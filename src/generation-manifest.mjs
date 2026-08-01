@@ -6,28 +6,43 @@
 // component IDs to actual repository paths.
 
 import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, openSync, closeSync, fsyncSync, renameSync, unlinkSync } from "node:fs";
-import { join, dirname, resolve, basename } from "node:path";
+import { join, resolve, basename } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-// From scripts/ai/autoloop/ → repo root: ../../../
-const DEFAULT_MANIFEST_DIR = resolve(HERE, "..", "..", "..", "docs", "loop", "metadata");
 const GENERATION_SCHEMA_VERSION = "1";
 const CURRENT_GENERATION_POINTER = "current-generation.json";
 let pointerTempSequence = 0;
 
+// AUTOLOOP_SCRIPTED_ADAPTER_AND_LIFECYCLE_HARNESS: the Aura-derived default
+// of resolve(HERE, "..","..","..", "docs","loop","metadata") assumed the
+// original scripts/ai/autoloop/ nesting three levels under the Aura repo
+// root; in this standalone checkout that resolves outside the repository
+// entirely. There is no correct repo-relative default here, so callers
+// (writeGenerationManifest() and the `write` CLI command below) must pass
+// manifestDir explicitly; omitting it fails closed instead of silently
+// writing outside the repository.
+//
+// material-change patterns: "run-card.mjs", "prompts/executor.md",
+// "prompts/reviewer.md", and "analyze-meta.mjs" are Aura-only paths that do
+// not exist in this standalone checkout. Rather than pretend to track files
+// that aren't here, runner_control_flow and scope_matcher now point at their
+// real standalone equivalents (lifecycle-runner.mjs, c2d/mutation-scope.mjs);
+// executor_prompt/reviewer_prompt/facts_schema have no standalone equivalent
+// yet and are left with an empty pattern list, matching the existing
+// not-yet-wired entries (model_family, authority_policy, candidate_derivation)
+// below.
 const MATERIAL_CHANGE_PATTERNS = [
-  { type: "runner_control_flow", patterns: ["run-card.mjs"] },
+  { type: "runner_control_flow", patterns: ["lifecycle-runner.mjs"] },
   { type: "reviewer_normalization", patterns: ["normalize-reviewer-json.mjs"] },
-  { type: "executor_prompt", patterns: ["prompts/executor.md"] },
-  { type: "reviewer_prompt", patterns: ["prompts/reviewer.md"] },
+  { type: "executor_prompt", patterns: [] },
+  { type: "reviewer_prompt", patterns: [] },
   { type: "model_family", patterns: [] },
   { type: "validation_policy", patterns: ["schema/card-input.schema.json"] },
-  { type: "scope_matcher", patterns: ["run-card.mjs"] },
+  { type: "scope_matcher", patterns: ["c2d/mutation-scope.mjs"] },
   { type: "authority_policy", patterns: [] },
-  { type: "facts_schema", patterns: ["analyze-meta.mjs"] },
+  { type: "facts_schema", patterns: [] },
   { type: "candidate_derivation", patterns: [] },
 ];
 
@@ -176,9 +191,12 @@ function replaceCurrentGenerationPointer(dir, pointer, { renamePointer = renameS
 }
 
 export function writeGenerationManifest(manifestDir, baselineCommit, cwd, options) {
+  if (!manifestDir) {
+    throw new Error("manifestDir is required (no default outside the repository is assumed)");
+  }
   const head = git(["rev-parse", "HEAD"], cwd);
   if (!head) throw new Error("cannot resolve HEAD");
-  const dir = manifestDir || DEFAULT_MANIFEST_DIR;
+  const dir = manifestDir;
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const current = readCurrentGeneration(dir);
   if (current?.pointer.latest_head_commit === head) return current.manifest;
@@ -245,7 +263,11 @@ function main() {
     const baselineIdx = args.indexOf("--baseline");
     const baselineCommit = baselineIdx >= 0 ? args[baselineIdx + 1] : git(["rev-parse", "HEAD~1"], process.cwd());
     const manifestDirIdx = args.indexOf("--manifest-dir");
-    const manifestDir = manifestDirIdx >= 0 ? resolve(args[manifestDirIdx + 1]) : DEFAULT_MANIFEST_DIR;
+    if (manifestDirIdx < 0) {
+      console.error("[generation-manifest] ERROR: --manifest-dir is required (no default outside the repository is assumed)");
+      process.exit(2);
+    }
+    const manifestDir = resolve(args[manifestDirIdx + 1]);
     try {
       const m = writeGenerationManifest(manifestDir, baselineCommit, process.cwd());
       console.log(JSON.stringify(m, null, 2));

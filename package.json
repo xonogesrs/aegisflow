@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "find src -name '*.mjs' -exec node --check {} +"
+    "check": "find src -name '*.mjs' -exec node --check {} +",
+    "test:scripted-lifecycle": "node --test test/test-scripted-adapter.mjs test/test-lifecycle-runner.mjs test/test-standalone-paths.mjs test/test-normalize-reviewer-json.mjs"
   }
 }

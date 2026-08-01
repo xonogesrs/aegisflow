@@ -140,22 +140,23 @@ fi
 # .aura/autoloop/metadata/ without pre-creating it manually.
 mkdir -p "$metadata_dir"
 
-# ── Verify scheduler exists ────────────────────────────────
-if [ ! -f "$SCHEDULER" ]; then
-  echo "FATAL: scheduler tick not found at $SCHEDULER"
-  exit 4
-fi
-
 # ── C3A candidate mode routes through operator-tick.mjs ───
 # Feature gating (AURA_AUTOLOOP_C3A_C2D_READ_ONLY) is enforced inside
 # operator-tick.mjs; with the feature disabled it delegates back to the
-# legacy scheduler unchanged.
+# legacy scheduler unchanged. This branch never touches $SCHEDULER, so its
+# presence is checked below, only on the legacy path that actually needs it.
 if [ -n "$candidate" ]; then
   if [ ! -f "$C3A_TICK" ]; then
     echo "FATAL: C3A operator tick not found at $C3A_TICK"
     exit 4
   fi
   exec node "$C3A_TICK" "${extra_args[@]}" "${c3a_args[@]}"
+fi
+
+# ── Verify scheduler exists (legacy path only) ────────────
+if [ ! -f "$SCHEDULER" ]; then
+  echo "UNSUPPORTED_STANDALONE_LEGACY_SCHEDULER: scheduler tick not found at $SCHEDULER"
+  exit 4
 fi
 
 # ── Invoke scheduler with preserved args ──────────────────

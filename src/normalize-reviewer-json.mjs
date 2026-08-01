@@ -15,12 +15,13 @@
 //   echo '{...}' | npx node normalize-reviewer-json.mjs
 
 import { readFileSync as _rfs } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-const VERDICTS = new Set(["PASS", "HOLD", "NEEDS_SUPPLEMENT", "REJECT"]);
-const CONFIDENCE = new Set(["LOW", "MEDIUM", "HIGH"]);
-const NEXT_ACTIONS = new Set(["STOP", "REPAIR", "HUMAN_REVIEW", "COMMIT_CANDIDATE"]);
+export const VERDICTS = new Set(["PASS", "HOLD", "NEEDS_SUPPLEMENT", "REJECT"]);
+export const CONFIDENCE = new Set(["LOW", "MEDIUM", "HIGH"]);
+export const NEXT_ACTIONS = new Set(["STOP", "REPAIR", "HUMAN_REVIEW", "COMMIT_CANDIDATE"]);
 
-const FAIL_CLOSED = {
+export const FAIL_CLOSED = {
   verdict: "HOLD",
   confidence: "LOW",
   model: "",
@@ -50,7 +51,7 @@ function normalizeRepair(input) {
   };
 }
 
-function normalize(input, expectedModel) {
+export function normalize(input, expectedModel) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     return { ...FAIL_CLOSED, summary: "reviewer output is not an object" };
   }
@@ -163,4 +164,6 @@ function main() {
   process.stdout.write(JSON.stringify(out) + "\n");
 }
 
-main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main();
+}

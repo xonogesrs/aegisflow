@@ -1101,6 +1101,16 @@ function parseArgs(argv) {
 }
 
 function delegateLegacy(a) {
+  // Standalone checkouts (see AUTOLOOP_STANDALONE_COPY_AND_BOOTSTRAP) do not
+  // carry scheduler-tick-dry.mjs. Without this guard, spawnSync would still
+  // launch node against a nonexistent module path and let it crash with a
+  // raw "Cannot find module" stack on inherited stderr; check up front and
+  // fail closed with a deterministic reason instead, preserving the same
+  // exit code the shell wrapper already uses for this condition.
+  if (!existsSync(SCHEDULER)) {
+    console.error(`UNSUPPORTED_STANDALONE_LEGACY_SCHEDULER: scheduler tick not found at ${SCHEDULER}`);
+    return 4;
+  }
   const args = [];
   if (a.metadataDir) args.push("--metadata-dir", a.metadataDir);
   if (a.lockFile) args.push("--lock-file", a.lockFile);
