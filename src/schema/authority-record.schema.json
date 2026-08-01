@@ -1,0 +1,186 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AutoLoop authority record — immutable projection of human/policy authority",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "card_id",
+    "card_body",
+    "risk",
+    "mode",
+    "required_commands",
+    "allowed_paths",
+    "forbidden_paths",
+    "scope_violation_policy",
+    "mutation_allowed",
+    "commit_allowed",
+    "push_allowed",
+    "seal_allowed",
+    "max_repair_rounds",
+    "ingress_identity",
+    "approval_metadata",
+    "repository_identity",
+    "branch",
+    "start_head",
+    "worktree_identity",
+    "git_common_dir_identity",
+    "origin_url",
+    "origin_master",
+    "expected_worktree_state",
+    "captured_at",
+    "authority_digest"
+  ],
+  "definitions": {
+    "canonicalDependencyPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?![A-Za-z]:)(?=\\S)(?!\\.\\.?(?:/|$))[^/\\\\\\x00*?\\[\\]]+(?:/(?!\\.\\.?(?:/|$))[^/\\\\\\x00*?\\[\\]]+)*(?<=\\S)$",
+      "description": "AURACORE-AUTOLOOP-C5B-ATOMIC-EVIDENCE-SCHEMA-PARITY-AND-CANONICAL-TEST-RUNNER-1: identical definition to card-input.schema.json's canonicalDependencyPath — one grammar, reused by $ref in both schema files, mirrored by validate-role-artifacts.mjs isCanonicalDependencyPath() at runtime. Persisted evidence must never accept a path form that card-input rejects."
+    },
+    "structuredCommandId": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$",
+      "description": "Mirrors run-card.mjs REQUIRED_COMMAND_ID_PATTERN exactly (author-declared structured id — never derived from array position or command text). The colon character is not in this alphabet, so a structured id can never collide lexically with the internal-only synthesized legacy execution id form 'legacy:<index>'."
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "autoloop.authority-record/v1"
+    },
+    "card_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "card_body": { "type": "string", "minLength": 1, "maxLength": 20000 },
+    "risk": {
+      "type": "string",
+      "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+      "description": "Already normalized via risk-normalization.mjs before this record is constructed. No alias values accepted here."
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "READ_ONLY", "CHANGE", "OPS", "IMPLEMENT", "FIX",
+        "VERIFY_ONLY", "MAP_ONLY",
+        "READ_ONLY_DISCOVERY", "READ_ONLY_DISCOVERY_WITH_EXECUTOR", "READ_ONLY_DESIGN",
+        "COMMIT_ONLY", "PUSH_ONLY", "SEAL_ONLY"
+      ],
+      "description": "Mirrors run-card.mjs VALID_MODES (STANDARD_MODES + LIFECYCLE_ONLY_MODES) exactly — not a new mode taxonomy."
+    },
+    "required_commands": {
+      "type": "array",
+      "description": "AURACORE-AUTOLOOP-C5B1: canonical digest-bound projection of card.validation.required_commands — see run-card.mjs requiredCommandsForDigest(). Legacy string entries have id:null (confirmed against requiredCommandsForDigest's actual mapping — NOT the synthesized internal-only 'legacy:<index>' execution id used solely by planRequiredCommands/executeRequiredCommandPlan, which is never persisted into the authority record). Exactly two dependency scopes exist: 'global' (repository-wide) and 'paths' (path-scoped).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "command", "scope", "paths", "source_format"],
+        "properties": {
+          "id": { "type": ["string", "null"] },
+          "command": { "type": "string", "minLength": 1 },
+          "scope": { "type": "string", "enum": ["global", "paths"] },
+          "paths": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/canonicalDependencyPath" } },
+          "source_format": { "type": "string", "enum": ["legacy_string", "structured_v1"] }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "scope": { "const": "paths" } }, "required": ["scope"] },
+            "then": { "properties": { "paths": { "type": "array", "minItems": 1 } } }
+          },
+          {
+            "if": { "properties": { "scope": { "const": "global" } }, "required": ["scope"] },
+            "then": { "properties": { "paths": { "type": "array", "maxItems": 0 } } }
+          },
+          {
+            "description": "Legacy source: id is always null (requiredCommandsForDigest's actual mapping — never the internal-only synthesized 'legacy:<index>' execution id), scope is always 'global', paths is always empty — the exact shape normalizeRequiredCommand() always produces for a legacy string entry.",
+            "if": { "properties": { "source_format": { "const": "legacy_string" } }, "required": ["source_format"] },
+            "then": { "properties": { "id": { "type": "null" }, "command": { "type": "string", "pattern": "\\S" }, "scope": { "const": "global" }, "paths": { "type": "array", "maxItems": 0 } } }
+          },
+          {
+            "description": "Structured source: id is always a non-null author-declared string matching the structured-id grammar (never null, never the ':'-containing legacy execution-id form, which this pattern's alphabet cannot produce).",
+            "if": { "properties": { "source_format": { "const": "structured_v1" } }, "required": ["source_format"] },
+            "then": { "properties": { "id": { "$ref": "#/definitions/structuredCommandId" } } }
+          }
+        ]
+      }
+    },
+    "allowed_paths": {
+      "type": "array",
+      "maxItems": 200,
+      "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+    },
+    "forbidden_paths": {
+      "type": "array",
+      "maxItems": 200,
+      "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+    },
+    "scope_violation_policy": { "type": "string", "enum": ["HOLD", "REJECT"] },
+    "mutation_allowed": { "type": "boolean" },
+    "commit_allowed": { "type": "boolean" },
+    "push_allowed": { "type": "boolean" },
+    "seal_allowed": { "type": "boolean" },
+    "max_repair_rounds": { "type": "integer", "minimum": 0, "maximum": 2 },
+    "ingress_identity": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Where this authority originated: manual/<actor>, producer/<generation_id>, emergency/<actor>, etc."
+    },
+    "approval_metadata": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "approver": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "approved_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+        }
+      },
+      "required": ["approver", "reason", "approved_at"],
+      "description": "Null unless ingress requires explicit human approval (e.g. READ_ONLY emergency bypass)."
+    },
+    "repository_identity": { "type": "string", "minLength": 1 },
+    "branch": { "type": "string" },
+    "start_head": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Exact starting HEAD. Required, never optional."
+    },
+    "worktree_identity": {
+      "type": "string",
+      "maxLength": 4096,
+      "description": "From collectFingerprint(). May be empty only for legacy/unit-constructed records; real-model dispatch requires a real repository (see run-card.mjs main() gates)."
+    },
+    "git_common_dir_identity": {
+      "type": "string",
+      "maxLength": 4096,
+      "description": "Resolved --git-common-dir, from collectFingerprint(). Detects common-dir/worktree rebinding at repair-round drift checks."
+    },
+    "origin_url": {
+      "type": "string",
+      "maxLength": 2048,
+      "description": "git remote get-url origin, from collectFingerprint(). Empty string permitted for local repos with no remote (dry-run/test compatibility) — real-model dispatch requires this to be non-empty (see run-card.mjs main())."
+    },
+    "origin_master": {
+      "type": "string",
+      "maxLength": 4096,
+      "description": "git rev-parse origin/master, from collectFingerprint(). Empty string permitted for local repos with no origin/master ref — real-model dispatch requires this to be non-empty (see run-card.mjs main())."
+    },
+    "expected_worktree_state": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "\"clean\" or a status-only dirty digest, from collectFingerprint(). Not compared for equality during repair-round drift checks (requireClean:false there by design) — captured for audit only."
+    },
+    "captured_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$",
+      "description": "Excluded from the authority semantic digest — mutable-in-spirit bookkeeping, not authority content."
+    },
+    "authority_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "sha256 of the canonical serialization of this record minus captured_at and authority_digest itself."
+    }
+  }
+}

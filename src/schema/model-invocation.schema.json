@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Provider-neutral model invocation identity",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "invocation_id",
+    "attempt_id",
+    "role",
+    "provider",
+    "configured_model",
+    "requested_model",
+    "effective_model",
+    "provider_request_id",
+    "started_at",
+    "completed_at",
+    "result_status"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "autoloop.model-invocation/v1",
+      "description": "Fixed schema version identifier."
+    },
+    "invocation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[\\x20-\\x7E]+$",
+      "description": "Unique invocation identifier. Free-form bounded string, no structural semantics."
+    },
+    "attempt_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[\\x20-\\x7E]+$",
+      "description": "Uniquely identifies this specific attempt within the invocation. Free-form bounded string."
+    },
+    "role": {
+      "type": "string",
+      "enum": ["designer", "executor", "reviewer", "challenge"],
+      "description": "Role this invocation served. Provider-neutral — no routing policy encoded here. 'challenge' is the conditional independent semantic-challenge model, distinct from 'designer'."
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[\\x20-\\x7E]+$",
+      "description": "Provider identifier (e.g. 'deepseek', 'openai', 'anthropic'). Free-form bounded string — no enum. Provider-neutral by design."
+    },
+    "configured_model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[\\x20-\\x7E]+$",
+      "description": "Model name as configured in the card/routing policy. Free-form bounded string. Model prose/name is NOT authoritative identity — use effective_model for the ground truth."
+    },
+    "requested_model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[\\x20-\\x7E]+$",
+      "description": "Model name as requested to the provider. May differ from effective_model if the provider overrode it. Free-form bounded string."
+    },
+    "effective_model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[\\x20-\\x7E]+$",
+      "description": "The model that actually served the invocation, ONLY when a provider/runtime event independently reports it — never a copy of configured_model/requested_model, which would fabricate a provider attestation that never occurred. Must be exactly the sentinel string 'NOT_REPORTED_BY_PROVIDER' (same convention as provider_request_id) when no such independent report is available for this invocation. Not authoritative identity by default — only a value that differs from configured_model/requested_model and from the sentinel represents an actual provider report."
+    },
+    "provider_request_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[\\x20-\\x7E]+$",
+      "description": "Provider-side request identifier for traceability. Free-form bounded string."
+    },
+    "started_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$",
+      "description": "ISO 8601 UTC timestamp when the invocation started."
+    },
+    "completed_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$",
+      "description": "ISO 8601 UTC timestamp when the invocation completed."
+    },
+    "result_status": {
+      "type": "string",
+      "enum": ["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED", "IDENTITY_MISMATCH", "INVALID_OUTPUT"],
+      "description": "Outcome of this invocation. Provider-neutral bounded enum."
+    }
+  }
+}

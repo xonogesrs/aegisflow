@@ -1,0 +1,100 @@
+{
+  "schema_version": "autoloop.implementation-evidence/v1",
+  "contract_id": "rc-20260717-001",
+  "design_revision_id": "rev-abc123",
+  "design_contract_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "implementation_attempt_id": "impl-attempt-001",
+  "parent_attempt_id": "",
+  "executor_invocation": {
+    "schema_version": "autoloop.model-invocation/v1",
+    "invocation_id": "inv-executor-001",
+    "attempt_id": "attempt-001",
+    "role": "executor",
+    "provider": "deepseek",
+    "configured_model": "deepseek/deepseek-v4-flash",
+    "requested_model": "deepseek/deepseek-v4-flash",
+    "effective_model": "NOT_REPORTED_BY_PROVIDER",
+    "provider_request_id": "req-xyz-456",
+    "started_at": "2026-07-17T11:00:00Z",
+    "completed_at": "2026-07-17T11:30:00Z",
+    "result_status": "SUCCEEDED"
+  },
+  "repository_baseline": {
+    "repository": "example-repo",
+    "branch": "feature/test",
+    "head": "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
+    "origin_ref": "origin/feature/test",
+    "origin_head": "1234567890123456789012345678901234567890",
+    "ahead": 3,
+    "behind": 0,
+    "expected_worktree_state": "clean",
+    "permitted_dirty_paths": [],
+    "captured_at": "2026-07-17T10:58:00Z"
+  },
+  "initial_integrity": "Pre-execution integrity verified.",
+  "final_integrity": "Post-execution integrity verified.",
+  "authorized_paths": [
+    "scripts/ai/autoloop/schema/model-invocation.schema.json",
+    "scripts/ai/autoloop/validate-role-artifacts.mjs"
+  ],
+  "actual_changed_paths": [
+    "scripts/ai/autoloop/schema/model-invocation.schema.json",
+    "scripts/ai/autoloop/validate-role-artifacts.mjs"
+  ],
+  "patch_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "commands": [
+    {
+      "command": "node --check validate-role-artifacts.mjs",
+      "status": "ok",
+      "exit_code": 0
+    }
+  ],
+  "compile_results": [
+    {
+      "command": "node --check validate-role-artifacts.mjs",
+      "status": "ok",
+      "exit_code": 0
+    }
+  ],
+  "test_results": [
+    {
+      "test_identifier": "test-role-artifact-schemas.mjs:valid model invocation",
+      "outcome": "passed",
+      "command": "node --test test/test-role-artifact-schemas.mjs",
+      "exit_code": 0,
+      "duration_ms": 150
+    },
+    {
+      "test_identifier": "test-role-artifact-schemas.mjs:invalid model invocation",
+      "outcome": "passed",
+      "command": "node --test test/test-role-artifact-schemas.mjs",
+      "exit_code": 0,
+      "duration_ms": 120
+    }
+  ],
+  "negative_evidence": [
+    {
+      "claim": "No ajv imports found in validator.",
+      "evidence_type": "code_search"
+    }
+  ],
+  "mutation_evidence": [
+    {
+      "path": "scripts/ai/autoloop/validate-role-artifacts.mjs",
+      "change_type": "created"
+    }
+  ],
+  "skipped_evidence": [],
+  "known_failures": [],
+  "environment_limits": {
+    "max_path_length": 256,
+    "notes": "Standard limits"
+  },
+  "scope_deviations": [],
+  "executor_verdict": "PASS",
+  "timestamps": {
+    "started_at": "2026-07-17T11:00:00Z",
+    "completed_at": "2026-07-17T11:30:00Z"
+  },
+  "integrity": "Evidence integrity verified."
+}

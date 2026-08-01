@@ -1,0 +1,134 @@
+{
+  "schema_version": "autoloop.role-contract/v1",
+  "workflow_kind": "role_contract",
+  "contract_id": "rc-20260717-001",
+  "design_revision_id": "rev-abc123",
+  "parent_design_revision_id": "rev-parent-000",
+  "source_card_id": "card-20260717-001",
+  "created_at": "2026-07-17T10:00:00Z",
+  "designer_invocation": {
+    "schema_version": "autoloop.model-invocation/v1",
+    "invocation_id": "inv-designer-001",
+    "attempt_id": "attempt-001",
+    "role": "designer",
+    "provider": "deepseek",
+    "configured_model": "deepseek/deepseek-v4-flash",
+    "requested_model": "deepseek/deepseek-v4-flash",
+    "effective_model": "deepseek/deepseek-v4-flash",
+    "provider_request_id": "req-abc-123",
+    "started_at": "2026-07-17T09:59:00Z",
+    "completed_at": "2026-07-17T10:00:00Z",
+    "result_status": "SUCCEEDED"
+  },
+  "repository_baseline": {
+    "repository": "example-repo",
+    "branch": "feature/test",
+    "head": "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
+    "origin_ref": "origin/feature/test",
+    "origin_head": "1234567890123456789012345678901234567890",
+    "ahead": 3,
+    "behind": 0,
+    "expected_worktree_state": "clean",
+    "permitted_dirty_paths": [],
+    "captured_at": "2026-07-17T09:58:00Z"
+  },
+  "risk": "LOW",
+  "problem": "Add JSON Schema artifacts and a pure validator for the AutoLoop system.",
+  "production_truth": [
+    {
+      "fact_id": "fact-001",
+      "claim": "No existing validation for role-contract artifacts exists.",
+      "evidence_type": "code_search",
+      "reference": "grep -r validateRoleContract",
+      "confidence": "HIGH",
+      "freshness": "2026-07-17T09:00:00Z"
+    },
+    {
+      "fact_id": "fact-002",
+      "claim": "Existing run-card.mjs uses hand-rolled validateCardInput.",
+      "evidence_type": "code_review",
+      "reference": "run-card.mjs:242",
+      "symbol": "validateCardInput",
+      "line": 242,
+      "confidence": "HIGH",
+      "freshness": "2026-07-17T09:00:00Z"
+    }
+  ],
+  "chosen_design": "Create provider-neutral JSON Schema files and a hand-rolled JS validator exporting validateModelInvocation, validateRoleContract, validateImplementationEvidence.",
+  "authority_map": [
+    {
+      "authority_id": "auth-schema-001",
+      "owner_role": "designer",
+      "source_of_truth": "model-invocation.schema.json",
+      "creation_point": "design-time",
+      "validation_point": "card-review",
+      "mutation_point": "governance-review",
+      "terminal_state": "published",
+      "forbidden_alternate_owners": ["executor"]
+    }
+  ],
+  "invariants": [
+    {
+      "invariant_id": "inv-no-ajv-001",
+      "statement": "Validator must not import ajv or any JSON-schema library.",
+      "applicable_stage": "implementation",
+      "evidence_requirement": "static analysis of import statements",
+      "violation_severity": "CRITICAL"
+    }
+  ],
+  "failure_boundaries": "Validation returns error array; never throws. No repository mutation.",
+  "authorized_scope": {
+    "authorized_paths": [
+      "scripts/ai/autoloop/schema/model-invocation.schema.json",
+      "scripts/ai/autoloop/schema/role-contract.schema.json",
+      "scripts/ai/autoloop/schema/implementation-evidence.schema.json",
+      "scripts/ai/autoloop/validate-role-artifacts.mjs",
+      "scripts/ai/autoloop/test/test-role-artifact-schemas.mjs",
+      "scripts/ai/autoloop/test/fixtures/role-contract-valid.json",
+      "scripts/ai/autoloop/test/fixtures/role-contract-invalid.json",
+      "scripts/ai/autoloop/test/fixtures/implementation-evidence-valid.json",
+      "scripts/ai/autoloop/test/fixtures/implementation-evidence-invalid.json"
+    ],
+    "permitted_new_paths": [],
+    "forbidden_paths": [],
+    "dependency_changes_allowed": false,
+    "migration_allowed": false,
+    "configuration_changes_allowed": false,
+    "source_mutation_allowed": true,
+    "test_mutation_allowed": true
+  },
+  "non_goals": "No storage, hashing, provider adapters, routing, state machine, or retries.",
+  "acceptance": {
+    "compile_commands": ["node --check validate-role-artifacts.mjs"],
+    "targeted_tests": ["node --test test/test-role-artifact-schemas.mjs"],
+    "full_suite_commands": ["node --test"],
+    "static_checks": [],
+    "integrity_checks": [],
+    "negative_evidence": [],
+    "mutation_evidence": [],
+    "repetition_requirements": [],
+    "environment_exclusions": [],
+    "pass_conditions": "All tests pass."
+  },
+  "hold_conditions": "Any test fails.",
+  "rejected_alternatives": "Using ajv library was rejected per hard rule 1.",
+  "open_questions": [
+    {
+      "question_id": "oq-001",
+      "owner_role": "designer",
+      "blocking": false,
+      "required_evidence": "N/A",
+      "resolution_stage": "design"
+    }
+  ],
+  "human_approval": {
+    "scope_expansion": false,
+    "security_exception": false,
+    "commit": false,
+    "push": false,
+    "seal": false,
+    "destructive_migration": false,
+    "remote_history_mutation": false
+  },
+  "integrity": "Design-time integrity verified."
+}

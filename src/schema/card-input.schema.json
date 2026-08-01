@@ -1,0 +1,178 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AutoLoop card input",
+  "type": "object",
+  "required": ["card_id", "mode", "worktree_path", "base_branch", "executor", "reviewer", "scope", "limits", "card_body"],
+  "additionalProperties": true,
+  "definitions": {
+    "canonicalDependencyPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?![A-Za-z]:)(?=\\S)(?!\\.\\.?(?:/|$))[^/\\\\\\x00*?\\[\\]]+(?:/(?!\\.\\.?(?:/|$))[^/\\\\\\x00*?\\[\\]]+)*(?<=\\S)$",
+      "description": "AURACORE-AUTOLOOP-C5B-ATOMIC-EVIDENCE-SCHEMA-PARITY-AND-CANONICAL-TEST-RUNNER-1: exactly one lexical form per repository-relative dependency path — mirrors validate-role-artifacts.mjs isCanonicalDependencyPath() exactly (proven by an exhaustive fuzz-parity test, not just the enumerated required cases). Repository-relative, '/'-separated, no leading '/', no leading './', no trailing '/', no repeated '/', no '.' or '..' path component, no backslash, no glob characters ('*','?','[',']'), no NUL, no leading/trailing whitespace, no Windows drive prefix. Ambiguous input is REJECTED, never silently normalized."
+    }
+  },
+  "properties": {
+    "card_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["READ_ONLY", "CHANGE", "OPS", "IMPLEMENT", "FIX", "COMMIT_ONLY", "PUSH_ONLY", "SEAL_ONLY", "VERIFY_ONLY", "MAP_ONLY", "READ_ONLY_DISCOVERY", "READ_ONLY_DESIGN"],
+      "description": "Fable5 default workflow is READ_ONLY, CHANGE, OPS. IMPLEMENT/FIX/VERIFY_ONLY/MAP_ONLY/READ_ONLY_DISCOVERY/READ_ONLY_DESIGN are legacy compatibility aliases, not card-generation defaults. COMMIT_ONLY, PUSH_ONLY, and SEAL_ONLY are exception-only per AGENTS.md Governance Constitution rule 12; each requires explicit Controller authorization and a concrete reason."
+    },
+    "worktree_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "base_branch": {
+      "type": "string",
+      "default": "origin/master"
+    },
+    "target_branch": {
+      "type": "string"
+    },
+    "start_head": {
+      "type": "string",
+      "pattern": "^(?:$|\\(unset\\)|[0-9a-fA-F]{7,40})$",
+      "description": "Bounded repair Finding A: mirrors run-card.mjs validateCardInput()'s start_head check (the runtime authority — see run-card.mjs comment at the validation function, design §32.16 / Gate A finding: this schema is documentation/parity, not itself enforced at runtime)."
+    },
+    "risk": {
+      "type": "string",
+      "enum": ["LOW", "MEDIUM", "HIGH"],
+      "description": "Optional risk tier. HIGH triggers strict reviewer routing."
+    },
+    "executor": {
+      "type": "object",
+      "required": ["model"],
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "Must be in the DeepSeek executor allowlist. Currently: deepseek/deepseek-v4-flash, deepseek/deepseek-v4-pro."
+        },
+        "variant": { "type": ["string", "null"] },
+        "agent": { "type": ["string", "null"] },
+        "auto": {
+          "type": "boolean",
+          "default": false,
+          "deprecated": true,
+          "description": "DEPRECATED in v0. --auto is HARDCODED OFF for executor and reviewer. Setting auto=true has NO effect; the runner prints a NOTE and proceeds without --auto."
+        }
+      }
+    },
+    "reviewer": {
+      "type": "object",
+      "required": ["default"],
+      "properties": {
+        "default": {
+          "type": "string",
+          "description": "Must be in the OpenCode Go reviewer family. deepseek/* and opencode-go/deepseek-v4-* are FORBIDDEN."
+        },
+        "strict": { "type": ["string", "null"] },
+        "fallback": { "type": ["string", "null"] },
+        "strict_on_high_risk": { "type": "boolean", "default": false },
+        "invoke_real_model": {
+          "type": "boolean",
+          "default": false,
+          "deprecated": true,
+          "description": "DEPRECATED. The real-invocation gate is harness.invoke_real_models (plural). This singular field is IGNORED."
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "required": ["allowed_paths", "forbidden_paths"],
+      "properties": {
+        "allowed_paths": { "type": "array", "items": { "type": "string" } },
+        "forbidden_paths": { "type": "array", "items": { "type": "string" } },
+        "scope_violation_policy": { "type": "string", "enum": ["HOLD", "REJECT"], "default": "HOLD" }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "properties": {
+        "required_commands": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S",
+                "description": "Legacy command string. Runtime (validateRequiredCommandsContract) rejects an empty or whitespace-only string via String.prototype.trim().length === 0 — minLength:1 alone would accept a whitespace-only string, so 'pattern' additionally requires at least one non-whitespace character, matching trim() semantics exactly. Leading/trailing whitespace around otherwise-non-empty command text is NOT rejected by runtime and is therefore NOT rejected here."
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "command", "scope", "paths"],
+                "properties": {
+                  "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,63}$" },
+                  "command": { "type": "string", "minLength": 1 },
+                  "scope": { "type": "string", "enum": ["global", "paths"] },
+                  "paths": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/definitions/canonicalDependencyPath" } }
+                },
+                "allOf": [
+                  {
+                    "if": { "properties": { "scope": { "const": "paths" } }, "required": ["scope"] },
+                    "then": { "properties": { "paths": { "type": "array", "minItems": 1 } } }
+                  },
+                  {
+                    "if": { "properties": { "scope": { "const": "global" } }, "required": ["scope"] },
+                    "then": { "properties": { "paths": { "type": "array", "maxItems": 0 } } }
+                  }
+                ]
+              }
+            ]
+          },
+          "default": [],
+          "description": "AURACORE-AUTOLOOP-C5B1: array entries are either a legacy command string (unchanged) or a structured object with an explicit id/scope/paths. Exactly two dependency scopes exist: 'global' (repository-wide) and 'paths' (explicit path-scoped metadata). C5B1 validates and normalizes structured entries but does not skip execution based on scope/paths — every required command still runs in every validation pass and at the independent final barrier, in declared array order. See card-input.schema.json.C5B1 note below and run-card.mjs validateCardInput()/normalizeRequiredCommand()."
+        },
+        "optional_commands": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "forbidden_commands": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["git push", "git commit", "git reset", "git rebase", "git amend", "git merge"]
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [
+            "git rev-parse --short HEAD",
+            "git status --short",
+            "git diff --stat",
+            "git diff --name-only",
+            "git diff --check"
+          ]
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "required": ["commit_allowed", "push_allowed", "seal_allowed"],
+      "properties": {
+        "max_repair_rounds": { "type": "integer", "minimum": 0, "maximum": 2, "default": 2 },
+        "commit_allowed": { "type": "boolean", "default": false },
+        "push_allowed": { "type": "boolean", "default": false },
+        "seal_allowed": { "type": "boolean", "default": false },
+        "mutation_allowed": { "type": "boolean", "default": false },
+        "subprocess_timeout_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "default": 600000,
+          "description": "Wall-clock cap for `opencode run` subprocess. Default 10 minutes. Timeout → HOLD, never PASS."
+        }
+      }
+    },
+    "card_body": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AutoLoop task-understanding payload — exact Designer-emittable object",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_card_id",
+    "objective",
+    "observable_outcomes",
+    "production_truth",
+    "completion_criteria",
+    "confidence",
+    "scope_assessment"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "autoloop.task-understanding-payload/v1"
+    },
+    "source_card_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "objective": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "observable_outcomes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+    },
+    "production_truth": {
+      "type": "array",
+      "maxItems": 15,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fact_id", "statement", "evidence_source", "reference", "confidence"],
+        "properties": {
+          "fact_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "statement": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "evidence_source": { "type": "string", "enum": ["FILE", "COMMAND_OUTPUT", "TEST_RESULT"] },
+          "reference": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "line_or_symbol": { "type": ["string", "null"], "maxLength": 200 },
+          "confidence": { "type": "string", "enum": ["VERIFIED", "INFERRED"] }
+        }
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+    },
+    "non_goals": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+    },
+    "completion_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+    },
+    "confidence": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW", "UNKNOWN"] },
+    "scope_assessment": { "type": "string", "enum": ["SUFFICIENT", "INSUFFICIENT", "AMBIGUOUS"] },
+    "scope_insufficiency_details": {
+      "type": ["string", "null"],
+      "maxLength": 1000,
+      "description": "Required (non-null) when scope_assessment != SUFFICIENT; must be null when SUFFICIENT."
+    },
+    "proposed_scope": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "allowed_paths": { "type": "array", "maxItems": 200, "items": { "type": "string" } },
+        "forbidden_paths": { "type": "array", "maxItems": 200, "items": { "type": "string" } }
+      },
+      "description": "Advisory only. Never merged into live authority scope."
+    },
+    "authority_ambiguities": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+    },
+    "blocking_questions": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+    }
+  }
+}

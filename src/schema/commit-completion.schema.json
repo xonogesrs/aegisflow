@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AutoLoop C3C commit completion",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "idempotency_key", "candidate_id", "candidate_manifest_digest", "review_artifact_digest", "commit_sha", "parent_sha", "tree_sha", "target_ref", "commit_message_digest", "authorship_digest", "changed_paths", "verified", "ahead", "behind", "completed_at"],
+  "properties": {
+    "schema": {"const": "autoloop.commit-completion/v1"},
+    "idempotency_key": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "candidate_id": {"type": "string", "pattern": "^cand_exec_[0-9a-f]{32}_r[1-9][0-9]*$"},
+    "candidate_manifest_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "review_artifact_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "commit_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "parent_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "tree_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "target_ref": {"type": "string", "pattern": "^refs/heads/.+$"},
+    "commit_message_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "authorship_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "changed_paths": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "verified": {"const": true},
+    "ahead": {"type": "integer", "minimum": 0},
+    "behind": {"type": "integer", "minimum": 0},
+    "completed_at": {"type": "string", "minLength": 1}
+  }
+}

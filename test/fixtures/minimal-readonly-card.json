@@ -1,0 +1,70 @@
+{
+  "card_id": "AUTOLOOP-STANDALONE-CORE-TEST-SMOKE-1",
+  "mode": "READ_ONLY_DISCOVERY",
+  "worktree_path": "/workspace/example-repo",
+  "base_branch": "origin/master",
+  "target_branch": "(none)",
+  "start_head": "(unset)",
+
+  "executor": {
+    "model": "deepseek/deepseek-v4-flash",
+    "variant": null,
+    "agent": null,
+    "auto": false
+  },
+  "reviewer": {
+    "default": "opencode-go/kimi-k2.7-code",
+    "strict": "opencode-go/glm-5.2",
+    "fallback": "opencode-go/qwen3.7-plus",
+    "strict_on_high_risk": false,
+    "invoke_real_model": false
+  },
+
+  "scope": {
+    "allowed_paths": ["scripts/ai/autoloop/"],
+    "forbidden_paths": [
+      "engine/",
+      "receiver-rust/",
+      "ui/src/",
+      ".opencode/",
+      "AGENTS.md",
+      "CONSTITUTION.md",
+      "docs/governance/",
+      ".mcp.json"
+    ],
+    "scope_violation_policy": "HOLD"
+  },
+
+  "validation": {
+    "required_commands": [],
+    "forbidden_commands": ["git push", "git commit", "git reset", "git rebase", "git amend", "git merge"]
+  },
+
+  "evidence": {
+    "required": [
+      "git rev-parse --short HEAD",
+      "git status --short",
+      "git diff --stat",
+      "git diff --name-only",
+      "git diff --check"
+    ]
+  },
+
+  "limits": {
+    "max_repair_rounds": 0,
+    "commit_allowed": false,
+    "push_allowed": false,
+    "seal_allowed": false,
+    "mutation_allowed": false
+  },
+
+"harness": {
+      "invoke_real_models": false,
+      "_invoke_real_models_note": "MUST stay false. relax_dirty_worktree is a mock/self-test exception; blocked otherwise.",
+      "relax_dirty_worktree": true,
+      "fake_executor_report": "(dry-run fixture; no real executor invoked)",
+      "fake_reviewer_events_file": "scripts/ai/autoloop/test/fixtures/minimal-opencode-json-events.txt"
+    },
+
+  "card_body": "READ-ONLY SMOKE FIXTURE for AutoLoop v0 harness. Proves preflight + evidence + parser pipeline without invoking any real model and without mutating the repository."
+}

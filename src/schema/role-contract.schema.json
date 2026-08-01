@@ -1,0 +1,263 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Role Contract — design contract between executor and reviewer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "workflow_kind",
+    "contract_id",
+    "design_revision_id",
+    "parent_design_revision_id",
+    "source_card_id",
+    "created_at",
+    "designer_invocation",
+    "repository_baseline",
+    "risk",
+    "problem",
+    "production_truth",
+    "chosen_design",
+    "authority_map",
+    "invariants",
+    "failure_boundaries",
+    "authorized_scope",
+    "non_goals",
+    "acceptance",
+    "hold_conditions",
+    "rejected_alternatives",
+    "open_questions",
+    "human_approval",
+    "integrity"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "autoloop.role-contract/v1"
+    },
+    "workflow_kind": {
+      "type": "string",
+      "const": "role_contract"
+    },
+    "contract_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[\\x20-\\x7E]+$",
+      "description": "Unique contract identifier."
+    },
+    "design_revision_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[\\x20-\\x7E]+$",
+      "description": "Identifies this specific design revision."
+    },
+    "parent_design_revision_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[\\x20-\\x7E]+$",
+      "description": "Identifies the parent design revision, if any."
+    },
+    "source_card_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[\\x20-\\x7E]+$",
+      "description": "Card ID that produced this contract."
+    },
+    "created_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$",
+      "description": "ISO 8601 UTC creation timestamp."
+    },
+    "designer_invocation": {
+      "$ref": "model-invocation.schema.json",
+      "description": "Invocation record for the designer model that produced this contract. Runtime validation reuses validateModelInvocation()."
+    },
+    "repository_baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "branch", "head", "origin_ref", "origin_head", "ahead", "behind", "expected_worktree_state", "permitted_dirty_paths", "captured_at"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "branch": { "type": "string", "minLength": 1 },
+        "head": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "origin_ref": { "type": "string", "minLength": 1 },
+        "origin_head": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "ahead": { "type": "integer", "minimum": 0 },
+        "behind": { "type": "integer", "minimum": 0 },
+        "expected_worktree_state": { "type": "string", "enum": ["clean", "dirty"] },
+        "permitted_dirty_paths": { "type": "array", "items": { "type": "string" } },
+        "captured_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$" }
+      }
+    },
+    "risk": {
+      "type": "string",
+      "enum": ["LOW", "MEDIUM", "HIGH"],
+      "description": "Assessed risk tier for this contract's execution."
+    },
+    "problem": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Statement of the problem this contract addresses."
+    },
+    "production_truth": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fact_id", "claim", "evidence_type", "reference", "confidence", "freshness"],
+        "properties": {
+          "fact_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[\\x20-\\x7E]+$" },
+          "claim": { "type": "string", "minLength": 1 },
+          "evidence_type": { "type": "string", "minLength": 1 },
+          "reference": { "type": "string" },
+          "symbol": { "type": "string", "description": "Optional bounded symbol/line reference." },
+          "line": { "type": "integer", "minimum": 0, "description": "Optional line number reference." },
+          "confidence": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+          "freshness": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$" }
+        }
+      }
+    },
+    "chosen_design": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Description of the chosen design approach."
+    },
+    "authority_map": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["authority_id", "owner_role", "source_of_truth", "creation_point", "validation_point", "mutation_point", "terminal_state", "forbidden_alternate_owners"],
+        "properties": {
+          "authority_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[\\x20-\\x7E]+$" },
+          "owner_role": { "type": "string", "minLength": 1 },
+          "source_of_truth": { "type": "string", "minLength": 1 },
+          "creation_point": { "type": "string", "minLength": 1 },
+          "validation_point": { "type": "string", "minLength": 1 },
+          "mutation_point": { "type": "string", "minLength": 1 },
+          "terminal_state": { "type": "string", "minLength": 1 },
+          "forbidden_alternate_owners": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["invariant_id", "statement", "applicable_stage", "evidence_requirement", "violation_severity"],
+        "properties": {
+          "invariant_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[\\x20-\\x7E]+$" },
+          "statement": { "type": "string", "minLength": 1 },
+          "applicable_stage": { "type": "string", "minLength": 1 },
+          "evidence_requirement": { "type": "string", "minLength": 1 },
+          "violation_severity": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] }
+        }
+      }
+    },
+    "failure_boundaries": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Description of failure boundaries."
+    },
+    "authorized_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authorized_paths", "permitted_new_paths", "forbidden_paths", "dependency_changes_allowed", "migration_allowed", "configuration_changes_allowed", "source_mutation_allowed", "test_mutation_allowed"],
+      "properties": {
+        "authorized_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!\\.\\./)(?!\\.\\.$)(?!\\.*$)(?!\\s*$).+$",
+            "description": "Repo-relative normalized path. Leading '/' and '../' and empty strings are rejected by the validator."
+          }
+        },
+        "permitted_new_paths": { "type": "array", "items": { "type": "string" } },
+        "forbidden_paths": { "type": "array", "items": { "type": "string" } },
+        "dependency_changes_allowed": { "type": "boolean" },
+        "migration_allowed": { "type": "boolean" },
+        "configuration_changes_allowed": { "type": "boolean" },
+        "source_mutation_allowed": { "type": "boolean" },
+        "test_mutation_allowed": { "type": "boolean" }
+      }
+    },
+    "non_goals": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Explicit non-goals for this contract."
+    },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compile_commands", "targeted_tests", "full_suite_commands", "static_checks", "integrity_checks", "negative_evidence", "mutation_evidence", "repetition_requirements", "environment_exclusions", "pass_conditions"],
+      "properties": {
+        "compile_commands": { "type": "array", "items": { "type": "string" } },
+        "targeted_tests": { "type": "array", "items": { "type": "string" } },
+        "full_suite_commands": { "type": "array", "items": { "type": "string" } },
+        "static_checks": { "type": "array", "items": { "type": "string" } },
+        "integrity_checks": { "type": "array", "items": { "type": "string" } },
+        "negative_evidence": { "type": "array", "items": { "type": "string" } },
+        "mutation_evidence": { "type": "array", "items": { "type": "string" } },
+        "repetition_requirements": { "type": "array", "items": { "type": "string" } },
+        "environment_exclusions": { "type": "array", "items": { "type": "string" } },
+        "pass_conditions": { "type": "string" }
+      }
+    },
+    "hold_conditions": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Conditions under which the executor should HOLD."
+    },
+    "rejected_alternatives": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Description of rejected alternative approaches."
+    },
+    "open_questions": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["question_id", "owner_role", "blocking", "required_evidence", "resolution_stage"],
+        "properties": {
+          "question_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[\\x20-\\x7E]+$" },
+          "owner_role": { "type": "string", "minLength": 1 },
+          "blocking": { "type": "boolean" },
+          "required_evidence": { "type": "string", "minLength": 1 },
+          "resolution_stage": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "human_approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_expansion", "security_exception", "commit", "push", "seal", "destructive_migration", "remote_history_mutation"],
+      "properties": {
+        "scope_expansion": { "type": "boolean" },
+        "security_exception": { "type": "boolean" },
+        "commit": { "type": "boolean" },
+        "push": { "type": "boolean" },
+        "seal": { "type": "boolean" },
+        "destructive_migration": { "type": "boolean" },
+        "remote_history_mutation": { "type": "boolean" }
+      }
+    },
+    "integrity": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Integrity section for the contract."
+    }
+  }
+}
