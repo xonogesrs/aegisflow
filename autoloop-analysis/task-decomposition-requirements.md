@@ -1,71 +1,64 @@
 # Task Decomposition Requirements
 
-> AutoLoop「大卡切小卡」第一版最小 contract。
-> 狀態：REQUIREMENTS（非實作）
-> 產生者：Pi + DeepSeek V4
-> 來源性質標記：SOURCE、INFERENCE、RECOMMENDATION
-> **已修復（2026-08-02）**：output union、canonical edges、role_id、checkpoint 相容、
-> execution_policy、card count discriminated union、split gating/advisory metrics。
+> AutoLoop「大卡切小卡」第一版最小 contract。狀態：REQUIREMENTS。
+> **v2.1（2026-08-02）**：三種 verdict union、reason codes、permit 語意修正、
+> trusted requirement manifest、unique identity rules。
 
 ---
 
 ## 1. 架構前提
 
-SOURCE: pi-assessment.md §架構定案、graph-lite.md §核心定位
+SOURCE: pi-assessment.md、graph-lite.md
 
 ```
-Parent Task
-→ AutoLoop 流程控制
-→ Pi + DeepSeek V4 單一執行路徑
-→ 有限 REPAIR
-→ 完整結果與證據
-→ GPT 外部 Review
+Parent Task → AutoLoop → Pi + DeepSeek V4 → REPAIR → GPT Review
 ```
-
-Task Decomposition 發生在「Parent Task 進入 → 第一張 child card 執行前」之間的階段。
 
 ---
 
 ## 2. 輸入 Contract
 
-SOURCE: card-input.schema.json（repo src/schema/card-input.schema.json）
+SOURCE: card-input.schema.json
 
-Decomposer 接收的 parent card 必須是合法 card-input schema 的 instance。
+Decomposer 接收 parent card。可選輸入：
 
-RECOMMENDATION: 拆卡時需額外提供：
+```json
+{
+  "parent_requirement_manifest": [
+    { "requirement_id": "R1", "text": "分析現有結構" }
+  ]
+}
+```
 
-- `repository_context`: Git root、branch、HEAD、remote count
-- `authority_boundary`: 從 parent card 的 scope/limits 推導，子卡不得擴張
-- `max_child_cards`: 第一版上限 7
+- **有 manifest**: M1/Z1 可 deterministic gating
+- **無 manifest**: shadow mode 可產生拆分，但不得宣稱機械式 100% coverage；必須交 reviewer 或 HOLD
 
 ---
 
-## 3. 輸出 Contract — Discriminated Union
-
-Decomposer 輸出是兩種互斥格式之一。
+## 3. 輸出 Contract — Three-Way Union
 
 ### Type A: DECOMPOSITION_NOT_BENEFICIAL
 
-當 parent task 範圍太小，不適合拆分：
+小型原子任務，不值得拆分：
 
 ```json
 {
   "verdict": "DECOMPOSITION_NOT_BENEFICIAL",
   "reason": "<string>",
-  "decomposition_evidence": ["<decomposer 的判斷理由>"]
+  "decomposition_evidence": ["<string>"]
 }
 ```
 
-此時 `child_cards` 不存在，`edges` 不存在，M9 card count = N/A。
+無 child_cards、無 edges。Z1/M1 = N/A。
 
 ### Type B: DECOMPOSED
 
-當 parent task 需要拆分：
+正常拆分，1–7 張 child cards，可包含 deferred/unresolved：
 
 ```json
 {
   "verdict": "DECOMPOSED",
-  "parent_goal": "<string — 從 parent card_body 精煉的單句目標>",
+  "parent_goal": "<string>",
   "execution_policy": {
     "executor": "INHERIT_PARENT",
     "reviewer": "EXTERNAL_GPT",
@@ -73,11 +66,11 @@ Decomposer 輸出是兩種互斥格式之一。
   },
   "child_cards": [
     {
-      "card_id": "<string — 由 decomposer 產生，任意格式>",
-      "role_id": "<string — 語意角色，供 eval matching 使用，如 'audit' / 'impl' / 'test' / 'review'>",
-      "goal": "<string — 這張小卡的單句目標>",
+      "card_id": "<string — unique within graph>",
+      "role_id": "<string — unique within graph, for eval matching>",
+      "goal": "<string>",
       "card_type": "READ_ONLY_AUDIT | IMPLEMENTATION | REPAIR | RUNTIME_VALIDATION | EXTERNAL_REVIEW | BASELINE_COMMIT",
-      "prerequisites": ["<string — 執行前必須滿足的非依賴條件>"],
+      "prerequisites": ["<string>"],
       "allowed_paths": ["<path>"],
       "forbidden_actions": ["<action>"],
       "authority_required": {
@@ -90,232 +83,172 @@ Decomposer 輸出是兩種互斥格式之一。
         "forbidden_commands": ["<command>"]
       },
       "hard_stop": ["<condition>"],
-      "report_format": "<schema reference>",
       "risk_level": "LOW | MEDIUM | HIGH | CRITICAL"
     }
   ],
   "edges": [
     {
-      "from": "<role_id of upstream card>",
-      "to": "<role_id of downstream card>",
+      "from": "<role_id>",
+      "to": "<role_id>",
       "type": "depends_on"
     }
   ],
   "deferred_items": [
     {
       "parent_requirement": "<string>",
-      "reason": "<string — 為什麼無法由任何 child card 承接>"
+      "reason_code": "CROSS_REPO_AUTHORITY_REQUIRED | COMMIT_NOT_AUTHORIZED | PRODUCTION_RUNTIME_OUT_OF_SCOPE | OTHER",
+      "reason": "<string>"
     }
   ],
   "unresolved_items": [
     {
       "parent_requirement": "<string>",
-      "question": "<string — 需要澄清的具體問題>"
+      "reason_code": "CYCLIC_DEPENDENCY | AMBIGUOUS_SCOPE | MISSING_AUTHORITY | OTHER",
+      "question": "<string>"
     }
   ],
   "coverage_map": [
     {
-      "parent_requirement": "<string>",
+      "parent_requirement_id": "<R1 from manifest, or extracted text>",
       "child_role_id": "<string>",
-      "verification": "<string — 如何驗證該 child card 滿足此需求>"
+      "verification": "<string>"
     }
   ],
-  "decomposition_evidence": ["<decomposer 如何推導出這個拆分的說明>"]
+  "decomposition_evidence": ["<string>"]
 }
 ```
 
-**Edge 是唯一的 canonical 依賴來源。** Child card 本身不保存 `depends_on`。READY / HOLD propagation 全部由頂層 `edges` 計算。`additionalProperties: false` 在 schema 層級強制，child card 不得覆寫 execution_policy 或 model。
+**規則**:
+- `card_id` 在 graph 中唯一
+- `role_id` 在 graph 中唯一
+- `edges.from/to` 只能引用存在的 `role_id`
+- `__any__` 為 eval matching 特殊值，表示任一 role_id 承接即可
+- eval 比較使用 `reason_code`（機械），自然語言僅供閱讀
+- `execution_policy` 固定：executor=INHERIT_PARENT, reviewer=EXTERNAL_GPT, multi_model_orchestration=false
+- `additionalProperties: false`，child card 不得覆寫 execution_policy 或 model
+- 1–7 張 child cards（下限 1 以允許 E5 單卡情境）
 
-**Child card 數量建議 2–7**（下限 2 以允許 E5 兩卡情境）。
+### Type C: DECOMPOSITION_BLOCKED
+
+無法形成安全 DAG，至少一項 unresolved：
+
+```json
+{
+  "verdict": "DECOMPOSITION_BLOCKED",
+  "unresolved_items": [
+    {
+      "parent_requirement": "<string>",
+      "reason_code": "CYCLIC_DEPENDENCY | AMBIGUOUS_SCOPE | MISSING_AUTHORITY | OTHER",
+      "question": "<string>"
+    }
+  ],
+  "decomposition_evidence": ["<string>"]
+}
+```
+
+無 child_cards、無 edges。適用於 E8 循環需求。Z1/M1 = N/A（blocked 本身即為 unresolved）。
 
 ---
 
-## 4. Child Card 類型定義
+## 4. Child Card 類型
 
-SOURCE: codex-original.md §P2#13
+| 類型 | mutation | 節點類型 |
+|------|:--:|:--:|
+| `READ_ONLY_AUDIT` | ❌ | READ_ONLY（取得 read lock，不取得 mutation permit） |
+| `IMPLEMENTATION` | ✅ | Mutation（必須取得唯一 mutation permit） |
+| `REPAIR` | ✅（限前卡範圍） | Mutation（取得 mutation permit） |
+| `RUNTIME_VALIDATION` | ❌ | READ_ONLY |
+| `EXTERNAL_REVIEW` | ❌ | READ_ONLY |
+| `BASELINE_COMMIT` | ❌ | READ_ONLY（只變 Git state） |
 
-| 類型 | 說明 | 允許 mutation |
-|------|------|:--:|
-| `READ_ONLY_AUDIT` | 唯讀分析、盤點 | ❌ |
-| `IMPLEMENTATION` | 程式碼變更 | ✅ |
-| `REPAIR` | 修正前卡失敗 | ✅（僅限前卡範圍） |
-| `RUNTIME_VALIDATION` | 執行測試驗證 | ❌ |
-| `EXTERNAL_REVIEW` | 外部模型審查 | ❌ |
-| `BASELINE_COMMIT` | 授權 commit | ❌（只變 Git state） |
-
-INFERENCE: 實作階段需建立這些類型到 card-input.mode enum 的 mapping。
-
-**禁止混在同一卡的組合**（SOURCE: codex-original.md §P2#13）:
-
-- Audit + mutation
-- Implementation + external review
-- Repair + baseline commit
-- 高風險 runtime + source modification
-- 不同 repo 的 mutation
-- 多個不相關主要目標
+**禁止組合**：Audit+mutation、Implementation+review、Repair+commit、跨 repo mutation、多不相關目標。
 
 ---
 
 ## 5. 第一版限制
 
-SOURCE: graph-lite.md §不建議現在做完整 Graph 平台
-
-| 參數 | 第一版值 |
-|------|---------|
-| Child cards 數量（DECOMPOSED） | 2–7 |
+| 參數 | 值 |
+|------|-----|
+| Child cards（DECOMPOSED） | 1–7 |
 | Graph 類型 | static DAG |
-| Writer 數量 | 1 |
-| Concurrent mutation nodes（同時持有 mutation permit） | 0 |
-| Repair loop | finite（max 1 per card） |
+| Maximum concurrent mutation permits | 1 |
+| Parallel mutation execution | disabled |
+| Repair loop | max 1 per card |
 | Auto execution | disabled |
-| Mode | shadow mode（只產生 DAG 不執行） |
+
+READ_ONLY node: READY→RUNNING，取得 read lock，**不**取得 mutation permit。
+Mutation node: READY→RUNNING，必須取得唯一 mutation permit。
 
 ---
 
 ## 6. Graph-lite 節點狀態
 
-SOURCE: graph-lite.md §中斷與恢復
-
 ```
-PENDING   → 尚未滿足前置條件
-READY     → 所有 depends_on 已 PASS，可執行（但尚未持有 permit）
-RUNNING   → 正在執行中（持有 permit）
-PASS      → 執行成功，verified
-REPAIR    → 執行失敗，進入修復
-HOLD      → 無法修復或超出 repair budget
-SKIPPED   → 有正式理由不執行
-```
-
-狀態轉移規則（INFERENCE）:
-
-```
-PENDING → READY    (所有 depends_on = PASS)
-READY   → RUNNING  (AutoLoop 核發 mutation permit)
-RUNNING → PASS     (驗證通過)
-RUNNING → REPAIR   (測試失敗、review finding)
-REPAIR  → PASS     (修復成功)
-REPAIR  → HOLD     (超出 repair budget 或同一 finding 再現)
-READY   → SKIPPED  (有正式理由)
-HOLD    → (terminal，需人工介入)
+PENDING → READY → RUNNING → PASS
+                           → REPAIR → PASS
+                                    → HOLD
+READY → SKIPPED（附 reason）
+HOLD → terminal
 ```
 
 ---
 
-## 7. Edge 與依賴規則
+## 7. Edge 規則
 
-SOURCE: graph-lite.md §邊與依賴
-
-僅有頂層 `edges` 是 canonical 來源。規則：
-
-- `depends_on`: Card B 必須等 Card A PASS 才進入 READY
-- PASS 解鎖下游：Card A PASS → 所有 depends_on Card A 的卡檢查是否所有前置都 PASS
-- HOLD 阻擋 descendants：Card A HOLD → 所有直接/間接 depends_on Card A 的卡設為 PENDING
-- REPAIR 回到原節點：上游 PASS 卡不重跑
-- 不允許循環依賴、self-dependency、指向不存在的 role_id
+- `edges` 是唯一 canonical 來源。child card 本身無 `depends_on`。
+- PASS 解鎖下游，HOLD 阻擋所有 descendants（直接+間接），REPAIR 不影響上游。
+- 禁止循環、self-dependency、未知 role_id。
 
 ---
 
 ## 8. Parent Requirement Coverage
 
-每項 parent requirement 必須：
+有 `parent_requirement_manifest`：每項 requirement_id 必須在 coverage_map / deferred / unresolved 中出現。
 
-1. 被一張或多張 child card 承接（記錄在 coverage_map）；或
-2. 明確放入 deferred_items 並附理由；或
-3. 明確放入 unresolved_items 並附具體問題
-
-不得靜默遺漏，不得重新解釋需求以製造 100% coverage。
+無 manifest：可產生拆分，但不得宣稱 100% coverage。Z1 自動 = HOLD（無法驗證）或交 reviewer。
 
 ---
 
-## 9. 權限保留原則
+## 9. 權限保留
 
-SOURCE: pi-assessment.md §三個角色
-
-Child card 的 authority 不得超過 parent card。AutoLoop validator 機械式檢查。
-
-第一版 parent authority 僅涵蓋 repository paths。以下權限不在第一版範圍，出現即 unresolved：
-- Production database mutation
-- Network/remote access
-- Credential scope
-- Cross-repo mutation（單一 parent card 只有一個 worktree_path）
+Child authority ≤ parent。第一版 parent 只有 repo paths。以下出現即 unresolved：production DB、network/remote、credential、cross-repo。
 
 ---
 
-## 10. Checkpoint 需求
+## 10. Checkpoint
 
-SOURCE: graph-lite.md §中斷與恢復，INFERENCE: 與現有 checkpoint-store 相容
+Graph checkpoint 是既有 `checkpoint-store.mjs` 的 additive extension。沿用既有 identity 欄位。
 
-Graph checkpoint 是既有 checkpoint store 的 additive extension，不另建平行系統。沿用既有 `execution_id`、`checkpoint_id`、`chain_id`、repository identity、expected HEAD/ref、revision CAS、checksum。
+Graph extension 記錄所有 node states（含 PENDING/READY/RUNNING/PASS/REPAIR/HOLD/SKIPPED）。
 
-Graph extension 保存：
-
-```json
-{
-  "graph_identity": "<parent card_id + execution_id>",
-  "parent_baseline": {
-    "branch": "<string>",
-    "head": "<string>",
-    "fingerprint": "<string>"
-  },
-  "node_states": {
-    "<role_id>": {
-      "state": "PENDING | READY | RUNNING | PASS | REPAIR | HOLD | SKIPPED",
-      "attempt_count": 0,
-      "verified_artifacts": ["<path>"],
-      "mutation_snapshot": {
-        "before": "<fingerprint>",
-        "after": "<fingerprint>"
-      }
-    }
-  },
-  "blocked_descendants": ["<role_id>"],
-  "last_completed_transition": "<role_id>: <from_state> → <to_state>",
-  "resume_preconditions": [
-    "current branch/HEAD/worktree fingerprint == checkpoint expected state"
-  ]
-}
-```
-
-Resume 前提是 fingerprint 相等，**不**要求 working tree clean（PASS 後的合法變更可能尚未 commit）。
+Resume 前提：branch/HEAD/fingerprint 等於 checkpoint 記錄。**不**要求 working tree clean。
 
 ---
 
 ## 11. Reason Codes
 
-SOURCE: codex-original.md §五 §2，RECOMMENDATION
-
 ```text
-# Decomposition 階段
-DECOMPOSITION_NOT_BENEFICIAL     — parent task 太小
-DECOMPOSITION_CYCLE_DETECTED     — 循環依賴
-DECOMPOSITION_COVERAGE_GAP       — parent requirement 未被承接
-DECOMPOSITION_AUTHORITY_EXPANSION — child 權限超過 parent
+# Decomposition
+DECOMPOSITION_NOT_BENEFICIAL — 小任務
+DECOMPOSITION_BLOCKED — 無法形成安全 DAG
+DECOMPOSITION_CYCLE_DETECTED
+DECOMPOSITION_COVERAGE_GAP
+DECOMPOSITION_AUTHORITY_EXPANSION
 
-# Graph 驗證階段
-GRAPH_CYCLE                      — DAG 循環
-GRAPH_ORPHAN_REQUIREMENT         — requirement 無節點
-GRAPH_UNKNOWN_ROLE_REF           — edge 指向不存在的 role_id
-GRAPH_SELF_DEPENDENCY            — 自依賴
-GRAPH_MULTIPLE_MUTATION_PERMITS  — >1 節點同時持有 mutation permit
-GRAPH_UNBOUNDED_REPAIR           — repair 無上限
+# Graph
+GRAPH_CYCLE / GRAPH_ORPHAN_REQUIREMENT / GRAPH_UNKNOWN_ROLE_REF
+GRAPH_SELF_DEPENDENCY / GRAPH_MULTIPLE_MUTATION_PERMITS / GRAPH_UNBOUNDED_REPAIR
 
-# 執行階段
-EXECUTION_MUTATION_SCOPE_VIOLATION — 變更超出 allowed_paths
-EXECUTION_EVIDENCE_INCOMPLETE      — 必要證據缺失
-EXECUTION_PROVIDER_TIMEOUT         — provider 超時
-EXECUTION_STATE_DIVERGENCE         — state 與 filesystem 不一致
+# Execution
+EXECUTION_MUTATION_SCOPE_VIOLATION / EXECUTION_EVIDENCE_INCOMPLETE
+EXECUTION_PROVIDER_TIMEOUT / EXECUTION_STATE_DIVERGENCE
 
-# 修復階段
-REPAIR_BUDGET_EXHAUSTED          — repair 次數用完
-REPAIR_SAME_FINDING_RECURRED     — 同一 finding 再現
-REPAIR_SCOPE_EXPANSION           — repair 擴張 scope
+# Repair
+REPAIR_BUDGET_EXHAUSTED / REPAIR_SAME_FINDING_RECURRED / REPAIR_SCOPE_EXPANSION
 ```
 
 ---
 
-## 12. 來源忠實性標記
+## 12. 來源標記
 
-- **SOURCE**: 直接來自既有文件或 repo 程式碼
-- **INFERENCE**: 跨文件推導
-- **RECOMMENDATION**: Pi 提出的設計建議
-- **UNRESOLVED**: 需進一步討論
+SOURCE / INFERENCE / RECOMMENDATION / UNRESOLVED
