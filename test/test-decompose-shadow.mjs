@@ -298,6 +298,22 @@ describe("F3 — no raw output in errors", () => {
     const str = JSON.stringify(r);
     assert.ok(!str.includes("sk-secret"), "secret must not appear in validation errors");
   });
+  it("45 secret in allowed_path not leaked", async () => {
+    const d = validDecomposed();
+    d.child_cards[0].allowed_paths = ["sk-secret-path/"];
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
+    assert.equal(r.status, "INVALID_DECOMPOSITION");
+    const str = JSON.stringify(r);
+    assert.ok(!str.includes("sk-secret"), "secret path must not appear in governance errors");
+  });
+  it("46 secret in role_id not leaked", async () => {
+    const d = validDecomposed();
+    d.child_cards[1].role_id = "sk-secret-role";
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
+    assert.equal(r.status, "INVALID_DECOMPOSITION");
+    const str = JSON.stringify(r);
+    assert.ok(!str.includes("sk-secret"), "secret role_id must not appear in governance errors");
+  });
 });
 
 // ======== E. SIDE-EFFECT BOUNDARIES ========

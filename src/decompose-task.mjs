@@ -109,7 +109,7 @@ export async function decomposeTask(opts = {}) {
       reason_code: "DECOMPOSITION_VALIDATION_FAILED",
       validation: {
         valid: false,
-        errors: validation.errors.map(e => ({ rule: e.rule, message: sanitizeMessage(e.message) }))
+        errors: validation.errors.map(({ rule }) => ({ rule }))
       }
     };
   }
@@ -146,11 +146,4 @@ function parseProviderOutput(raw) {
   }
 
   return { error: true, output_type: Array.isArray(raw) ? "array" : typeof raw };
-}
-
-// --- F3: strip actual values from error messages ---
-function sanitizeMessage(msg) {
-  if (!msg || typeof msg !== "string") return "";
-  // Strip JSON data from schema error messages (const/enum contain actual values)
-  return msg.replace(/got .+$/g, "got [REDACTED]").slice(0, 200);
 }
