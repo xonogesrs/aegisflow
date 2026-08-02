@@ -244,3 +244,17 @@ describe("others", () => {
         coverage_map: [], decomposition_evidence: ["e"] } }).valid, false);
   });
 });
+
+// ======== Card 1 regression: null !== object ========
+describe("null type check regression", () => {
+  it("edges=[null] rejected (null not object)", () => {
+    const v = d(); v.edges = [null];
+    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
+    assert.ok(r.errors.some(e => e.rule === "SCHEMA"));
+  });
+  it("child_cards=[null] rejected", () => {
+    const v = d(); v.child_cards = [null];
+    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
+    assert.ok(r.errors.some(e => e.rule === "SCHEMA"));
+  });
+});

@@ -8,6 +8,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { decomposeTask } from "../src/decompose-task.mjs";
 
 const parentCard = {
@@ -260,6 +261,11 @@ describe("F2 — strict input", () => {
     const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: {} });
     assert.equal(r.status, "INVALID_INPUT");
   });
+  it("41 circular parentCard → INVALID_INPUT", async () => {
+    const circ = { limits: {}, scope: {} }; circ.self = circ;
+    const r = await decomposeTask({ parentCard: circ, requirementManifest: manifest, provider: makeProvider({}) });
+    assert.equal(r.status, "INVALID_INPUT");
+  });
 });
 
 // ======== F3: NO RAW OUTPUT LEAK ========
@@ -284,6 +290,14 @@ describe("F3 — no raw output in errors", () => {
     assert.ok(!("raw_output_summary" in r));
     assert.ok("output_length" in r);
   });
+  it("44 secret in invalid decomposition not leaked", async () => {
+    const d = validDecomposed();
+    d.execution_policy = { executor: "sk-secret-value-12345", reviewer: "EXTERNAL_GPT", multi_model_orchestration: false };
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
+    assert.equal(r.status, "INVALID_DECOMPOSITION");
+    const str = JSON.stringify(r);
+    assert.ok(!str.includes("sk-secret"), "secret must not appear in validation errors");
+  });
 });
 
 // ======== E. SIDE-EFFECT BOUNDARIES ========
@@ -302,5 +316,20 @@ describe("E — side-effects", () => {
     const p = { generate: async () => { throw new Error("boom"); } };
     const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
     assert.equal(r.status, "INVALID_PROVIDER_OUTPUT");
+  });
+  it("47 no filesystem write", async () => {
+    const src = readFileSync(new URL("../src/decompose-task.mjs", import.meta.url), "utf8");
+    assert.ok(!src.includes("writeFileSync") && !src.includes("writeFile(") && !src.includes("mkdirSync") && !src.includes("rmSync"),
+      "decompose-task.mjs must not contain filesystem write operations");
+  });
+  it("48 no child executor call", async () => {
+    const src = readFileSync(new URL("../src/decompose-task.mjs", import.meta.url), "utf8");
+    assert.ok(!src.includes("lifecycle") && !src.includes("executor") && !src.includes("runCard") && !src.includes("operatorTick"),
+      "decompose-task.mjs must not call lifecycle runner or child executor");
+  });
+  it("49 no network call", async () => {
+    const src = readFileSync(new URL("../src/decompose-task.mjs", import.meta.url), "utf8");
+    assert.ok(!src.includes("fetch(") && !src.includes("http.request") && !src.includes("https.request") && !src.includes("axios"),
+      "decompose-task.mjs must not contain network calls");
   });
 });

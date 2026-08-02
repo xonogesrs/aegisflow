@@ -58,15 +58,21 @@ export async function decomposeTask(opts = {}) {
     return { status: "INVALID_INPUT", reason_code: "DECOMPOSITION_INPUT_INVALID", errors: inputErrors };
   }
 
-  // --- Build provider input ---
-  const providerInput = JSON.stringify({
-    parentCard,
-    requirementManifest,
-    repositoryContext: {
-      worktreePath: parentCard.worktree_path || "(unspecified)",
-      baseBranch: parentCard.base_branch || "main"
-    }
-  });
+  // --- Build provider input (F4: safe serialization) ---
+  let providerInput;
+  try {
+    providerInput = JSON.stringify({
+      parentCard,
+      requirementManifest,
+      repositoryContext: {
+        worktreePath: parentCard.worktree_path || "(unspecified)",
+        baseBranch: parentCard.base_branch || "main"
+      }
+    });
+  } catch (err) {
+    return { status: "INVALID_INPUT", reason_code: "DECOMPOSITION_INPUT_INVALID",
+      errors: ["parentCard or requirementManifest cannot be serialized: " + (err?.constructor?.name || "Error")] };
+  }
 
   // --- Single provider call (F3: no raw output in error) ---
   let rawOutput;
@@ -94,11 +100,18 @@ export async function decomposeTask(opts = {}) {
 
   const parsed = parseResult.value;
 
-  // --- Validate through Card 1 validator ---
+  // --- Validate through Card 1 validator (F3: sanitize errors) ---
   const validation = validateDecomposition({ parentCard, requirementManifest, decomposition: parsed });
 
   if (!validation.valid) {
-    return { status: "INVALID_DECOMPOSITION", reason_code: "DECOMPOSITION_VALIDATION_FAILED", validation };
+    return {
+      status: "INVALID_DECOMPOSITION",
+      reason_code: "DECOMPOSITION_VALIDATION_FAILED",
+      validation: {
+        valid: false,
+        errors: validation.errors.map(e => ({ rule: e.rule, message: sanitizeMessage(e.message) }))
+      }
+    };
   }
 
   return { status: "VALID", decomposition: parsed, validation };
@@ -133,4 +146,11 @@ function parseProviderOutput(raw) {
   }
 
   return { error: true, output_type: Array.isArray(raw) ? "array" : typeof raw };
+}
+
+// --- F3: strip actual values from error messages ---
+function sanitizeMessage(msg) {
+  if (!msg || typeof msg !== "string") return "";
+  // Strip JSON data from schema error messages (const/enum contain actual values)
+  return msg.replace(/got .+$/g, "got [REDACTED]").slice(0, 200);
 }
