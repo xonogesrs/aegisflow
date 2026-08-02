@@ -1,12 +1,17 @@
 // shared/json-schema-validator.mjs
 //
 // Minimal JSON Schema draft-07 validator for AutoLoop schemas.
-// Supports: type, required, properties, additionalProperties,
-// enum, const, oneOf, minItems, maxItems, minLength, items.
+// Supports: type (including "integer"), required, properties, additionalProperties,
+// enum, const, oneOf, minItems, maxItems, minLength, minimum, items, default.
 
 export function validate(schema, data, path = "$") {
   const errors = [];
   if (schema === undefined || schema === null) return { valid: true, errors };
+
+  // Apply default values before validation
+  if (schema.default !== undefined && data === undefined) {
+    data = schema.default;
+  }
 
   // const
   if (schema.const !== undefined && data !== schema.const) {
@@ -20,19 +25,31 @@ export function validate(schema, data, path = "$") {
     return { valid: false, errors };
   }
 
-  // type
+  // type (including "integer")
   if (schema.type) {
     const types = Array.isArray(schema.type) ? schema.type : [schema.type];
-    let typeMatch = false;
+    let match = false;
     for (const t of types) {
-      if (t === "null" && data === null) { typeMatch = true; break; }
-      if (t === "array" && Array.isArray(data)) { typeMatch = true; break; }
-      if (t === "object" && data !== null && typeof data === "object" && !Array.isArray(data)) { typeMatch = true; break; }
-      if (typeof data === t) { typeMatch = true; break; }
+      if (t === "null" && data === null) { match = true; break; }
+      if (t === "array" && Array.isArray(data)) { match = true; break; }
+      if (t === "object" && data !== null && typeof data === "object" && !Array.isArray(data)) { match = true; break; }
+      if (t === "integer") {
+        if (typeof data === "number" && Number.isInteger(data)) { match = true; break; }
+      } else if (typeof data === t) { match = true; break; }
     }
-    if (!typeMatch) {
+    if (!match) {
       errors.push(`${path}: expected ${types.join("|")}, got ${data === null ? "null" : Array.isArray(data) ? "array" : typeof data}`);
       return { valid: false, errors };
+    }
+  }
+
+  // number/integer constraints
+  if (typeof data === "number") {
+    if (schema.minimum !== undefined && data < schema.minimum) {
+      errors.push(`${path}: minimum ${schema.minimum}, got ${data}`);
+    }
+    if (schema.maximum !== undefined && data > schema.maximum) {
+      errors.push(`${path}: maximum ${schema.maximum}, got ${data}`);
     }
   }
 
@@ -62,7 +79,6 @@ export function validate(schema, data, path = "$") {
 
   // object constraints
   if (data && typeof data === "object" && !Array.isArray(data)) {
-    // required
     if (schema.required) {
       for (const req of schema.required) {
         if (!(req in data)) {
@@ -71,7 +87,6 @@ export function validate(schema, data, path = "$") {
       }
     }
 
-    // additionalProperties
     if (schema.properties) {
       const allowed = new Set(Object.keys(schema.properties));
       if (schema.additionalProperties === false) {
@@ -83,29 +98,29 @@ export function validate(schema, data, path = "$") {
       }
     }
 
-    // properties
     if (schema.properties) {
       for (const [key, propSchema] of Object.entries(schema.properties)) {
         if (key in data) {
           const r = validate(propSchema, data[key], `${path}.${key}`);
           errors.push(...r.errors);
+        } else if (propSchema.default !== undefined) {
+          data[key] = propSchema.default;
         }
       }
     }
 
-    // oneOf
     if (schema.oneOf) {
       let matchCount = 0;
-      const oneOfErrors = [];
       for (let i = 0; i < schema.oneOf.length; i++) {
-        const r = validate(schema.oneOf[i], data, `${path}[oneOf#${i}]`);
+        // Clone to prevent defaults from one variant contaminating the next
+        const clone = JSON.parse(JSON.stringify(data));
+        const r = validate(schema.oneOf[i], clone, `${path}[oneOf#${i}]`);
         if (r.errors.length === 0) matchCount++;
-        oneOfErrors.push(r.errors);
       }
       if (matchCount === 0) {
         errors.push(`${path}: matches none of ${schema.oneOf.length} oneOf variants`);
       } else if (matchCount > 1) {
-        errors.push(`${path}: matches ${matchCount} oneOf variants (expected exactly 1)`);
+        errors.push(`${path}: matches ${matchCount} oneOf variants (expected 1)`);
       }
     }
 
