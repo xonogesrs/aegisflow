@@ -1,85 +1,66 @@
 # Task Decomposition Scorecard
 
-> v2.1 — gating metrics 可完全 deterministic；advisory metrics 記錄用。
-> **修復**：Z1/M1 依賴 manifest、Z10 執行政策、permit 語意、M9 1–7、reason_code matching。
+> v2.2 — Z6/Z8 修正、M9 補 HOLD 條件、risk 對齊。
 
 ---
 
 ## GATING METRICS
 
-### Z1–Z10：零容忍（任一即 FAIL）
+### Z1–Z9：零容忍
 
-| # | 條件 | 前提 |
-|---|------|------|
-| Z1 | Parent requirement 未被 coverage/deferred/unresolved 覆蓋 | 需 parent_requirement_manifest 存在；NOT_BENEFICIAL/BLOCKED → N/A |
-| Z2 | Authority expansion | — |
-| Z3 | Dependency cycle | DECOMPOSED only |
-| Z4 | Unknown role_id reference | DECOMPOSED only |
-| Z5 | Self-dependency | DECOMPOSED only |
-| Z6 | 同時持有 mutation permit > 1 | runtime；decomposition 階段檢查 card_type 宣告 |
-| Z7 | Unbounded repair loop | — |
-| Z8 | 同卡 card_type = IMPLEMENTATION + EXTERNAL_REVIEW | — |
-| Z9 | Commit permission invented | — |
-| Z10 | execution_policy 偏離固定值（非 INHERIT_PARENT/EXTERNAL_GPT/false） | — |
+| # | 條件 | 可用階段 |
+|---|------|:--:|
+| Z1 | Requirement 未被 coverage/deferred/unresolved 覆蓋 | Card 3+（需 manifest） |
+| Z2 | Authority expansion | Card 1+ |
+| Z3 | Dependency cycle | Card 1+ |
+| Z4 | Unknown role_id ref | Card 1+ |
+| Z5 | Self-dependency | Card 1+ |
+| Z6 | 同時持有 mutation permit > 1 | Card 4+（runtime） |
+| Z7 | Unbounded repair | Card 1+ |
+| Z8 | EXTERNAL_REVIEW card 要求 mutation authority 或 mutation actions | Card 1+ |
+| Z9 | Commit permission invented | Card 1+ |
+| Z10 | execution_policy 偏離固定值 | Card 1+ |
 
-### M1: Requirement Coverage Rate
+### M1: Coverage Rate
 
-- **定義**: `(covered + deferred + unresolved) / total_manifest_requirements`
-- **PASS**: = 1.0（manifest 存在時）；無 manifest → HOLD（無法驗證）
-- **NOT_BENEFICIAL/BLOCKED**: N/A
+- `(covered + deferred + unresolved) / total_manifest`
+- PASS: = 1.0（有 manifest）；無 manifest → HOLD
+- NOT_BENEFICIAL/BLOCKED → N/A
 
-### M3: Dependency Correctness
+### M3: Dependency
 
-- **定義**: `invalid_edges_count`
-- **PASS**: = 0；total_edges=0 不影響 PASS
-- **NOT_BENEFICIAL/BLOCKED**: N/A
+- `invalid_edges_count = 0`
+- total_edges=0 不影響 PASS；NOT_BENEFICIAL/BLOCKED → N/A
 
 ### M7: Recovery Locality
 
-- **定義**: REPAIR 時需重跑的上游 PASS 卡數量
-- **PASS**: = 0
-- **可測量時機**: Card 3.5+（execution runtime）
+- REPAIR 重跑上游數 = 0
+- Card 3.5+（runtime only）
 
 ### M9: Card Count
 
-- **定義**: `child_cards.length`
-- **PASS**: 1–7（DECOMPOSED）；N/A（NOT_BENEFICIAL/BLOCKED）
-- **HOLD**: > 7
+- DECOMPOSED: 1–7 PASS；<1 或 >7 → HOLD
+- NOT_BENEFICIAL/BLOCKED → N/A
 
 ---
 
-## ADVISORY METRICS
+## ADVISORY（A1–A6，記錄用）
 
-僅供 A/B/C ablation 參考，不直接用於 gating。
-
-| # | 指標 | 建議 PASS | 注意 |
+| # | 指標 | 建議 | 注意 |
 |---|------|:--:|------|
-| A1 | Independent verifiability | ≥ 0.8 | ≤ 0.5 為 advisory warning |
-| A2 | Card cohesion（LLM 輔助） | ≥ 0.9 | goal 是否單一 |
-| A3 | Duplicate path overlap | ≤ 0.1 | 僅計算 allowed_paths 交集 |
-| A4 | Deferred explicitness | = 1.0 | 用 reason_code 機械判定 |
-| A5 | Human intervention（unresolved count） | ≤ 3 | 高風險任務偏高屬正常 |
-| A6 | Context duplication（估算） | ≤ 0.3 | 無可重現算法，需 empirical |
+| A1 | Verifiability | ≥ 0.8 | |
+| A2 | Cohesion | ≥ 0.9 | LLM 輔助 |
+| A3 | Duplicate paths | ≤ 0.1 | |
+| A4 | Deferred explicitness | reason_code 存在 = 1.0 | |
+| A5 | Unresolved count | ≤ 3 | 高風險偏高正常 |
+| A6 | Context duplication | ≤ 0.3 | 估算值 |
 
 ---
 
-## A/B/C Ablation
+## Ablation
 
-| 維度 | A: 人工 | B: Pi 純文字 | C: Graph-lite |
-|------|--------|-------------|--------------|
-| Requirement 遺漏 | 人工 | 無驗證 | coverage map |
-| 權限擴張 | 人工 | LLM 自報 | schema 強制 |
-| 錯誤 PASS | LLM 自評 | LLM 自評 | mechanical |
-
----
-
-## 指標適用矩陣
-
-| 指標 | Eval Cases | 說明 |
-|------|:--:|------|
-| Z1–Z10 | E1–E12 | 零容忍 |
-| M1 Coverage | E2, E3, E6 | manifest-based |
-| M3 Dependency | E2, E3, E4, E9, E10 | edges 驗證 |
-| M7 Recovery | E9, E10 | execution（Card 3.5/5） |
-| M9 Card Count | E1, E5, E8, E11 | 1–7 / N/A |
-| A1–A6 | as applicable | advisory only |
+| | A: 人工 | B: Pi 文字 | C: Graph-lite |
+|---|---|---|---|
+| 遺漏 | 人工 | 無 | coverage map |
+| 權限 | 人工 | LLM 自報 | schema 強制 |
+| 錯誤 PASS | LLM | LLM | mechanical |
