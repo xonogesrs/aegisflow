@@ -59,7 +59,7 @@ Use when the parent task can be decomposed into 1-7 child cards:
    - IMPLEMENTATION, REPAIR → mutation_allowed:true (only if parent allows)
 7. Child allowed_paths MUST be within parent allowed_paths
 8. Child authority MUST NOT exceed parent authority (mutation, commit, push)
-9. Every requirement_id from the manifest MUST appear in coverage_map, deferred_items, or unresolved_items — exactly once, never in multiple categories
+9. Each requirement_id MUST belong to exactly ONE disposition category: coverage_map, deferred_items, or unresolved_items. Within coverage_map, one requirement_id may map to multiple distinct role_ids when multiple child cards jointly implement or verify it.
 10. Edges use "from" and "to" with role_ids. No cycles, no self-references.
 11. NEVER include commit, push, secret, or network operations in child cards
 12. Child cards 1-7. If not beneficial to decompose, use NOT_BENEFICIAL. If blocked, use BLOCKED.

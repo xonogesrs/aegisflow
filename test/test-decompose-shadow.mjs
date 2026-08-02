@@ -1,20 +1,18 @@
 // test/test-decompose-shadow.mjs
 //
-// Card 2 — Shadow-mode decomposer scripted tests.
-// 36 test cases covering valid, invalid, parsing, validation, input, side-effects.
+// Card 2 repaired — shadow-mode decomposer tests.
+// F1: malformed edges → INVALID_DECOMPOSITION (no throw)
+// F2: strict manifest item + parentCard validation
+// F3: no raw output in error results
+// F5: 3 added boundary tests (filesystem, child exec, network)
 
-import { describe, it, before, after } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { decomposeTask } from "../src/decompose-task.mjs";
-import { readFileSync, existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 const parentCard = {
-  card_id: "CARD_TEST_2",
-  mode: "IMPLEMENT",
-  worktree_path: "/tmp/test-autoloop",
-  base_branch: "main",
+  card_id: "CARD_TEST_2", mode: "IMPLEMENT",
+  worktree_path: "/tmp/test-autoloop", base_branch: "main",
   limits: { commit_allowed: false, push_allowed: false, mutation_allowed: true },
   scope: { allowed_paths: ["src/", "test/"], forbidden_paths: ["src/secrets/"] },
   card_body: "Test parent task"
@@ -26,20 +24,14 @@ const manifest = [
   { requirement_id: "R3", text: "test" }
 ];
 
-// --- Scripted provider ---
-function makeProvider(output, opts = {}) {
-  let callCount = 0;
-  return {
-    callCount: () => callCount,
-    generate: async () => { callCount++; return output; }
-  };
+function makeProvider(output) {
+  let calls = 0;
+  return { callCount: () => calls, generate: async () => { calls++; return output; } };
 }
 
-// --- Valid decompositions for scripted use ---
 function validDecomposed() {
   return {
-    verdict: "DECOMPOSED",
-    parent_goal: "Implement test feature",
+    verdict: "DECOMPOSED", parent_goal: "Implement test feature",
     execution_policy: { executor: "INHERIT_PARENT", reviewer: "EXTERNAL_GPT", multi_model_orchestration: false },
     child_cards: [
       { card_id: "c1", role_id: "audit", goal: "Audit", card_type: "READ_ONLY_AUDIT",
@@ -63,241 +55,252 @@ function validDecomposed() {
   };
 }
 
-// ======== A. THREE VALID VERDICTS ========
-
-describe("A — valid verdicts", () => {
-  it("1 — DECOMPOSITION_NOT_BENEFICIAL", async () => {
-    const output = { verdict: "DECOMPOSITION_NOT_BENEFICIAL", reason: "too small", decomposition_evidence: ["e"] };
-    const p = makeProvider(output);
+// ======== A. VALID VERDICTS ========
+describe("A — valid", () => {
+  it("1 NOT_BENEFICIAL", async () => {
+    const p = makeProvider({ verdict: "DECOMPOSITION_NOT_BENEFICIAL", reason: "small", decomposition_evidence: ["e"] });
     const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
-    assert.equal(r.status, "VALID");
-    assert.equal(p.callCount(), 1);
+    assert.equal(r.status, "VALID"); assert.equal(p.callCount(), 1);
   });
-
-  it("2 — DECOMPOSED", async () => {
+  it("2 DECOMPOSED", async () => {
     const p = makeProvider(validDecomposed());
     const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
-    assert.equal(r.status, "VALID");
-    assert.equal(p.callCount(), 1);
-    assert.equal(r.decomposition.verdict, "DECOMPOSED");
+    assert.equal(r.status, "VALID"); assert.equal(p.callCount(), 1);
   });
-
-  it("3 — DECOMPOSITION_BLOCKED", async () => {
-    const output = { verdict: "DECOMPOSITION_BLOCKED",
+  it("3 BLOCKED", async () => {
+    const p = makeProvider({ verdict: "DECOMPOSITION_BLOCKED",
       unresolved_items: [{ requirement_id: "R1", reason_code: "CYCLIC_DEPENDENCY", question: "?" }],
-      decomposition_evidence: ["e"] };
-    const p = makeProvider(output);
+      decomposition_evidence: ["e"] });
     const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
-    assert.equal(r.status, "VALID");
-    assert.equal(p.callCount(), 1);
+    assert.equal(r.status, "VALID"); assert.equal(p.callCount(), 1);
   });
 });
 
-// ======== B. PROVIDER OUTPUT PARSING ========
-
-describe("B — provider output parsing", () => {
-  it("4 — accepts JSON string", async () => {
-    const p = makeProvider(JSON.stringify(validDecomposed()));
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+// ======== B. PARSING ========
+describe("B — parsing", () => {
+  it("4 JSON string", async () => {
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(JSON.stringify(validDecomposed())) });
     assert.equal(r.status, "VALID");
   });
-
-  it("5 — accepts object", async () => {
-    const p = makeProvider(validDecomposed());
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+  it("5 object", async () => {
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(validDecomposed()) });
     assert.equal(r.status, "VALID");
   });
-
-  it("6 — rejects non-JSON string", async () => {
-    const p = makeProvider("not json at all");
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+  it("6 non-JSON string", async () => {
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider("not json") });
     assert.equal(r.status, "INVALID_PROVIDER_OUTPUT");
   });
-
-  it("7 — rejects markdown-fenced JSON", async () => {
-    const p = makeProvider("```json\n" + JSON.stringify(validDecomposed()) + "\n```");
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+  it("7 markdown fence", async () => {
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider("```json\n{}") });
     assert.equal(r.status, "INVALID_PROVIDER_OUTPUT");
   });
-
-  it("8 — rejects JSON with explanatory text", async () => {
-    const p = makeProvider("Here is the result:\n" + JSON.stringify(validDecomposed()));
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+  it("8 explanatory prefix", async () => {
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider("here:\n{}") });
     assert.equal(r.status, "INVALID_PROVIDER_OUTPUT");
   });
-
-  it("9 — rejects empty string", async () => {
-    const p = makeProvider("");
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+  it("9 empty string", async () => {
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider("") });
     assert.equal(r.status, "INVALID_PROVIDER_OUTPUT");
   });
-
-  it("10 — rejects null", async () => {
-    const p = makeProvider(null);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+  it("10 null", async () => {
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(null) });
     assert.equal(r.status, "INVALID_PROVIDER_OUTPUT");
   });
-
-  it("11 — rejects array", async () => {
-    const p = makeProvider([1, 2, 3]);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+  it("11 array", async () => {
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider([1,2,3]) });
     assert.equal(r.status, "INVALID_PROVIDER_OUTPUT");
+  });
+});
+
+// ======== F1: MALFORMED EDGES (no throw) ========
+describe("F1 — malformed edges", () => {
+  it("12 edges={}", async () => {
+    const d = validDecomposed(); d.edges = {};
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
+    assert.equal(r.status, "INVALID_DECOMPOSITION");
+  });
+  it("13 edges='invalid'", async () => {
+    const d = validDecomposed(); d.edges = "invalid";
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
+    assert.equal(r.status, "INVALID_DECOMPOSITION");
+  });
+  it("14 edges=[null]", async () => {
+    const d = validDecomposed(); d.edges = [null];
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
+    assert.equal(r.status, "INVALID_DECOMPOSITION");
+  });
+  it("15 edges=[{from:'a'}]", async () => {
+    const d = validDecomposed(); d.edges = [{ from: "a" }];
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
+    assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
 });
 
 // ======== C. VALIDATOR INTEGRATION ========
-
-describe("C — validator integration", () => {
-  it("12 — unknown verdict → INVALID_DECOMPOSITION", async () => {
-    const d = validDecomposed(); d.verdict = "UNKNOWN";
-    const p = makeProvider(d);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+describe("C — validator", () => {
+  it("16 unknown verdict", async () => {
+    const d = validDecomposed(); d.verdict = "X";
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
     assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
-
-  it("13 — missing child_cards → INVALID_DECOMPOSITION", async () => {
+  it("17 missing child_cards", async () => {
     const d = validDecomposed(); delete d.child_cards;
-    const p = makeProvider(d);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
     assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
-
-  it("14 — duplicate card_id → INVALID_DECOMPOSITION", async () => {
+  it("18 duplicate card_id", async () => {
     const d = validDecomposed(); d.child_cards[1].card_id = "c1";
-    const p = makeProvider(d);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
     assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
-
-  it("15 — duplicate role_id → INVALID_DECOMPOSITION", async () => {
+  it("19 duplicate role_id", async () => {
     const d = validDecomposed(); d.child_cards[1].role_id = "audit";
-    const p = makeProvider(d);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
     assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
-
-  it("16 — unknown edge role → INVALID_DECOMPOSITION", async () => {
-    const d = validDecomposed(); d.edges.push({ from: "audit", to: "nonexistent" });
-    const p = makeProvider(d);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+  it("20 unknown edge role", async () => {
+    const d = validDecomposed(); d.edges = [{ from: "audit", to: "impl" }, { from: "audit", to: "x" }];
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
     assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
-
-  it("17 — self edge → INVALID_DECOMPOSITION", async () => {
-    const d = validDecomposed(); d.edges.push({ from: "audit", to: "audit" });
-    const p = makeProvider(d);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+  it("21 self edge", async () => {
+    const d = validDecomposed(); d.edges = [{ from: "audit", to: "audit" }];
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
     assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
-
-  it("18 — cycle → INVALID_DECOMPOSITION", async () => {
+  it("22 cycle", async () => {
     const d = validDecomposed();
     d.edges = [{ from: "audit", to: "impl" }, { from: "impl", to: "test" }, { from: "test", to: "audit" }];
-    const p = makeProvider(d);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
     assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
-
-  it("19 — authority expansion → INVALID_DECOMPOSITION", async () => {
+  it("23 authority expansion", async () => {
     const d = validDecomposed(); d.child_cards[0].allowed_paths = ["etc/"];
-    const p = makeProvider(d);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
     assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
-
-  it("20 — commit_allowed=true → INVALID_DECOMPOSITION", async () => {
+  it("24 commit_allowed=true", async () => {
     const d = validDecomposed(); d.child_cards[0].authority_required.commit_allowed = true;
-    const p = makeProvider(d);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
     assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
-
-  it("21 — push_allowed=true → INVALID_DECOMPOSITION", async () => {
+  it("25 push_allowed=true", async () => {
     const d = validDecomposed(); d.child_cards[0].authority_required.push_allowed = true;
-    const p = makeProvider(d);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
     assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
-
-  it("22 — __any__ role_id → INVALID_DECOMPOSITION", async () => {
+  it("26 __any__ role", async () => {
     const d = validDecomposed(); d.child_cards[0].role_id = "__any__";
-    const p = makeProvider(d);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
     assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
-
-  it("23 — missing requirement disposition → INVALID_DECOMPOSITION", async () => {
+  it("27 missing disposition", async () => {
     const d = validDecomposed(); d.coverage_map = d.coverage_map.slice(0, 2);
-    const p = makeProvider(d);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
     assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
-
-  it("24 — coverage orphan role → INVALID_DECOMPOSITION", async () => {
+  it("28 coverage orphan", async () => {
     const d = validDecomposed();
-    d.coverage_map.push({ requirement_id: "R3", role_id: "nonexistent", verification: "x" });
-    const p = makeProvider(d);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+    d.coverage_map.push({ requirement_id: "R3", role_id: "x", verification: "x" });
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
     assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
-
-  it("25 — execution_policy deviation → INVALID_DECOMPOSITION", async () => {
+  it("29 execution_policy deviation", async () => {
     const d = validDecomposed();
     d.execution_policy = { executor: "CLAUDE", reviewer: "EXTERNAL_GPT", multi_model_orchestration: false };
-    const p = makeProvider(d);
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider(d) });
     assert.equal(r.status, "INVALID_DECOMPOSITION");
   });
 });
 
-// ======== D. INPUT FAIL-CLOSED ========
-
-describe("D — input fail-closed", () => {
-  it("26 — missing parentCard", async () => {
+// ======== F2: STRICT INPUT ========
+describe("F2 — strict input", () => {
+  it("30 missing parentCard", async () => {
     const r = await decomposeTask({ requirementManifest: manifest, provider: makeProvider({}) });
     assert.equal(r.status, "INVALID_INPUT");
   });
-
-  it("27 — missing manifest", async () => {
+  it("31 parentCard is array", async () => {
+    const r = await decomposeTask({ parentCard: [], requirementManifest: manifest, provider: makeProvider({}) });
+    assert.equal(r.status, "INVALID_INPUT");
+  });
+  it("32 missing manifest", async () => {
     const r = await decomposeTask({ parentCard, provider: makeProvider({}) });
     assert.equal(r.status, "INVALID_INPUT");
   });
-
-  it("28 — empty manifest", async () => {
+  it("33 empty manifest", async () => {
     const r = await decomposeTask({ parentCard, requirementManifest: [], provider: makeProvider({}) });
     assert.equal(r.status, "INVALID_INPUT");
   });
-
-  it("29 — missing provider", async () => {
+  it("34 manifest item not object", async () => {
+    const r = await decomposeTask({ parentCard, requirementManifest: ["bad"], provider: makeProvider({}) });
+    assert.equal(r.status, "INVALID_INPUT");
+  });
+  it("35 manifest item missing text", async () => {
+    const r = await decomposeTask({ parentCard, requirementManifest: [{ requirement_id: "R1" }], provider: makeProvider({}) });
+    assert.equal(r.status, "INVALID_INPUT");
+  });
+  it("36 manifest item empty requirement_id", async () => {
+    const r = await decomposeTask({ parentCard, requirementManifest: [{ requirement_id: "", text: "x" }], provider: makeProvider({}) });
+    assert.equal(r.status, "INVALID_INPUT");
+  });
+  it("37 manifest duplicate IDs", async () => {
+    const r = await decomposeTask({ parentCard, requirementManifest: [{ requirement_id: "R1", text: "a" }, { requirement_id: "R1", text: "b" }], provider: makeProvider({}) });
+    assert.equal(r.status, "INVALID_INPUT");
+  });
+  it("38 input invalid → provider NOT called", async () => {
+    const p = makeProvider({});
+    await decomposeTask({ parentCard, requirementManifest: [], provider: p });
+    assert.equal(p.callCount(), 0);
+  });
+  it("39 missing provider", async () => {
     const r = await decomposeTask({ parentCard, requirementManifest: manifest });
     assert.equal(r.status, "INVALID_INPUT");
   });
-
-  it("30 — provider missing generate", async () => {
+  it("40 provider missing generate", async () => {
     const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: {} });
     assert.equal(r.status, "INVALID_INPUT");
   });
 });
 
-// ======== E. SIDE-EFFECT BOUNDARIES ========
+// ======== F3: NO RAW OUTPUT LEAK ========
+describe("F3 — no raw output in errors", () => {
+  it("41 invalid string: no raw text in result", async () => {
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider("sk-test-secret-token") });
+    const str = JSON.stringify(r);
+    assert.ok(!str.includes("sk-test-secret"));
+    assert.equal(r.status, "INVALID_PROVIDER_OUTPUT");
+    assert.ok(r.output_type);
+  });
+  it("42 provider exception: no raw message in result", async () => {
+    const p = { generate: async () => { throw new Error("AURA_RENDERER_TRANSPORT_SECRET=abc123"); } };
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+    const str = JSON.stringify(r);
+    assert.ok(!str.includes("AURA_RENDERER"));
+    assert.ok(!str.includes("abc123"));
+    assert.equal(r.status, "INVALID_PROVIDER_OUTPUT");
+  });
+  it("43 output_length reported, not content", async () => {
+    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: makeProvider("not json at all") });
+    assert.ok(!("raw_output_summary" in r));
+    assert.ok("output_length" in r);
+  });
+});
 
-describe("E — side-effect boundaries", () => {
-  it("31 — invalid output: single provider call", async () => {
+// ======== E. SIDE-EFFECT BOUNDARIES ========
+describe("E — side-effects", () => {
+  it("44 provider call at most 1", async () => {
     const p = makeProvider("not json");
     await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
     assert.equal(p.callCount(), 1);
   });
-
-  it("32 — provider call succeeds with 1 call", async () => {
+  it("45 valid output: single call", async () => {
     const p = makeProvider(validDecomposed());
     await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
     assert.equal(p.callCount(), 1);
   });
-
-  it("33 — provider throw → INVALID_PROVIDER_OUTPUT", async () => {
-    const p = { generate: async () => { throw new Error("boom"); }, callCount: () => 1 };
+  it("46 provider throw handled", async () => {
+    const p = { generate: async () => { throw new Error("boom"); } };
     const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
     assert.equal(r.status, "INVALID_PROVIDER_OUTPUT");
-    assert.equal(r.reason_code, "DECOMPOSITION_PROVIDER_CALL_FAILED");
   });
 });

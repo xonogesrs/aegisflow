@@ -33,6 +33,7 @@ export function validate(schema, data, path = "$") {
       if (t === "null" && data === null) { match = true; break; }
       if (t === "array" && Array.isArray(data)) { match = true; break; }
       if (t === "object" && data !== null && typeof data === "object" && !Array.isArray(data)) { match = true; break; }
+      if (data === null && t !== "null") continue;
       if (t === "integer") {
         if (typeof data === "number" && Number.isInteger(data)) { match = true; break; }
       } else if (typeof data === t) { match = true; break; }

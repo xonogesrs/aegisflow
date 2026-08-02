@@ -1,8 +1,9 @@
 // decompose-task.mjs
 //
-// AutoLoop Card 2 — Shadow-mode task decomposer.
-// Wraps provider output through Card 1 validator.
-// Single provider call, no child execution, no filesystem mutation.
+// AutoLoop Card 2 — Shadow-mode task decomposer (repaired).
+// F1: no edge normalization before validator (Card 1 handles it)
+// F2: strict manifest item + parentCard validation before provider call
+// F3: raw_output_summary replaced with safe metadata
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -12,33 +13,49 @@ import { validateDecomposition } from "./validate-decomposition.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SYSTEM_PROMPT = readFileSync(join(HERE, "prompts", "decompose-system.txt"), "utf8");
 
-const MAX_RAW_SUMMARY_LENGTH = 200;
-
 /**
- * @param {object} opts
+ * @param {object} [opts]
  * @param {object} opts.parentCard
- * @param {object[]} opts.requirementManifest — [{ requirement_id, text }]
+ * @param {object[]} opts.requirementManifest
  * @param {{ generate: (opts: { systemPrompt: string, input: string }) => Promise<string|object> }} opts.provider
- * @returns {Promise<object>} structured result
  */
-export async function decomposeTask({ parentCard, requirementManifest, provider }) {
-  // --- Input validation ---
+export async function decomposeTask(opts = {}) {
+  const { parentCard, requirementManifest, provider } = opts;
+
+  // --- F2: strict input validation ---
   const inputErrors = [];
-  if (!parentCard || typeof parentCard !== "object") {
-    inputErrors.push("parentCard must be a non-null object");
+
+  if (!parentCard || typeof parentCard !== "object" || Array.isArray(parentCard)) {
+    inputErrors.push("parentCard must be a non-array object");
   }
   if (!requirementManifest || !Array.isArray(requirementManifest) || requirementManifest.length === 0) {
     inputErrors.push("requirementManifest must be a non-empty array");
+  } else {
+    const seen = new Set();
+    for (let i = 0; i < requirementManifest.length; i++) {
+      const item = requirementManifest[i];
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        inputErrors.push(`requirementManifest[${i}] must be a non-array object`);
+        continue;
+      }
+      if (!item.requirement_id || typeof item.requirement_id !== "string" || !item.requirement_id.trim()) {
+        inputErrors.push(`requirementManifest[${i}].requirement_id must be a non-empty string`);
+      } else if (seen.has(item.requirement_id)) {
+        inputErrors.push(`requirementManifest[${i}].requirement_id "${item.requirement_id}" is duplicated`);
+      } else {
+        seen.add(item.requirement_id);
+      }
+      if (!item.text || typeof item.text !== "string" || !item.text.trim()) {
+        inputErrors.push(`requirementManifest[${i}].text must be a non-empty string`);
+      }
+    }
   }
   if (!provider || typeof provider !== "object" || typeof provider.generate !== "function") {
     inputErrors.push("provider must have a generate(systemPrompt, input) function");
   }
+
   if (inputErrors.length > 0) {
-    return {
-      status: "INVALID_INPUT",
-      reason_code: "DECOMPOSITION_INPUT_INVALID",
-      errors: inputErrors
-    };
+    return { status: "INVALID_INPUT", reason_code: "DECOMPOSITION_INPUT_INVALID", errors: inputErrors };
   }
 
   // --- Build provider input ---
@@ -51,100 +68,69 @@ export async function decomposeTask({ parentCard, requirementManifest, provider 
     }
   });
 
-  // --- Single provider call ---
+  // --- Single provider call (F3: no raw output in error) ---
   let rawOutput;
   try {
-    rawOutput = await provider.generate({
-      systemPrompt: SYSTEM_PROMPT,
-      input: providerInput
-    });
+    rawOutput = await provider.generate({ systemPrompt: SYSTEM_PROMPT, input: providerInput });
   } catch (err) {
     return {
       status: "INVALID_PROVIDER_OUTPUT",
       reason_code: "DECOMPOSITION_PROVIDER_CALL_FAILED",
-      raw_output_summary: truncate(String(err?.message || "provider error"))
+      error_class: err?.constructor?.name || "Error"
     };
   }
 
-  // --- Parse provider output ---
-  let parsed;
-  if (typeof rawOutput === "object" && rawOutput !== null && !Array.isArray(rawOutput)) {
-    parsed = rawOutput;
-  } else if (typeof rawOutput === "string") {
-    const trimmed = rawOutput.trim();
-    // Reject markdown fences, explanatory text, empty strings
-    if (trimmed.startsWith("```")) {
-      return {
-        status: "INVALID_PROVIDER_OUTPUT",
-        reason_code: "DECOMPOSITION_PROVIDER_OUTPUT_INVALID_JSON",
-        raw_output_summary: truncate(trimmed)
-      };
-    }
-    // Reject if it contains explanatory text before/after JSON
-    const firstBrace = trimmed.indexOf("{");
-    const lastBrace = trimmed.lastIndexOf("}");
-    if (firstBrace !== 0 || lastBrace !== trimmed.length - 1) {
-      return {
-        status: "INVALID_PROVIDER_OUTPUT",
-        reason_code: "DECOMPOSITION_PROVIDER_OUTPUT_INVALID_JSON",
-        raw_output_summary: truncate(trimmed)
-      };
-    }
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      return {
-        status: "INVALID_PROVIDER_OUTPUT",
-        reason_code: "DECOMPOSITION_PROVIDER_OUTPUT_INVALID_JSON",
-        raw_output_summary: truncate(trimmed)
-      };
-    }
-  } else {
+  // --- F1+F3: parse safely, no raw content in results ---
+  const parseResult = parseProviderOutput(rawOutput);
+  if (parseResult.error) {
     return {
       status: "INVALID_PROVIDER_OUTPUT",
       reason_code: "DECOMPOSITION_PROVIDER_OUTPUT_INVALID_JSON",
-      raw_output_summary: truncate(String(rawOutput))
+      output_type: parseResult.output_type,
+      output_length: parseResult.output_length,
+      contains_markdown_fence: parseResult.contains_markdown_fence || false
     };
   }
 
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return {
-      status: "INVALID_PROVIDER_OUTPUT",
-      reason_code: "DECOMPOSITION_PROVIDER_OUTPUT_INVALID_JSON",
-      raw_output_summary: truncate(JSON.stringify(parsed))
-    };
-  }
+  const parsed = parseResult.value;
 
-  // --- Validate through Card 1 validator (only normalization: edge type default) ---
-  // Apply edge type default before validation (Card 1 defined normalization)
-  if (parsed.edges) {
-    for (const e of parsed.edges) {
-      if (!e.type) e.type = "depends_on";
-    }
-  }
-
-  const validation = validateDecomposition({
-    parentCard,
-    requirementManifest,
-    decomposition: parsed
-  });
+  // --- Validate through Card 1 validator ---
+  const validation = validateDecomposition({ parentCard, requirementManifest, decomposition: parsed });
 
   if (!validation.valid) {
-    return {
-      status: "INVALID_DECOMPOSITION",
-      reason_code: "DECOMPOSITION_VALIDATION_FAILED",
-      validation
-    };
+    return { status: "INVALID_DECOMPOSITION", reason_code: "DECOMPOSITION_VALIDATION_FAILED", validation };
   }
 
-  return {
-    status: "VALID",
-    decomposition: parsed,
-    validation
-  };
+  return { status: "VALID", decomposition: parsed, validation };
 }
 
-function truncate(str) {
-  if (!str) return "";
-  return str.length <= MAX_RAW_SUMMARY_LENGTH ? str : str.slice(0, MAX_RAW_SUMMARY_LENGTH) + "...";
+// --- Safe parsing (F1: handles non-iterable edges, null elements) ---
+function parseProviderOutput(raw) {
+  if (!raw) {
+    return { error: true, output_type: typeof raw };
+  }
+
+  let str;
+  if (typeof raw === "string") {
+    str = raw.trim();
+    if (str.startsWith("```")) {
+      return { error: true, output_type: "string", output_length: str.length, contains_markdown_fence: true };
+    }
+    const first = str.indexOf("{");
+    const last = str.lastIndexOf("}");
+    if (first !== 0 || last !== str.length - 1) {
+      return { error: true, output_type: "string", output_length: str.length };
+    }
+    try {
+      return { value: JSON.parse(str), output_type: "json_string", output_length: str.length };
+    } catch {
+      return { error: true, output_type: "json_parse_error", output_length: str.length };
+    }
+  }
+
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+    return { value: raw, output_type: "object" };
+  }
+
+  return { error: true, output_type: Array.isArray(raw) ? "array" : typeof raw };
 }
