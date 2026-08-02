@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 
 import { createPiRpcAdapter, DEFAULT_ENV_ALLOWLIST } from "../src/adapter/pi-rpc-adapter.mjs";
-import { createJsonlSplitter, ProtocolLimitError } from "../src/adapter/pi-rpc-protocol.mjs";
+import { createJsonlSplitter, ProtocolLimitError, DEFAULT_MAX_LINE_BYTES, DEFAULT_MAX_CUMULATIVE_BYTES, HARD_MAX_CUMULATIVE_BYTES } from "../src/adapter/pi-rpc-protocol.mjs";
 import { createScriptedAdapter } from "../src/adapter/scripted-adapter.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -99,6 +99,106 @@ test("T9 an incomplete final line (no trailing newline) is detectable", () => {
   const splitter = createJsonlSplitter();
   splitter.push('{"type":"partial"');
   assert.equal(splitter.hasIncompleteLine, true);
+});
+
+// ── A. Constants and defaults ──
+
+test("A1: DEFAULT_MAX_CUMULATIVE_BYTES === 64 MiB", () => {
+  assert.equal(DEFAULT_MAX_CUMULATIVE_BYTES, 64 * 1024 * 1024);
+});
+
+test("A2: HARD_MAX_CUMULATIVE_BYTES === 256 MiB", () => {
+  assert.equal(HARD_MAX_CUMULATIVE_BYTES, 256 * 1024 * 1024);
+});
+
+test("A3: splitter with no override uses 64 MiB default", () => {
+  const s = createJsonlSplitter();
+  assert.equal(s.maxCumulativeBytes, 64 * 1024 * 1024);
+});
+
+test("A4: 2 MiB line limit unchanged", () => {
+  assert.equal(DEFAULT_MAX_LINE_BYTES, 2 * 1024 * 1024);
+  const s = createJsonlSplitter();
+  assert.equal(s.maxLineBytes, 2 * 1024 * 1024);
+});
+
+// ── B. Direct splitter validation ──
+
+test("B5: small positive integer override works", () => {
+  const s = createJsonlSplitter({ maxCumulativeBytes: 1000 });
+  assert.equal(s.maxCumulativeBytes, 1000);
+  // Feed data within limit
+  s.push("x".repeat(500) + "\n");
+  assert.equal(s.cumulativeBytes, 500);
+});
+
+test("B6: under limit passes", () => {
+  const s = createJsonlSplitter({ maxCumulativeBytes: 100 });
+  s.push("a".repeat(50) + "\n");
+  assert.equal(s.cumulativeBytes, 50);
+});
+
+test("B7: exceeding limit throws cumulative_limit_exceeded", () => {
+  const s = createJsonlSplitter({ maxCumulativeBytes: 50 });
+  s.push("a".repeat(30) + "\n");
+  assert.throws(() => s.push("b".repeat(30) + "\n"), (err) => {
+    return err instanceof ProtocolLimitError && err.reason === "cumulative_limit_exceeded";
+  });
+});
+
+test("B8: 256 MiB exact value accepted", () => {
+  const s = createJsonlSplitter({ maxCumulativeBytes: 256 * 1024 * 1024 });
+  assert.equal(s.maxCumulativeBytes, 256 * 1024 * 1024);
+});
+
+test("B9: 256 MiB + 1 rejected", () => {
+  assert.throws(() => createJsonlSplitter({ maxCumulativeBytes: 256 * 1024 * 1024 + 1 }), (err) => {
+    return err instanceof ProtocolLimitError &&
+      err.reason === "invalid_limit_configuration" &&
+      err.detail.reason === "hard_ceiling_exceeded";
+  });
+});
+
+test("B10: zero rejected", () => {
+  assert.throws(() => createJsonlSplitter({ maxCumulativeBytes: 0 }), (err) => {
+    return err instanceof ProtocolLimitError && err.detail.reason === "not_positive";
+  });
+});
+
+test("B11: negative rejected", () => {
+  assert.throws(() => createJsonlSplitter({ maxCumulativeBytes: -1 }), (err) => {
+    return err instanceof ProtocolLimitError && err.detail.reason === "not_positive";
+  });
+});
+
+test("B12: fractional rejected", () => {
+  assert.throws(() => createJsonlSplitter({ maxCumulativeBytes: 1.5 }), (err) => {
+    return err instanceof ProtocolLimitError && err.detail.reason === "not_integer";
+  });
+});
+
+test("B13: NaN rejected", () => {
+  assert.throws(() => createJsonlSplitter({ maxCumulativeBytes: NaN }), (err) => {
+    return err instanceof ProtocolLimitError && err.detail.reason === "not_finite";
+  });
+});
+
+test("B14: Infinity rejected", () => {
+  assert.throws(() => createJsonlSplitter({ maxCumulativeBytes: Infinity }), (err) => {
+    return err instanceof ProtocolLimitError && err.detail.reason === "not_finite";
+  });
+});
+
+test("B15: string rejected", () => {
+  assert.throws(() => createJsonlSplitter({ maxCumulativeBytes: "100" }), (err) => {
+    return err instanceof ProtocolLimitError && err.detail.reason === "not_a_number";
+  });
+});
+
+test("B16: explicit null rejected", () => {
+  assert.throws(() => createJsonlSplitter({ maxCumulativeBytes: null }), (err) => {
+    return err instanceof ProtocolLimitError && err.detail.reason === "not_a_number";
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -332,5 +432,252 @@ test("T24b creating a Pi RPC adapter has no side effect: nothing is spawned unti
     assert.equal(typeof adapter.runAdapter, "function");
     // Construction alone (above) must not have spawned anything.
     assert.equal(existsSync(pidFile), false);
+  });
+});
+
+// ── C. Adapter default path with cumulative-overflow ──
+
+test("C17: cumulative-overflow with default 64 MiB returns error", async () => {
+  const adapter = makeAdapter();
+  const result = await adapter.runAdapter(baseRequest());
+  await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.equal(r.status, "error");
+  });
+});
+
+test("C18: cumulative-overflow terminalReason is cumulative_limit_exceeded", async () => {
+  const adapter = makeAdapter();
+  await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.equal(r.status, "error");
+    assert.equal(r.metadata.terminalReason, "cumulative_limit_exceeded");
+  });
+});
+
+test("C19: default path metadata shows configured limit = 64 MiB", async () => {
+  const adapter = makeAdapter();
+  await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.equal(r.metadata.protocolMaxCumulativeBytes, 64 * 1024 * 1024);
+  });
+});
+
+test("C20: default path cumulative bytes > 64 MiB", async () => {
+  const adapter = makeAdapter();
+  await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.ok(r.metadata.protocolCumulativeBytes > 64 * 1024 * 1024,
+      `Expected > 64 MiB, got ${r.metadata.protocolCumulativeBytes}`);
+  });
+});
+
+test("C21: tool call count remains 0", async () => {
+  const adapter = makeAdapter();
+  await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.equal(r.metadata.toolCallCount, 0);
+  });
+});
+
+test("C22: process is cleaned up", async () => {
+  const adapter = makeAdapter();
+  await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.ok(r.metadata.processTreeKilled !== undefined);
+  });
+});
+
+// ── D. Adapter bounded override path ──
+
+test("D23: cumulative-overflow with 128 MiB override completes", async () => {
+  const adapter = makeAdapter({
+    protocolLimits: { maxCumulativeBytes: 128 * 1024 * 1024 }
+  });
+  await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.equal(r.status, "completed", `Expected completed, got ${r.status}: ${r.error || ""}`);
+  });
+});
+
+test("D24: override path final stdout retrieved", async () => {
+  const adapter = makeAdapter({
+    protocolLimits: { maxCumulativeBytes: 128 * 1024 * 1024 }
+  });
+  await withFakeControl({ scenario: "cumulative-overflow", assistantTextByPhase: { executor: "OVERRIDE_OK" } }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.equal(r.status, "completed");
+    assert.equal(r.stdout, "OVERRIDE_OK");
+  });
+});
+
+test("D25: override path configured limit = 128 MiB", async () => {
+  const adapter = makeAdapter({
+    protocolLimits: { maxCumulativeBytes: 128 * 1024 * 1024 }
+  });
+  await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.equal(r.metadata.protocolMaxCumulativeBytes, 128 * 1024 * 1024);
+  });
+});
+
+test("D26: override path cumulative bytes > 64 MiB", async () => {
+  const adapter = makeAdapter({
+    protocolLimits: { maxCumulativeBytes: 128 * 1024 * 1024 }
+  });
+  await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.ok(r.metadata.protocolCumulativeBytes > 64 * 1024 * 1024,
+      `Expected > 64 MiB, got ${r.metadata.protocolCumulativeBytes}`);
+  });
+});
+
+test("D27: override path cumulative bytes <= 128 MiB", async () => {
+  const adapter = makeAdapter({
+    protocolLimits: { maxCumulativeBytes: 128 * 1024 * 1024 }
+  });
+  await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.ok(r.metadata.protocolCumulativeBytes <= 128 * 1024 * 1024,
+      `Expected <= 128 MiB, got ${r.metadata.protocolCumulativeBytes}`);
+  });
+});
+
+test("D28: override path tool call count = 0", async () => {
+  const adapter = makeAdapter({
+    protocolLimits: { maxCumulativeBytes: 128 * 1024 * 1024 }
+  });
+  await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.equal(r.metadata.toolCallCount, 0);
+  });
+});
+
+test("D29: override path process cleaned up", async () => {
+  const adapter = makeAdapter({
+    protocolLimits: { maxCumulativeBytes: 128 * 1024 * 1024 }
+  });
+  await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.ok(r.metadata.processTreeKilled !== undefined);
+  });
+});
+
+test("D30: override path session mode / args unchanged", async () => {
+  const adapter = makeAdapter({
+    protocolLimits: { maxCumulativeBytes: 128 * 1024 * 1024 }
+  });
+  await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    const args = r.metadata.args;
+    assert.ok(args.includes("--no-session"), "must include --no-session");
+    assert.ok(args.includes("--no-tools"), "must include --no-tools");
+    assert.ok(args.includes("--no-extensions"), "must include --no-extensions");
+  });
+});
+
+// ── E. Invalid adapter configuration ──
+
+test("E31: HARD_MAX + 1 does not spawn child", async () => {
+  const pidFile = join(tmpdir(), `pi-rpc-e31-${process.pid}-${Date.now()}.pid`);
+  const adapter = createPiRpcAdapter({
+    piExecutable: FIXTURE,
+    environmentAllowlist: ALLOWLIST_WITH_CONTROL,
+    protocolLimits: { maxCumulativeBytes: HARD_MAX_CUMULATIVE_BYTES + 1 }
+  });
+  await withFakeControl({ scenario: "normal", pidFile }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.equal(r.status, "error");
+    assert.equal(existsSync(pidFile), false, "child must not have been spawned");
+  });
+});
+
+test("E32: Infinity does not spawn child", async () => {
+  const pidFile = join(tmpdir(), `pi-rpc-e32-${process.pid}-${Date.now()}.pid`);
+  const adapter = createPiRpcAdapter({
+    piExecutable: FIXTURE,
+    environmentAllowlist: ALLOWLIST_WITH_CONTROL,
+    protocolLimits: { maxCumulativeBytes: Infinity }
+  });
+  await withFakeControl({ scenario: "normal", pidFile }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.equal(r.status, "error");
+    assert.equal(existsSync(pidFile), false, "child must not have been spawned");
+  });
+});
+
+test("E33: negative does not spawn child", async () => {
+  const pidFile = join(tmpdir(), `pi-rpc-e33-${process.pid}-${Date.now()}.pid`);
+  const adapter = createPiRpcAdapter({
+    piExecutable: FIXTURE,
+    environmentAllowlist: ALLOWLIST_WITH_CONTROL,
+    protocolLimits: { maxCumulativeBytes: -100 }
+  });
+  await withFakeControl({ scenario: "normal", pidFile }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.equal(r.status, "error");
+    assert.equal(existsSync(pidFile), false, "child must not have been spawned");
+  });
+});
+
+test("E34: invalid config returns status=error", async () => {
+  const adapter = createPiRpcAdapter({
+    piExecutable: FIXTURE,
+    environmentAllowlist: ALLOWLIST_WITH_CONTROL,
+    protocolLimits: { maxCumulativeBytes: 0 }
+  });
+  const r = await adapter.runAdapter(baseRequest());
+  assert.equal(r.status, "error");
+});
+
+test("E35: error does not contain environment or prompt", async () => {
+  const adapter = createPiRpcAdapter({
+    piExecutable: FIXTURE,
+    environmentAllowlist: ALLOWLIST_WITH_CONTROL,
+    protocolLimits: { maxCumulativeBytes: 0 }
+  });
+  const r = await adapter.runAdapter(baseRequest());
+  const str = JSON.stringify(r);
+  assert.ok(!str.includes("FAKE_PI_CONTROL"), "error must not contain env var");
+  assert.ok(!str.includes("taskCard"), "error must not contain taskCard");
+});
+
+// ── F. Metadata safety ──
+
+test("F36: metadata has numeric limits and counter", async () => {
+  const adapter = makeAdapter();
+  await withFakeControl({ scenario: "normal", assistantTextByPhase: { executor: "ok" } }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    assert.equal(typeof r.metadata.protocolCumulativeBytes, "number");
+    assert.equal(typeof r.metadata.protocolMaxCumulativeBytes, "number");
+    assert.equal(typeof r.metadata.protocolHardMaxCumulativeBytes, "number");
+  });
+});
+
+test("F37: metadata does not contain raw event", async () => {
+  const adapter = makeAdapter();
+  await withFakeControl({ scenario: "normal", assistantTextByPhase: { executor: "ok" } }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    const str = JSON.stringify(r.metadata);
+    assert.ok(!str.includes("message_update"), "metadata must not contain raw events");
+    assert.ok(!str.includes("agent_start"), "metadata must not contain raw events");
+  });
+});
+
+test("F38: metadata does not contain provider output", async () => {
+  const adapter = makeAdapter();
+  await withFakeControl({ scenario: "normal", assistantTextByPhase: { executor: "secret-output-12345" } }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    const str = JSON.stringify(r.metadata);
+    assert.ok(!str.includes("secret-output"), "metadata must not contain output content");
+  });
+});
+
+test("F39: metadata does not contain credential-like fixture value", async () => {
+  const adapter = makeAdapter();
+  await withFakeControl({ scenario: "normal", assistantTextByPhase: { executor: "sk-test-token" } }, async () => {
+    const r = await adapter.runAdapter(baseRequest());
+    const str = JSON.stringify(r.metadata);
+    assert.ok(!str.includes("sk-test"), "metadata must not contain fake credential");
   });
 });

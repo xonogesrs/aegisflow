@@ -21,7 +21,7 @@
 
 import { spawn } from "node:child_process";
 import { assertAdapterRequest, assertAdapterResult } from "./contract.mjs";
-import { createJsonlSplitter, parseEventLine, ProtocolLimitError } from "./pi-rpc-protocol.mjs";
+import { createJsonlSplitter, parseEventLine, ProtocolLimitError, HARD_MAX_CUMULATIVE_BYTES, DEFAULT_MAX_CUMULATIVE_BYTES, DEFAULT_MAX_LINE_BYTES } from "./pi-rpc-protocol.mjs";
 
 export const DEFAULT_ENV_ALLOWLIST = Object.freeze(["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "TERM"]);
 
@@ -150,8 +150,35 @@ export function createPiRpcAdapter(options = {}) {
     extraArgs = [],
     environmentAllowlist = DEFAULT_ENV_ALLOWLIST,
     toolPolicy: defaultToolPolicy,
+    protocolLimits = {},
     graceMs = 300,
   } = options;
+
+  // Validate protocolLimits early (before any spawn)
+  let configuredMaxCumulativeBytes;
+  try {
+    const maxCumulativeLimit = protocolLimits.maxCumulativeBytes ?? DEFAULT_MAX_CUMULATIVE_BYTES;
+    createJsonlSplitter({ maxCumulativeBytes: maxCumulativeLimit });
+    configuredMaxCumulativeBytes = maxCumulativeLimit;
+  } catch (e) {
+    // Invalid protocolLimits — return an adapter that always fails closed
+    const validationError = e.message;
+    return {
+      runAdapter: async (request) => {
+        assertAdapterRequest(request);
+        return assertAdapterResult(errorResult({
+          executionId: request.executionId,
+          stdout: "",
+          stderr: "",
+          error: validationError,
+          metadata: {
+            protocolMaxCumulativeBytes: protocolLimits.maxCumulativeBytes,
+            protocolHardMaxCumulativeBytes: HARD_MAX_CUMULATIVE_BYTES,
+          }
+        }));
+      }
+    };
+  }
 
   async function runAdapter(request) {
     assertAdapterRequest(request);
@@ -178,7 +205,7 @@ export function createPiRpcAdapter(options = {}) {
       return assertAdapterResult(errorResult({ executionId, stdout: "", stderr: "", error: e.message, metadata: { args } }));
     }
 
-    const splitter = createJsonlSplitter();
+    const splitter = createJsonlSplitter({ maxCumulativeBytes: configuredMaxCumulativeBytes });
     let stderrBuf = "";
     let eventCount = 0;
     let toolCallStarts = new Set();
@@ -320,6 +347,9 @@ export function createPiRpcAdapter(options = {}) {
         : (outcome.detail && outcome.detail.reason) || outcome.kind,
       processTreeKilled: termInfo.processTreeKilled,
       args,
+      protocolCumulativeBytes: splitter.cumulativeBytes,
+      protocolMaxCumulativeBytes: configuredMaxCumulativeBytes,
+      protocolHardMaxCumulativeBytes: HARD_MAX_CUMULATIVE_BYTES,
     };
 
     if (outcome.kind === "completed") {

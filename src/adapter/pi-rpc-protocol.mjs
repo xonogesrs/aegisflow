@@ -18,13 +18,51 @@ export class ProtocolLimitError extends Error {
   }
 }
 
-const DEFAULT_MAX_LINE_BYTES = 2 * 1024 * 1024; // 2 MiB per line
-const DEFAULT_MAX_CUMULATIVE_BYTES = 64 * 1024 * 1024; // 64 MiB per run
+export const DEFAULT_MAX_LINE_BYTES = 2 * 1024 * 1024; // 2 MiB per line
+export const DEFAULT_MAX_CUMULATIVE_BYTES = 64 * 1024 * 1024; // 64 MiB per run
+export const HARD_MAX_CUMULATIVE_BYTES = 256 * 1024 * 1024; // 256 MiB hard ceiling
+
+function validateMaxCumulativeBytes(value) {
+  if (typeof value !== "number") {
+    throw new ProtocolLimitError("invalid_limit_configuration", {
+      field: "maxCumulativeBytes",
+      reason: "not_a_number"
+    });
+  }
+  if (!Number.isFinite(value)) {
+    throw new ProtocolLimitError("invalid_limit_configuration", {
+      field: "maxCumulativeBytes",
+      reason: "not_finite"
+    });
+  }
+  if (!Number.isInteger(value)) {
+    throw new ProtocolLimitError("invalid_limit_configuration", {
+      field: "maxCumulativeBytes",
+      reason: "not_integer"
+    });
+  }
+  if (value <= 0) {
+    throw new ProtocolLimitError("invalid_limit_configuration", {
+      field: "maxCumulativeBytes",
+      reason: "not_positive"
+    });
+  }
+  if (value > HARD_MAX_CUMULATIVE_BYTES) {
+    throw new ProtocolLimitError("invalid_limit_configuration", {
+      field: "maxCumulativeBytes",
+      reason: "hard_ceiling_exceeded"
+    });
+  }
+}
 
 export function createJsonlSplitter({
   maxLineBytes = DEFAULT_MAX_LINE_BYTES,
   maxCumulativeBytes = DEFAULT_MAX_CUMULATIVE_BYTES,
 } = {}) {
+  // Validate limits synchronously before any I/O
+  validateMaxCumulativeBytes(maxCumulativeBytes);
+
+  const configuredMaxCumulative = maxCumulativeBytes;
   let buffer = "";
   let cumulative = 0;
 
@@ -41,8 +79,8 @@ export function createJsonlSplitter({
         throw new ProtocolLimitError("line_too_long", { lineBytes: Buffer.byteLength(line, "utf8"), maxLineBytes });
       }
       cumulative += Buffer.byteLength(line, "utf8");
-      if (cumulative > maxCumulativeBytes) {
-        throw new ProtocolLimitError("cumulative_limit_exceeded", { cumulative, maxCumulativeBytes });
+      if (cumulative > configuredMaxCumulative) {
+        throw new ProtocolLimitError("cumulative_limit_exceeded", { cumulative, maxCumulativeBytes: configuredMaxCumulative });
       }
       if (line.length === 0) continue;
       lines.push(line);
@@ -60,6 +98,12 @@ export function createJsonlSplitter({
     },
     get cumulativeBytes() {
       return cumulative;
+    },
+    get maxLineBytes() {
+      return maxLineBytes;
+    },
+    get maxCumulativeBytes() {
+      return configuredMaxCumulative;
     },
   };
 }
