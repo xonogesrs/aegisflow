@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AutoLoop Task Decomposition Eval Cases",
+  "type": "object",
+  "required": ["schema_version", "cases"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string" },
+    "description": { "type": "string" },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["case_id", "title"],
+        "additionalProperties": false,
+        "properties": {
+          "case_id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "parent_task_summary": { "type": "string" },
+          "parent_requirement_manifest": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["requirement_id", "text"],
+              "additionalProperties": false,
+              "properties": {
+                "requirement_id": { "type": "string", "minLength": 1 },
+                "text": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          "authority_boundary": {
+            "type": "object",
+            "properties": {
+              "allowed_paths": { "type": "array", "items": { "type": "string" } },
+              "mutation_allowed": { "type": "boolean" },
+              "commit_allowed": { "type": "boolean" },
+              "push_allowed": { "type": "boolean" }
+            }
+          },
+          "expected_decomposition": {
+            "type": "object",
+            "properties": {
+              "expected_verdict": {
+                "type": "string",
+                "enum": ["DECOMPOSITION_NOT_BENEFICIAL", "DECOMPOSED", "DECOMPOSITION_BLOCKED"]
+              },
+              "min_cards": { "type": "integer", "minimum": 0 },
+              "max_cards": { "type": "integer", "minimum": 0 },
+              "required_card_types": { "type": "array", "items": { "type": "string" } },
+              "required_edges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["from", "to"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "from": { "type": "string" },
+                    "to": { "type": "string" },
+                    "type": { "type": "string", "default": "depends_on" }
+                  }
+                }
+              },
+              "forbidden_authority_expansions": { "type": "array", "items": { "type": "string" } },
+              "required_coverage_items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["requirement_id"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "requirement_id": { "type": "string", "minLength": 1 },
+                    "role_id": { "type": "string", "minLength": 1 }
+                  }
+                }
+              },
+              "required_deferred_items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["requirement_id", "reason_code"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "requirement_id": { "type": "string" },
+                    "reason_code": { "type": "string" }
+                  }
+                }
+              },
+              "required_unresolved_items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["requirement_id", "reason_code"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "requirement_id": { "type": "string" },
+                    "reason_code": { "type": "string" }
+                  }
+                }
+              },
+              "required_execution_policy": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "executor": { "const": "INHERIT_PARENT" },
+                  "reviewer": { "const": "EXTERNAL_GPT" },
+                  "multi_model_orchestration": { "const": false }
+                }
+              },
+              "forbidden": { "type": "array", "items": { "type": "string" } }
+            }
+          },
+          "failure_conditions": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}
