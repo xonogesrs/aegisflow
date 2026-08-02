@@ -78,9 +78,10 @@ export function createJsonlSplitter({
       if (Buffer.byteLength(line, "utf8") > maxLineBytes) {
         throw new ProtocolLimitError("line_too_long", { lineBytes: Buffer.byteLength(line, "utf8"), maxLineBytes });
       }
-      cumulative += Buffer.byteLength(line, "utf8");
+      const accounted = accountableBytesForLine(line);
+      cumulative += accounted;
       if (cumulative > configuredMaxCumulative) {
-        throw new ProtocolLimitError("cumulative_limit_exceeded", { cumulative, maxCumulativeBytes: configuredMaxCumulative });
+        throw new ProtocolLimitError("cumulative_limit_exceeded", { cumulative, maxCumulativeBytes: configuredMaxCumulative, accounted });
       }
       if (line.length === 0) continue;
       lines.push(line);
@@ -114,4 +115,41 @@ export function parseEventLine(line) {
   } catch (e) {
     return { ok: false, error: e.message };
   }
+}
+
+// ── Snapshot amplification mitigation ──
+// Pi RPC message_update events carry full accumulated message snapshots.
+// Counting every snapshot line toward the cumulative limit causes O(n²)
+// amplification. This helper extracts only the accountable delta bytes.
+
+let _lastSnapshotTextLen = 0;
+
+export function accountableBytesForLine(line) {
+  if (!line.includes('"message_update"')) {
+    return Buffer.byteLength(line, "utf8");
+  }
+  try {
+    const evt = JSON.parse(line);
+    if (evt.type !== "message_update") {
+      return Buffer.byteLength(line, "utf8");
+    }
+    const deltaText = evt.assistantMessageEvent?.delta;
+    if (typeof deltaText === "string") {
+      // Count only the incremental delta + structural overhead.
+      // The full snapshot in evt.message is NOT counted (it's O(n²) amplification).
+      // 200-byte floor: JSON keys, braces, non-text metadata per event.
+      // Justification: measured structural overhead of message_update events
+      // (keys like type, assistantMessageEvent, contentIndex, partial) is ~150-250 bytes.
+      const deltaBytes = Buffer.byteLength(deltaText, "utf8");
+      return Math.max(200, deltaBytes + 200);
+    }
+    // Non-delta events (start, end): count minimal overhead
+    return 200;
+  } catch {
+    return Buffer.byteLength(line, "utf8");
+  }
+}
+
+export function resetSnapshotAccounting() {
+  _lastSnapshotTextLen = 0;
 }

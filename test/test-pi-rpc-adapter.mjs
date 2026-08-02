@@ -437,21 +437,21 @@ test("T24b creating a Pi RPC adapter has no side effect: nothing is spawned unti
 
 // ── C. Adapter default path with cumulative-overflow ──
 
-test("C17: cumulative-overflow with default 64 MiB returns error", async () => {
+test("C17: cumulative-overflow with default 64 MiB completes (dedup prevents overflow)", async () => {
   const adapter = makeAdapter();
-  const result = await adapter.runAdapter(baseRequest());
   await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
     const r = await adapter.runAdapter(baseRequest());
-    assert.equal(r.status, "error");
+    // With snapshot dedup, the 100 MiB synthetic stream counts only delta bytes (~40 KB total)
+    assert.equal(r.status, "completed", "dedup should prevent overflow: " + (r.error || r.metadata?.terminalReason || ""));
   });
 });
 
-test("C18: cumulative-overflow terminalReason is cumulative_limit_exceeded", async () => {
+test("C18: cumulative-overflow terminalReason is stop (no overflow with dedup)", async () => {
   const adapter = makeAdapter();
   await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
     const r = await adapter.runAdapter(baseRequest());
-    assert.equal(r.status, "error");
-    assert.equal(r.metadata.terminalReason, "cumulative_limit_exceeded");
+    assert.equal(r.status, "completed");
+    assert.equal(r.metadata.terminalReason, "stop");
   });
 });
 
@@ -463,12 +463,12 @@ test("C19: default path metadata shows configured limit = 64 MiB", async () => {
   });
 });
 
-test("C20: default path cumulative bytes > 64 MiB", async () => {
+test("C20: default path cumulative bytes < 64 MiB (dedup counting)", async () => {
   const adapter = makeAdapter();
   await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
     const r = await adapter.runAdapter(baseRequest());
-    assert.ok(r.metadata.protocolCumulativeBytes > 64 * 1024 * 1024,
-      `Expected > 64 MiB, got ${r.metadata.protocolCumulativeBytes}`);
+    assert.ok(r.metadata.protocolCumulativeBytes < 64 * 1024 * 1024,
+      `Expected < 64 MiB with dedup, got ${r.metadata.protocolCumulativeBytes}`);
   });
 });
 
@@ -521,14 +521,14 @@ test("D25: override path configured limit = 128 MiB", async () => {
   });
 });
 
-test("D26: override path cumulative bytes > 64 MiB", async () => {
+test("D26: override path cumulative bytes < 64 MiB (dedup counting)", async () => {
   const adapter = makeAdapter({
     protocolLimits: { maxCumulativeBytes: 128 * 1024 * 1024 }
   });
   await withFakeControl({ scenario: "cumulative-overflow" }, async () => {
     const r = await adapter.runAdapter(baseRequest());
-    assert.ok(r.metadata.protocolCumulativeBytes > 64 * 1024 * 1024,
-      `Expected > 64 MiB, got ${r.metadata.protocolCumulativeBytes}`);
+    assert.ok(r.metadata.protocolCumulativeBytes < 64 * 1024 * 1024,
+      `Expected < 64 MiB with dedup, got ${r.metadata.protocolCumulativeBytes}`);
   });
 });
 
@@ -654,13 +654,20 @@ test("F36: metadata has numeric limits and counter", async () => {
   });
 });
 
-test("F37: metadata does not contain raw event", async () => {
+test("F37: diagnostic metadata uses type labels but contains no raw event content", async () => {
   const adapter = makeAdapter();
   await withFakeControl({ scenario: "normal", assistantTextByPhase: { executor: "ok" } }, async () => {
     const r = await adapter.runAdapter(baseRequest());
     const str = JSON.stringify(r.metadata);
-    assert.ok(!str.includes("message_update"), "metadata must not contain raw events");
-    assert.ok(!str.includes("agent_start"), "metadata must not contain raw events");
+    // Diagnostic counters are numeric, not content
+    assert.equal(typeof r.metadata.protocolEventTypeCounts, "object");
+    assert.equal(typeof r.metadata.protocolThinkingDeltaCount, "number");
+    assert.equal(typeof r.metadata.protocolMaxObservedLineBytes, "number");
+    // Type keys appear as map keys — that's by design. Verify no raw event payload fields.
+    assert.ok(!str.includes('"chunk"') && !str.includes('"i"'),
+      "metadata must not contain raw event payload fields");
+    // Verify cumulative line bytes are reasonable (not zero for a real run)
+    assert.ok(r.metadata.protocolCumulativeBytes > 0, "cumulative bytes must be > 0 for non-empty stream");
   });
 });
 

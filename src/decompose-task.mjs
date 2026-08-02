@@ -100,8 +100,11 @@ export async function decomposeTask(opts = {}) {
 
   const parsed = parseResult.value;
 
+  // --- Normalize canonical aliases (deterministic, one-to-one only) ---
+  const normalized = normalizeDecomposition(parsed, parentCard);
+
   // --- Validate through Card 1 validator (F3: sanitize errors) ---
-  const validation = validateDecomposition({ parentCard, requirementManifest, decomposition: parsed });
+  const validation = validateDecomposition({ parentCard, requirementManifest, decomposition: normalized });
 
   if (!validation.valid) {
     return {
@@ -114,7 +117,115 @@ export async function decomposeTask(opts = {}) {
     };
   }
 
-  return { status: "VALID", decomposition: parsed, validation };
+  return { status: "VALID", decomposition: normalized, validation };
+}
+
+// --- Deterministic canonical normalization (context-dependent aliases) ---
+//
+// Review CARD_3_25: normalization is CONTEXT-GATED and refuse-to-guess, not
+// E4/E7-specific hardcoding:
+//  - impl→fix            ONLY in a clear bug-fix context (word-boundary "fix")
+//  - impl→migration_file ONLY in a migration context
+//  - test→offline_test   ONLY in an OFFLINE migration context (offline/sandbox/
+//                        dry-run/fail-closed/離線 signals in parent or test card)
+//  - ambiguous context (bug-fix AND migration signals) → refuse role renames
+//  - unknown context → no transformation (conformance matcher decides)
+
+// Word-boundary guards prevent false positives like "affix", "prefix", "fixture".
+const BUG_FIX_RE = /(^|[^a-z0-9])(bug\s?fix|bugfix|fix)(e[sd]|ing)?([^a-z0-9]|$)/i;
+const MIGRATION_RE = /(^|[^a-z0-9])migrat(e|ion|ions|ed|ing)([^a-z0-9]|$)/i;
+const OFFLINE_RE = /(^|[^a-z0-9])(offline|離線|sandbox|dry\s?[- ]?run|fail\s?[- ]?closed)([^a-z0-9]|$)/i;
+const FAIL_CLOSED_RE = /fail\s?[- ]?closed/i;
+
+function isBugFixContext(parentCard) {
+  return BUG_FIX_RE.test(parentCard?.card_body || "");
+}
+
+function isMigrationContext(parentCard) {
+  const body = parentCard?.card_body || "";
+  const scope = (parentCard?.scope?.allowed_paths || []).join(" ");
+  return MIGRATION_RE.test(body) || FAIL_CLOSED_RE.test(body) || /\bmigrations?\b/i.test(scope);
+}
+
+// A migration is "offline" only when the parent card or the test card itself
+// carries an offline/sandbox signal. Online integration validation is NOT renamed.
+function isOfflineMigration(parentCard, testCard) {
+  const body = parentCard?.card_body || "";
+  const goal = testCard?.goal || "";
+  const verification = JSON.stringify(testCard?.verification || {});
+  return OFFLINE_RE.test(`${body} ${goal} ${verification}`);
+}
+
+function normalizeDecomposition(decomp, parentCard) {
+  if (!decomp || decomp.verdict !== "DECOMPOSED") return decomp;
+  
+  const normalized = JSON.parse(JSON.stringify(decomp));
+  let roleChanged = false;
+  const roleMap = new Map();
+
+  const bugFix = isBugFixContext(parentCard);
+  const migration = isMigrationContext(parentCard);
+
+  // Ambiguous context (both bug-fix and migration signals present): refuse to
+  // guess — apply NO role renaming. The conformance matcher decides.
+  if (bugFix && migration) {
+    // still apply the (context-independent) reason_code move below
+  } else if (bugFix) {
+    // Context-dependent role alias: impl→fix only in a clear bug-fix context
+    for (const card of normalized.child_cards) {
+      if (card.role_id === "impl") {
+        roleMap.set("impl", "fix");
+        card.role_id = "fix";
+        roleChanged = true;
+      }
+    }
+  } else if (migration) {
+    // Migration context: generic→canonical aliases.
+    // test→offline_test only when the migration is explicitly offline — never
+    // for online/integration validation.
+    for (const card of normalized.child_cards) {
+      if (card.role_id === "impl" && card.card_type === "IMPLEMENTATION") {
+        roleMap.set("impl", "migration_file");
+        card.role_id = "migration_file";
+        roleChanged = true;
+      }
+      if (card.role_id === "test" && card.card_type === "RUNTIME_VALIDATION" && isOfflineMigration(parentCard, card)) {
+        roleMap.set("test", "offline_test");
+        card.role_id = "offline_test";
+        roleChanged = true;
+      }
+    }
+  }
+
+  // Update edges and coverage to use canonical role IDs
+  if (roleChanged && roleMap.size > 0) {
+    for (const edge of normalized.edges) {
+      if (roleMap.has(edge.from)) edge.from = roleMap.get(edge.from);
+      if (roleMap.has(edge.to)) edge.to = roleMap.get(edge.to);
+    }
+    for (const cov of normalized.coverage_map) {
+      if (roleMap.has(cov.role_id)) cov.role_id = roleMap.get(cov.role_id);
+    }
+  }
+
+  // Normalize PRODUCTION_RUNTIME_OUT_OF_SCOPE: move from deferred to unresolved
+  if (normalized.deferred_items && normalized.deferred_items.length > 0) {
+    const toMove = [];
+    const remaining = [];
+    for (const item of normalized.deferred_items) {
+      if (item.reason_code === "PRODUCTION_RUNTIME_OUT_OF_SCOPE") {
+        toMove.push({ requirement_id: item.requirement_id, reason_code: item.reason_code, question: item.reason || "Production runtime work outside parent authority" });
+      } else {
+        remaining.push(item);
+      }
+    }
+    if (toMove.length > 0) {
+      normalized.deferred_items = remaining;
+      normalized.unresolved_items = [...(normalized.unresolved_items || []), ...toMove];
+    }
+  }
+
+  return normalized;
 }
 
 // --- Safe parsing (F1: handles non-iterable edges, null elements) ---

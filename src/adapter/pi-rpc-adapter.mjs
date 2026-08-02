@@ -21,7 +21,7 @@
 
 import { spawn } from "node:child_process";
 import { assertAdapterRequest, assertAdapterResult } from "./contract.mjs";
-import { createJsonlSplitter, parseEventLine, ProtocolLimitError, HARD_MAX_CUMULATIVE_BYTES, DEFAULT_MAX_CUMULATIVE_BYTES, DEFAULT_MAX_LINE_BYTES } from "./pi-rpc-protocol.mjs";
+import { createJsonlSplitter, parseEventLine, ProtocolLimitError, HARD_MAX_CUMULATIVE_BYTES, DEFAULT_MAX_CUMULATIVE_BYTES, DEFAULT_MAX_LINE_BYTES, resetSnapshotAccounting } from "./pi-rpc-protocol.mjs";
 
 export const DEFAULT_ENV_ALLOWLIST = Object.freeze(["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "TERM"]);
 
@@ -205,6 +205,13 @@ export function createPiRpcAdapter(options = {}) {
       return assertAdapterResult(errorResult({ executionId, stdout: "", stderr: "", error: e.message, metadata: { args } }));
     }
 
+    // Observability: pid / start / last-activity / exit (for HOLD-on-disappearance)
+    const childPid = child.pid;
+    const spawnedAt = Date.now();
+    let lastActivityAt = spawnedAt;
+    let exitedAt = null;
+
+    resetSnapshotAccounting();
     const splitter = createJsonlSplitter({ maxCumulativeBytes: configuredMaxCumulativeBytes });
     let stderrBuf = "";
     let eventCount = 0;
@@ -219,6 +226,21 @@ export function createPiRpcAdapter(options = {}) {
     let spawnError = null;
     let childExited = false;
     let childExitInfo = { code: null, signal: null };
+
+    // Diagnostic counters — numeric only, no raw content
+    const eventTypeCounts = new Map();
+    const bytesByEventType = new Map();
+    let messageSnapshotBytes = 0;
+    let messagePartialBytes = 0;
+    let messageDeltaBytes = 0;
+    let messageUpdateSubtypeCounts = { snapshot: 0, partial: 0, delta: 0, unknown: 0 };
+    let thinkingDeltaCount = 0;
+    let thinkingDeltaBytes = 0;
+    let textDeltaCount = 0;
+    let textDeltaBytes = 0;
+    let maxObservedLineBytes = 0;
+    let totalLineBytes = 0;
+    let totalLineCount = 0;
 
     const outcome = { kind: null, detail: null }; // "completed" | "error" | "timed_out" | "aborted"
 
@@ -240,13 +262,64 @@ export function createPiRpcAdapter(options = {}) {
       }
     }
 
-    function handleEvent(evt) {
+    function handleEvent(evt, lineBytes) {
       eventCount += 1;
+      lastActivityAt = Date.now();
+
+      // Diagnostic: count by event type
+      const etype = evt.type || "unknown";
+      eventTypeCounts.set(etype, (eventTypeCounts.get(etype) || 0) + 1);
+      bytesByEventType.set(etype, (bytesByEventType.get(etype) || 0) + lineBytes);
+      totalLineBytes += lineBytes;
+      totalLineCount += 1;
+      if (lineBytes > maxObservedLineBytes) maxObservedLineBytes = lineBytes;
+
       if (evt.type === "tool_execution_start" && evt.toolCallId) toolCallStarts.add(evt.toolCallId);
       if (evt.type === "tool_execution_end" && evt.toolCallId) toolCallEnds.add(evt.toolCallId);
       if (evt.type === "message_end" && evt.message && evt.message.role === "assistant") {
         lastAssistantStopReason = evt.message.stopReason ?? lastAssistantStopReason;
         lastAssistantErrorMessage = evt.message.errorMessage ?? lastAssistantErrorMessage;
+      }
+      // message_update diagnostic classification
+      if (evt.type === "message_update") {
+        const msg = evt.message;
+        if (msg && Array.isArray(msg.content)) {
+          // Determine if this is a snapshot (full message so far) or delta (incremental)
+          // Pi RPC: partial messages carry complete text; delta updates add new chunks
+          let hasThinkingContent = false;
+          let hasTextContent = false;
+          for (const block of msg.content) {
+            if (block && typeof block.type === "string" && typeof block.text === "string") {
+              const blockBytes = Buffer.byteLength(block.text, "utf8");
+              if (block.type === "thinking" || block.type === "reasoning") {
+                thinkingDeltaCount += 1;
+                thinkingDeltaBytes += blockBytes;
+                hasThinkingContent = true;
+              } else if (block.type === "text" || block.type === "output") {
+                textDeltaCount += 1;
+                textDeltaBytes += blockBytes;
+                hasTextContent = true;
+              }
+            }
+          }
+          // Classify update subtype based on content structure
+          // Heuristic: if content looks like a complete reconstruction → snapshot;
+          // if it's an append → partial; if just the delta → delta
+          if (msg.partial === true || (hasTextContent && !hasThinkingContent)) {
+            // Pi sends partial=true for streaming updates that carry full text so far
+            messagePartialBytes += lineBytes;
+            messageUpdateSubtypeCounts.partial += 1;
+          } else if (hasThinkingContent && hasTextContent) {
+            messageSnapshotBytes += lineBytes;
+            messageUpdateSubtypeCounts.snapshot += 1;
+          } else {
+            messageDeltaBytes += lineBytes;
+            messageUpdateSubtypeCounts.delta += 1;
+          }
+        } else {
+          messageDeltaBytes += lineBytes;
+          messageUpdateSubtypeCounts.unknown += 1;
+        }
       }
       if (evt.type === "agent_settled") {
         sawAgentSettled = true;
@@ -264,7 +337,9 @@ export function createPiRpcAdapter(options = {}) {
     }
 
     child.stdout.setEncoding("utf8");
+    let rawWireBytes = 0;
     child.stdout.on("data", (chunk) => {
+      rawWireBytes += Buffer.byteLength(chunk, "utf8");
       if (outcome.kind) return;
       try {
         const lines = splitter.push(chunk);
@@ -274,7 +349,7 @@ export function createPiRpcAdapter(options = {}) {
             finishOnce("error", { reason: "malformed_json", detail: parsed.error });
             return;
           }
-          handleEvent(parsed.value);
+          handleEvent(parsed.value, Buffer.byteLength(line, "utf8"));
           if (outcome.kind) return;
         }
       } catch (e) {
@@ -288,6 +363,7 @@ export function createPiRpcAdapter(options = {}) {
 
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk) => {
+      lastActivityAt = Date.now();
       stderrBuf += chunk;
     });
 
@@ -299,10 +375,14 @@ export function createPiRpcAdapter(options = {}) {
     child.on("exit", (code, signal) => {
       childExited = true;
       childExitInfo = { code, signal };
+      exitedAt = Date.now();
+      lastActivityAt = exitedAt;
       if (!outcome.kind) {
-        // Child ended before we ever reached a terminal event / final text.
-        const reason = splitter.hasIncompleteLine ? "incomplete_final_line" : "missing_terminal_event";
-        finishOnce("error", { reason, detail: { code, signal } });
+        // Child process disappeared before reaching a terminal event / final text.
+        finishOnce("error", {
+          reason: "process_disappeared",
+          detail: { code, signal, incompleteFinalLine: splitter.hasIncompleteLine }
+        });
       }
     });
 
@@ -337,6 +417,10 @@ export function createPiRpcAdapter(options = {}) {
 
     const metadata = {
       exitCode: childExited ? childExitInfo.code : null,
+      childPid,
+      spawnedAt,
+      lastActivityAt,
+      exitedAt,
       piExecutable,
       piVersion: null,
       piSessionId: null,
@@ -347,9 +431,23 @@ export function createPiRpcAdapter(options = {}) {
         : (outcome.detail && outcome.detail.reason) || outcome.kind,
       processTreeKilled: termInfo.processTreeKilled,
       args,
+      rawWireBytes,
       protocolCumulativeBytes: splitter.cumulativeBytes,
       protocolMaxCumulativeBytes: configuredMaxCumulativeBytes,
       protocolHardMaxCumulativeBytes: HARD_MAX_CUMULATIVE_BYTES,
+      protocolEventTypeCounts: Object.fromEntries(eventTypeCounts),
+      protocolBytesByEventType: Object.fromEntries(bytesByEventType),
+      protocolMessageUpdateBytes: (bytesByEventType.get("message_update") || 0),
+      protocolMessageSnapshotBytes: messageSnapshotBytes,
+      protocolMessagePartialBytes: messagePartialBytes,
+      protocolMessageDeltaBytes: messageDeltaBytes,
+      protocolMessageUpdateSubtypeCounts: messageUpdateSubtypeCounts,
+      protocolThinkingDeltaCount: thinkingDeltaCount,
+      protocolThinkingDeltaBytes: thinkingDeltaBytes,
+      protocolTextDeltaCount: textDeltaCount,
+      protocolTextDeltaBytes: textDeltaBytes,
+      protocolMaxObservedLineBytes: maxObservedLineBytes,
+      protocolAverageObservedLineBytes: totalLineCount > 0 ? Math.round(totalLineBytes / totalLineCount) : 0,
     };
 
     if (outcome.kind === "completed") {
