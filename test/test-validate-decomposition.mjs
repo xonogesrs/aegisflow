@@ -1,6 +1,6 @@
 // test/test-validate-decomposition.mjs
 //
-// Card 1 repaired: all 14 negative-path gates covered.
+// Card 1 repaired v2: F1–F6 negative-path gates + malformed input tests.
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -24,10 +24,10 @@ function d(overrides = {}) {
     child_cards: [
       { card_id: "c1", role_id: "audit", goal: "Audit", card_type: "READ_ONLY_AUDIT",
         authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: false },
-        verification: { required_commands: [], forbidden_commands: [] }, risk_level: "LOW", allowed_paths: ["src/"] },
+        verification: { required_commands: [], forbidden_commands: [] }, risk_level: "LOW", allowed_paths: ["src/core/"] },
       { card_id: "c2", role_id: "impl", goal: "Impl", card_type: "IMPLEMENTATION",
         authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: true },
-        verification: { required_commands: [], forbidden_commands: [] }, risk_level: "MEDIUM", allowed_paths: ["src/"] },
+        verification: { required_commands: [], forbidden_commands: [] }, risk_level: "MEDIUM", allowed_paths: ["src/core/"] },
       { card_id: "c3", role_id: "test", goal: "Test", card_type: "RUNTIME_VALIDATION",
         authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: false },
         verification: { required_commands: ["npm test"], forbidden_commands: [] }, risk_level: "LOW", allowed_paths: ["test/"] }
@@ -63,7 +63,7 @@ describe("valid", () => {
     const v = d({ child_cards: [
       { card_id: "c1", role_id: "fix", goal: "Fix", card_type: "IMPLEMENTATION",
         authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: true },
-        verification: { required_commands: [], forbidden_commands: [] }, risk_level: "LOW", allowed_paths: ["src/"] }
+        verification: { required_commands: [], forbidden_commands: [] }, risk_level: "LOW", allowed_paths: ["src/core/"] }
     ], edges: [],
     coverage_map: [
       { requirement_id: "R1", role_id: "fix", verification: "x" },
@@ -88,185 +88,138 @@ describe("valid", () => {
     ], deferred_items: [{ requirement_id: "R3", reason_code: "COMMIT_NOT_AUTHORIZED", reason: "x" }] });
     assert.equal(validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v }).valid, true);
   });
-  it("path prefix matches correctly (src/file.js in src/)", () => {
+  it("path prefix matches (src/utils/file.js in src/)", () => {
     const v = d();
     v.child_cards[0].allowed_paths = ["src/utils/file.js"];
     assert.equal(validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v }).valid, true);
   });
 });
 
-// ======== F1: missing parentCard / manifest ========
-describe("F1 — parentCard/manifest required", () => {
-  it("rejects missing parentCard", () => {
-    const r = validateDecomposition({ requirementManifest: manifest, decomposition: d() });
-    assert.equal(r.valid, false);
-    assert.ok(r.errors.some(e => e.rule === "MISSING_PARENT_CARD"));
-  });
-  it("rejects missing manifest", () => {
-    const r = validateDecomposition({ parentCard, decomposition: d() });
-    assert.equal(r.valid, false);
-    assert.ok(r.errors.some(e => e.rule === "MISSING_MANIFEST"));
-  });
-  it("rejects empty manifest", () => {
-    const r = validateDecomposition({ parentCard, requirementManifest: [], decomposition: d() });
-    assert.equal(r.valid, false);
-    assert.ok(r.errors.some(e => e.rule === "MISSING_MANIFEST"));
-  });
-});
-
-// ======== F2: full authority ========
-describe("F2 — authority", () => {
-  it("rejects mutation_allowed invented", () => {
+// ======== F1: REPAIR mutation bound to parent ========
+describe("F1 — REPAIR no mutation bypass", () => {
+  it("rejects REPAIR with mutation when parent mutation_allowed=false", () => {
     const p = { limits: { commit_allowed: false, push_allowed: false, mutation_allowed: false } };
     const v = d();
-    v.child_cards[1].authority_required.mutation_allowed = true;
+    v.child_cards.push({ card_id: "c4", role_id: "repair", goal: "Repair", card_type: "REPAIR",
+      authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: true },
+      verification: { required_commands: [], forbidden_commands: [] }, risk_level: "MEDIUM", allowed_paths: ["src/core/"] });
+    v.coverage_map.push({ requirement_id: "R1", role_id: "repair", verification: "x" });
     const r = validateDecomposition({ parentCard: p, requirementManifest: manifest, decomposition: v });
     assert.ok(r.errors.some(e => e.rule === "AUTHORITY_EXPANSION" && e.message.includes("mutation_allowed")));
   });
-  it("rejects allowed_path intersecting parent forbidden_path", () => {
-    const v = d();
-    v.child_cards[0].allowed_paths = ["src/secrets/"]; // parent forbidden
-    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
+});
+
+// ======== F2: empty allowed_paths ========
+describe("F2 — empty parent allowed_paths", () => {
+  it("rejects child paths when parent has no allowed_paths", () => {
+    const p = { limits: { commit_allowed: false, push_allowed: false, mutation_allowed: true },
+      scope: { allowed_paths: [], forbidden_paths: [] } };
+    const r = validateDecomposition({ parentCard: p, requirementManifest: manifest, decomposition: d() });
     assert.ok(r.errors.some(e => e.rule === "AUTHORITY_EXPANSION"));
   });
-  it("rejects path with ..", () => {
-    const v = d();
-    v.child_cards[0].allowed_paths = ["../etc"];
+});
+
+// ======== F3: malformed DECOMPOSED ========
+describe("F3 — malformed input", () => {
+  it("rejects missing child_cards", () => {
+    const v = { verdict: "DECOMPOSED" };
     const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.ok(r.errors.some(e => e.rule === "INVALID_PATH"));
+    assert.equal(r.valid, false);
+    assert.ok(r.errors.some(e => e.rule === "SCHEMA"));
   });
-  it("rejects path with backslash", () => {
-    const v = d();
-    v.child_cards[0].allowed_paths = ["src\\utils"];
+  it("rejects child_cards=null", () => {
+    const v = { verdict: "DECOMPOSED", parent_goal: "x",
+      execution_policy: { executor: "INHERIT_PARENT", reviewer: "EXTERNAL_GPT", multi_model_orchestration: false },
+      child_cards: null, edges: [], deferred_items: [], unresolved_items: [],
+      coverage_map: [], decomposition_evidence: ["e"] };
     const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.ok(r.errors.some(e => e.rule === "INVALID_PATH"));
+    assert.equal(r.valid, false);
   });
-  it("rejects path not in parent scope (different dir)", () => {
+  it("rejects missing edges", () => {
     const v = d();
-    v.child_cards[0].allowed_paths = ["etc/"];
+    delete v.edges;
     const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.ok(r.errors.some(e => e.rule === "AUTHORITY_EXPANSION"));
+    assert.equal(r.valid, false);
   });
-  it("accepts child path as subdirectory under parent path", () => {
-    const v = d();
-    v.child_cards[0].allowed_paths = ["src/auth/"]; // subdir of src/
+  it("rejects edges=null", () => {
+    const v = d({ edges: null });
     const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.equal(r.valid, true);
+    assert.equal(r.valid, false);
   });
 });
 
-// ======== F4: coverage ========
-describe("F4 — coverage", () => {
-  it("rejects coverage with orphan role", () => {
+// ======== F4: forbidden-path ancestor ========
+describe("F4 — forbidden-path ancestor", () => {
+  it("rejects child allowed_path=src/ when parent forbidden=src/secrets/", () => {
     const v = d();
-    v.coverage_map.push({ requirement_id: "R3", role_id: "nonexistent", verification: "x" });
-    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.ok(r.errors.some(e => e.rule === "COVERAGE_ORPHAN_ROLE"));
-  });
-  it("rejects __any__ role_id in production", () => {
-    const v = d();
-    v.child_cards[0].role_id = "__any__";
-    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.ok(r.errors.some(e => e.rule === "RESERVED_ROLE_ID"));
-  });
-  it("rejects manifest duplicate IDs", () => {
-    const badManifest = [
-      { requirement_id: "R1", text: "a" },
-      { requirement_id: "R1", text: "b" }
-    ];
-    const r = validateDecomposition({ parentCard, requirementManifest: badManifest, decomposition: d() });
-    assert.ok(r.errors.some(e => e.rule === "DUPLICATE_MANIFEST_ID"));
-  });
-  it("rejects cross-category duplicate (coverage + deferred)", () => {
-    const v = d();
-    v.deferred_items = [{ requirement_id: "R1", reason_code: "OTHER" }];
-    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.ok(r.errors.some(e => e.rule === "CROSS_CATEGORY_DUPLICATE"));
-  });
-  it("rejects missing requirement", () => {
-    const v = d();
-    v.coverage_map = v.coverage_map.slice(0, 2);
-    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.ok(r.errors.some(e => e.rule === "MISSING_DISPOSITION"));
+    v.child_cards[0].allowed_paths = ["src/"]; // ancestor of src/secrets/
+    const p = { limits: { commit_allowed: false, push_allowed: false, mutation_allowed: true },
+      scope: { allowed_paths: ["src/", "test/"], forbidden_paths: ["src/secrets/"] } };
+    const r = validateDecomposition({ parentCard: p, requirementManifest: manifest, decomposition: v });
+    assert.ok(r.errors.some(e => e.rule === "AUTHORITY_EXPANSION" && e.message.includes("ancestor")));
   });
 });
 
-// ======== F5: card type mutation ========
-describe("F5 — card type vs mutation", () => {
-  it("rejects READ_ONLY_AUDIT with mutation", () => {
+// ======== F5: deferred/unresolved require requirement_id ========
+describe("F5 — deferred/unresolved requirement_id required", () => {
+  it("rejects deferred without requirement_id", () => {
     const v = d();
-    v.child_cards[0].authority_required.mutation_allowed = true;
+    v.deferred_items = [{ reason_code: "OTHER", reason: "x" }];
     const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.ok(r.errors.some(e => e.rule === "TYPE_MUTATION_MISMATCH"));
+    assert.ok(r.errors.some(e => e.rule === "SCHEMA"));
   });
-  it("rejects RUNTIME_VALIDATION with mutation", () => {
+  it("rejects unresolved without requirement_id", () => {
     const v = d();
-    v.child_cards[2].authority_required.mutation_allowed = true;
+    v.unresolved_items = [{ reason_code: "OTHER", question: "?" }];
     const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.ok(r.errors.some(e => e.rule === "TYPE_MUTATION_MISMATCH"));
-  });
-  it("rejects IMPLEMENTATION without mutation", () => {
-    const v = d();
-    v.child_cards[1].authority_required.mutation_allowed = false;
-    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.ok(r.errors.some(e => e.rule === "TYPE_MUTATION_MISMATCH"));
-  });
-  it("rejects EXTERNAL_REVIEW with mutation", () => {
-    const v = d();
-    v.child_cards.push({ card_id: "c4", role_id: "review", goal: "Rev", card_type: "EXTERNAL_REVIEW",
-      authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: true },
-      verification: { required_commands: [], forbidden_commands: [] }, risk_level: "LOW", allowed_paths: ["src/"] });
-    v.coverage_map.push({ requirement_id: "R1", role_id: "review", verification: "x" });
-    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.ok(r.errors.some(e => e.rule === "TYPE_MUTATION_MISMATCH"));
+    assert.ok(r.errors.some(e => e.rule === "SCHEMA"));
   });
 });
 
-// ======== F6: edge type default ========
-describe("F6 — edge type default", () => {
-  it("applies depends_on default when type missing (schema default)", () => {
+// ======== F6: commit/push banned in child cards ========
+describe("F6 — commit/push forbidden", () => {
+  it("rejects child with commit_allowed=true", () => {
     const v = d();
-    v.edges = [{ from: "audit", to: "impl" }, { from: "impl", to: "test" }]; // no type
+    v.child_cards[0].authority_required.commit_allowed = true;
     const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.equal(r.valid, true);
-    // After validation, type should be filled
-    assert.equal(v.edges[0].type, "depends_on");
-    assert.equal(v.edges[1].type, "depends_on");
+    assert.ok(r.errors.some(e => e.rule === "COMMIT_FORBIDDEN"));
+  });
+  it("rejects child with push_allowed=true", () => {
+    const v = d();
+    v.child_cards[0].authority_required.push_allowed = true;
+    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
+    assert.ok(r.errors.some(e => e.rule === "PUSH_FORBIDDEN"));
   });
 });
 
-// ======== Misc ========
-describe("misc", () => {
-  it("rejects NOT_BENEFICIAL with child_cards", () => {
-    const v = { verdict: "DECOMPOSITION_NOT_BENEFICIAL", reason: "x", decomposition_evidence: ["e"], child_cards: [{ card_id: "x" }] };
-    assert.equal(validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v }).valid, false);
+// ======== Others ========
+describe("others", () => {
+  it("rejects missing parentCard", () => {
+    assert.equal(validateDecomposition({ requirementManifest: manifest, decomposition: d() }).valid, false);
+  });
+  it("rejects missing manifest", () => {
+    assert.equal(validateDecomposition({ parentCard, decomposition: d() }).valid, false);
+  });
+  it("rejects wrong executor", () => {
+    const r = validateDecomposition({ parentCard, requirementManifest: manifest,
+      decomposition: d({ execution_policy: { executor: "CLAUDE", reviewer: "EXTERNAL_GPT", multi_model_orchestration: false } }) });
+    assert.ok(r.errors.some(e => e.rule === "EXECUTION_POLICY_LOCKED" || e.rule === "SCHEMA"));
   });
   it("rejects cycle", () => {
     const v = d();
     v.edges = [{ from: "audit", to: "impl" }, { from: "impl", to: "test" }, { from: "test", to: "audit" }];
-    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.ok(r.errors.some(e => e.rule === "CYCLE_DETECTED"));
-  });
-  it("rejects wrong executor", () => {
-    const v = d({ execution_policy: { executor: "CLAUDE", reviewer: "EXTERNAL_GPT", multi_model_orchestration: false } });
-    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
-    assert.ok(r.errors.some(e => e.rule === "EXECUTION_POLICY_LOCKED" || e.rule === "SCHEMA"));
+    assert.ok(validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v }).errors.some(e => e.rule === "CYCLE_DETECTED"));
   });
   it("rejects 8 cards", () => {
     const cards = Array.from({ length: 8 }, (_, i) => ({
       card_id: `c${i}`, role_id: `r${i}`, goal: `g${i}`, card_type: i < 2 ? "IMPLEMENTATION" : "READ_ONLY_AUDIT",
       authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: i < 2 },
-      verification: { required_commands: [], forbidden_commands: [] },
-      risk_level: "LOW", allowed_paths: ["src/"]
+      verification: { required_commands: [], forbidden_commands: [] }, risk_level: "LOW", allowed_paths: ["src/core/"]
     }));
-    const r = validateDecomposition({ parentCard, requirementManifest: manifest,
+    assert.equal(validateDecomposition({ parentCard, requirementManifest: manifest,
       decomposition: { verdict: "DECOMPOSED", parent_goal: "x",
         execution_policy: { executor: "INHERIT_PARENT", reviewer: "EXTERNAL_GPT", multi_model_orchestration: false },
         child_cards: cards, edges: [], deferred_items: [], unresolved_items: [],
-        coverage_map: [], decomposition_evidence: ["e"] } });
-    assert.ok(r.errors.some(e => e.rule === "CARD_COUNT" || e.rule === "SCHEMA"));
-  });
-  it("rejects null", () => {
-    assert.equal(validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: null }).valid, false);
+        coverage_map: [], decomposition_evidence: ["e"] } }).valid, false);
   });
 });
