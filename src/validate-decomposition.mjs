@@ -42,8 +42,33 @@ export function validateDecomposition({ parentCard, requirementManifest, decompo
 
   const verdict = decomposition.verdict;
 
-  // 2. NOT_BENEFICIAL / BLOCKED
-  if (verdict === "DECOMPOSITION_NOT_BENEFICIAL" || verdict === "DECOMPOSITION_BLOCKED") {
+  // 2. NOT_BENEFICIAL / BLOCKED — with manifest check for BLOCKED
+  if (verdict === "DECOMPOSITION_NOT_BENEFICIAL") {
+    return finish(errors);
+  }
+
+  if (verdict === "DECOMPOSITION_BLOCKED") {
+    // Validate unresolved IDs against manifest if provided
+    if (requirementManifest && requirementManifest.length > 0) {
+      const manifestSet = new Set();
+      for (const r of requirementManifest) {
+        if (manifestSet.has(r.requirement_id)) {
+          errors.push({ rule: "DUPLICATE_MANIFEST_ID", message: `Duplicate requirement_id: ${r.requirement_id}` });
+        }
+        manifestSet.add(r.requirement_id);
+      }
+      const seen = new Set();
+      for (const item of (decomposition.unresolved_items || [])) {
+        if (!item.requirement_id) continue;
+        if (seen.has(item.requirement_id)) {
+          errors.push({ rule: "DUPLICATE_DISPOSITION", message: `${item.requirement_id} duplicated in unresolved_items` });
+        }
+        if (!manifestSet.has(item.requirement_id)) {
+          errors.push({ rule: "UNKNOWN_REQUIREMENT_ID", message: `${item.requirement_id} not in manifest` });
+        }
+        seen.add(item.requirement_id);
+      }
+    }
     return finish(errors);
   }
 

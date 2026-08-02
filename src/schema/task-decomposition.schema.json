@@ -165,7 +165,7 @@
           "minItems": 1,
           "items": {
             "type": "object",
-            "required": ["reason_code"],
+            "required": ["requirement_id", "reason_code"],
             "additionalProperties": false,
             "properties": {
               "requirement_id": { "type": "string", "minLength": 1 },

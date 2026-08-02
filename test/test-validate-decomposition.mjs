@@ -162,17 +162,38 @@ describe("F4 — forbidden-path ancestor", () => {
 
 // ======== F5: deferred/unresolved require requirement_id ========
 describe("F5 — deferred/unresolved requirement_id required", () => {
-  it("rejects deferred without requirement_id", () => {
+  it("rejects DECOMPOSED deferred without requirement_id", () => {
     const v = d();
     v.deferred_items = [{ reason_code: "OTHER", reason: "x" }];
     const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
     assert.ok(r.errors.some(e => e.rule === "SCHEMA"));
   });
-  it("rejects unresolved without requirement_id", () => {
+  it("rejects DECOMPOSED unresolved without requirement_id", () => {
     const v = d();
     v.unresolved_items = [{ reason_code: "OTHER", question: "?" }];
     const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
     assert.ok(r.errors.some(e => e.rule === "SCHEMA"));
+  });
+  it("rejects BLOCKED unresolved without requirement_id", () => {
+    const v = { verdict: "DECOMPOSITION_BLOCKED",
+      unresolved_items: [{ reason_code: "CYCLIC_DEPENDENCY", question: "?" }],
+      decomposition_evidence: ["e"] };
+    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
+    assert.ok(r.errors.some(e => e.rule === "SCHEMA"));
+  });
+  it("rejects BLOCKED unresolved with unknown requirement_id", () => {
+    const v = { verdict: "DECOMPOSITION_BLOCKED",
+      unresolved_items: [{ requirement_id: "R99", reason_code: "CYCLIC_DEPENDENCY", question: "?" }],
+      decomposition_evidence: ["e"] };
+    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
+    assert.ok(r.errors.some(e => e.rule === "UNKNOWN_REQUIREMENT_ID"));
+  });
+  it("accepts BLOCKED with valid manifest-aligned unresolved", () => {
+    const v = { verdict: "DECOMPOSITION_BLOCKED",
+      unresolved_items: [{ requirement_id: "R1", reason_code: "CYCLIC_DEPENDENCY", question: "?" }],
+      decomposition_evidence: ["e"] };
+    const r = validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v });
+    assert.equal(r.valid, true);
   });
 });
 
