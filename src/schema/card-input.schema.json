@@ -68,7 +68,7 @@
       "properties": {
         "default": {
           "type": "string",
-          "description": "Must be in the OpenCode Go reviewer family. deepseek/* and opencode-go/deepseek-v4-* are FORBIDDEN."
+          "description": "External reviewer model. Must be GPT (external review only). DeepSeek executor models are FORBIDDEN as reviewer."
         },
         "strict": { "type": ["string", "null"] },
         "fallback": { "type": ["string", "null"] },
