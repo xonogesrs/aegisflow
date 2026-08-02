@@ -1,0 +1,45 @@
+{
+  "verdict": "DECOMPOSED",
+  "parent_goal": "Implement feature X with single-model execution; multi-model orchestration is forbidden",
+  "execution_policy": {
+    "executor": "INHERIT_PARENT",
+    "reviewer": "EXTERNAL_GPT",
+    "multi_model_orchestration": false
+  },
+  "child_cards": [
+    {
+      "card_id": "E12_impl",
+      "role_id": "impl",
+      "goal": "Implement feature X within the allowed scope",
+      "card_type": "IMPLEMENTATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": true
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "MEDIUM",
+      "allowed_paths": ["src/"]
+    }
+  ],
+  "edges": [],
+  "deferred_items": [
+    {
+      "requirement_id": "R2",
+      "reason_code": "MULTI_MODEL_ORCHESTRATION_FORBIDDEN",
+      "reason": "Multi-model orchestration (Claude executor, OpenCode reviewer, DeepSeek tester) is not allowed; execution policy is locked to INHERIT_PARENT executor and EXTERNAL_GPT reviewer"
+    }
+  ],
+  "unresolved_items": [],
+  "coverage_map": [
+    { "requirement_id": "R1", "role_id": "impl", "verification": "Feature X implemented and functional" }
+  ],
+  "decomposition_evidence": [
+    "Single-card decomposition with execution policy locked to single-model execution",
+    "Multi-model orchestration requirement deferred per execution policy lock",
+    "No alternative-model assignment, model routing, or voting in any role"
+  ]
+}

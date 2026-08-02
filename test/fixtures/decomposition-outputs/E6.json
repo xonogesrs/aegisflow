@@ -1,0 +1,80 @@
+{
+  "verdict": "DECOMPOSED",
+  "parent_goal": "Implement complete auth system: login, logout, session mgmt, password reset, email verification, OAuth2",
+  "execution_policy": {
+    "executor": "INHERIT_PARENT",
+    "reviewer": "EXTERNAL_GPT",
+    "multi_model_orchestration": false
+  },
+  "child_cards": [
+    {
+      "card_id": "E6_impl",
+      "role_id": "impl",
+      "goal": "Implement login, logout, and session management features",
+      "card_type": "IMPLEMENTATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": true
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "MEDIUM",
+      "allowed_paths": ["src/auth/"]
+    },
+    {
+      "card_id": "E6_test",
+      "role_id": "test",
+      "goal": "Write and run tests for password reset and email verification flows",
+      "card_type": "RUNTIME_VALIDATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": ["npm test"],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": ["src/auth/", "src/email/"]
+    },
+    {
+      "card_id": "E6_oauth",
+      "role_id": "oauth",
+      "goal": "Audit and integrate OAuth2 provider configuration",
+      "card_type": "READ_ONLY_AUDIT",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": ["src/auth/"]
+    }
+  ],
+  "edges": [
+    { "from": "impl", "to": "test", "type": "depends_on" },
+    { "from": "test", "to": "oauth", "type": "depends_on" }
+  ],
+  "deferred_items": [],
+  "unresolved_items": [],
+  "coverage_map": [
+    { "requirement_id": "R1", "role_id": "impl", "verification": "Login endpoint functional with proper credential validation" },
+    { "requirement_id": "R2", "role_id": "impl", "verification": "Logout endpoint clears session correctly" },
+    { "requirement_id": "R3", "role_id": "impl", "verification": "Session management with proper expiry and refresh" },
+    { "requirement_id": "R4", "role_id": "test", "verification": "Password reset flow tested end-to-end" },
+    { "requirement_id": "R5", "role_id": "test", "verification": "Email verification flow tested with mock transport" },
+    { "requirement_id": "R6", "role_id": "oauth", "verification": "OAuth2 provider configuration audited and integration points identified" }
+  ],
+  "decomposition_evidence": [
+    "Three-card decomposition: implementation of core auth, runtime validation of flows, audit of OAuth2",
+    "All six requirements covered across coverage_map with distinct verification criteria"
+  ]
+}

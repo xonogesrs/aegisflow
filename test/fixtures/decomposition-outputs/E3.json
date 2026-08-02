@@ -1,0 +1,115 @@
+{
+  "verdict": "DECOMPOSED",
+  "parent_goal": "Define contract, implement adapter, write scripted tests, run real smoke tests, GPT review",
+  "execution_policy": {
+    "executor": "INHERIT_PARENT",
+    "reviewer": "EXTERNAL_GPT",
+    "multi_model_orchestration": false
+  },
+  "child_cards": [
+    {
+      "card_id": "E3_contract",
+      "role_id": "contract",
+      "goal": "Define interface contract and expected behaviors for the adapter",
+      "card_type": "READ_ONLY_AUDIT",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": ["src/adapter/", "test/"]
+    },
+    {
+      "card_id": "E3_impl",
+      "role_id": "impl",
+      "goal": "Implement adapter following the defined contract",
+      "card_type": "IMPLEMENTATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": true
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "MEDIUM",
+      "allowed_paths": ["src/adapter/"]
+    },
+    {
+      "card_id": "E3_test",
+      "role_id": "test",
+      "goal": "Write and run scripted tests against the adapter interface",
+      "card_type": "RUNTIME_VALIDATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": ["npm test"],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": ["test/"]
+    },
+    {
+      "card_id": "E3_smoke",
+      "role_id": "smoke",
+      "goal": "Execute real smoke tests against the integrated adapter",
+      "card_type": "RUNTIME_VALIDATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": ["npm run smoke"],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "MEDIUM",
+      "allowed_paths": ["test/"]
+    },
+    {
+      "card_id": "E3_review",
+      "role_id": "review",
+      "goal": "GPT review of contract compliance, implementation quality, and test coverage",
+      "card_type": "EXTERNAL_REVIEW",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": []
+    }
+  ],
+  "edges": [
+    { "from": "contract", "to": "impl", "type": "depends_on" },
+    { "from": "impl", "to": "test", "type": "depends_on" },
+    { "from": "test", "to": "smoke", "type": "depends_on" },
+    { "from": "smoke", "to": "review", "type": "depends_on" }
+  ],
+  "deferred_items": [],
+  "unresolved_items": [],
+  "coverage_map": [
+    { "requirement_id": "R1", "role_id": "contract", "verification": "Contract document defining interface and behaviors" },
+    { "requirement_id": "R2", "role_id": "impl", "verification": "Adapter implementation matching contract" },
+    { "requirement_id": "R3", "role_id": "test", "verification": "Scripted tests pass against adapter" },
+    { "requirement_id": "R4", "role_id": "smoke", "verification": "Real smoke tests pass on integrated system" },
+    { "requirement_id": "R5", "role_id": "review", "verification": "GPT review confirms contract compliance and quality" }
+  ],
+  "decomposition_evidence": [
+    "Five-phase DAG: contract definition, implementation, scripted validation, real smoke testing, external review",
+    "Sequential dependencies ensure each phase validates the previous output"
+  ]
+}

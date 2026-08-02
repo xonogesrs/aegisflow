@@ -1,0 +1,15 @@
+{
+  "verdict": "DECOMPOSITION_BLOCKED",
+  "unresolved_items": [
+    {
+      "requirement_id": "R1",
+      "reason_code": "CYCLIC_DEPENDENCY",
+      "question": "Modules A, B, and C have mutual import dependencies; decomposition would create circular edges between child cards. How should these circular references be resolved before decomposition?"
+    }
+  ],
+  "decomposition_evidence": [
+    "Detected cyclic imports: A imports from B, B imports from C, C imports from A",
+    "No linear or DAG decomposition possible without breaking the cycle at module boundaries",
+    "Requires architectural refactoring to eliminate circular dependencies before decomposition can proceed"
+  ]
+}

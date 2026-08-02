@@ -1,0 +1,77 @@
+{
+  "verdict": "DECOMPOSED",
+  "parent_goal": "Diagnose cross-module bug, fix src/utils/helper.js, verify no side-effects on other modules",
+  "execution_policy": {
+    "executor": "INHERIT_PARENT",
+    "reviewer": "EXTERNAL_GPT",
+    "multi_model_orchestration": false
+  },
+  "child_cards": [
+    {
+      "card_id": "E7_audit",
+      "role_id": "audit",
+      "goal": "Diagnose root cause of cross-module bug by reading and tracing through affected code paths",
+      "card_type": "READ_ONLY_AUDIT",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": ["src/utils/helper.js", "test/utils/"]
+    },
+    {
+      "card_id": "E7_fix",
+      "role_id": "fix",
+      "goal": "Apply targeted fix to src/utils/helper.js based on audit findings",
+      "card_type": "IMPLEMENTATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": true
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "MEDIUM",
+      "allowed_paths": ["src/utils/helper.js"]
+    },
+    {
+      "card_id": "E7_test",
+      "role_id": "test",
+      "goal": "Verify the fix does not break other modules by running the full test suite",
+      "card_type": "RUNTIME_VALIDATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": ["npm test"],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": ["test/utils/"]
+    }
+  ],
+  "edges": [
+    { "from": "audit", "to": "fix", "type": "depends_on" },
+    { "from": "fix", "to": "test", "type": "depends_on" }
+  ],
+  "deferred_items": [],
+  "unresolved_items": [],
+  "coverage_map": [
+    { "requirement_id": "R1", "role_id": "audit", "verification": "Root cause diagnosis documented with affected code paths" },
+    { "requirement_id": "R2", "role_id": "fix", "verification": "Fix applied to src/utils/helper.js addressing root cause" },
+    { "requirement_id": "R3", "role_id": "test", "verification": "Full test suite passes confirming no regression in other modules" }
+  ],
+  "decomposition_evidence": [
+    "Three-card fail-closed pipeline: read-only audit, scoped fix, test validation",
+    "All child cards restricted to src/utils/helper.js and test/utils/; no authority expansion"
+  ]
+}

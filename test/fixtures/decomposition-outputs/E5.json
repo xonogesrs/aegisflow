@@ -1,0 +1,44 @@
+{
+  "verdict": "DECOMPOSED",
+  "parent_goal": "Implement new feature in autoloop; cross-repo documentation update deferred",
+  "execution_policy": {
+    "executor": "INHERIT_PARENT",
+    "reviewer": "EXTERNAL_GPT",
+    "multi_model_orchestration": false
+  },
+  "child_cards": [
+    {
+      "card_id": "E5_impl",
+      "role_id": "impl",
+      "goal": "Implement the new feature within the autoloop repository",
+      "card_type": "IMPLEMENTATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": true
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "MEDIUM",
+      "allowed_paths": ["src/"]
+    }
+  ],
+  "edges": [],
+  "deferred_items": [
+    {
+      "requirement_id": "R2",
+      "reason_code": "CROSS_REPO_AUTHORITY_REQUIRED",
+      "reason": "aura-plans documentation update requires authority in a different repository not covered by current scope"
+    }
+  ],
+  "unresolved_items": [],
+  "coverage_map": [
+    { "requirement_id": "R1", "role_id": "impl", "verification": "New feature implemented and functional within autoloop" }
+  ],
+  "decomposition_evidence": [
+    "Single-card decomposition for in-repo work; cross-repo requirement correctly deferred",
+    "Authority boundary limited to src/ within autoloop repository"
+  ]
+}

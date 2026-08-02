@@ -1,0 +1,77 @@
+{
+  "verdict": "DECOMPOSED",
+  "parent_goal": "Execute audit, implement feature, and external review with resume capability",
+  "execution_policy": {
+    "executor": "INHERIT_PARENT",
+    "reviewer": "EXTERNAL_GPT",
+    "multi_model_orchestration": false
+  },
+  "child_cards": [
+    {
+      "card_id": "E10_audit",
+      "role_id": "audit",
+      "goal": "Audit codebase to assess scope and requirements",
+      "card_type": "READ_ONLY_AUDIT",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": ["src/"]
+    },
+    {
+      "card_id": "E10_impl",
+      "role_id": "impl",
+      "goal": "Implement the feature based on audit results",
+      "card_type": "IMPLEMENTATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": true
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "MEDIUM",
+      "allowed_paths": ["src/"]
+    },
+    {
+      "card_id": "E10_review",
+      "role_id": "review",
+      "goal": "External GPT review of implementation",
+      "card_type": "EXTERNAL_REVIEW",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": []
+    }
+  ],
+  "edges": [
+    { "from": "audit", "to": "impl", "type": "depends_on" },
+    { "from": "impl", "to": "review", "type": "depends_on" }
+  ],
+  "deferred_items": [],
+  "unresolved_items": [],
+  "coverage_map": [
+    { "requirement_id": "R1", "role_id": "audit", "verification": "Audit report confirming scope and approach" },
+    { "requirement_id": "R2", "role_id": "impl", "verification": "Feature implementation functional and tested" },
+    { "requirement_id": "R3", "role_id": "review", "verification": "GPT review confirms implementation quality" }
+  ],
+  "decomposition_evidence": [
+    "Linear three-phase pipeline: audit, implementation, external review",
+    "Three cards in linear chain; static structure validation only"
+  ]
+}

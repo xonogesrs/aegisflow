@@ -1,0 +1,101 @@
+{
+  "verdict": "DECOMPOSED",
+  "parent_goal": "Analyze existing auth structure, extract shared logic, add unit tests, commit results",
+  "execution_policy": {
+    "executor": "INHERIT_PARENT",
+    "reviewer": "EXTERNAL_GPT",
+    "multi_model_orchestration": false
+  },
+  "child_cards": [
+    {
+      "card_id": "E2_audit",
+      "role_id": "audit",
+      "goal": "Analyze current auth module structure, identify duplication and refactoring opportunities",
+      "card_type": "READ_ONLY_AUDIT",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": ["src/auth/", "test/auth/"]
+    },
+    {
+      "card_id": "E2_impl",
+      "role_id": "impl",
+      "goal": "Extract shared logic into reusable functions within src/auth/",
+      "card_type": "IMPLEMENTATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": true
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "MEDIUM",
+      "allowed_paths": ["src/auth/"]
+    },
+    {
+      "card_id": "E2_test",
+      "role_id": "test",
+      "goal": "Add unit tests for extracted logic under test/auth/",
+      "card_type": "RUNTIME_VALIDATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": ["npm test"],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": ["test/auth/"]
+    },
+    {
+      "card_id": "E2_review",
+      "role_id": "review",
+      "goal": "External GPT review of all changes before commit",
+      "card_type": "EXTERNAL_REVIEW",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push", "npm test"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": []
+    }
+  ],
+  "edges": [
+    { "from": "audit", "to": "impl", "type": "depends_on" },
+    { "from": "impl", "to": "test", "type": "depends_on" },
+    { "from": "test", "to": "review", "type": "depends_on" }
+  ],
+  "deferred_items": [
+    {
+      "requirement_id": "R4",
+      "reason_code": "COMMIT_NOT_AUTHORIZED",
+      "reason": "Parent authority does not grant commit permission; commit is deferred to human operator"
+    }
+  ],
+  "unresolved_items": [],
+  "coverage_map": [
+    { "requirement_id": "R1", "role_id": "audit", "verification": "Audit report identifying all duplication and refactoring targets" },
+    { "requirement_id": "R2", "role_id": "impl", "verification": "Extracted shared logic functions with clean interfaces" },
+    { "requirement_id": "R3", "role_id": "test", "verification": "Unit tests pass covering extracted logic paths" }
+  ],
+  "decomposition_evidence": [
+    "Four-phase pipeline: audit existing code, implement refactoring, validate with tests, external review",
+    "Each phase has distinct authority requirements and verification criteria"
+  ]
+}

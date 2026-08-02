@@ -1,0 +1,64 @@
+{
+  "verdict": "DECOMPOSED",
+  "parent_goal": "Create production DB migration file with offline schema integrity validation",
+  "execution_policy": {
+    "executor": "INHERIT_PARENT",
+    "reviewer": "EXTERNAL_GPT",
+    "multi_model_orchestration": false
+  },
+  "child_cards": [
+    {
+      "card_id": "E4_migration_file",
+      "role_id": "migration_file",
+      "goal": "Generate migration file for schema changes in offline mode only",
+      "card_type": "IMPLEMENTATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": true
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push", "psql", "mysql", "ALTER TABLE", "CREATE DATABASE"]
+      },
+      "risk_level": "MEDIUM",
+      "allowed_paths": ["migrations/"]
+    },
+    {
+      "card_id": "E4_offline_test",
+      "role_id": "offline_test",
+      "goal": "Offline schema integrity validation against a temporary sandbox database",
+      "card_type": "RUNTIME_VALIDATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push", "psql production", "mysql production"]
+      },
+      "risk_level": "MEDIUM",
+      "allowed_paths": ["migrations/"]
+    }
+  ],
+  "edges": [
+    { "from": "migration_file", "to": "offline_test", "type": "depends_on" }
+  ],
+  "deferred_items": [],
+  "unresolved_items": [
+    {
+      "requirement_id": "R3",
+      "reason_code": "PRODUCTION_RUNTIME_OUT_OF_SCOPE",
+      "question": "Production DB backup, ALTER, verification, and monitoring require production access not available in current authority boundary"
+    }
+  ],
+  "coverage_map": [
+    { "requirement_id": "R1", "role_id": "migration_file", "verification": "Migration file generated with correct schema transformations" },
+    { "requirement_id": "R2", "role_id": "offline_test", "verification": "Schema integrity validated in sandbox environment" }
+  ],
+  "decomposition_evidence": [
+    "Fail-closed approach: offline migration file creation and sandbox testing only",
+    "Live-schema modification is explicitly out of scope and prohibited in child cards"
+  ]
+}

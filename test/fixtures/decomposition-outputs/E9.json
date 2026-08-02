@@ -1,0 +1,96 @@
+{
+  "verdict": "DECOMPOSED",
+  "parent_goal": "Build feature with foundation audit, implementation, testing, and external review",
+  "execution_policy": {
+    "executor": "INHERIT_PARENT",
+    "reviewer": "EXTERNAL_GPT",
+    "multi_model_orchestration": false
+  },
+  "child_cards": [
+    {
+      "card_id": "E9_foundation",
+      "role_id": "foundation",
+      "goal": "Audit codebase to establish foundation and identify integration points",
+      "card_type": "READ_ONLY_AUDIT",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": ["src/"]
+    },
+    {
+      "card_id": "E9_impl",
+      "role_id": "impl",
+      "goal": "Implement the feature based on foundation audit findings",
+      "card_type": "IMPLEMENTATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": true
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "MEDIUM",
+      "allowed_paths": ["src/"]
+    },
+    {
+      "card_id": "E9_test",
+      "role_id": "test",
+      "goal": "Execute runtime validation to verify implementation correctness",
+      "card_type": "RUNTIME_VALIDATION",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": ["npm test"],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": ["src/"]
+    },
+    {
+      "card_id": "E9_review",
+      "role_id": "review",
+      "goal": "External GPT review of the full change set",
+      "card_type": "EXTERNAL_REVIEW",
+      "authority_required": {
+        "commit_allowed": false,
+        "push_allowed": false,
+        "mutation_allowed": false
+      },
+      "verification": {
+        "required_commands": [],
+        "forbidden_commands": ["git commit", "git push"]
+      },
+      "risk_level": "LOW",
+      "allowed_paths": []
+    }
+  ],
+  "edges": [
+    { "from": "foundation", "to": "impl", "type": "depends_on" },
+    { "from": "impl", "to": "test", "type": "depends_on" },
+    { "from": "test", "to": "review", "type": "depends_on" }
+  ],
+  "deferred_items": [],
+  "unresolved_items": [],
+  "coverage_map": [
+    { "requirement_id": "R1", "role_id": "foundation", "verification": "Foundation audit report identifying all integration points" },
+    { "requirement_id": "R2", "role_id": "impl", "verification": "Feature implementation complete and self-consistent" },
+    { "requirement_id": "R3", "role_id": "test", "verification": "All tests pass including regression suite" },
+    { "requirement_id": "R4", "role_id": "review", "verification": "GPT review confirms quality and contract compliance" }
+  ],
+  "decomposition_evidence": [
+    "Linear four-phase pipeline: foundation audit, implementation, validation, external review",
+    "Four cards in linear dependency chain; static structure validation only"
+  ]
+}
