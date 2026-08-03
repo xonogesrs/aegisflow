@@ -137,11 +137,11 @@ const MIGRATION_RE = /(^|[^a-z0-9])migrat(e|ion|ions|ed|ing)([^a-z0-9]|$)/i;
 const OFFLINE_RE = /(^|[^a-z0-9])(offline|離線|sandbox|dry\s?[- ]?run|fail\s?[- ]?closed)([^a-z0-9]|$)/i;
 const FAIL_CLOSED_RE = /fail\s?[- ]?closed/i;
 
-function isBugFixContext(parentCard) {
+export function isBugFixContext(parentCard) {
   return BUG_FIX_RE.test(parentCard?.card_body || "");
 }
 
-function isMigrationContext(parentCard) {
+export function isMigrationContext(parentCard) {
   const body = parentCard?.card_body || "";
   const scope = (parentCard?.scope?.allowed_paths || []).join(" ");
   return MIGRATION_RE.test(body) || FAIL_CLOSED_RE.test(body) || /\bmigrations?\b/i.test(scope);
@@ -149,7 +149,7 @@ function isMigrationContext(parentCard) {
 
 // A migration is "offline" only when the parent card or the test card itself
 // carries an offline/sandbox signal. Online integration validation is NOT renamed.
-function isOfflineMigration(parentCard, testCard) {
+export function isOfflineMigration(parentCard, testCard) {
   const body = parentCard?.card_body || "";
   const goal = testCard?.goal || "";
   const verification = JSON.stringify(testCard?.verification || {});

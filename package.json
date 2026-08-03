@@ -5,8 +5,14 @@
   "type": "module",
   "scripts": {
     "check": "find src -name '*.mjs' -exec node --check {} +",
-    "test:scripted-lifecycle": "node --test test/test-scripted-adapter.mjs test/test-lifecycle-runner.mjs test/test-standalone-paths.mjs test/test-normalize-reviewer-json.mjs",
+    "gate:card5e": "node scripts/card5e-parity-gate.mjs",
+    "test:card5e": "node --test test/v2/test-card5e-parity.mjs",
     "test:pi-rpc-adapter": "node --test test/test-pi-rpc-adapter.mjs test/test-pi-lifecycle-integration.mjs",
-    "test:pi-rpc-smoke": "node test/pi-rpc-real-smoke.mjs"
+    "test:pi-rpc-smoke": "node test/pi-rpc-real-smoke.mjs",
+    "test:scripted-lifecycle": "node --test test/test-scripted-adapter.mjs test/test-lifecycle-runner.mjs test/test-standalone-paths.mjs test/test-normalize-reviewer-json.mjs",
+    "test:v2": "node --test \"test/v2/*.mjs\""
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "0.83.0"
   }
 }
