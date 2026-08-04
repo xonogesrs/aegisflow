@@ -42,8 +42,14 @@ merge／release／seal／開始下一張實作卡。
 
 - `REVIEW_ROUND`：外部 review 輪次（REPAIR 後遞增，round ≥ 2 的 result artifact 必須綁定
   上一輪 `prior_bundle_sha256`＋`prior_findings_digest`）。
-- `repair round`：累計修復輪數，**不得重設**；`remaining repair budget = maximum_repair_rounds
+- `repair round`：累計修復輪數，**不得重設**；`remaining repair budget = effective_repair_cap
   − repair round`。
+- **Canonical repair cap（round 5 finding）**：`effective_repair_cap = min(
+  bounded_repair.max_rounds, review_unit.maximum_repair_rounds)`，單一有效上限，由 authority
+  record 推導並寫入 history（`effective_repair_cap` 欄位）；`gov-controller-prepare-round.mjs`
+  不接受 `--max-repair-rounds` 自由輸入，`repair round > cap` 或兩欄位有限值不一致 →
+  `HOLD / REVIEW_HISTORY_INVALID`。bundle 產生前若 `repair round > cap` →
+  `HOLD / REVIEW_UNIT_LIMIT_EXCEEDED`，不產生 bundle。
 - Bundle §7 必須包含**上一輪 external findings 全文與其 findings digest**。
 - fresh verification 為強制：production CLI 完全移除 `--skip-fresh-verify` 與任何
   `--verify-config` 旗標（round 4 finding 1：`--verify-config` 一併明確拒絕，無法以任意

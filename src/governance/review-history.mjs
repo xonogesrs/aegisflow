@@ -24,7 +24,7 @@ export const REVIEW_HISTORY_SCHEMA_JSON = Object.freeze({
   required: [
     "schema", "card_id", "review_round", "repair_round",
     "prior_bundle_sha256", "prior_findings_digest", "prior_findings_text",
-    "remaining_budget", "updated_at",
+    "effective_repair_cap", "remaining_budget", "updated_at",
   ],
   properties: {
     schema: { type: "string", const: REVIEW_HISTORY_SCHEMA },
@@ -34,6 +34,10 @@ export const REVIEW_HISTORY_SCHEMA_JSON = Object.freeze({
     prior_bundle_sha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
     prior_findings_digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
     prior_findings_text: { type: "string", minLength: 1 },
+    // Canonical repair cap = min(bounded_repair.max_rounds,
+    // review_unit.maximum_repair_rounds) of the authority record the round
+    // was prepared under (round 5 finding). Never a free input.
+    effective_repair_cap: { type: "integer", minimum: 0 },
     remaining_budget: { type: "integer", minimum: 0 },
     updated_at: { type: "string", format: "date-time" },
   },
@@ -79,6 +83,7 @@ export function deriveRoundContext(history) {
       prior_bundle_sha256: "",
       prior_findings_digest: "",
       prior_findings_text: "",
+      effective_repair_cap: null,
       remaining_budget: 0,
     };
   }
@@ -88,6 +93,7 @@ export function deriveRoundContext(history) {
     prior_bundle_sha256: history.prior_bundle_sha256,
     prior_findings_digest: history.prior_findings_digest,
     prior_findings_text: history.prior_findings_text,
+    effective_repair_cap: history.effective_repair_cap,
     remaining_budget: history.remaining_budget,
   };
 }

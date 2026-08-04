@@ -75,6 +75,34 @@ test("[neg 22] repair budget exhausted → HOLD", () => {
   assert.ok(g.violations.some((v) => v.includes("maximum_repair_rounds")));
 });
 
+test("[neg 23] repair caps must intersect: bounded_repair.max_rounds ∩ review_unit.maximum_repair_rounds (round 5 finding)", () => {
+  // self-contradictory card: bounded_repair.max_rounds=2 vs
+  // review_unit.maximum_repair_rounds=3 — the effective cap is min(2,3)=2
+  const conflicted = {
+    bounded_repair: entryBlock().bounded_repair, // max_rounds 2
+    review_unit: { ...entryBlock().review_unit, maximum_repair_rounds: 3 },
+  };
+  // repair 3 is within review_unit.maximum_repair_rounds but exceeds the
+  // effective cap → must be rejected, and the conflict itself is flagged
+  const g = evaluateReviewUnitGate({ authority: conflicted, actual: { ...within, repair_rounds: 3 } });
+  assert.equal(g.allowed, false);
+  assert.ok(g.violations.some((v) => v.includes("repair_cap_authority_conflict")));
+  assert.ok(g.violations.some((v) => v.includes("maximum_repair_rounds")));
+  assert.equal(g.limits.maximum_repair_rounds, 2, "effective cap = min(2,3)");
+
+  // a consistent card (both caps 4) admits repair 4 and rejects repair 5
+  const consistent = {
+    bounded_repair: { ...entryBlock().bounded_repair, max_rounds: 4 },
+    review_unit: { ...entryBlock().review_unit, maximum_repair_rounds: 4 },
+  };
+  const ok4 = evaluateReviewUnitGate({ authority: consistent, actual: { ...within, repair_rounds: 4 } });
+  assert.equal(ok4.allowed, true, ok4.violations.join("; "));
+  assert.equal(ok4.limits.maximum_repair_rounds, 4);
+  const over4 = evaluateReviewUnitGate({ authority: consistent, actual: { ...within, repair_rounds: 5 } });
+  assert.equal(over4.allowed, false);
+  assert.ok(over4.violations.some((v) => v.includes("maximum_repair_rounds")));
+});
+
 test("early-stop conditions never expand the unit", () => {
   const stopKeys = Object.keys(REVIEW_UNIT_STOP_CONDITIONS);
   assert.ok(stopKeys.length >= 10);

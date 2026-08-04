@@ -148,9 +148,9 @@ test("create_if_missing / update_if_present are capability AND", () => {
 
 test("min caps: effective is min; child exceeding parent is escalation", () => {
   const parent = entryRecord();
-  // schema hard-caps bounded_repair.max_rounds at 2 — exceeding it is invalid
+  // schema sanity-caps bounded_repair.max_rounds at 8 — exceeding it is invalid
   const tooHigh = entryRecord({
-    lifecycle_authorization: { ...block, bounded_repair: { allowed: true, max_rounds: 5, scope_expansion: false } },
+    lifecycle_authorization: { ...block, bounded_repair: { allowed: true, max_rounds: 9, scope_expansion: false } },
   });
   assert.equal(validateAuthorityRecord(tooHigh).valid, false);
   // escalation within schema bounds: child raises max_depth above parent

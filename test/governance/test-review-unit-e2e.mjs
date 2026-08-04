@@ -16,6 +16,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { writeFileSync, mkdirSync, mkdtempSync, readFileSync, existsSync, rmSync, realpathSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
@@ -392,7 +393,7 @@ test("[neg 6] round 3 must not reset to repair round 1 (history-derived)", (t) =
   writeFileSync(findingsFile, "round 2 findings text");
   const prepare = run("gov-controller-prepare-round.mjs", [
     "--bundle-dir", outDir, "--card-id", CARD_ID, "--findings-file", findingsFile,
-    "--review-round", "3", "--repair-round", "2", "--max-repair-rounds", "2",
+    "--review-round", "3", "--repair-round", "2", "--authority-file", authorityPath,
   ], dir);
   assert.equal(prepare.status, 0, prepare.stderr);
   // bundle generation now derives round 3 / repair 2 — attempting to reset via
@@ -518,6 +519,73 @@ test("[neg 10] remote URL: only canonical GitHub forms pass the production polic
   assert.equal(remoteUrlMatchesAuthorizedRepository("/var/tmp/xonogesrs/autoloop.git", target, testRemoteMatch), true);
   assert.equal(productionRemoteMatch("git@github.com:xonogesrs/autoloop.git", target), true);
   assert.equal(productionRemoteMatch("/var/tmp/xonogesrs/autoloop.git", target), false);
+});
+
+test("[neg 13] repair caps must intersect: bounded 2 / review_unit 3 / repair 3 → HOLD (round 5 finding)", (t) => {
+  const { dir, git } = createTempRepo(t);
+  writeFileSync(join(dir, ".gitignore"), GITIGNORE);
+  git(["add", ".gitignore"]);
+  git(["commit", "-m", "gitignore"]);
+  const outDir = join(dir, "out");
+  const bundlePath = join(outDir, "READY_FOR_REVIEW.txt");
+  mkdirSync(outDir, { recursive: true });
+  mkdirSync(join(dir, "work"), { recursive: true });
+  const authorityPath = writeAuthorityRecord(dir, bundlePath);
+  // self-contradictory card: bounded_repair.max_rounds=2 but
+  // review_unit.maximum_repair_rounds=3 (the round-4 exception shape) — the
+  // effective cap is min(2,3)=2, so repair 3 is OUT of effective authority
+  const conflicted = JSON.parse(readFileSync(authorityPath, "utf8"));
+  conflicted.lifecycle_authorization.review_unit.maximum_repair_rounds = 3;
+  const conflictedPath = join(outDir, "authority-conflicted.json");
+  writeFileSync(conflictedPath, JSON.stringify(conflicted, null, 2));
+  writeFileSync(join(dir, "work", "a.txt"), "a\n");
+
+  // checkpoint under the conflicted record is blocked by the gate
+  const ck = run("gov-commit-checkpoint.mjs", [
+    "--authority-file", conflictedPath, "--cwd", dir, "--verification-passed", "true",
+    "--artifact-identity", "x", "--evidence-digest", "e".repeat(64), "--repair-converged", "true",
+    "--card-id", CARD_ID, "--run-id", RUN_ID, "--milestone-id", "m1", "--milestones", "1",
+    "--repair-rounds", "3", "--message", "ck", "--apply",
+  ], dir);
+  assert.notEqual(ck.status, 0);
+  assert.match(ck.stderr, /REVIEW_UNIT_LIMIT_EXCEEDED|repair_cap_authority_conflict/);
+
+  // prepare-round must refuse to write history at repair 3 under this record
+  mkdirSync(join(outDir, "archive"), { recursive: true });
+  writeFileSync(join(outDir, "archive", "20260804T000000Z-" + CARD_ID + "-run-1.txt"), "PRIOR BUNDLE R4\nBUNDLE_SHA256 (sha256 of all content above): deadbeef\n");
+  const findingsFile = join(outDir, "findings.txt");
+  writeFileSync(findingsFile, "round 4 findings");
+  const prepare = run("gov-controller-prepare-round.mjs", [
+    "--bundle-dir", outDir, "--card-id", CARD_ID, "--findings-file", findingsFile,
+    "--review-round", "4", "--repair-round", "3", "--authority-file", conflictedPath,
+  ], dir);
+  assert.notEqual(prepare.status, 0);
+  assert.match(prepare.stderr, /REVIEW_HISTORY_INVALID|repair_cap_authority_conflict/);
+
+  // a stale history claiming repair 3 under a cap-2 record must block the bundle
+  mkdirSync(join(outDir, "governance"), { recursive: true });
+  const priorText = "stale";
+  const stale = {
+    schema: "autoloop.review-history/v1",
+    card_id: CARD_ID,
+    review_round: 4,
+    repair_round: 3,
+    prior_bundle_sha256: "deadbeef".repeat(8),
+    prior_findings_digest: createHash("sha256").update(priorText).digest("hex"),
+    prior_findings_text: priorText,
+    effective_repair_cap: 2,
+    remaining_budget: 0,
+    updated_at: new Date().toISOString(),
+  };
+  writeFileSync(join(outDir, "governance", "review-history.json"), JSON.stringify(stale, null, 2));
+  writeFileSync(join(outDir, "meta.json"), JSON.stringify({ goal: "x" }));
+  const bundle = genBundle([
+    "--cwd", dir, "--authority-file", conflictedPath, "--card-id", CARD_ID, "--run-id", RUN_ID,
+    "--base-branch", "main", "--out-dir", outDir, "--meta", join(outDir, "meta.json"),
+  ], verifyFixtureCommands(dir));
+  assert.notEqual(bundle.status, 0);
+  assert.match(bundle.stderr, /REVIEW_UNIT_LIMIT_EXCEEDED|REVIEW_HISTORY_INVALID/);
+  assert.equal(existsSync(bundlePath), false, "no bundle when repair exceeds the effective cap");
 });
 
 test("[neg 11] custom PR body missing card/result binding is rejected", (t) => {

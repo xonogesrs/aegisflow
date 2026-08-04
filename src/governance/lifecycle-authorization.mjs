@@ -517,6 +517,45 @@ export function lifecycleAuthorizationPath(execDir) {
   return join(execDir, "governance", "lifecycle-authorization.json");
 }
 
+// ---------------------------------------------------------------------------
+// Canonical repair budget (round 5 finding)
+// ---------------------------------------------------------------------------
+//
+// The same effective authority carries TWO repair caps:
+//   bounded_repair.max_rounds          (bounded-repair capability)
+//   review_unit.maximum_repair_rounds  (review-unit boundary)
+//
+// The canonical cap is their strict intersection (min). Any finite mismatch
+// between the two is an authority conflict and is rejected fail-closed — a
+// card must declare ONE consistent repair budget.
+
+function finiteCap(v) {
+  return typeof v === "number" && Number.isFinite(v);
+}
+
+/** Canonical repair cap = min(bounded_repair.max_rounds, review_unit.maximum_repair_rounds). */
+export function effectiveRepairCap(authority) {
+  const bounded = authority?.bounded_repair?.max_rounds;
+  const unit = authority?.review_unit?.maximum_repair_rounds;
+  if (!finiteCap(bounded) && !finiteCap(unit)) return Infinity;
+  if (!finiteCap(bounded)) return unit;
+  if (!finiteCap(unit)) return bounded;
+  return Math.min(bounded, unit);
+}
+
+/**
+ * When BOTH repair caps are finite and differ, the record itself is
+ * self-contradictory (e.g. bounded_repair.max_rounds 2 vs
+ * review_unit.maximum_repair_rounds 3) — returns a human-readable conflict
+ * description, or null when the record is consistent.
+ */
+export function repairCapConflict(authority) {
+  const bounded = authority?.bounded_repair?.max_rounds;
+  const unit = authority?.review_unit?.maximum_repair_rounds;
+  if (!finiteCap(bounded) || !finiteCap(unit) || bounded === unit) return null;
+  return `bounded_repair.max_rounds ${bounded} != review_unit.maximum_repair_rounds ${unit} (effective repair cap = min = ${Math.min(bounded, unit)})`;
+}
+
 export function authorityDigest(a) {
   return digestOf(canonicalize(a));
 }

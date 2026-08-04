@@ -63,6 +63,12 @@ FINALIZATION-1）因授權範圍內完整修復必然超過預設 path/line 上�
   不得略過邊界檢查。
 - `maximum_repair_rounds` 為真實治理：每輪 REPAIR 後 `repair round` 遞增、剩餘預算遞減，
   bundle 與 result artifact 都會揭露；重新產生 bundle 不能重設預算。
+- **Canonical repair cap（round 5 finding）**：repair 預算只有一個有效上限
+  `effective_repair_cap = min(bounded_repair.max_rounds, review_unit.maximum_repair_rounds)`；
+  review-unit gate、checkpoint、bundle 與 `gov-controller-prepare-round.mjs` 一律以它為準。
+  兩欄位皆為有限值且不一致（如 2 vs 3）→ `repair_cap_authority_conflict`，fail-closed HOLD。
+  `prepare-round` 不得接受自由輸入的 `--max-repair-rounds`（一律由 authority record 推導，
+  `--authority-file` 必填）；`repair round > effective_repair_cap` → 不寫 history、不產生 bundle。
 - **round／repair／prior 一律由持久化 review-history artifact 推導**
   （`<bundleDir>/governance/review-history.json`，Controller 專屬 `scripts/gov-controller-
   prepare-round.mjs` 寫入）；Agent CLI 不得輸入這三個值（衝突 → `HOLD / REVIEW_HISTORY_INVALID`）。

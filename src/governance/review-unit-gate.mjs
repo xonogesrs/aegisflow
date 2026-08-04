@@ -9,6 +9,7 @@
 // concrete reason. Never expands scope on its own.
 
 import { GOV_HOLD, hold } from "./holds.mjs";
+import { effectiveRepairCap, repairCapConflict } from "./lifecycle-authorization.mjs";
 
 // Default limits (§5) — mirrors the card's default caps. An entry card may
 // declare higher values in its review_unit block (schema sanity bounds above);
@@ -71,6 +72,16 @@ export function evaluateReviewUnitGate({ authority, actual = {}, stopConditions 
   const violations = [];
 
   if (cap.allowed !== true) violations.push("review_unit.allowed is false (fail-closed)");
+
+  // Round 5 finding: the repair budget has TWO declared caps
+  // (bounded_repair.max_rounds and review_unit.maximum_repair_rounds). The
+  // canonical cap is their strict intersection; the rendered limit and the
+  // enforcement below use that single effective cap. A finite mismatch
+  // between the two declarations is itself an authority conflict.
+  const repairCap = effectiveRepairCap(authority);
+  limits.maximum_repair_rounds = repairCap;
+  const conflict = repairCapConflict(authority);
+  if (conflict) violations.push(`repair_cap_authority_conflict: ${conflict}`);
 
   const limitOf = (key) => {
     if (REVIEW_UNIT_LIMIT_FIELDS.includes(key)) return key;

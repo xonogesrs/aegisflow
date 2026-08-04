@@ -54,7 +54,7 @@
           "required": ["allowed", "max_rounds", "scope_expansion"],
           "properties": {
             "allowed": { "type": "boolean" },
-            "max_rounds": { "type": "integer", "minimum": 0, "maximum": 2 },
+            "max_rounds": { "type": "integer", "minimum": 0, "maximum": 8 },
             "scope_expansion": { "type": "boolean" }
           }
         },
@@ -110,7 +110,7 @@
             "maximum_internal_milestones": { "type": "integer", "minimum": 1, "maximum": 3 },
             "maximum_changed_paths": { "type": "integer", "minimum": 1, "maximum": 64 },
             "maximum_patch_lines": { "type": "integer", "minimum": 1, "maximum": 20000 },
-            "maximum_repair_rounds": { "type": "integer", "minimum": 0, "maximum": 3 }
+            "maximum_repair_rounds": { "type": "integer", "minimum": 0, "maximum": 8 }
           }
         },
         "merge_main": {

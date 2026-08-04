@@ -251,7 +251,29 @@ export function generateReviewBundle({ argv, verifyCommands = DEFAULT_VERIFY_COM
   const stopConditions = meta.stopConditions || [];
   const reviewUnit = evaluateReviewUnitGate({ authority, actual: reviewUnitActual, stopConditions });
   if (!reviewUnit.allowed) {
+    // round 5 finding: the gate enforces the canonical repair cap
+    // (min of bounded_repair.max_rounds and
+    // review_unit.maximum_repair_rounds) — repair_round > effective cap →
+    // HOLD before any bundle is produced.
     fail(GOV_HOLD.REVIEW_UNIT_LIMIT_EXCEEDED, reviewUnit.violations.join("; "));
+  }
+
+  // Round 5 finding: the Controller-maintained history must agree with the
+  // authority-derived effective repair cap — history can never expand
+  // authorization. Both recorded fields (effective_repair_cap and
+  // remaining_budget) must have been derived from the SAME cap this record
+  // declares.
+  if (history) {
+    const effectiveCap = reviewUnit.limits.maximum_repair_rounds;
+    if (Number.isFinite(effectiveCap) && roundCtx.effective_repair_cap !== effectiveCap) {
+      fail(GOV_HOLD.REVIEW_HISTORY_INVALID,
+        `history effective_repair_cap ${roundCtx.effective_repair_cap} != authority effective cap ${effectiveCap}`);
+    }
+    const expectedRemaining = Math.max(0, effectiveCap - repairRounds);
+    if (remainingBudget !== expectedRemaining) {
+      fail(GOV_HOLD.REVIEW_HISTORY_INVALID,
+        `history remaining_budget ${remainingBudget} != effective cap ${effectiveCap} − repair ${repairRounds} = ${expectedRemaining}`);
+    }
   }
 
   // ── fresh verification (§15): full rerun embedded in the bundle. No skip
@@ -435,7 +457,8 @@ export function generateReviewBundle({ argv, verifyCommands = DEFAULT_VERIFY_COM
     section("7. REVIEW AND REPAIR HISTORY"),
     `- external review round: ${reviewRound}`,
     `- repair round: ${repairRounds}`,
-    `- remaining repair budget: ${remainingBudget}（history 紀錄；= maximum ${reviewUnit.limits.maximum_repair_rounds} − repair ${repairRounds}）`,
+    `- effective repair cap (min of bounded_repair.max_rounds & review_unit.maximum_repair_rounds): ${reviewUnit.limits.maximum_repair_rounds}`,
+    `- remaining repair budget: ${Math.max(0, reviewUnit.limits.maximum_repair_rounds - repairRounds)}（= effective cap − repair ${repairRounds}；history 紀錄 remaining ${remainingBudget}）`,
     `- previous external findings (round ${reviewRound - 1}):`,
     priorFindings ? priorFindings.split("\n").map((l) => `    ${l}`).join("\n") : `    (round ${reviewRound - 1} 無 findings 記錄 — round ${reviewRound - 1} 檔案不存在)`,
     `- previous findings digest: ${priorFindingsDigest || "(無)"}`,
