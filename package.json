@@ -21,7 +21,9 @@
     "test:c4l": "node --test test/v2/test-executor-strict-json-prompt.mjs",
     "test:c4n": "node --test test/v2/test-review-evidence-delivery.mjs",
     "test:c4q": "node --test test/v2/test-harness-owned-evidence.mjs",
-    "test:c4s": "node --test test/v2/test-system-delta.mjs"
+    "test:c4s": "node --test test/v2/test-system-delta.mjs",
+    "test:governance": "node --test test/governance/*.mjs",
+    "gov:effective": "node scripts/gov-effective-authority.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.83.0"
