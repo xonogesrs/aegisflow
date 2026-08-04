@@ -31,7 +31,7 @@ import {
   validateAuthorityRecord,
 } from "../src/governance/lifecycle-authorization.mjs";
 import { buildChangeInventory, expandPath } from "../src/governance/change-inventory.mjs";
-import { evaluateReviewUnitGate, REVIEW_UNIT_LIMIT_FIELDS } from "../src/governance/review-unit-gate.mjs";
+import { evaluateReviewUnitGate, REVIEW_UNIT_LIMIT_FIELDS, REVIEW_UNIT_ACTUAL_TO_LIMIT } from "../src/governance/review-unit-gate.mjs";
 import { digestOfPayload, buildBundleHeader, renderProhibitedActions, EXTERNAL_REVIEW_STOP } from "../src/governance/external-review.mjs";
 import { bundleDigestFromFile } from "../src/governance/review-context.mjs";
 import { scanForSecrets } from "../src/evidence/run-evidence-store.mjs";
@@ -318,9 +318,10 @@ const bundle = [
   `- 執行單位: ONE COHERENT REVIEW UNIT`,
   ...REVIEW_UNIT_LIMIT_FIELDS.map((f) => {
     const limit = reviewUnit.limits[f];
-    const value = reviewUnitActual[f];
-    const ok = value <= limit;
-    return `- ${f}: actual ${value} / limit ${limit}  ${ok ? "OK" : "EXCEEDED"}`;
+    const shortKey = Object.keys(REVIEW_UNIT_ACTUAL_TO_LIMIT).find((k) => REVIEW_UNIT_ACTUAL_TO_LIMIT[k] === f);
+    const value = reviewUnitActual[f] ?? (shortKey ? reviewUnitActual[shortKey] : undefined);
+    const ok = value !== undefined && value <= limit;
+    return `- ${f}: actual ${value ?? "(未測量)"} / limit ${limit}  ${ok ? "OK" : value === undefined ? "UNMEASURED" : "EXCEEDED"}`;
   }),
   `- review-unit gate: ${reviewUnit.allowed ? "WITHIN LIMITS" : `VIOLATIONS: ${reviewUnit.violations.join("; ")}`}`,
   `- stop conditions triggered: ${meta.stopConditions?.length ? meta.stopConditions.join(",") : "NONE"}`,
