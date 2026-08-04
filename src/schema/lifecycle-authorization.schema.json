@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "autoloop.lifecycle-authorization/v1",
+  "title": "AutoLoop Reversible Lifecycle Authorization",
+  "description": "Entry-card-level authorization for a controlled, reversible work lifecycle: decompose → execute → independent review → bounded repair → fresh verification → checkpoint commit → feature-branch push → draft PR create/update. Fail-closed: any capability not explicitly allowed is denied.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "card_id", "lifecycle_authorization"],
+  "properties": {
+    "schema": { "type": "string", "const": "autoloop.lifecycle-authorization/v1" },
+    "card_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "card_revision": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "authorized_by": { "type": "string", "minLength": 1 },
+    "authorization_ref": { "type": "string", "minLength": 1 },
+    "lifecycle_authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decomposition", "independent_review", "bounded_repair", "checkpoint_commit", "feature_branch_push", "draft_pr", "merge_main", "release", "seal"],
+      "properties": {
+        "decomposition": {
+          "type": "object", "additionalProperties": false,
+          "required": ["allowed", "max_depth", "max_total_nodes"],
+          "properties": {
+            "allowed": { "type": "boolean" },
+            "max_depth": { "type": "integer", "minimum": 0, "maximum": 16 },
+            "max_total_nodes": { "type": "integer", "minimum": 0, "maximum": 1024 }
+          }
+        },
+        "independent_review": {
+          "type": "object", "additionalProperties": false,
+          "required": ["allowed", "require_fresh_session", "require_same_artifact_digest"],
+          "properties": {
+            "allowed": { "type": "boolean" },
+            "require_fresh_session": { "type": "boolean" },
+            "require_same_artifact_digest": { "type": "boolean" }
+          }
+        },
+        "bounded_repair": {
+          "type": "object", "additionalProperties": false,
+          "required": ["allowed", "max_rounds", "scope_expansion"],
+          "properties": {
+            "allowed": { "type": "boolean" },
+            "max_rounds": { "type": "integer", "minimum": 0, "maximum": 16 },
+            "scope_expansion": { "type": "boolean" }
+          }
+        },
+        "checkpoint_commit": {
+          "type": "object", "additionalProperties": false,
+          "required": ["allowed", "require_local_gates_pass", "require_clean_index_before_stage", "require_expected_paths_only"],
+          "properties": {
+            "allowed": { "type": "boolean" },
+            "require_local_gates_pass": { "type": "boolean" },
+            "require_clean_index_before_stage": { "type": "boolean" },
+            "require_expected_paths_only": { "type": "boolean" }
+          }
+        },
+        "feature_branch_push": {
+          "type": "object", "additionalProperties": false,
+          "required": ["allowed", "branch_pattern", "force_push", "require_remote_ancestor_check"],
+          "properties": {
+            "allowed": { "type": "boolean" },
+            "branch_pattern": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "force_push": { "type": "boolean" },
+            "require_remote_ancestor_check": { "type": "boolean" }
+          }
+        },
+        "draft_pr": {
+          "type": "object", "additionalProperties": false,
+          "required": ["allowed", "base_branch", "draft_only", "create_if_missing", "update_if_present"],
+          "properties": {
+            "allowed": { "type": "boolean" },
+            "base_branch": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "draft_only": { "type": "boolean" },
+            "update_if_present": { "type": "boolean" }
+          }
+        },
+        "merge_main": {
+          "type": "object", "additionalProperties": false,
+          "required": ["allowed"],
+          "properties": { "allowed": { "type": "boolean", "const": false } }
+        },
+        "release": {
+          "type": "object", "additionalProperties": false,
+          "required": ["allowed"],
+          "properties": { "allowed": { "type": "boolean", "const": false } }
+        },
+        "seal": {
+          "type": "object", "additionalProperties": false,
+          "required": ["allowed"],
+          "properties": { "allowed": { "type": "boolean", "const": false } }
+        }
+      }
+    }
+  }
+}
