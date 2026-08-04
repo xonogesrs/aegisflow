@@ -553,6 +553,26 @@ const IE_TIMESTAMPS = {
   }
 };
 
+// AURACORE-AUTOLOOP-C4R-SINGLE-SCHEMA-AUTHORITY-1:
+// Additive exports so src/v2/phase-response-contract.mjs projects the
+// executor final-response contract from the SAME constants the runtime
+// validator (validateImplementationEvidence) enforces. The prompt never
+// carries a hand-maintained second field list — any drift would be a
+// duplicate-schema-authority defect. These exports change no validation
+// behavior (read-only snapshots of existing constants).
+export const IE_REQUIRED_FIELDS = Object.freeze([...IE_REQUIRED]);
+export const IE_ALLOWED_FIELDS = Object.freeze([...IE_ALLOWED]);
+export const IE_ITEM_SHAPE_COMMANDS = Object.freeze(IE_CMD_ITEM);
+export const IE_ITEM_SHAPE_COMPILE_RESULTS = Object.freeze(IE_CMD_ITEM);
+export const IE_ITEM_SHAPE_TEST_RESULTS = Object.freeze(IE_TR_ITEM);
+export const IE_ITEM_SHAPE_NEGATIVE_EVIDENCE = Object.freeze(IE_NE_ITEM);
+export const IE_ITEM_SHAPE_MUTATION_EVIDENCE = Object.freeze(IE_ME_ITEM);
+export const IE_ITEM_SHAPE_SKIPPED_EVIDENCE = Object.freeze(IE_SE_ITEM);
+export const IE_ITEM_SHAPE_KNOWN_FAILURES = Object.freeze(IE_KF_ITEM);
+export const IE_ITEM_SHAPE_SCOPE_DEVIATIONS = Object.freeze(IE_SD_ITEM);
+export const IE_ENV_LIMITS_SHAPE = Object.freeze(IE_ENV_LIMITS);
+export const IE_TIMESTAMPS_SHAPE = Object.freeze(IE_TIMESTAMPS);
+
 export function validateImplementationEvidence(value) {
   const errors = [];
 

@@ -55,6 +55,17 @@ export const KNOWN_CONTROL_STATES = new Set([
   "RECOVERY_REQUIRED",
   "REVIEW_HOLD",
   "ROLLBACK_FAILED",
+  // C3 AutoLoop additive states（checkpoint-bridge 使用；不影響既有 callers）
+  "AUTOLOOP_RUNNING",
+  "AUTOLOOP_RESUMABLE",
+  "AUTOLOOP_TERMINAL_PASS",
+  "AUTOLOOP_TERMINAL_HOLD",
+  "AUTOLOOP_TERMINAL_NOT_BENEFICIAL",
+  // C4I additive: pre-decomposition / incomplete-decomposition runs whose
+  // checkpoint lacks the resume material (decomposition-ir + verified
+  // IR/DAG hashes + frozen phase set). Such runs cannot be resumed and must
+  // be restarted under a NEW execution id. Never marked RESUMABLE.
+  "AUTOLOOP_RESTART_REQUIRED",
 ]);
 
 export function resolveExecDir(checkpointRoot, executionId) {

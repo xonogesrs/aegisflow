@@ -17,8 +17,15 @@
 import { randomUUID } from "node:crypto";
 import { AdapterContractError } from "./adapter/contract.mjs";
 import { ScriptedAdapterSequenceError } from "./adapter/scripted-adapter.mjs";
-import { validateImplementationEvidence } from "./validate-role-artifacts.mjs";
 import { captureScopeSnapshot, enforceScopeGate } from "./c2d/mutation-scope.mjs";
+import { buildReviewEvidenceBundle } from "./v2/review-evidence.mjs";
+import { buildSystemObservedDelta, SYSTEM_DELTA_ERRORS } from "./v2/system-delta.mjs";
+import {
+  buildExecutorOutputDiagnostic,
+  buildHarnessOwnedEvidence,
+  collectGitBaseline,
+  runVerificationCommand,
+} from "./v2/harness-evidence.mjs";
 import { classifyHold } from "./hold-taxonomy.mjs";
 import { normalize as normalizeReviewerVerdict, FAIL_CLOSED as REVIEWER_FAIL_CLOSED } from "./normalize-reviewer-json.mjs";
 
@@ -47,28 +54,124 @@ function checkMutationScope(mutationScope) {
   const { repositoryRoot, baselineSnapshot, allowedPaths = [], forbiddenPaths = [] } = mutationScope;
   const currentSnapshot = captureScopeSnapshot(repositoryRoot);
   const gate = enforceScopeGate(repositoryRoot, baselineSnapshot, currentSnapshot, allowedPaths, forbiddenPaths);
-  return { ok: gate.ok, violations: gate.violations };
+  // C4N: the full changed-path inventory（delta）is the system-observed
+  // objective fact delivered to the reviewer in the evidence bundle.
+  return { ok: gate.ok, violations: gate.violations, delta: gate.delta };
 }
 
 function parseJsonStrict(text) {
   try {
     return { ok: true, value: JSON.parse(text ?? "") };
   } catch (e) {
-    return { ok: false, error: e.message };
+    // Keep the message string for the existing `detail` field（unchanged
+    // shape）; also expose the error name so C4J diagnostics can record
+    // parse_error.type（V8: "SyntaxError"）.
+    return { ok: false, error: e.message, name: e.name };
   }
+}
+
+// ── C4J — bounded EXECUTOR_EVIDENCE_INVALID diagnostics ──────────────────
+// When the executor final assistant text fails strict JSON parsing, bounded
+// durable diagnostics are produced（final text ≤ 2 KiB, bounded stderr tail,
+// parse error + adapter protocol counters）. The diagnostics NEVER change the
+// verdict or reason: they are best-effort, carried only by the durable
+// persistence path（secret-scanned, DURABLE_EVIDENCE_SECRET_RISK fail-closed）.
+export const EXECUTOR_DIAGNOSTICS_LIMITS = Object.freeze({
+  format_version: "1.0.0",
+  max_final_text_bytes: 2 * 1024,   // C4J: bounded final assistant text cap
+  max_stderr_tail_bytes: 4 * 1024,  // bounded stderr tail cap
+  max_parse_message_chars: 2048,    // parse error message cap
+});
+
+function headBytes(text, maxBytes) {
+  if (typeof text !== "string") return { value: String(text ?? ""), truncated: false, original_bytes: 0 };
+  const buf = Buffer.from(text, "utf8");
+  if (buf.length <= maxBytes) return { value: text, truncated: false, original_bytes: buf.length };
+  return { value: buf.subarray(0, maxBytes).toString("utf8"), truncated: true, original_bytes: buf.length };
+}
+
+function tailBytes(text, maxBytes) {
+  if (typeof text !== "string") return { value: String(text ?? ""), truncated: false, original_bytes: 0 };
+  const buf = Buffer.from(text, "utf8");
+  if (buf.length <= maxBytes) return { value: text, truncated: false, original_bytes: buf.length };
+  return { value: buf.subarray(buf.length - maxBytes).toString("utf8"), truncated: true, original_bytes: buf.length };
+}
+
+function countLines(text) {
+  if (typeof text !== "string" || text.length === 0) return 0;
+  const newlines = text.match(/\n/g);
+  const n = newlines ? newlines.length : 0;
+  return text.endsWith("\n") ? n : n + 1;
+}
+
+/**
+ * Build bounded executor diagnostics from the adapter result. stdout is the
+ * model's final assistant text（delivered by pi-rpc-adapter via
+ * get_last_assistant_text → response.data.text → adapter.stdout）; stderr is
+ * the child's stderr buffer（kept separate — never mixed）. Pure,
+ * deterministic, credential-safe（values are bounded here; the durable store
+ * re-scans every string and fails closed on any secret pattern）.
+ */
+export function buildExecutorEvidenceDiagnostics(executorResult, parseError, limits = EXECUTOR_DIAGNOSTICS_LIMITS) {
+  const stdout = executorResult?.stdout ?? "";
+  const stderr = executorResult?.stderr ?? "";
+  const metadata = executorResult?.metadata ?? {};
+  const text = headBytes(stdout, limits.max_final_text_bytes);
+  const tail = tailBytes(stderr, limits.max_stderr_tail_bytes);
+  const eventCounts = metadata.protocolEventTypeCounts ?? {};
+  const rawJsonlLines = Object.values(eventCounts).reduce((a, b) => a + (Number(b) || 0), 0);
+  const firstContent = stdout.search(/\S/);
+  return {
+    format_version: limits.format_version,
+    failure_code: "EXECUTOR_EVIDENCE_INVALID",
+    final_assistant_text: {
+      stored: text.value,
+      original_length: text.original_bytes,
+      stored_length: Buffer.byteLength(text.value, "utf8"),
+      truncated: text.truncated,
+      max_bytes: limits.max_final_text_bytes,
+    },
+    parse_error: {
+      type: parseError?.name ?? null,
+      message: typeof parseError?.message === "string" ? parseError.message.slice(0, limits.max_parse_message_chars) : null,
+      position: null, // JSON.parse（V8）exposes no numeric offset
+      first_non_whitespace_offset: firstContent >= 0 ? firstContent : null,
+    },
+    protocol: {
+      rpc_completion_status: executorResult?.status ?? null,
+      terminal_reason: metadata.terminalReason ?? null,
+      assistant_message_count: eventCounts.message_end ?? 0,
+      tool_call_count: metadata.toolCallCount ?? 0,
+      raw_jsonl_line_count: rawJsonlLines,
+      malformed_jsonl_count: 0, // any malformed wire line would have produced an error outcome instead of EXECUTOR_EVIDENCE_INVALID
+      stderr_byte_count: tail.original_bytes,
+      stderr_line_count: countLines(stderr),
+      adapter_extraction_path: "pi-rpc-adapter get_last_assistant_text -> response.data.text -> adapter.stdout",
+    },
+    stderr_tail: {
+      stored: tail.value,
+      original_length: tail.original_bytes,
+      stored_length: Buffer.byteLength(tail.value, "utf8"),
+      truncated: tail.truncated,
+      max_bytes: limits.max_stderr_tail_bytes,
+    },
+  };
 }
 
 export async function runLifecycle({
   cwd,
   taskCard,
   adapter,
+  executorAdapter,
+  reviewerAdapter,
+  executorEvidenceValidator,
   maxRepairAttempts,
   timeoutMs,
   abortSignal,
+  hooks = {},
 }) {
   if (typeof cwd !== "string" || cwd.length === 0) throw new TypeError("cwd is required");
   if (taskCard === undefined || taskCard === null) throw new TypeError("taskCard is required");
-  if (!adapter || typeof adapter.runAdapter !== "function") throw new TypeError("adapter.runAdapter is required");
   if (!Number.isInteger(maxRepairAttempts) || maxRepairAttempts < 0) {
     throw new TypeError("maxRepairAttempts must be a nonnegative integer (0 means no repair)");
   }
@@ -76,6 +179,34 @@ export async function runLifecycle({
     throw new TypeError("timeoutMs must be a finite positive number");
   }
 
+  // Adapter separation (C2): executor and reviewer may be provided as two
+  // distinct adapters (production mode). A single `adapter` remains valid for
+  // legacy/scripted callers only. If a split pair is requested, BOTH halves
+  // must be present — a partial pair fails closed before any adapter call.
+  const splitAdapters = executorAdapter !== undefined || reviewerAdapter !== undefined;
+  let resolveAdapter;
+  if (splitAdapters) {
+    if (!executorAdapter || typeof executorAdapter.runAdapter !== "function" ||
+        !reviewerAdapter || typeof reviewerAdapter.runAdapter !== "function") {
+      const missing = [
+        !executorAdapter || typeof executorAdapter.runAdapter !== "function" ? "executorAdapter" : null,
+        !reviewerAdapter || typeof reviewerAdapter.runAdapter !== "function" ? "reviewerAdapter" : null,
+      ].filter(Boolean).join(",");
+      const executionId = (taskCard && taskCard.executionId) || `lifecycle-${randomUUID()}`;
+      return {
+        final: "HOLD", reason: "MISSING_ADAPTER_PAIR", attempt: null,
+        detail: { missing }, classification: classifyHold({ failureOrigin: "MISSING_ADAPTER_PAIR", message: `missing ${missing}` }),
+        transitions: [{ phase: "runner", status: "HOLD", reason: "MISSING_ADAPTER_PAIR", detail: { missing } }],
+        executionId,
+      };
+    }
+    resolveAdapter = (phase) => (phase === "executor" ? executorAdapter : reviewerAdapter);
+  } else {
+    if (!adapter || typeof adapter.runAdapter !== "function") throw new TypeError("adapter.runAdapter is required");
+    resolveAdapter = () => adapter;
+  }
+
+  const lifecycleStartedAt = new Date().toISOString();
   const executionId = (taskCard && taskCard.executionId) || `lifecycle-${randomUUID()}`;
   const transitions = [];
 
@@ -89,9 +220,9 @@ export async function runLifecycle({
     return hold("ABORTED_BEFORE_START");
   }
 
-  async function callAdapter(phase, attempt) {
+  async function callAdapter(phase, attempt, extra = {}) {
     try {
-      return { ok: true, result: await adapter.runAdapter({
+      return { ok: true, result: await resolveAdapter(phase).runAdapter({
         executionId,
         cwd,
         taskCard,
@@ -101,6 +232,7 @@ export async function runLifecycle({
         environmentAllowlist: taskCard.environmentAllowlist,
         toolPolicy: taskCard.toolPolicy,
         abortSignal,
+        ...extra,
       }) };
     } catch (e) {
       if (e instanceof ScriptedAdapterSequenceError) {
@@ -124,24 +256,111 @@ export async function runLifecycle({
     if (executorResult.status === "timed_out") return hold("EXECUTOR_TIMEOUT", { attempt });
     if (executorResult.status === "aborted") return hold("EXECUTOR_ABORTED", { attempt });
 
-    const evidenceParse = parseJsonStrict(executorResult.stdout);
-    if (!evidenceParse.ok) {
-      return hold("EXECUTOR_EVIDENCE_INVALID", { attempt, reason: "stdout_not_valid_json", detail: evidenceParse.error });
-    }
-    const evidenceCheck = validateImplementationEvidence(evidenceParse.value);
-    if (!evidenceCheck.valid) {
-      return hold("EXECUTOR_EVIDENCE_INVALID", { attempt, errors: evidenceCheck.errors });
+    // C4Q: the executor final message is NON-AUTHORITATIVE for evidence.
+    // It is preserved only as a bounded diagnostic（never parsed as the
+    // formal evidence, never a gate, never polluting the run verdict）.
+    // A persistence failure（e.g. secret-pattern fail-closed）becomes a
+    // journaled phase hold — never a silent exception.
+    try {
+      await hooks.onExecutorOutput?.({ attempt, diagnostic: buildExecutorOutputDiagnostic(executorResult) });
+    } catch (e) {
+      return hold("EXECUTOR_OUTPUT_PERSISTENCE_FAILED", { attempt, reason: e?.message ?? String(e) });
     }
 
+    let scopeCheck = null;
     if (taskCard.mutationScope) {
-      const scopeCheck = checkMutationScope(taskCard.mutationScope);
+      scopeCheck = checkMutationScope(taskCard.mutationScope);
       transitions.push({ phase: "mutation_scope_gate", attempt, ok: scopeCheck.ok });
       if (!scopeCheck.ok) {
         return hold("MUTATION_SCOPE_VIOLATION", { attempt, violations: scopeCheck.violations });
       }
     }
 
-    const reviewerCall = await callAdapter("reviewer", attempt);
+    // C4S: system-observed textual delta evidence（reviewer-visible）. The
+    // harness converts the scope gate's already-validated repository delta
+    // into a bounded unified diff + per-file SHA-256 records. Every
+    // fail-closed gate（identity / scope binding / SHA / oversize / binary /
+    // secret）HOLDS here, BEFORE the reviewer is ever invoked（C4S-7/8/9）.
+    let systemDelta = null;
+    if (taskCard.mutationScope && scopeCheck) {
+      const deltaResult = buildSystemObservedDelta({
+        executionId: taskCard.parentExecutionId ?? executionId,
+        taskCard,
+        scopeCheck,
+        limits: {},
+      });
+      if (!deltaResult.ok) {
+        return hold(deltaResult.code, { attempt, reason: deltaResult.reason });
+      }
+      systemDelta = deltaResult.delta;
+      // C4S-11: the patch + metadata must persist durably before review;
+      // a persistence failure is a journaled HOLD — never a silent continue.
+      try {
+        await hooks.onSystemDeltaReady?.({ attempt, delta: systemDelta });
+      } catch (e) {
+        return hold(SYSTEM_DELTA_ERRORS.PERSISTENCE_FAILED, {
+          attempt,
+          reason: `${e?.code ?? e?.name ?? "error"}: ${String(e?.message ?? e).slice(0, 2048)}`,
+        });
+      }
+    }
+
+    // C4Q: harness-owned evidence assembly — AutoLoop collects the objective
+    // facts and builds the implementation-evidence object itself（identity
+    // mechanically bound; system-observed test process; schema validated）.
+    const evidenceStartedAt = new Date().toISOString();
+    const evidenceBuild = await buildHarnessOwnedEvidence({
+      executionId: taskCard.parentExecutionId ?? executionId,
+      taskCard,
+      attempt,
+      scopeCheck: scopeCheck ?? { ok: true, violations: [], delta: [] },
+      baseline: taskCard.repositoryRoot ? collectGitBaseline(taskCard.repositoryRoot) : null,
+      testRun: Array.isArray(taskCard.verificationCommand)
+        ? await runVerificationCommand({
+            command: taskCard.verificationCommand,
+            cwd: taskCard.repositoryRoot,
+            environmentAllowlist: taskCard.environmentAllowlist,
+          })
+        : null,
+      phaseStartedAt: lifecycleStartedAt,
+      phaseCompletedAt: evidenceStartedAt,
+      executorResult,
+      systemDelta,
+    });
+    if (!evidenceBuild.ok) {
+      return hold(evidenceBuild.code, { attempt, reason: evidenceBuild.reason });
+    }
+    const harnessEvidence = evidenceBuild.evidence;
+
+    // C3 checkpoint hook：executor 階段完整完成（harness evidence 已組裝）。
+    await hooks.onExecutorCompleted?.({ attempt, evidence: harnessEvidence });
+
+    // C4N: assemble the system reviewer evidence bundle（only when a
+    // mutation scope was attached, i.e. the production orchestrator path）.
+    // Any fail-closed gate blocks review and HOLDS the run without
+    // changing the executor verdict. Absent mutationScope（legacy/direct
+    // callers）delivers no bundle — the reviewer then has only the task card.
+    let reviewEvidence = null;
+    if (taskCard.mutationScope && scopeCheck) {
+      const bundleResult = buildReviewEvidenceBundle({
+        executionId: taskCard.parentExecutionId ?? executionId,
+        taskCard,
+        attempt,
+        evidence: harnessEvidence,
+        observedChangedPaths: (scopeCheck.delta || []).map((d) => d.path),
+        toolExecutionCount: executorResult?.metadata?.toolCallCount ?? null,
+        systemDelta,
+      });
+      if (!bundleResult.ok) {
+        return hold(bundleResult.code, {
+          attempt,
+          reason: bundleResult.reason,
+        });
+      }
+      reviewEvidence = bundleResult.bundle;
+    }
+
+    const reviewerCall = await callAdapter("reviewer", attempt, { reviewEvidence });
     if (!reviewerCall.ok) return reviewerCall.holdResult;
     const reviewerResult = reviewerCall.result;
     transitions.push({ phase: "reviewer", attempt, status: reviewerResult.status });
@@ -165,11 +384,15 @@ export async function runLifecycle({
       recommended_next_action: verdict.recommended_next_action,
     });
 
+    // C3 checkpoint hook：reviewer 階段完整完成（verdict 已 normalize）。
+    await hooks.onReviewerCompleted?.({ attempt, verdict: verdict.verdict, verdictObject: verdict });
+
     if (verdict.verdict === "PASS") {
       return { final: "PASS", attempt, transitions, executionId };
     }
 
     if (verdict.recommended_next_action === "REPAIR") {
+      await hooks.onRepairRequested?.({ attempt });
       if (attempt >= maxRepairAttempts) {
         return hold("REPAIR_BUDGET_EXHAUSTED", { attempt, maxRepairAttempts });
       }

@@ -17,6 +17,7 @@ import { dirname, resolve } from "node:path";
 import { runLifecycle } from "../src/lifecycle-runner.mjs";
 import { createScriptedAdapter } from "../src/adapter/scripted-adapter.mjs";
 import { captureScopeSnapshot } from "../src/c2d/mutation-scope.mjs";
+import { buildPhaseTaskCard, deriveScopePatterns } from "../src/v2/phase-task-card.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_EVIDENCE = JSON.parse(
@@ -27,6 +28,13 @@ function evidenceJson(overrides = {}) {
   return JSON.stringify({ ...FIXTURE_EVIDENCE, ...overrides });
 }
 
+// C4N: bind the evidence contract identity to the phase execution id from
+// the request's task card（the review bundle enforces this correspondence）.
+function evidenceFor(request, overrides = {}) {
+  const contractId = request?.taskCard?.executionId ?? FIXTURE_EVIDENCE.contract_id;
+  return JSON.stringify({ ...FIXTURE_EVIDENCE, contract_id: contractId, ...overrides });
+}
+
 function verdictJson({ verdict, confidence = "HIGH", model = "test-model", summary = "ok", recommended_next_action, ...rest } = {}) {
   return JSON.stringify({ verdict, confidence, model, summary, recommended_next_action, ...rest });
 }
@@ -35,8 +43,50 @@ function completed(stdout) {
   return { status: "completed", stdout, stderr: "", signal: null, error: null, metadata: { exitCode: 0 } };
 }
 
+// C4Q harness configuration + real baseline snapshot so the harness-owned
+// evidence builder can assemble facts for direct lifecycle tests.
+const FIXTURE_CWD = (() => {
+  const dir = mkdtempSync(join(tmpdir(), "c1-life-"));
+  execFileSync("git", ["init", "-b", "master"], { cwd: dir, stdio: "ignore" });
+  execFileSync("git", ["config", "user.email", "t@t"], { cwd: dir, stdio: "ignore" });
+  execFileSync("git", ["config", "user.name", "t"], { cwd: dir, stdio: "ignore" });
+  writeFileSync(join(dir, "base.txt"), "base\n");
+  execFileSync("git", ["add", "."], { cwd: dir, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "base"], { cwd: dir, stdio: "ignore" });
+  return dir;
+})();
+
+const WRITER_PHASE = {
+  phase_id: "p_impl", title: "Impl", summary: "writer", responsibility: "R1 impl", purpose: "implementation",
+  effects: {
+    artifact_mutation: "required", runtime_side_effect: "forbidden", external_system_mutation: "forbidden",
+    evidence_output: "persistent", boundaries: { artifact: ["src/"], runtime: [], external_system: [], evidence: [] },
+  },
+  covers: [{ requirement_id: "R1", completeness: "complete", claim: "covers R1" }],
+  depends_on: [],
+};
+
 function baseCard(overrides = {}) {
-  return { id: "card-1", ...overrides };
+  const card = buildPhaseTaskCard({
+    phase: WRITER_PHASE,
+    parent: { scope: { allowed_paths: ["src/"], forbidden_paths: [] } },
+    executionId: "exec_11111111111111111111111111111111",
+    cwd: FIXTURE_CWD,
+    maxRepairAttempts: 0,
+    expectedReviewerModel: "test-model",
+    toolPolicy: { mode: "no-tools" },
+    environmentAllowlist: ["PATH", "HOME", "TMPDIR"],
+  });
+  card.verificationCommand = ["node", "-e", "process.exit(0)"];
+  card.expectedExecutorModel = "deepseek-v4-flash";
+  card.expectedExecutorProvider = "deepseek";
+  card.mutationScope = {
+    repositoryRoot: FIXTURE_CWD,
+    baselineSnapshot: captureScopeSnapshot(FIXTURE_CWD),
+    allowedPaths: deriveScopePatterns(card.allowedPaths),
+    forbiddenPaths: deriveScopePatterns(card.forbiddenPaths),
+  };
+  return { ...card, ...overrides };
 }
 
 test("direct PASS: executor completed + reviewer PASS resolves final PASS at attempt 0", async () => {
@@ -247,18 +297,20 @@ test("malformed adapter result (contract violation) fails closed as HOLD MALFORM
   assert.equal(outcome.reason, "MALFORMED_ADAPTER_RESULT");
 });
 
-test("executor evidence failing implementation-evidence schema yields HOLD EXECUTOR_EVIDENCE_INVALID", async () => {
+test("executor output is non-authoritative; harness schema validation is the gate（C4Q）", async () => {
+  // The executor final message is NOT parsed as evidence under C4Q. Even a
+  // malformed object proceeds to the reviewer; the harness-owned evidence is
+  // assembled and schema-validated by the harness builder itself.
   const adapter = createScriptedAdapter([
     {
       expect: { phase: "executor", attempt: 0 },
-      // Missing every required implementation-evidence field.
       result: completed(JSON.stringify({ not_evidence: true })),
     },
+    { expect: { phase: "reviewer", attempt: 0 }, result: completed(verdictJson({ verdict: "PASS", recommended_next_action: "STOP" })) },
   ]);
-  const outcome = await runLifecycle({ cwd: "/tmp", taskCard: baseCard(), adapter, maxRepairAttempts: 0, timeoutMs: 1000 });
-  assert.equal(outcome.final, "HOLD");
-  assert.equal(outcome.reason, "EXECUTOR_EVIDENCE_INVALID");
-  assert.equal(adapter.callRecord.length, 1, "reviewer must never be called on invalid executor evidence");
+  const outcome = await runLifecycle({ cwd: FIXTURE_CWD, taskCard: baseCard(), adapter, maxRepairAttempts: 0, timeoutMs: 1000 });
+  assert.equal(outcome.final, "PASS");
+  assert.equal(adapter.callRecord.length, 2, "reviewer is reached regardless of executor output format");
 });
 
 // ---------------------------------------------------------------------------
@@ -317,7 +369,7 @@ test("mutation scope check passes through when the change stays within the allow
     writeFileSync(join(repositoryRoot, "src", "b.txt"), "in scope\n");
 
     const adapter = createScriptedAdapter([
-      { expect: { phase: "executor", attempt: 0 }, result: completed(evidenceJson()) },
+      { expect: { phase: "executor", attempt: 0 }, result: (req) => completed(evidenceFor(req)) },
       {
         expect: { phase: "reviewer", attempt: 0 },
         result: completed(verdictJson({ verdict: "PASS", recommended_next_action: "STOP" })),
@@ -327,6 +379,8 @@ test("mutation scope check passes through when the change stays within the allow
     const outcome = await runLifecycle({
       cwd: repositoryRoot,
       taskCard: baseCard({
+        // Keep the default executionId so the harness identity re-derivation
+        // (phaseExecutionId(run, phase)) stays consistent.
         mutationScope: { repositoryRoot, baselineSnapshot, allowedPaths: ["src/**"], forbiddenPaths: [] },
       }),
       adapter,
@@ -338,4 +392,48 @@ test("mutation scope check passes through when the change stays within the allow
   } finally {
     rmSync(repositoryRoot, { recursive: true, force: true });
   }
+});
+
+// ── C2: executor/reviewer adapter separation ──
+
+test("C2: split executor/reviewer adapters route by phase", async () => {
+  const executorAdapter = createScriptedAdapter([
+    { expect: { phase: "executor", attempt: 0 }, result: completed(evidenceJson()) },
+  ]);
+  const reviewerAdapter = createScriptedAdapter([
+    { expect: { phase: "reviewer", attempt: 0 }, result: completed(verdictJson({ verdict: "PASS", recommended_next_action: "STOP" })) },
+  ]);
+
+  const outcome = await runLifecycle({
+    cwd: "/tmp",
+    taskCard: baseCard(),
+    executorAdapter,
+    reviewerAdapter,
+    maxRepairAttempts: 0,
+    timeoutMs: 1000,
+  });
+
+  assert.equal(outcome.final, "PASS");
+  // each adapter saw exactly its own phase
+  assert.ok(executorAdapter.callRecord.every((c) => c.phase === "executor"));
+  assert.ok(reviewerAdapter.callRecord.every((c) => c.phase === "reviewer"));
+  assert.equal(executorAdapter.callRecord.length, 1);
+  assert.equal(reviewerAdapter.callRecord.length, 1);
+});
+
+test("C2: split pair with one half missing → HOLD MISSING_ADAPTER_PAIR before any call", async () => {
+  const executorAdapter = createScriptedAdapter([
+    { expect: { phase: "executor", attempt: 0 }, result: completed(evidenceJson()) },
+  ]);
+  const outcome = await runLifecycle({
+    cwd: "/tmp",
+    taskCard: baseCard(),
+    executorAdapter,
+    reviewerAdapter: undefined,
+    maxRepairAttempts: 0,
+    timeoutMs: 1000,
+  });
+  assert.equal(outcome.final, "HOLD");
+  assert.equal(outcome.reason, "MISSING_ADAPTER_PAIR");
+  assert.equal(executorAdapter.callRecord.length, 0, "no adapter call before fail-closed HOLD");
 });

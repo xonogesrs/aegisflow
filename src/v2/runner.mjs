@@ -149,17 +149,20 @@ function transitiveDependents(dependentsOf, startId) {
  * @param {object} opts
  * @param {object} opts.ir — DECOMPOSED IR（含 phases/depends_on）
  * @param {Function} [opts.execute] — async (phase, ctx) => { status: "passed"|"held"|"failed", note? }
- * @param {object} [opts.hooks] — { onLease, onStatus }
+ * @param {object} [opts.hooks] — { onLease, onStatus, onCheckpoint }
  * @param {string} [opts.workspace]
  * @param {AbortSignal} [opts.signal] — abort 時釋放 lease 並停止
+ * @param {object} [opts.initialState] — resume seed：{ statuses: {phase_id: status} }；
+ *        已驗證之完整 phase set；running 狀態必須由 resume policy 先處置。
  * @returns {Promise<{
  *   verdict: "PASS"|"HOLD",
  *   statuses: object, order: string[], runLog: object[],
  *   skipped: string[], writerViolations: string[],
- *   leaseHolderAfter: string|null, phases: object[]
+ *   leaseHolderAfter: string|null, phases: object[],
+ *   initialStateErrors: string[]
  * }>}
  */
-export async function runDecompositionGraph({ ir, execute, hooks = {}, workspace = "workspace", signal } = {}) {
+export async function runDecompositionGraph({ ir, execute, hooks = {}, workspace = "workspace", signal, initialState } = {}) {
   const phases = (ir?.phases || []).map((p) => ({ ...p, depends_on: [...(p.depends_on || [])] }));
   const byId = new Map(phases.map((p) => [p.phase_id, p]));
   const decl = declIndexMap(ir);
@@ -178,6 +181,27 @@ export async function runDecompositionGraph({ ir, execute, hooks = {}, workspace
   const status = new Map();
   for (const p of phases) status.set(p.phase_id, PHASE_STATUS.PENDING);
 
+  // ── Resume seed（C3）：initialState 由 checkpoint bridge 驗證後提供；
+  //    此處再防禦性驗證 — 不信任 caller 直接提供的 phase states。──
+  const initialStateErrors = [];
+  if (initialState) {
+    const ids = new Set(phases.map((p) => p.phase_id));
+    const src = initialState.statuses || {};
+    const validStatuses = new Set(Object.values(PHASE_STATUS));
+    for (const id of Object.keys(src)) {
+      if (!ids.has(id)) { initialStateErrors.push(`unknown phase in initialState: ${id}`); continue; }
+      const s = src[id];
+      if (!validStatuses.has(s)) initialStateErrors.push(`invalid status for ${id}: ${String(s)}`);
+      if (s === PHASE_STATUS.RUNNING) initialStateErrors.push(`running status must be resolved by resume policy: ${id}`);
+    }
+    for (const id of ids) {
+      if (!(id in src)) initialStateErrors.push(`initialState missing phase: ${id}`);
+    }
+    if (initialStateErrors.length === 0) {
+      for (const p of phases) status.set(p.phase_id, src[p.phase_id] || PHASE_STATUS.PENDING);
+    }
+  }
+
   const lease = new ArtifactWriterLease(workspace);
   const runLog = [];
   const writerViolations = [];
@@ -186,6 +210,29 @@ export async function runDecompositionGraph({ ir, execute, hooks = {}, workspace
     runLog.push({ phase_id, transition, writer: !!writer });
     hooks.onStatus?.(phase_id, transition, writer);
   };
+
+  const stateView = (newlySkipped = []) => ({
+    statuses: Object.fromEntries([...status.entries()]),
+    leaseHolder: lease.holder,
+    newlySkipped,
+  });
+  const checkpointHook = async (newlySkipped) => {
+    await hooks.onCheckpoint?.(stateView(newlySkipped));
+  };
+
+  if (initialStateErrors.length > 0) {
+    return {
+      verdict: RUN_VERDICTS.HOLD,
+      statuses: Object.fromEntries([...status.entries()]),
+      order: [],
+      runLog: [],
+      skipped: [],
+      writerViolations: [],
+      leaseHolderAfter: null,
+      phases,
+      initialStateErrors,
+    };
+  }
 
   const pendingRun = new Map(); // phase_id -> promise
 
@@ -224,7 +271,7 @@ export async function runDecompositionGraph({ ir, execute, hooks = {}, workspace
     log(phaseId, final, writer);
   };
 
-  const startPhase = (phaseId) => {
+  const startPhase = async (phaseId) => {
     const phase = byId.get(phaseId);
     const writer = requiresWriterLease(phase);
     status.set(phaseId, PHASE_STATUS.READY);
@@ -233,6 +280,7 @@ export async function runDecompositionGraph({ ir, execute, hooks = {}, workspace
       status.set(phaseId, PHASE_STATUS.RUNNING); // acquire 於 runPhase 內
     }
     order.push(phaseId);
+    await checkpointHook([]); // 點 5：phase 啟動前
     const p = runPhase(phaseId).finally(() => pendingRun.delete(phaseId));
     pendingRun.set(phaseId, p);
     return p;
@@ -273,12 +321,14 @@ export async function runDecompositionGraph({ ir, execute, hooks = {}, workspace
           log(s, PHASE_STATUS.SKIPPED_DUE_TO_DEPENDENCY, w);
         }
       }
+      await checkpointHook([...skipped]);
     }
 
     if (holdTriggered) {
       // 不再啟動任何新 phase；等待已在跑的 phase 結束（其 lease 於 terminal 釋放）。
       if (pendingRun.size === 0) break;
       await Promise.all([...pendingRun.values()]);
+      await checkpointHook([]);
       continue;
     }
 
@@ -326,6 +376,7 @@ export async function runDecompositionGraph({ ir, execute, hooks = {}, workspace
     const startPromises = starts.map((p) => startPhase(p.phase_id));
     if (startPromises.length) {
       await Promise.all(startPromises);
+      await checkpointHook([]);
     } else if (pendingRun.size === 0) {
       // 全部 waiting_for_writer 且無在跑 → 死結不可發生（writer 終究會釋放）；安全防護 break
       break;
@@ -337,6 +388,7 @@ export async function runDecompositionGraph({ ir, execute, hooks = {}, workspace
 
   const skipped = phases.filter((p) => status.get(p.phase_id) === PHASE_STATUS.SKIPPED_DUE_TO_DEPENDENCY).map((p) => p.phase_id);
   const statuses = Object.fromEntries([...status.entries()]);
+  await checkpointHook([]); // 點 10：final verdict 前
 
   return {
     verdict,
@@ -347,6 +399,7 @@ export async function runDecompositionGraph({ ir, execute, hooks = {}, workspace
     writerViolations,
     leaseHolderAfter: lease.holder,
     phases,
+    initialStateErrors,
   };
 }
 

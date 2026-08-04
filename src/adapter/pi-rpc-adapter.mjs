@@ -182,7 +182,7 @@ export function createPiRpcAdapter(options = {}) {
 
   async function runAdapter(request) {
     assertAdapterRequest(request);
-    const { executionId, cwd, phase, attempt, timeoutMs, abortSignal, taskCard } = request;
+    const { executionId, cwd, phase, attempt, timeoutMs, abortSignal, taskCard, reviewEvidence } = request;
     const allowlist = request.environmentAllowlist || environmentAllowlist;
     const toolPolicy = request.toolPolicy || defaultToolPolicy;
 
@@ -407,7 +407,11 @@ export function createPiRpcAdapter(options = {}) {
 
     // Send the prompt: task card is carried entirely inside the JSON
     // "message" field of the RPC command, never in argv or a shell string.
-    send({ type: "prompt", message: JSON.stringify({ phase, attempt, taskCard }) });
+    // C4N: the system-assembled reviewer evidence bundle is delivered as a
+    // top-level message field when present（reviewer request only）.
+    const message = { phase, attempt, taskCard };
+    if (reviewEvidence !== undefined && reviewEvidence !== null) message.reviewEvidence = reviewEvidence;
+    send({ type: "prompt", message: JSON.stringify(message) });
 
     await done;
     clearTimeout(timer);

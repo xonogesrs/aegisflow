@@ -10,7 +10,18 @@
     "test:pi-rpc-adapter": "node --test test/test-pi-rpc-adapter.mjs test/test-pi-lifecycle-integration.mjs",
     "test:pi-rpc-smoke": "node test/pi-rpc-real-smoke.mjs",
     "test:scripted-lifecycle": "node --test test/test-scripted-adapter.mjs test/test-lifecycle-runner.mjs test/test-standalone-paths.mjs test/test-normalize-reviewer-json.mjs",
-    "test:v2": "node --test \"test/v2/*.mjs\""
+    "test:c2": "node --test test/test-autoloop-entrypoint.mjs test/v2/test-production-pipeline.mjs test/v2/test-execution-orchestrator.mjs",
+    "test:c3": "node --test test/test-run-evidence-store.mjs test/test-run-manifest.mjs test/v2/test-checkpoint-bridge.mjs test/v2/test-durable-execution.mjs",
+    "test:c4r": "node --test test/v2/test-phase-response-contract.mjs",
+    "test:c4i": "node --test test/v2/test-pre-decomposition-interruption.mjs",
+    "test:v1": "node --test test/test-*.mjs",
+    "test:v2": "node --test \"test/v2/*.mjs\"",
+    "test:c4f": "node --test test/v2/test-decomposition-hold-observability.mjs",
+    "test:c4j": "node --test test/v2/test-executor-evidence-observability.mjs",
+    "test:c4l": "node --test test/v2/test-executor-strict-json-prompt.mjs",
+    "test:c4n": "node --test test/v2/test-review-evidence-delivery.mjs",
+    "test:c4q": "node --test test/v2/test-harness-owned-evidence.mjs",
+    "test:c4s": "node --test test/v2/test-system-delta.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.83.0"

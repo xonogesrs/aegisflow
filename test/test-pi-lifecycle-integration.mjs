@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { runLifecycle } from "../src/lifecycle-runner.mjs";
 import { createPiRpcAdapter, DEFAULT_ENV_ALLOWLIST } from "../src/adapter/pi-rpc-adapter.mjs";
 import { captureScopeSnapshot } from "../src/c2d/mutation-scope.mjs";
+import { buildPhaseTaskCard, deriveScopePatterns } from "../src/v2/phase-task-card.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = resolve(HERE, "fixtures", "fake-pi-rpc.mjs");
@@ -48,6 +49,32 @@ function makePiAdapter(adapterOptions = {}) {
   });
 }
 
+// C4Q harness-owned evidence needs a real baseline + harness config.
+function makeCard(cwd) {
+  const card = buildPhaseTaskCard({
+    phase: {
+      phase_id: "p_impl", title: "Impl", summary: "writer", responsibility: "R1", purpose: "implementation",
+      effects: {
+        artifact_mutation: "required", runtime_side_effect: "forbidden", external_system_mutation: "forbidden",
+        evidence_output: "persistent", boundaries: { artifact: ["src/"], runtime: [], external_system: [], evidence: [] },
+      },
+      covers: [{ requirement_id: "R1", completeness: "complete", claim: "c" }], depends_on: [],
+    },
+    parent: { scope: { allowed_paths: ["src/"], forbidden_paths: [] } },
+    executionId: "exec_11111111111111111111111111111111",
+    cwd, maxRepairAttempts: 1, expectedReviewerModel: "fake-pi",
+    toolPolicy: { mode: "no-tools" }, environmentAllowlist: ALLOWLIST_WITH_CONTROL,
+  });
+  card.verificationCommand = ["node", "-e", "process.exit(0)"];
+  card.expectedExecutorModel = "fake-pi";
+  card.expectedExecutorProvider = "deepseek";
+  card.mutationScope = {
+    repositoryRoot: cwd, baselineSnapshot: captureScopeSnapshot(cwd),
+    allowedPaths: deriveScopePatterns(card.allowedPaths), forbiddenPaths: deriveScopePatterns(card.forbiddenPaths),
+  };
+  return card;
+}
+
 test("T20 lifecycle direct PASS: Pi RPC executor completes, reviewer returns PASS, lifecycle resolves PASS", async () => {
   await withFakeControl(
     {
@@ -58,12 +85,17 @@ test("T20 lifecycle direct PASS: Pi RPC executor completes, reviewer returns PAS
       },
     },
     async () => {
-      const adapter = makePiAdapter();
-      const outcome = await runLifecycle({
-        cwd: tmpdir(), taskCard: { id: "card-20" }, adapter, maxRepairAttempts: 0, timeoutMs: 10000,
-      });
-      assert.equal(outcome.final, "PASS");
-      assert.equal(outcome.attempt, 0);
+      const cwd = gitFixture();
+      try {
+        const adapter = makePiAdapter();
+        const card = makeCard(cwd);
+        card.maxRepairAttempts = 0;
+        const outcome = await runLifecycle({
+          cwd, taskCard: card, adapter, maxRepairAttempts: 0, timeoutMs: 10000,
+        });
+        assert.equal(outcome.final, "PASS");
+        assert.equal(outcome.attempt, 0);
+      } finally { rmSync(cwd, { recursive: true, force: true }); }
     },
   );
 });
@@ -81,14 +113,18 @@ test("T21 lifecycle REPAIR -> PASS: reviewer requests REPAIR on attempt 0, PASS 
       },
     },
     async () => {
-      const adapter = makePiAdapter();
-      const outcome = await runLifecycle({
-        cwd: tmpdir(), taskCard: { id: "card-21" }, adapter, maxRepairAttempts: 1, timeoutMs: 10000,
-      });
-      assert.equal(outcome.final, "PASS");
-      assert.equal(outcome.attempt, 1);
-      const phases = outcome.transitions.filter((t) => t.phase === "executor" || t.phase === "reviewer").map((t) => [t.phase, t.attempt]);
-      assert.deepEqual(phases, [["executor", 0], ["reviewer", 0], ["executor", 1], ["reviewer", 1]]);
+      const cwd = gitFixture();
+      try {
+        const adapter = makePiAdapter();
+        const card = makeCard(cwd);
+        const outcome = await runLifecycle({
+          cwd, taskCard: card, adapter, maxRepairAttempts: 1, timeoutMs: 10000,
+        });
+        assert.equal(outcome.final, "PASS");
+        assert.equal(outcome.attempt, 1);
+        const phases = outcome.transitions.filter((t) => t.phase === "executor" || t.phase === "reviewer").map((t) => [t.phase, t.attempt]);
+        assert.deepEqual(phases, [["executor", 0], ["reviewer", 0], ["executor", 1], ["reviewer", 1]]);
+      } finally { rmSync(cwd, { recursive: true, force: true }); }
     },
   );
 });

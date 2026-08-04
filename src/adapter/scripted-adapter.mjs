@@ -67,7 +67,11 @@ export function createScriptedAdapter(script) {
     }
 
     cursor += 1;
-    const result = { ...step.result, executionId: step.result.executionId ?? request.executionId };
+    // C4N test wiring: a scripted result may be a pure function of the
+    // request（e.g. to bind evidence contract_id to the phase execution id
+    // from the task card）. Static result objects continue to work unchanged.
+    const baseResult = typeof step.result === "function" ? step.result(request) : step.result;
+    const result = { ...baseResult, executionId: baseResult.executionId ?? request.executionId };
     assertAdapterResult(result);
     callRecord.push({ phase: request.phase, attempt: request.attempt, consumed: true, result });
     return result;
