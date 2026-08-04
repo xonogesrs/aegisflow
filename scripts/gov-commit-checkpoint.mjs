@@ -8,10 +8,11 @@
 
 import { execFileSync } from "node:child_process";
 import { parseArgs, asBool, splitList } from "./shared/gov-args.mjs";
-import { git, gitOk, loadRecord, loadAuthority, buildInventory, rejectSelfDeclaredFlags, scanChangedFilesForSecrets } from "./shared/gov-args.mjs";
+import { git, gitOk, loadRecord, loadAuthority, buildInventory, rejectSelfDeclaredFlags, scanChangedFilesForSecrets, assertLiveBindings, assertScopeCoversInventory } from "./shared/gov-args.mjs";
 import { evaluateCheckpointCommitGate, checkpointCommitViolationsToHold } from "../src/governance/checkpoint-commit-gate.mjs";
 import { evaluateReviewUnitGate } from "../src/governance/review-unit-gate.mjs";
-import { scopeCovers } from "../src/governance/lifecycle-authorization.mjs";function gitLines(args, cwd) {
+import { scopeCovers } from "../src/governance/lifecycle-authorization.mjs";
+import { GOV_HOLD } from "../src/governance/holds.mjs";function gitLines(args, cwd) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).split("\n")
     .filter((l) => l.trim().length > 0);
 }
@@ -30,7 +31,9 @@ if (selfDeclared.length > 0) {
 
 const authority = loadAuthority(flags);
 const record = loadRecord(flags);
-const baseBranch = flags.baseBranch || authority.base || record.base || "main";
+const baseBranch = record.base || authority.base || "main";
+const cardId = record.card_id || "";
+const runId = record.run_id || "";
 // Scope is authoritative from the record; a CLI --expected-paths override is
 // only accepted when strictly contained in the authorized scope (else HOLD).
 const recordScope = record.authorized_paths || [];
@@ -51,7 +54,15 @@ if (cliScope.length) {
 let inventory = null;
 try {
   inventory = buildInventory(cwd, baseBranch);
+  // full-inventory scope + live bindings (round 3 findings 2/3)
+  assertLiveBindings({ record, cwd, inventory, baseBranch, cardId, runId, flags });
+  assertScopeCoversInventory(inventory, recordScope);
 } catch (e) {
+  if (e.code === GOV_HOLD.LIVE_BINDING_MISMATCH || e.code === GOV_HOLD.GOVERNANCE_SCOPE_EXPANSION_REQUIRED) {
+    console.error(e.code);
+    console.error(`  - ${e.message}`);
+    process.exit(1);
+  }
   console.error("HOLD / REVIEW_UNIT_MEASUREMENT_INCOMPLETE");
   console.error(`  - change inventory unavailable: ${e.message}`);
   process.exit(1);
@@ -100,8 +111,8 @@ const gate = evaluateCheckpointCommitGate({
   reviewBlockingFindings: splitList(flags.reviewBlocking),
   repairConverged: asBool(flags.repairConverged, false),
   secretLikeValues: scannedSecrets.length > 0 ? scannedSecrets : splitList(flags.secretLikeValues),
-  cardId: flags.cardId || "",
-  runId: flags.runId || "",
+  cardId,
+  runId,
   milestoneId: flags.milestoneId || "",
   reviewUnitActual,
 });

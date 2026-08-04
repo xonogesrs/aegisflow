@@ -44,7 +44,7 @@ export function bundleDigestFromFile(text) {
  * @param {string} env.cardId / env.runId / env.reviewRound / env.agentIdentity
  * @returns current context object
  */
-export function computeReviewContext({ authority, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity }) {
+export function computeReviewContext({ authority, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity, priorBundleSha256 = "", priorFindingsDigest = "" }) {
   const changedTreeIdentity = inventory.changedTreeIdentity;
   const patchSha256 = inventory.patchSha256;
   let bundleSha256 = "";
@@ -58,7 +58,9 @@ export function computeReviewContext({ authority, inventory, bundlePath, cardId,
   const currentHead = inventory.head;
   const baseHead = inventory.baseHead;
   const repository = authority?.repository ?? "";
-  const branch = authority?.branch ?? inventory.branch;
+  // branch comes from the ACTUAL inventory (never from the authority record,
+  // which would mask branch drift — assertLiveBindings already verified them)
+  const branch = inventory.branch || authority?.branch || "";
   const baseBranch = inventory.baseBranch;
   return {
     changedTreeIdentity,
@@ -73,5 +75,7 @@ export function computeReviewContext({ authority, inventory, bundlePath, cardId,
     runId,
     reviewRound,
     agentIdentity,
+    priorBundleSha256,
+    priorFindingsDigest,
   };
 }

@@ -9,8 +9,9 @@
 // REJECTED (self-declared / caller-supplied authority).
 
 import { execFileSync } from "node:child_process";
+import { dirname } from "node:path";
 import { parseArgs, asBool } from "./shared/gov-args.mjs";
-import { git, loadRecord, buildInventory, rejectSelfDeclaredFlags, contextFor } from "./shared/gov-args.mjs";
+import { git, loadRecord, buildInventory, rejectSelfDeclaredFlags, contextFor, assertLiveBindings, assertScopeCoversInventory, remoteUrlMatchesAuthorizedRepository } from "./shared/gov-args.mjs";
 import { normalizeAuthority } from "../src/governance/lifecycle-authorization.mjs";
 import { readExternalReviewResult } from "../src/governance/external-review.mjs";
 import { evaluatePushGate, pushViolationsToHold } from "../src/governance/feature-branch-push-gate.mjs";
@@ -30,23 +31,22 @@ if (selfDeclared.length > 0) {
 
 const record = loadRecord(flags);
 const authority = normalizeAuthority(record.lifecycle_authorization);
-const baseBranch = flags.baseBranch || record.base || authority.base || "main";
-const cardId = flags.cardId || record.card_id || "";
-const runId = flags.runId || record.run_id || "";
-const reviewRound = Number.isInteger(Number(flags.reviewRound)) ? Number(flags.reviewRound) : 1;
+const baseBranch = record.base || authority.base || "main";
+// card/run identity come ONLY from the record — flag overrides are rejected
+// by assertLiveBindings.
+const cardId = record.card_id || "";
+const runId = record.run_id || "";
 const agentIdentity = flags.agent || "pi-deepseek-v4-flash";
 
 // Remote identity check: the remote used for push must resolve to the
-// authorized repository. An arbitrary --remote that points elsewhere is
-// rejected (fail-closed).
+// authorized repository — precise trailing owner/repo match, allowed host
+// only (substring matches like evil.example/xonogesrs/autoloop are rejected).
 function remoteMatchesAuthorizedRepo(remoteName) {
   let url = "";
   try {
     url = execFileSync("git", ["remote", "get-url", remoteName], { cwd, encoding: "utf8" }).trim();
   } catch { return false; }
-  const normalized = url.replace(/\.git$/, "").replace(/^[a-z]+:\/\//, "").replace(/^git@/, "").replace(/:/, "/");
-  const repoId = (record.repository || "").replace(/\.git$/, "");
-  return repoId.length > 0 && normalized.includes(repoId);
+  return remoteUrlMatchesAuthorizedRepository(url, record.repository);
 }
 if (!remoteMatchesAuthorizedRepo(remote)) {
   console.error("HOLD / REMOTE_NOT_AUTHORIZED");
@@ -54,10 +54,20 @@ if (!remoteMatchesAuthorizedRepo(remote)) {
   process.exit(1);
 }
 
-// Harness-owned result artifact — fixed controller path only.
+// Recompute current identities + bind the live environment to the record.
+const inventory = buildInventory(cwd, baseBranch);
+assertLiveBindings({ record, cwd, inventory, baseBranch, cardId, runId, flags });
+assertScopeCoversInventory(inventory, record.authorized_paths || []);
+const bundlePath = flags.bundlePath
+  ? expandPath(flags.bundlePath, cwd)
+  : (record.bundle_path ? expandPath(record.bundle_path, cwd) : "");
+
+// Harness-owned result artifact — fixed controller path derived from the
+// bundle directory (outside the executor writable scope), never --result-file.
+const bundleDir = bundlePath ? dirname(bundlePath) : "";
 let result = null;
 try {
-  result = readExternalReviewResult(cwd);
+  result = bundleDir ? readExternalReviewResult(bundleDir) : null;
 } catch (e) {
   if (e.code === "HOLD / EXTERNAL_REVIEW_RESULT_MISSING" || e.code === "HOLD / EXTERNAL_REVIEW_RESULT_INVALID") {
     console.error(e.code);
@@ -67,16 +77,12 @@ try {
   console.error(e.code ?? e.message);
   process.exit(1);
 }
-
-const branch = git(["branch", "--show-current"], cwd);
-const head = git(["rev-parse", "HEAD"], cwd);
-
-// Recompute current identities.
-const inventory = buildInventory(cwd, baseBranch);
-const bundlePath = flags.bundlePath
-  ? expandPath(flags.bundlePath, cwd)
-  : (record.bundle_path ? expandPath(record.bundle_path, cwd) : "");
+// review round comes from the verified artifact, never from CLI flags
+const reviewRound = result ? result.review_round : 1;
 const current = contextFor({ authority, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity, record });
+
+const branch = inventory.branch;
+const head = inventory.head;
 
 // remote probe (read-only)
 let remoteReachable = false;

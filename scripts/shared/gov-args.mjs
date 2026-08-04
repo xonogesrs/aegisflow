@@ -5,12 +5,13 @@
 // FINALIZATION-1 §3. No dependencies beyond node builtins.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
-import { join } from "node:path";
-import { normalizeAuthority, readLifecycleAuthorization, validateAuthorityRecord } from "../../src/governance/lifecycle-authorization.mjs";
+import { readFileSync, readdirSync, statSync, existsSync, realpathSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { normalizeAuthority, readLifecycleAuthorization, validateAuthorityRecord, scopeCovers } from "../../src/governance/lifecycle-authorization.mjs";
 import { buildChangeInventory } from "../../src/governance/change-inventory.mjs";
 import { computeReviewContext } from "../../src/governance/review-context.mjs";
 import { scanForSecrets } from "../../src/evidence/run-evidence-store.mjs";
+import { GOV_HOLD, hold } from "../../src/governance/holds.mjs";
 
 export function parseArgs(argv) {
   const out = { flags: {} };
@@ -93,12 +94,107 @@ export function buildInventory(cwd, baseBranch = "main") {
 }
 
 /** Recompute the review context (identities) for gates. */
-export function contextFor({ authority, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity, record }) {
-  // gates need the record-level bindings (repository/branch/base) for identity
+export function contextFor({ authority, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity, record, priorBundleSha256, priorFindingsDigest }) {
+  // gates need the record-level repository binding for identity; branch/base
+  // come from the ACTUAL inventory (never from the record — that would mask
+  // branch drift; assertLiveBindings already verified actual == record).
   const bound = record
-    ? { ...authority, repository: record.repository ?? "", branch: record.branch ?? "", base: record.base ?? "" }
+    ? { ...authority, repository: record.repository ?? "" }
     : authority;
-  return computeReviewContext({ authority: bound, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity });
+  return computeReviewContext({
+    authority: bound, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity,
+    priorBundleSha256, priorFindingsDigest,
+  });
+}
+
+/**
+ * Fail-closed binding of the actual execution environment to the authority
+ * record (round 3 finding 2). Called by EVERY governance CLI entry
+ * (checkpoint / bundle / integration / push / Draft PR).
+ *
+ *   realpath(cwd) == record.worktree
+ *   actual branch  == record.branch
+ *   rev-parse(record.base) == record.base_head
+ *   baseBranch     == record.base
+ *   cardId / runId == record.card_id / record.run_id
+ */
+export function assertLiveBindings({ record, cwd, inventory, baseBranch, cardId, runId, flags = {} }) {
+  const violations = [];
+  try {
+    const cwdReal = realpathSync(cwd);
+    const wtReal = record.worktree ? realpathSync(resolve(record.worktree)) : "";
+    if (wtReal && cwdReal !== wtReal) violations.push(`worktree: cwd ${cwdReal} != record ${wtReal}`);
+  } catch (e) {
+    violations.push(`worktree: cannot resolve (${e.message})`);
+  }
+  if (record.branch && inventory.branch && record.branch !== inventory.branch) {
+    violations.push(`branch: actual ${inventory.branch} != record ${record.branch}`);
+  }
+  if (record.base && record.base_head) {
+    try {
+      const actualBaseHead = git(["rev-parse", record.base], cwd).trim();
+      if (actualBaseHead !== record.base_head) violations.push(`base_head: ${record.base} is ${actualBaseHead} != ${record.base_head}`);
+    } catch {
+      violations.push(`base_head: cannot resolve base ${record.base}`);
+    }
+  }
+  if (record.base && baseBranch && baseBranch !== record.base) violations.push(`base: ${baseBranch} != record ${record.base}`);
+  const cliCard = flags.cardId ?? cardId;
+  const cliRun = flags.runId ?? runId;
+  if (record.card_id && cliCard && cliCard !== record.card_id) violations.push(`card_id: ${cliCard} != record ${record.card_id}`);
+  if (record.run_id && cliRun && cliRun !== record.run_id) violations.push(`run_id: ${cliRun} != record ${record.run_id}`);
+  if (violations.length > 0) {
+    throw hold(GOV_HOLD.LIVE_BINDING_MISMATCH, violations.join("; "));
+  }
+}
+
+/**
+ * Fail-closed writable-scope enforcement (round 3 finding 3): every changed
+ * path in the FULL inventory must be covered by the authorized paths.
+ */
+export function assertScopeCoversInventory(inventory, authorizedPaths) {
+  const outside = (inventory.changedPaths || []).filter((p) => !scopeCovers(p, authorizedPaths));
+  if (outside.length > 0) {
+    throw hold(GOV_HOLD.GOVERNANCE_SCOPE_EXPANSION_REQUIRED, `changed paths outside authorized scope: ${outside.join(",")}`);
+  }
+}
+
+/**
+ * Precise remote-URL authorization (round 3 finding 6): substring checks are
+ * bypassable (evil.example/xonogesrs/autoloop, /tmp/xonogesrs/autoloop-
+ * backup.git). Parse the URL, require an allowed host/transport and an EXACT
+ * trailing `owner/repository` match.
+ */
+export function remoteUrlMatchesAuthorizedRepository(url, repoId) {
+  if (typeof url !== "string" || url.length === 0) return false;
+  const target = String(repoId || "").replace(/\.git$/, "");
+  if (!target || !target.includes("/")) return false;
+  let host = "";
+  let path = "";
+  const s = url.replace(/\.git$/, "");
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
+    // https://host/owner/repo  (or file:///abs/path)
+    const rest = s.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+    const slash = rest.indexOf("/");
+    host = slash === -1 ? rest : rest.slice(0, slash);
+    path = slash === -1 ? "" : rest.slice(slash + 1);
+  } else if (/^git@/.test(s)) {
+    // git@host:owner/repo
+    const rest = s.replace(/^git@/, "");
+    const colon = rest.indexOf(":");
+    host = colon === -1 ? "" : rest.slice(0, colon);
+    path = colon === -1 ? rest : rest.slice(colon + 1);
+  } else {
+    // local absolute path: /tmp/.../owner/repo  → host empty, path = the path
+    path = s.replace(/^\//, "");
+  }
+  const allowedHosts = ["github.com", "git@github.com"];
+  if (host && !allowedHosts.includes(host)) return false;
+  // extract the trailing owner/repository segments exactly
+  const segments = path.split("/").filter(Boolean);
+  if (segments.length < 2) return false;
+  const ownerRepo = segments.slice(-2).join("/");
+  return ownerRepo === target;
 }
 
 /** Reject explicitly self-declared PASS flags (fail-closed, §9). */

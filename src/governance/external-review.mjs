@@ -14,11 +14,11 @@
 // accept `--external-review-status PASS` or caller-supplied artifact
 // identity as final authority. An Agent can never self-declare PASS.
 
-import { existsSync, readFileSync, openSync, writeSync, closeSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { GOV_HOLD, hold } from "./holds.mjs";
 import { sha256Text } from "../evidence/run-evidence-store.mjs";
-import { assertNotSymlink, ensureDir0700 } from "../c2d/fs-atomic.mjs";
+import { assertNotSymlink } from "../c2d/fs-atomic.mjs";
 import { validateAgainstSchema } from "./lifecycle-authorization.mjs";
 
 export const EXTERNAL_REVIEW_STATUSES = Object.freeze([
@@ -149,28 +149,15 @@ export function renderProhibitedActions(authority, extraDeclarations = []) {
 // External review result artifact (§9) — harness-owned, digest-bound
 // ---------------------------------------------------------------------------
 
-export function externalReviewResultPath(execDir) {
-  return join(execDir, "governance", "external-review-result.json");
-}
-
 /**
- * Controller-owned result writer. Exclusive-create only ('wx'): the artifact
- * can be created exactly once and never overwritten — the Agent has no code
- * path that calls this; it exists for the Controller (or a Controller-
- * simulating fixture) to record the external verdict.
+ * Controller-owned result path, DERIVED from the review bundle directory
+ * (which lives outside the executor's writable scope — e.g.
+ * ~/Desktop/AutoLoop-Review). Executor CLIs only READ this path; the
+ * artifact is created exclusively by the Controller ingestion entry
+ * (scripts/controller/ingest-review-result.mjs).
  */
-export function writeExternalReviewResult(execDir, result) {
-  const check = validateExternalReviewResult(result);
-  if (!check.valid) throw hold(GOV_HOLD.EXTERNAL_REVIEW_RESULT_INVALID, check.errors.join(","));
-  const p = externalReviewResultPath(execDir);
-  ensureDir0700(join(execDir, "governance"));
-  const fd = openSync(p, "wx");
-  try {
-    writeSync(fd, JSON.stringify(result, null, 2));
-  } finally {
-    closeSync(fd);
-  }
-  return p;
+export function externalReviewResultPath(bundleDir) {
+  return join(bundleDir, "governance", "external-review-result.json");
 }
 
 /**

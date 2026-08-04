@@ -10,8 +10,9 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { parseArgs, asBool } from "./shared/gov-args.mjs";
-import { loadRecord, buildInventory, rejectSelfDeclaredFlags, contextFor } from "./shared/gov-args.mjs";
+import { loadRecord, buildInventory, rejectSelfDeclaredFlags, contextFor, assertLiveBindings, assertScopeCoversInventory } from "./shared/gov-args.mjs";
 import { normalizeAuthority } from "../src/governance/lifecycle-authorization.mjs";
 import { readExternalReviewResult } from "../src/governance/external-review.mjs";
 import { decideDraftPrAction, buildDraftPrBody, prViolationsToHold, prBoundToParentCard } from "../src/governance/draft-pr-lifecycle.mjs";
@@ -30,15 +31,33 @@ if (selfDeclared.length > 0) {
 
 const record = loadRecord(flags);
 const authority = normalizeAuthority(record.lifecycle_authorization);
-const baseBranch = flags.baseBranch || record.base || authority.base || "main";
-const cardId = flags.cardId || record.card_id || "";
-const runId = flags.runId || record.run_id || "";
-const reviewRound = Number.isInteger(Number(flags.reviewRound)) ? Number(flags.reviewRound) : 1;
+const baseBranch = record.base || authority.base || "main";
+// card/run identity come ONLY from the record — flag overrides are rejected
+// by assertLiveBindings.
+const cardId = record.card_id || "";
+const runId = record.run_id || "";
 const agentIdentity = flags.agent || "pi-deepseek-v4-flash";
 
+// Recompute current identities + bind the live environment to the record.
+const inventory = buildInventory(cwd, baseBranch);
+try {
+  assertLiveBindings({ record, cwd, inventory, baseBranch, cardId, runId, flags });
+  assertScopeCoversInventory(inventory, record.authorized_paths || []);
+} catch (e) {
+  console.error(e.code ?? e.message);
+  console.error(`  - ${e.message}`);
+  process.exit(1);
+}
+const bundlePath = flags.bundlePath
+  ? expandPath(flags.bundlePath, cwd)
+  : (record.bundle_path ? expandPath(record.bundle_path, cwd) : "");
+
+// Harness-owned result artifact — fixed controller path derived from the
+// bundle directory (outside the executor writable scope).
+const bundleDir = bundlePath ? dirname(bundlePath) : "";
 let result = null;
 try {
-  result = readExternalReviewResult(cwd);
+  result = bundleDir ? readExternalReviewResult(bundleDir) : null;
 } catch (e) {
   if (e.code === "HOLD / EXTERNAL_REVIEW_RESULT_MISSING" || e.code === "HOLD / EXTERNAL_REVIEW_RESULT_INVALID") {
     console.error(e.code);
@@ -48,6 +67,8 @@ try {
   console.error(e.code ?? e.message);
   process.exit(1);
 }
+const reviewRound = result ? result.review_round : 1;
+const current = contextFor({ authority, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity, record });
 
 // Repository identity comes ONLY from the reviewed result and must match the
 // authority binding. --repo is rejected as an override (fail-closed).
@@ -65,13 +86,6 @@ if (authority.repository && repo && authority.repository !== repo) {
 const head = result.branch || "";
 const base = result.base_branch || baseBranch;
 const title = flags.title || `Draft: ${cardId || "checkpoint"}`;
-
-// Recompute current identities.
-const inventory = buildInventory(cwd, baseBranch);
-const bundlePath = flags.bundlePath
-  ? expandPath(flags.bundlePath, cwd)
-  : (record.bundle_path ? expandPath(record.bundle_path, cwd) : "");
-const current = contextFor({ authority, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity, record });
 
 // Find existing PR for this head branch + its draft state + parent-card
 // binding (read-only). An existing PR counts as "for this parent card" only
@@ -115,6 +129,14 @@ const body = flags.bodyFile
       reviewResultDigest: result.changed_tree_identity,
       bundlePath: bundlePath || flags.bundlePath || "",
     });
+
+// The FINAL body (template OR --body-file) must be bound to the parent card
+// for both CREATE and UPDATE (round 3 finding 6).
+if (!prBoundToParentCard({ body, cardId, reviewResultDigest: result.changed_tree_identity })) {
+  console.error("HOLD / PR_NOT_BOUND_TO_PARENT_CARD");
+  console.error(`  - final PR body is not bound to card ${cardId} (missing card id / review-result digest)`);
+  process.exit(1);
+}
 
 const decision = decideDraftPrAction({
   authority,

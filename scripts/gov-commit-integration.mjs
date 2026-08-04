@@ -13,8 +13,9 @@
 // artifact is read from the fixed controller path only.
 
 import { execFileSync } from "node:child_process";
+import { dirname } from "node:path";
 import { parseArgs, asBool, splitList } from "./shared/gov-args.mjs";
-import { gitOk, loadRecord, buildInventory, rejectSelfDeclaredFlags, scanChangedFilesForSecrets, contextFor } from "./shared/gov-args.mjs";
+import { gitOk, loadRecord, buildInventory, rejectSelfDeclaredFlags, scanChangedFilesForSecrets, contextFor, assertLiveBindings, assertScopeCoversInventory } from "./shared/gov-args.mjs";
 import { normalizeAuthority, scopeCovers } from "../src/governance/lifecycle-authorization.mjs";
 import { readExternalReviewResult } from "../src/governance/external-review.mjs";
 import { evaluateIntegrationCommitGate, integrationViolationsToHold } from "../src/governance/integration-commit-gate.mjs";
@@ -34,10 +35,11 @@ if (selfDeclared.length > 0) {
 
 const record = loadRecord(flags);
 const authority = normalizeAuthority(record.lifecycle_authorization);
-const baseBranch = flags.baseBranch || record.base || authority.base || "main";
-const cardId = flags.cardId || record.card_id || "";
-const runId = flags.runId || record.run_id || "";
-const reviewRound = Number.isInteger(Number(flags.reviewRound)) ? Number(flags.reviewRound) : 1;
+const baseBranch = record.base || authority.base || "main";
+// card/run identity come ONLY from the record — flag overrides are rejected
+// by assertLiveBindings.
+const cardId = record.card_id || "";
+const runId = record.run_id || "";
 const agentIdentity = flags.agent || "pi-deepseek-v4-flash";
 // Scope is authoritative from the record; a CLI --expected-paths override is
 // only accepted when strictly contained in the authorized scope (else HOLD).
@@ -54,10 +56,24 @@ if (cliScope.length) {
   }
 }
 
-// Harness-owned result artifact — fixed controller path, never --result-file.
+// Recompute current identities + bind the live environment to the record.
+const inventory = buildInventory(cwd, baseBranch);
+try {
+  assertLiveBindings({ record, cwd, inventory, baseBranch, cardId, runId, flags });
+  assertScopeCoversInventory(inventory, recordScope);
+} catch (e) {
+  console.error(e.code ?? e.message);
+  console.error(`  - ${e.message}`);
+  process.exit(1);
+}
+const bundlePath = record.bundle_path ? expandPath(record.bundle_path, cwd) : "";
+
+// Harness-owned result artifact — fixed controller path derived from the
+// bundle directory (outside the executor writable scope), never --result-file.
+const bundleDir = bundlePath ? dirname(bundlePath) : "";
 let result;
 try {
-  result = readExternalReviewResult(cwd);
+  result = bundleDir ? readExternalReviewResult(bundleDir) : null;
 } catch (e) {
   console.error(e.code ?? e.message);
   if (e.code === GOV_HOLD.EXTERNAL_REVIEW_RESULT_MISSING) {
@@ -65,10 +81,7 @@ try {
   }
   process.exit(1);
 }
-
-// Recompute current identities (never trust the artifact for current state).
-const inventory = buildInventory(cwd, baseBranch);
-const bundlePath = record.bundle_path ? expandPath(record.bundle_path, cwd) : "";
+const reviewRound = result ? result.review_round : 1;
 const current = contextFor({ authority, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity, record });
 
 // The integration gate must never leave the tree uncommitted or the HEAD

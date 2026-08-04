@@ -1,6 +1,6 @@
 # Reversible Lifecycle Governance — Review-Unit Edition
 
-> 狀態：實作完成，待 GitHub 外部 review（round 2）
+> 狀態：實作完成，待 GitHub 外部 review（round 3）
 > 卡片：`AUTOLOOP-GOVERNANCE-REVIEW-UNIT-FINALIZATION-1`
 > 分支：`governance/reversible-lifecycle-draft-pr`
 > 基底：main（未修改）
@@ -63,6 +63,11 @@ FINALIZATION-1）因授權範圍內完整修復必然超過預設 path/line 上�
   不得略過邊界檢查。
 - `maximum_repair_rounds` 為真實治理：每輪 REPAIR 後 `repair round` 遞增、剩餘預算遞減，
   bundle 與 result artifact 都會揭露；重新產生 bundle 不能重設預算。
+- **round／repair／prior 一律由持久化 review-history artifact 推導**
+  （`<bundleDir>/governance/review-history.json`，Controller 專屬 `scripts/gov-controller-
+  prepare-round.mjs` 寫入）；Agent CLI 不得輸入這三個值（衝突 → `HOLD / REVIEW_HISTORY_INVALID`）。
+  round ≥ 2 的 prior bundle digest 必須能在 archive 中找到對應檔案（可驗證綁定）。
+- **stop conditions 全部接入 gate**：任一宣告之 early-stop 條件觸發 → 不產生 bundle。
 
 遇到以下任一情況，**不得繼續擴大 review unit**，必須輸出具體 HOLD reason：
 
@@ -99,6 +104,15 @@ Runtime validator（`src/governance/lifecycle-authorization.mjs`）與 schema �
 **CLI 一律以 authority record 為 scope/repo/remote 的唯一來源**：`--expected-paths` 擴張
 scope、`--repo`／`--remote` 指向非授權目的地 → `HOLD / CLI_OVERRIDE_REJECTED`／
 `HOLD / REMOTE_NOT_AUTHORIZED`。
+
+**Live bindings（`assertLiveBindings`，checkpoint／bundle／integration／push／Draft PR 全部呼叫）**：
+`realpath(cwd) == record.worktree`、actual branch == `record.branch`、
+`rev-parse(record.base) == record.base_head`、`card_id/run_id == record.*`；不符 →
+`HOLD / LIVE_BINDING_MISMATCH`。
+
+**Writable scope fail-closed**：checkpoint／bundle／integration／push 四個入口都對**完整
+inventory**（不限 `--commit-paths` 子集）執行 `assertScopeCoversInventory`；任何 changed path
+不在 `authorized_paths` → `HOLD / GOVERNANCE_SCOPE_EXPANSION_REQUIRED`（不再只是標記）。
 
 ## 4. 授權交集方向（effective authority = parent ∩ child ∩ runtime）
 
@@ -193,10 +207,18 @@ prior_bundle_sha256 / prior_findings_digest（round ≥ 2 必填，綁定上一�
 current_head / base_head / repository / branch / base_branch / bundle_path
 ```
 
-Gate 讀取 artifact（**固定 controller path，不接受 `--result-file`**）→ 重新計算目前
-identity → 比對；任何不一致 → `HOLD / EVIDENCE_IDENTITY_MISMATCH`。Agent 不得自行建立
-PASS result；artifact 以 exclusive-create（`wx`）建立、不可覆寫
-（`writeExternalReviewResult` 僅供 Controller 使用）。
+Gate 讀取 artifact（**固定 controller path**，由 bundle 目錄推導、位於 executor writable scope 外，
+不接受 `--result-file`）→ 重新計算目前 identity → 比對；任何不一致 →
+`HOLD / EVIDENCE_IDENTITY_MISMATCH`。
+
+**Result 只能由 Controller ingestion 入口建立**（`scripts/gov-controller-ingest-result.mjs`，
+exclusive-create、不可覆寫；identity 全部由實際 bundle 計算／解析）。Executor 的 production module
+**不 export 也不呼叫** PASS writer（negative test 9 驗證）。
+
+> 誠實聲明：此機制防止的是 **非故意的自我宣告**（executor 無法經由任何 production API 建立
+> PASS artifact、也無法覆寫）。`reviewer_identity` 與 `authorization_source` 為 Controller 輸入的
+> 字串；完整的外部來源保證仍依賴 Controller 守護 ingestion 入口，本治理不宣稱能做
+> 密碼學層級的外部證明。
 
 ## 7. Lifecycle 狀態機
 

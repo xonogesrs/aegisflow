@@ -45,8 +45,11 @@ merge／release／seal／開始下一張實作卡。
 - `repair round`：累計修復輪數，**不得重設**；`remaining repair budget = maximum_repair_rounds
   − repair round`。
 - Bundle §7 必須包含**上一輪 external findings 全文與其 findings digest**。
-- fresh verification 為強制：production CLI 拒絕 `--skip-fresh-verify`
-  （`HOLD / FRESH_VERIFY_REQUIRED`）。
+- fresh verification 為強制：production CLI 完全移除 `--skip-fresh-verify`；任一測試 FAIL 或
+  NOT RUN → `HOLD / FRESH_VERIFY_FAILED`，**不產生 bundle**。測試 fixture 可注入真正執行的
+  最小命令集（`--verify-config <file>`），不得經由環境變數開後門。
+- bundle §6 內嵌每項命令的 parsed totals（`ℹ tests / pass / fail` 行）供 reviewer 獨立核對；
+  §1 內嵌完整 authorization record 與 effective authority。
 
 ## Bundle 章節
 

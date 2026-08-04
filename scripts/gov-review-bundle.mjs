@@ -19,11 +19,11 @@
 // Bundle 實際輸出位置必須等於 authorization artifact 授權之 canonical path。
 
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync, renameSync, mkdirSync, copyFileSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync, mkdirSync, copyFileSync, readdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { parseArgs } from "./shared/gov-args.mjs";
+import { parseArgs, assertLiveBindings, assertScopeCoversInventory } from "./shared/gov-args.mjs";
 import {
   readLifecycleAuthorization,
   effectiveAuthority,
@@ -34,6 +34,7 @@ import { buildChangeInventory, expandPath } from "../src/governance/change-inven
 import { evaluateReviewUnitGate, REVIEW_UNIT_LIMIT_FIELDS, REVIEW_UNIT_ACTUAL_TO_LIMIT } from "../src/governance/review-unit-gate.mjs";
 import { digestOfPayload, buildBundleHeader, renderProhibitedActions, EXTERNAL_REVIEW_STOP } from "../src/governance/external-review.mjs";
 import { bundleDigestFromFile } from "../src/governance/review-context.mjs";
+import { readReviewHistory, deriveRoundContext } from "../src/governance/review-history.mjs";
 import { scanForSecrets } from "../src/evidence/run-evidence-store.mjs";
 import { scopeCovers } from "../src/governance/lifecycle-authorization.mjs";
 import { hold, GOV_HOLD } from "../src/governance/holds.mjs";
@@ -42,18 +43,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 const { flags } = parseArgs(process.argv.slice(2));
 
-// Fresh verification is mandatory in production — the skip flag exists only
-// for test fixtures (AUTOLOOP_TEST_FIXTURE=1) and even then reports NOT RUN.
-if (flags.skipFreshVerify && process.env.AUTOLOOP_TEST_FIXTURE !== "1") {
-  console.error(GOV_HOLD.FRESH_VERIFY_REQUIRED);
-  console.error("  - --skip-fresh-verify is rejected in production (fresh verification is mandatory)");
-  process.exit(1);
-}
-
 const REPO_ROOT = flags?.cwd ? resolve(flags.cwd) : join(HERE, "..");
-const cardId = flags.cardId || "UNKNOWN-CARD";
-const runId = flags.runId || "run-1";
-const reviewRound = Number.isInteger(Number(flags.reviewRound)) ? Number(flags.reviewRound) : 1;
 const cardTitle = flags.cardTitle || "";
 const baseBranch = flags.baseBranch || "main";
 const agent = flags.agent || "pi-deepseek-v4-flash";
@@ -145,10 +135,84 @@ const meta = flags.meta ? JSON.parse(readFileSync(flags.meta, "utf8")) : {};
 const milestones = (flags.milestones || "").split(",").filter(Boolean);
 const architectureGoal = meta.architectureGoal || flags.architectureGoal || meta.goal || "";
 
+// ── review-history artifact (round 3 finding 4): the round, accumulated
+// repair round, prior digests, prior findings and remaining budget are
+// DERIVED from the Controller-maintained history — never from Agent flags.
+// card/run identity come from the authority record only.
+const cardId = record?.card_id || flags.cardId || "UNKNOWN-CARD";
+const runId = record?.run_id || flags.runId || "run-1";
+if (flags.cardId && record?.card_id && flags.cardId !== record.card_id) {
+  console.error(GOV_HOLD.LIVE_BINDING_MISMATCH);
+  console.error(`  - --card-id ${flags.cardId} != record ${record.card_id}`);
+  process.exit(1);
+}
+const history = readReviewHistory(outDir);
+const roundCtx = deriveRoundContext(history);
+const reviewRound = roundCtx.review_round;
+const repairRounds = roundCtx.repair_round;
+const priorFindings = roundCtx.prior_findings_text;
+const priorFindingsDigest = roundCtx.prior_findings_digest;
+const priorBundleSha256 = roundCtx.prior_bundle_sha256;
+const remainingBudget = roundCtx.remaining_budget;
+// Reject agent-supplied round/repair conflicts with the persisted history.
+if (flags.reviewRound && Number(flags.reviewRound) !== reviewRound) {
+  console.error(GOV_HOLD.REVIEW_HISTORY_INVALID);
+  console.error(`  - --review-round ${flags.reviewRound} != history round ${reviewRound} (round is derived, not caller-chosen)`);
+  process.exit(1);
+}
+if (meta.repairRounds !== undefined && Number(meta.repairRounds) !== repairRounds) {
+  console.error(GOV_HOLD.REVIEW_HISTORY_INVALID);
+  console.error(`  - meta.repairRounds ${meta.repairRounds} != history repair round ${repairRounds} (repair budget cannot be reset)`);
+  process.exit(1);
+}
+if (priorFindings && priorFindingsDigest !== digestOfPayload(priorFindings)) {
+  console.error(GOV_HOLD.REVIEW_HISTORY_INVALID);
+  console.error("  - history prior_findings_digest does not match prior_findings_text");
+  process.exit(1);
+}
+// Prior bundle binding: the recorded prior bundle digest must exist in the
+// archive (Controller-recorded, verifiable).
+if (reviewRound > 1 && priorBundleSha256) {
+  let found = false;
+  try {
+    for (const f of readdirSync(archiveDir)) {
+      if (!f.endsWith(".txt")) continue;
+      const text = readFileSync(join(archiveDir, f), "utf8");
+      if (bundleDigestFromFile(text) === priorBundleSha256) { found = true; break; }
+    }
+  } catch { /* archive unreadable → fail below */ }
+  if (!found) {
+    console.error(GOV_HOLD.REVIEW_HISTORY_INVALID);
+    console.error(`  - prior bundle ${priorBundleSha256} not found in ${archiveDir} (prior binding cannot be verified)`);
+    process.exit(1);
+  }
+}
+if (reviewRound > 1 && (!priorFindingsDigest || !priorBundleSha256)) {
+  console.error(GOV_HOLD.REVIEW_HISTORY_MISSING);
+  console.error("  - round > 1 requires a review-history artifact with prior bundle/findings digests");
+  process.exit(1);
+}
+
 // ── change inventory (complete: committed + staged + dirty + untracked) ──
 const inventory = buildChangeInventory({ git, cwd: REPO_ROOT, baseBranch });
 const changedTreeIdentity = inventory.changedTreeIdentity;
 const patchSha256 = inventory.patchSha256;
+
+// ── live bindings + writable scope (round 3 findings 2/3) — fail-closed ──
+try {
+  assertLiveBindings({ record, cwd: REPO_ROOT, inventory, baseBranch, cardId, runId, flags });
+} catch (e) {
+  console.error(e.code ?? e.message);
+  console.error(`  - ${e.message}`);
+  process.exit(1);
+}
+try {
+  assertScopeCoversInventory(inventory, top.authorized_paths || []);
+} catch (e) {
+  console.error(e.code ?? e.message);
+  console.error(`  - ${e.message}`);
+  process.exit(1);
+}
 
 // ── clean-worktree requirement (§8/§13): the reviewed HEAD must be the
 // pushable HEAD. Dirty or untracked content at bundle time would make the
@@ -159,8 +223,8 @@ if (inventory.dirtyCount > 0 || inventory.untrackedCount > 0) {
   process.exit(1);
 }
 
-// ── review-unit boundary (§5) — runtime enforcement, fail-closed ──
-const repairRounds = Number.isInteger(Number(meta.repairRounds)) ? Number(meta.repairRounds) : (reviewRound > 1 ? 1 : 0);
+// ── review-unit boundary (§5) — runtime enforcement, fail-closed; every
+// declared stop condition is wired into the gate (round 3 finding 4). ──
 const reviewUnitActual = {
   repository_count: 1,
   worktree_count: 1,
@@ -171,64 +235,65 @@ const reviewUnitActual = {
   patch_lines: inventory.patchLines,
   repair_rounds: repairRounds,
 };
-const reviewUnit = evaluateReviewUnitGate({ authority, actual: reviewUnitActual });
+const stopConditions = meta.stopConditions || [];
+const reviewUnit = evaluateReviewUnitGate({ authority, actual: reviewUnitActual, stopConditions });
 if (!reviewUnit.allowed) {
   console.error(GOV_HOLD.REVIEW_UNIT_LIMIT_EXCEEDED);
   for (const v of reviewUnit.violations) console.error(`  - ${v}`);
   process.exit(1);
 }
 
-// Previous external findings (round ≥ 2 must carry them + their digest).
-const priorFindings = meta.priorFindings || "";
-const priorFindingsDigest = priorFindings ? digestOfPayload(priorFindings) : "";
-
-// ── fresh verification (§15): full rerun embedded in the bundle ──
-const testCommands = [
+// ── fresh verification (§15): full rerun embedded in the bundle. No skip
+// path exists: every configured command MUST run and PASS, otherwise the
+// bundle is NOT produced (round 3 finding 1). A test-fixture may inject a
+// minimal but REAL command set via --verify-config; the commands still
+// execute and must exit 0.
+const DEFAULT_VERIFY_COMMANDS = [
   ["npm run check", "syntax check (all src .mjs)"],
   ["npm run test:governance", "governance tests"],
   ["npm run test:v1", "v1 test suite"],
   ["npm run test:v2", "v2 test suite"],
   ["git diff --check", "whitespace/conflict check"],
 ];
+const testCommands = flags.verifyConfig
+  ? JSON.parse(readFileSync(flags.verifyConfig, "utf8")).commands
+  : DEFAULT_VERIFY_COMMANDS;
 const testReports = [];
 let allPassed = true;
 let testOutputText = "";
-if (flags.skipFreshVerify) {
-  // Production CLI must never skip fresh verification (fail-closed). The
-  // flag exists ONLY for test fixtures, gated by AUTOLOOP_TEST_FIXTURE=1,
-  // and even then the report is honest (NOT RUN, not PASS).
-  if (process.env.AUTOLOOP_TEST_FIXTURE !== "1") {
-    console.error("HOLD / FRESH_VERIFY_REQUIRED");
-    console.error("  - --skip-fresh-verify is rejected in production (fresh verification is mandatory)");
-    process.exit(1);
-  }
-  testReports.push({ cmd: "(fresh verification SKIPPED — test fixture)", label: "test harness", exitCode: -1, ok: false, output: "" });
-  allPassed = false;
-  testOutputText = "\n===== fresh verification SKIPPED (test fixture) =====\n";
-} else {
-  for (const [cmd, label] of testCommands) {
-    let output = "";
-    let exitCode = -1;
-    try {
-      if (cmd.startsWith("git ")) {
-        output = execFileSync("git", cmd.slice(4).split(" "), { cwd: REPO_ROOT, encoding: "utf8" });
-        exitCode = 0;
-      } else if (cmd.startsWith("npm run ")) {
-        const script = cmd.slice("npm run ".length);
-        output = execFileSync("npm", ["run", script], { cwd: REPO_ROOT, encoding: "utf8" });
-        exitCode = 0;
-      } else {
-        exitCode = 1;
-      }
-    } catch (e) {
-      output = String(e.stdout ?? "") + String(e.stderr ?? "");
-      exitCode = e.status ?? 1;
+for (const [cmd, label] of testCommands) {
+  let output = "";
+  let exitCode = -1;
+  try {
+    if (cmd.startsWith("git ")) {
+      output = execFileSync("git", cmd.slice(4).split(" "), { cwd: REPO_ROOT, encoding: "utf8" });
+      exitCode = 0;
+    } else if (cmd.startsWith("npm run ")) {
+      const script = cmd.slice("npm run ".length);
+      output = execFileSync("npm", ["run", script], { cwd: REPO_ROOT, encoding: "utf8" });
+      exitCode = 0;
+    } else if (cmd.startsWith("node ")) {
+      output = execFileSync("node", cmd.slice("node ".length).split(" "), { cwd: REPO_ROOT, encoding: "utf8" });
+      exitCode = 0;
+    } else {
+      exitCode = 1;
     }
-    const ok = exitCode === 0;
-    if (!ok) allPassed = false;
-    testReports.push({ cmd, label, exitCode, ok, output });
-    testOutputText += `\n===== ${cmd} (${label}) =====\nexit: ${exitCode}\n${output}`;
+  } catch (e) {
+    output = String(e.stdout ?? "") + String(e.stderr ?? "");
+    exitCode = e.status ?? 1;
   }
+  const ok = exitCode === 0;
+  if (!ok) allPassed = false;
+  testReports.push({ cmd, label, exitCode, ok, output });
+  testOutputText += `\n===== ${cmd} (${label}) =====\nexit: ${exitCode}\n${output}`;
+}
+if (!allPassed) {
+  // Any FAIL / NOT-RUN → no bundle (fail-closed).
+  console.error(GOV_HOLD.FRESH_VERIFY_FAILED);
+  for (const t of testReports) {
+    if (!t.ok) console.error(`  - FAILED: ${t.cmd} (exit ${t.exitCode})`);
+  }
+  process.exit(1);
 }
 const testOutputDigest = digestOfPayload(testOutputText);
 const evidenceDigest = digestOfPayload([testOutputDigest, changedTreeIdentity, patchSha256].join("\n"));
@@ -275,6 +340,19 @@ const effectiveText = effective
   ? JSON.stringify(effective, null, 1)
   : "(未提供 --effective-file；以入口卡 record 為授權)";
 
+// Effective authority computed from the entry record itself (parent == child
+// == entry; neutral runtime) — rendered for reviewer verification.
+let effectiveAuthorityComputed = null;
+try {
+  effectiveAuthorityComputed = effectiveAuthority(record, record);
+} catch { effectiveAuthorityComputed = null; }
+
+// Per-command test totals parsed from the actual output (reviewer-verifiable).
+const testTotalsText = testOutputText
+  .split("\n")
+  .filter((l) => /^ℹ (tests|pass|fail)/.test(l))
+  .join("; ");
+
 const scopeMark = (p) => {
   const scope = top.authorized_paths.length ? top.authorized_paths : (flags.scope || "").split(",").filter(Boolean);
   return scope.some((s) => p === s || p.startsWith(s.replace(/\/?$/, "/"))) ? "AUTHORIZED" : "UNEXPECTED — 需 reviewer 確認";
@@ -311,6 +389,8 @@ const bundle = [
     "本 bundle 產生後 Agent 停止，等待外部 reviewer 判定。",
   ]),
   `AUTHORIZED_BINDINGS: ${JSON.stringify({ repository: top.repository, branch: top.branch || branch, base: top.base, base_head: top.base_head, bundle_path: top.bundle_path })}`,
+  `AUTHORIZATION_RECORD: ${JSON.stringify(record, null, 1).split("\n").map((l) => `    ${l}`).join("\n")}`,
+  `EFFECTIVE_AUTHORITY: ${effectiveAuthorityComputed ? JSON.stringify(effectiveAuthorityComputed, null, 1).split("\n").map((l) => `    ${l}`).join("\n") : "(不可計算)"}`,
   "",
   section("2. EXECUTIVE SUMMARY"),
   `- 本卡目標: ${meta.goal || "(未填)"}`,
@@ -345,18 +425,20 @@ const bundle = [
   ...testReports.map((t) => [
     `- command: ${t.cmd}  (${t.label})`,
     `- exit code: ${t.exitCode}`,
-    `- result: ${t.ok ? "PASS" : t.exitCode === -1 ? "NOT RUN (skipped — fixture)" : "FAIL"}`,
+    `- result: ${t.ok ? "PASS" : "FAIL"}`,
     t.ok ? "" : `- output:\n${(t.output || "").slice(0, 20000)}`,
   ].join("\n")),
+  `- parsed totals from output: ${testTotalsText || "(無 ℹ tests/pass/fail 行 — 見上方完整輸出)"}`,
   `- test_output_digest: ${testOutputDigest}`,
   "",
   section("7. REVIEW AND REPAIR HISTORY"),
   `- external review round: ${reviewRound}`,
   `- repair round: ${repairRounds}`,
-  `- remaining repair budget: ${Math.max(0, reviewUnit.limits.maximum_repair_rounds - repairRounds)}`,
+  `- remaining repair budget: ${remainingBudget}（history 紀錄；= maximum ${reviewUnit.limits.maximum_repair_rounds} − repair ${repairRounds}）`,
   `- previous external findings (round ${reviewRound - 1}):`,
   priorFindings ? priorFindings.split("\n").map((l) => `    ${l}`).join("\n") : `    (round ${reviewRound - 1} 無 findings 記錄 — round ${reviewRound - 1} 檔案不存在)`,
   `- previous findings digest: ${priorFindingsDigest || "(無)"}`,
+  `- prior bundle digest: ${priorBundleSha256 || "(round 1 無 prior)"}`,
   `- reviewer invocation identity: ${meta.reviewerIdentity || "(待外部 review)"}`,
   `- executor invocation identity: ${meta.executorIdentity || agent}`,
   `- fresh session: ${meta.freshSession ?? "YES"}`,
@@ -399,7 +481,7 @@ const bundle = [
     return `- ${f}: actual ${value ?? "(未測量)"} / limit ${limit}  ${ok ? "OK" : value === undefined ? "UNMEASURED" : "EXCEEDED"}`;
   }),
   `- review-unit gate: ${reviewUnit.allowed ? "WITHIN LIMITS" : `VIOLATIONS: ${reviewUnit.violations.join("; ")}`}`,
-  `- stop conditions triggered: ${meta.stopConditions?.length ? meta.stopConditions.join(",") : "NONE"}`,
+  `- stop conditions triggered: ${stopConditions.length ? stopConditions.join(",") : "NONE"}（已傳入 gate；任一觸發即不產生 bundle）`,
   `- effective authority（若提供）: ${effectiveText}`,
   "",
   section("11. OPEN QUESTIONS AND REVIEW REQUEST"),
