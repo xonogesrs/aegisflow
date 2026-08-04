@@ -65,11 +65,34 @@ export function buildChangeInventory({ git, cwd, baseBranch = "main", fs = {} })
   const baseHead = git(["rev-parse", baseBranch]).trim();
   const branch = git(["branch", "--show-current"]).trim();
 
+  // Rename detection for REPORTING (the identity canonical form stays on the
+  // stable no-renames view: a rename is both a deletion and an addition).
+  const renames = [];
+  const collectRenames = (lines, source) => {
+    for (const line of lines) {
+      if (!line.startsWith("R")) continue;
+      const parts = line.split("\t");
+      if (parts.length >= 3) {
+        renames.push({ from: parts[1], to: parts[2], similarity: parts[0], source });
+      }
+    }
+  };
+  collectRenames(git(["diff", "-M", "--name-status", `${baseBranch}...HEAD`]).split("\n").filter(Boolean), "committed");
+  collectRenames(git(["diff", "-M", "--name-status", "HEAD"]).split("\n").filter(Boolean), "dirty");
+
   // index modes for tracked files (100644 / 100755)
   const indexModes = new Map();
   for (const line of git(["ls-files", "-s"]).split("\n").filter(Boolean)) {
     const parts = line.split("\t");
     if (parts.length === 2) indexModes.set(parts[1], parts[0].split(" ")[0]);
+  }
+
+  // base-tree modes: exec-bit changes are judged RELATIVE TO BASE (so a
+  // committed mode change is still detected, not just an index/worktree one).
+  const baseModes = new Map();
+  for (const line of git(["ls-tree", "-r", baseBranch]).split("\n").filter(Boolean)) {
+    const parts = line.split("\t");
+    if (parts.length === 2) baseModes.set(parts[1], parts[0].split(" ")[0]);
   }
 
   const parseStatusLines = (lines) => lines.map((l) => {
@@ -117,7 +140,13 @@ export function buildChangeInventory({ git, cwd, baseBranch = "main", fs = {} })
         binary = isBinaryContent(buf);
         if (!mode) mode = fileMode & 0o111 ? "100755" : "100644";
       }
-      if (indexModes.has(path)) {
+      if (baseModes.has(path)) {
+        // relative to BASE: catches committed mode changes (index == worktree)
+        const baseHasExec = baseModes.get(path) === "100755";
+        const workHasExec = (fileMode & 0o111) !== 0;
+        execBitChanged = baseHasExec !== workHasExec;
+      } else if (indexModes.has(path)) {
+        // file not in base but tracked: catch dirty index-vs-worktree changes
         const indexHasExec = indexModes.get(path) === "100755";
         const workHasExec = (fileMode & 0o111) !== 0;
         execBitChanged = indexHasExec !== workHasExec;
@@ -175,8 +204,15 @@ export function buildChangeInventory({ git, cwd, baseBranch = "main", fs = {} })
     binaries,
     execBitChanges,
     dependencyChanges,
+    renames,
     untracked,
     stagedPaths,
+    committedPaths: committedLines.map((l) => l.split("\t").pop()).filter(Boolean),
+    dirtyPaths: dirtyLines.map((l) => l.split("\t").pop()).filter(Boolean),
+    committedCount: committedLines.length,
+    stagedCount: stagedPaths.length,
+    dirtyCount: dirtyLines.length,
+    untrackedCount: untracked.length,
     patchText,
     patchLines: patchText.split("\n").length,
     changedTreeIdentity,

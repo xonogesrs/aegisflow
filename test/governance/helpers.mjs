@@ -78,6 +78,7 @@ export function validResult(overrides = {}) {
     reviewed_at: new Date().toISOString(),
     review_round: 1,
     findings_digest: "f".repeat(64),
+    authorization_source: "controller-session:final-1",
     current_head: "1".repeat(40),
     base_head: "2".repeat(40),
     repository: REPOSITORY,
@@ -86,6 +87,15 @@ export function validResult(overrides = {}) {
     bundle_path: BUNDLE_PATH,
     ...overrides,
   };
+}
+
+export function validResultRound2(overrides = {}) {
+  return validResult({
+    review_round: 2,
+    prior_bundle_sha256: "9".repeat(64),
+    prior_findings_digest: "8".repeat(64),
+    ...overrides,
+  });
 }
 
 export function currentContext(overrides = {}) {
@@ -103,6 +113,8 @@ export function currentContext(overrides = {}) {
     baseBranch: BASE,
     bundlePath: BUNDLE_PATH,
     agentIdentity: AGENT_IDENTITY,
+    priorBundleSha256: "",
+    priorFindingsDigest: "",
     ...overrides,
   };
 }

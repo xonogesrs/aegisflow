@@ -48,6 +48,7 @@ test("[neg 16] rename/delete/mode/symlink/binary all enter the inventory", (t) =
   assert.ok(paths.includes("gone.txt"), "deletion must be listed");
   assert.ok(paths.includes("new-name.txt"), "rename target must be listed");
   assert.ok(paths.some((p) => p.startsWith("old-name.txt")), "rename source must be listed (no-renames)");
+  assert.ok(inv.renames.some((r) => r.from === "old-name.txt" && r.to === "new-name.txt"), "rename must be reported via git diff -M");
   assert.ok(paths.includes("run.sh"), "mode change must be listed");
   assert.ok(inv.execBitChanges.includes("run.sh"), "exec bit change must be flagged");
   assert.ok(inv.symlinks.includes("link.txt"), "symlink must be flagged via lstat");
@@ -60,6 +61,47 @@ test("[neg 16] rename/delete/mode/symlink/binary all enter the inventory", (t) =
   assert.equal(gone.status, "DELETED");
   assert.equal(gone.contentSha256, "MISSING");
 });
+
+test("exec-bit change vs BASE is detected even when committed (index == worktree)", (t) => {
+  const { dir, git } = createTempRepo(t);
+  // tool.sh exists on MAIN first (so it is part of the base tree)
+  git(["checkout", "main"]);
+  writeFileSync(join(dir, "tool.sh"), "#!/bin/sh\necho hi\n");
+  git(["add", "."]);
+  git(["commit", "-m", "add tool.sh (non-exec)"]);
+  git(["checkout", "-b", "governance/mode-test"]);
+  // committed mode change: base 100644 → HEAD 100755 (index and worktree agree)
+  chmodSync(join(dir, "tool.sh"), 0o755);
+  git(["add", "tool.sh"]);
+  git(["commit", "-m", "make executable"]);
+  const inv = inventoryFor(dir, git);
+  assert.ok(inv.execBitChanges.includes("tool.sh"), "committed exec-bit change vs base must be flagged");
+});
+
+test("inventory counts are honest per category", (t) => {
+  const { dir, git } = createTempRepo(t);
+  // committed change
+  writeFileSync(join(dir, "committed.txt"), "c\n");
+  git(["add", "."]);
+  git(["commit", "-m", "committed"]);
+  // staged change
+  writeFileSync(join(dir, "staged.txt"), "s\n");
+  git(["add", "staged.txt"]);
+  // dirty tracked change
+  writeFileSync(join(dir, "base.txt"), "dirty\n");
+  // untracked
+  writeFileSync(join(dir, "untracked.txt"), "u\n");
+  const inv = inventoryFor(dir, git);
+  assert.equal(inv.committedCount >= 1, true);
+  assert.equal(inv.stagedCount, 1);
+  // dirty = tracked files differing from HEAD (staged ⊆ dirty is expected)
+  assert.equal(inv.dirtyCount, 2);
+  assert.equal(inv.untrackedCount, 1);
+  // clean-worktree invariant: with no tracked/untracked changes dirty==0
+  assert.equal(changedPathsOf(inv).length >= 4, true);
+});
+
+function changedPathsOf(inv) { return inv.changedPaths; }
 
 test("identities are deterministic and content-based", (t) => {
   const { dir, git } = createTempRepo(t);

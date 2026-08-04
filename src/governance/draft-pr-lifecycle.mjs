@@ -22,6 +22,17 @@ import { verifyExternalReviewResult } from "./external-review.mjs";
 export const DRAFT_PR_ACTIONS = Object.freeze(["CREATE", "UPDATE", "NONE"]);
 
 /**
+ * True when an existing PR body is bound to this parent card: it must
+ * reference the card id and the reviewed result digest.
+ */
+export function prBoundToParentCard({ body, cardId, reviewResultDigest }) {
+  const text = String(body ?? "");
+  if (typeof cardId !== "string" || cardId.length === 0) return false;
+  if (typeof reviewResultDigest !== "string" || reviewResultDigest.length === 0) return false;
+  return text.includes(cardId) && text.includes(reviewResultDigest);
+}
+
+/**
  * Decide the Draft PR action for the current head branch.
  *
  * @param {object} args

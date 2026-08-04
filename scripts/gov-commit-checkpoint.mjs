@@ -9,7 +9,9 @@
 import { execFileSync } from "node:child_process";
 import { parseArgs, asBool, splitList } from "./shared/gov-args.mjs";
 import { git, gitOk, loadRecord, loadAuthority, buildInventory, rejectSelfDeclaredFlags, scanChangedFilesForSecrets } from "./shared/gov-args.mjs";
-import { evaluateCheckpointCommitGate, checkpointCommitViolationsToHold } from "../src/governance/checkpoint-commit-gate.mjs";function gitLines(args, cwd) {
+import { evaluateCheckpointCommitGate, checkpointCommitViolationsToHold } from "../src/governance/checkpoint-commit-gate.mjs";
+import { evaluateReviewUnitGate } from "../src/governance/review-unit-gate.mjs";
+import { scopeCovers } from "../src/governance/lifecycle-authorization.mjs";function gitLines(args, cwd) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).split("\n")
     .filter((l) => l.trim().length > 0);
 }
@@ -29,8 +31,32 @@ if (selfDeclared.length > 0) {
 const authority = loadAuthority(flags);
 const record = loadRecord(flags);
 const baseBranch = flags.baseBranch || authority.base || record.base || "main";
-const expectedPaths = splitList(flags.expectedPaths).length ? splitList(flags.expectedPaths) : (record.authorized_paths || []);
-const branch = git(["branch", "--show-current"], cwd);
+// Scope is authoritative from the record; a CLI --expected-paths override is
+// only accepted when strictly contained in the authorized scope (else HOLD).
+const recordScope = record.authorized_paths || [];
+const cliScope = splitList(flags.expectedPaths);
+const expectedPaths = cliScope.length ? cliScope : recordScope;
+if (cliScope.length) {
+  for (const p of cliScope) {
+    if (!scopeCovers(p, recordScope)) {
+      console.error("HOLD / CLI_OVERRIDE_REJECTED");
+      console.error(`  - --expected-paths expands scope: ${p} not covered by authority record`);
+      process.exit(1);
+    }
+  }
+}
+// Review-unit boundary (§5): measured counts at runtime. Measurement failure
+// is fail-closed — never silently skip the boundary check. The inventory is
+// built FIRST so a broken/unusable repo fails cleanly here.
+let inventory = null;
+try {
+  inventory = buildInventory(cwd, baseBranch);
+} catch (e) {
+  console.error("HOLD / REVIEW_UNIT_MEASUREMENT_INCOMPLETE");
+  console.error(`  - change inventory unavailable: ${e.message}`);
+  process.exit(1);
+}
+const branch = inventory.branch || git(["branch", "--show-current"], cwd);
 const stagedPaths = gitLines(["diff", "--cached", "--name-only"], cwd);
 const changedPaths = flags.commitPaths
   ? splitList(flags.commitPaths)
@@ -43,12 +69,7 @@ const diffCheckClean = gitOk(["diff", "--check"], cwd);
 // Condition 11: real secret scan over changed file contents.
 const scannedSecrets = scanChangedFilesForSecrets(cwd, changedPaths);
 
-// Review-unit boundary (§5): measured counts at runtime.
-let inventory = null;
-try {
-  inventory = buildInventory(cwd, baseBranch);
-} catch { /* inventory unavailable — review-unit check skipped, other gates still apply */ }
-const reviewUnitActual = inventory ? {
+const reviewUnitActual = {
   repository_count: 1,
   worktree_count: 1,
   parent_card_count: 1,
@@ -57,7 +78,14 @@ const reviewUnitActual = inventory ? {
   changed_paths: changedPaths.length,
   patch_lines: inventory.patchLines,
   repair_rounds: Number.isInteger(Number(flags.repairRounds)) ? Number(flags.repairRounds) : 0,
-} : undefined;
+};
+
+const reviewUnit = evaluateReviewUnitGate({ authority, actual: reviewUnitActual });
+if (!reviewUnit.allowed) {
+  console.error("HOLD / REVIEW_UNIT_LIMIT_EXCEEDED");
+  for (const v of reviewUnit.violations) console.error(`  - ${v}`);
+  process.exit(1);
+}
 
 const gate = evaluateCheckpointCommitGate({
   authority,

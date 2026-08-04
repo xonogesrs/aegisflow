@@ -14,11 +14,11 @@
 // accept `--external-review-status PASS` or caller-supplied artifact
 // identity as final authority. An Agent can never self-declare PASS.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, openSync, writeSync, closeSync } from "node:fs";
 import { join } from "node:path";
 import { GOV_HOLD, hold } from "./holds.mjs";
 import { sha256Text } from "../evidence/run-evidence-store.mjs";
-import { assertNotSymlink } from "../c2d/fs-atomic.mjs";
+import { assertNotSymlink, ensureDir0700 } from "../c2d/fs-atomic.mjs";
 import { validateAgainstSchema } from "./lifecycle-authorization.mjs";
 
 export const EXTERNAL_REVIEW_STATUSES = Object.freeze([
@@ -31,7 +31,9 @@ export const EXTERNAL_REVIEW_STOP = Object.freeze({
 
 export const RESULT_ARTIFACT_SCHEMA = "autoloop.external-review-result/v1";
 
-// Schema for the harness-owned result artifact (§9).
+// Schema for the harness-owned result artifact (§9). Round ≥ 2 results MUST
+// bind the previous round's bundle digest and findings digest, and every
+// result must carry the Controller authorization source.
 export const EXTERNAL_REVIEW_RESULT_SCHEMA = Object.freeze({
   type: "object",
   additionalProperties: false,
@@ -39,6 +41,7 @@ export const EXTERNAL_REVIEW_RESULT_SCHEMA = Object.freeze({
     "schema", "card_id", "run_id", "verdict",
     "bundle_sha256", "patch_sha256", "changed_tree_identity",
     "reviewer_identity", "reviewed_at", "review_round", "findings_digest",
+    "authorization_source",
     "current_head", "base_head", "repository", "branch", "base_branch", "bundle_path",
   ],
   properties: {
@@ -53,6 +56,9 @@ export const EXTERNAL_REVIEW_RESULT_SCHEMA = Object.freeze({
     reviewed_at: { type: "string", format: "date-time" },
     review_round: { type: "integer", minimum: 1 },
     findings_digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
+    authorization_source: { type: "string", minLength: 1, maxLength: 512 },
+    prior_bundle_sha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+    prior_findings_digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
     current_head: { type: "string", pattern: "^[0-9a-f]{40}$" },
     base_head: { type: "string", pattern: "^[0-9a-f]{40}$" },
     repository: { type: "string", minLength: 1, maxLength: 256 },
@@ -148,13 +154,44 @@ export function externalReviewResultPath(execDir) {
 }
 
 /**
+ * Controller-owned result writer. Exclusive-create only ('wx'): the artifact
+ * can be created exactly once and never overwritten — the Agent has no code
+ * path that calls this; it exists for the Controller (or a Controller-
+ * simulating fixture) to record the external verdict.
+ */
+export function writeExternalReviewResult(execDir, result) {
+  const check = validateExternalReviewResult(result);
+  if (!check.valid) throw hold(GOV_HOLD.EXTERNAL_REVIEW_RESULT_INVALID, check.errors.join(","));
+  const p = externalReviewResultPath(execDir);
+  ensureDir0700(join(execDir, "governance"));
+  const fd = openSync(p, "wx");
+  try {
+    writeSync(fd, JSON.stringify(result, null, 2));
+  } finally {
+    closeSync(fd);
+  }
+  return p;
+}
+
+/**
  * Validate a raw result artifact. Strict parity with EXTERNAL_REVIEW_RESULT_SCHEMA.
+ * Round ≥ 2 results must bind the previous round (prior_bundle_sha256 +
+ * prior_findings_digest) and the Controller authorization source is always
+ * required.
  */
 export function validateExternalReviewResult(raw) {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     return { valid: false, errors: ["result:type"] };
   }
   const errors = validateAgainstSchema(EXTERNAL_REVIEW_RESULT_SCHEMA, raw, "result");
+  if (Number.isInteger(raw.review_round) && raw.review_round > 1) {
+    if (typeof raw.prior_bundle_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(raw.prior_bundle_sha256)) {
+      errors.push("result.prior_bundle_sha256 required for round > 1");
+    }
+    if (typeof raw.prior_findings_digest !== "string" || !/^[0-9a-f]{64}$/.test(raw.prior_findings_digest)) {
+      errors.push("result.prior_findings_digest required for round > 1");
+    }
+  }
   return { valid: errors.length === 0, errors };
 }
 
@@ -192,6 +229,19 @@ export function verifyExternalReviewResult({ result, current }) {
   if (result.card_id !== current.cardId) violations.push(`result.card_id ${result.card_id} != ${current.cardId}`);
   if (result.run_id !== current.runId) violations.push(`result.run_id ${result.run_id} != ${current.runId}`);
   if (result.review_round !== current.reviewRound) violations.push(`result.review_round ${result.review_round} != ${current.reviewRound}`);
+  if (result.review_round > 1) {
+    if (!/^[0-9a-f]{64}$/.test(result.prior_bundle_sha256 ?? "")) violations.push("result.prior_bundle_sha256 missing for round > 1");
+    if (!/^[0-9a-f]{64}$/.test(result.prior_findings_digest ?? "")) violations.push("result.prior_findings_digest missing for round > 1");
+    if (current.priorBundleSha256 && result.prior_bundle_sha256 !== current.priorBundleSha256) {
+      violations.push(`result.prior_bundle_sha256 ${result.prior_bundle_sha256} != known ${current.priorBundleSha256}`);
+    }
+    if (current.priorFindingsDigest && result.prior_findings_digest !== current.priorFindingsDigest) {
+      violations.push(`result.prior_findings_digest ${result.prior_findings_digest} != known ${current.priorFindingsDigest}`);
+    }
+  }
+  if (typeof result.authorization_source !== "string" || result.authorization_source.length === 0) {
+    violations.push("result.authorization_source missing (Controller authorization required)");
+  }
   if (result.current_head !== current.currentHead) violations.push(`result.current_head ${result.current_head} != ${current.currentHead}`);
   if (result.base_head !== current.baseHead) violations.push(`result.base_head ${result.base_head} != ${current.baseHead}`);
   if (result.repository !== current.repository) violations.push(`result.repository ${result.repository} != ${current.repository}`);

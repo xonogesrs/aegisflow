@@ -21,7 +21,7 @@ import {
   isExternalReviewPassed,
 } from "../../src/governance/external-review.mjs";
 import { GOV_HOLD } from "../../src/governance/holds.mjs";
-import { validResult, currentContext, CARD_ID, RUN_ID } from "./helpers.mjs";
+import { validResult, validResultRound2, currentContext, CARD_ID, RUN_ID } from "./helpers.mjs";
 
 test("A-8: status enum is closed", () => {
   assert.deepEqual(EXTERNAL_REVIEW_STATUSES, ["PENDING", "PASS", "REPAIR", "HOLD"]);
@@ -94,6 +94,29 @@ test("result artifact rejects missing/extra fields and bad verdicts", () => {
   assert.equal(validateExternalReviewResult(extra).valid, false);
   const badDigest = validResult({ bundle_sha256: "not-a-digest" });
   assert.equal(validateExternalReviewResult(badDigest).valid, false);
+});
+
+test("result artifact requires the Controller authorization source", () => {
+  const noAuth = validResult();
+  delete noAuth.authorization_source;
+  assert.equal(validateExternalReviewResult(noAuth).valid, false);
+  const violations = verifyExternalReviewResult({ result: noAuth, current: currentContext() });
+  assert.ok(violations.some((v) => v.includes("authorization_source")));
+});
+
+test("round ≥ 2 result must bind the previous round (bundle + findings digests)", () => {
+  const round2 = validResultRound2();
+  assert.equal(validateExternalReviewResult(round2).valid, true);
+  const missingPrior = validResultRound2({ prior_bundle_sha256: undefined });
+  delete missingPrior.prior_bundle_sha256;
+  assert.equal(validateExternalReviewResult(missingPrior).valid, false);
+  const badPrior = validResultRound2({ prior_findings_digest: "x" });
+  assert.equal(validateExternalReviewResult(badPrior).valid, false);
+  const ctx = currentContext({ reviewRound: 2, priorBundleSha256: "9".repeat(64), priorFindingsDigest: "8".repeat(64) });
+  assert.equal(isExternalReviewPassed({ result: round2, current: ctx }), true);
+  const drift = validResultRound2({ prior_bundle_sha256: "0".repeat(64) });
+  const violations = verifyExternalReviewResult({ result: drift, current: ctx });
+  assert.ok(violations.some((v) => v.includes("prior_bundle_sha256")));
 });
 
 test("verified PASS requires recomputed identities to match", () => {

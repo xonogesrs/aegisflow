@@ -14,7 +14,7 @@ import {
 } from "../../src/governance/integration-commit-gate.mjs";
 import { normalizeAuthority } from "../../src/governance/lifecycle-authorization.mjs";
 import { GOV_HOLD } from "../../src/governance/holds.mjs";
-import { entryBlock, validResult, currentContext, CARD_ID, RUN_ID, BRANCH, AUTHORIZED_PATHS } from "./helpers.mjs";
+import { entryBlock, validResult, validResultRound2, currentContext, CARD_ID, RUN_ID, BRANCH, AUTHORIZED_PATHS } from "./helpers.mjs";
 
 const auth = normalizeAuthority(entryBlock());
 const result = validResult();
@@ -105,6 +105,20 @@ test("fresh full verification is mandatory", () => {
   const g = evaluateIntegrationCommitGate({ ...ok, verificationPassed: false });
   assert.equal(g.allowed, false);
   assert.ok(g.violations.some((v) => v.includes("fresh_full_verification_pass")));
+});
+
+test("dirty worktree at integration time blocks (no new commit after review)", () => {
+  const g = evaluateIntegrationCommitGate({ ...ok, worktreeDirty: true });
+  assert.equal(g.allowed, false);
+  assert.ok(g.violations.some((v) => v.includes("worktree_dirty")));
+});
+
+test("round ≥ 2 integration requires prior-round binding", () => {
+  const round2 = validResultRound2();
+  const ctx = currentContext({ reviewRound: 2, priorBundleSha256: "9".repeat(64), priorFindingsDigest: "8".repeat(64) });
+  assert.equal(evaluateIntegrationCommitGate({ ...ok, result: round2, current: ctx }).allowed, true);
+  const drift = validResultRound2({ prior_bundle_sha256: "0".repeat(64) });
+  assert.equal(evaluateIntegrationCommitGate({ ...ok, result: drift, current: ctx }).allowed, false);
 });
 
 test("local conditions still apply (scope, branch, secrets)", () => {

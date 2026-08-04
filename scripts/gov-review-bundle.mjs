@@ -35,11 +35,21 @@ import { evaluateReviewUnitGate, REVIEW_UNIT_LIMIT_FIELDS, REVIEW_UNIT_ACTUAL_TO
 import { digestOfPayload, buildBundleHeader, renderProhibitedActions, EXTERNAL_REVIEW_STOP } from "../src/governance/external-review.mjs";
 import { bundleDigestFromFile } from "../src/governance/review-context.mjs";
 import { scanForSecrets } from "../src/evidence/run-evidence-store.mjs";
-import { GOV_HOLD, hold } from "../src/governance/holds.mjs";
+import { scopeCovers } from "../src/governance/lifecycle-authorization.mjs";
+import { hold, GOV_HOLD } from "../src/governance/holds.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 const { flags } = parseArgs(process.argv.slice(2));
+
+// Fresh verification is mandatory in production — the skip flag exists only
+// for test fixtures (AUTOLOOP_TEST_FIXTURE=1) and even then reports NOT RUN.
+if (flags.skipFreshVerify && process.env.AUTOLOOP_TEST_FIXTURE !== "1") {
+  console.error(GOV_HOLD.FRESH_VERIFY_REQUIRED);
+  console.error("  - --skip-fresh-verify is rejected in production (fresh verification is mandatory)");
+  process.exit(1);
+}
+
 const REPO_ROOT = flags?.cwd ? resolve(flags.cwd) : join(HERE, "..");
 const cardId = flags.cardId || "UNKNOWN-CARD";
 const runId = flags.runId || "run-1";
@@ -48,7 +58,25 @@ const cardTitle = flags.cardTitle || "";
 const baseBranch = flags.baseBranch || "main";
 const agent = flags.agent || "pi-deepseek-v4-flash";
 
+// ── side-effect measurement (real, not asserted) ──
+// (a) the generator must not import network-capable modules;
+// (b) every git invocation must be local/read-only (no fetch/push/pull/remote
+//     mutation); (c) every file write must land inside outDir (verified after).
+const generatorSource = readFileSync(fileURLToPath(import.meta.url), "utf8");
+const networkImport = /from ["']node:(net|http|https)["']/.exec(generatorSource);
+if (networkImport) {
+  console.error(GOV_HOLD.SECURITY_CHECK_INCOMPLETE);
+  console.error(`  - generator imports network-capable module: ${networkImport[0]}`);
+  process.exit(1);
+}
+const FORBIDDEN_GIT_OPS = ["fetch", "push", "pull", "remote add", "remote set-url", "remote remove", "remote rename"];
 function git(args) {
+  const joined = args.join(" ");
+  if (FORBIDDEN_GIT_OPS.some((op) => joined.startsWith(op))) {
+    console.error(GOV_HOLD.SECURITY_CHECK_INCOMPLETE);
+    console.error(`  - generator invoked remote/write git op: git ${joined}`);
+    process.exit(1);
+  }
   return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8" });
 }
 function gitOk(args) {
@@ -66,11 +94,15 @@ let record;
 if (flags.execDir) record = readLifecycleAuthorization(flags.execDir);
 else if (flags.authorityFile) {
   const raw = JSON.parse(readFileSync(flags.authorityFile, "utf8"));
-  if (!validateAuthorityRecord(raw).valid && raw.lifecycle_authorization) {
-    record = { schema: "autoloop.lifecycle-authorization/v2", card_id: cardId, ...raw, lifecycle_authorization: raw.lifecycle_authorization };
-  } else {
-    record = raw;
+  const check = validateAuthorityRecord(raw);
+  if (!check.valid) {
+    // Fail-closed: no fallback for an invalid record (top-level bindings are
+    // mandatory and must pass schema validation).
+    console.error("HOLD / AUTHORIZATION_INVALID");
+    for (const e of check.errors) console.error(`  - ${e}`);
+    process.exit(1);
   }
+  record = raw;
 } else {
   record = null;
 }
@@ -81,7 +113,9 @@ if (!record) {
 const block = record.lifecycle_authorization ?? record;
 const authority = normalizeAuthority(block);
 const top = {
-  repository: flags.repository || record.repository || "",
+  // repository / branch / base / scope / bundle_path come ONLY from the
+  // authority record — CLI overrides are rejected (fail-closed).
+  repository: record.repository || "",
   branch: record.branch || "",
   base: record.base || baseBranch,
   base_head: record.base_head || "",
@@ -92,6 +126,21 @@ const effective = flags.effectiveFile
   ? JSON.parse(readFileSync(flags.effectiveFile, "utf8"))
   : null;
 
+// ── bundle path authorization (§11): the actual output location must equal
+// the canonical path authorized in the authority artifact — checked early. ──
+const outDir = flags.outDir ? resolve(flags.outDir) : join(homedir(), "Desktop", "AutoLoop-Review");
+const archiveDir = join(outDir, "archive");
+const target = join(outDir, "READY_FOR_REVIEW.txt");
+const authorizedBundlePath = top.bundle_path || authority.external_review?.bundle_path || "";
+const canonicalTarget = resolve(target);
+const canonicalAuthorized = authorizedBundlePath ? resolve(expandPath(authorizedBundlePath, REPO_ROOT)) : "";
+if (canonicalAuthorized && canonicalAuthorized !== canonicalTarget) {
+  console.error(GOV_HOLD.BUNDLE_PATH_MISMATCH);
+  console.error(`  authorized: ${canonicalAuthorized}`);
+  console.error(`  actual:     ${canonicalTarget}`);
+  process.exit(1);
+}
+
 const meta = flags.meta ? JSON.parse(readFileSync(flags.meta, "utf8")) : {};
 const milestones = (flags.milestones || "").split(",").filter(Boolean);
 const architectureGoal = meta.architectureGoal || flags.architectureGoal || meta.goal || "";
@@ -101,8 +150,17 @@ const inventory = buildChangeInventory({ git, cwd: REPO_ROOT, baseBranch });
 const changedTreeIdentity = inventory.changedTreeIdentity;
 const patchSha256 = inventory.patchSha256;
 
-// ── review-unit boundary (§5) — runtime enforcement ──
-const repairRounds = Number.isInteger(Number(meta.repairRounds)) ? Number(meta.repairRounds) : 0;
+// ── clean-worktree requirement (§8/§13): the reviewed HEAD must be the
+// pushable HEAD. Dirty or untracked content at bundle time would make the
+// reviewed artifact unpushable → fail-closed.
+if (inventory.dirtyCount > 0 || inventory.untrackedCount > 0) {
+  console.error(GOV_HOLD.WORKTREE_DIRTY_AT_BUNDLE);
+  console.error(`  - dirty tracked: ${inventory.dirtyCount}, untracked: ${inventory.untrackedCount} — checkpoint all content before bundling`);
+  process.exit(1);
+}
+
+// ── review-unit boundary (§5) — runtime enforcement, fail-closed ──
+const repairRounds = Number.isInteger(Number(meta.repairRounds)) ? Number(meta.repairRounds) : (reviewRound > 1 ? 1 : 0);
 const reviewUnitActual = {
   repository_count: 1,
   worktree_count: 1,
@@ -114,6 +172,15 @@ const reviewUnitActual = {
   repair_rounds: repairRounds,
 };
 const reviewUnit = evaluateReviewUnitGate({ authority, actual: reviewUnitActual });
+if (!reviewUnit.allowed) {
+  console.error(GOV_HOLD.REVIEW_UNIT_LIMIT_EXCEEDED);
+  for (const v of reviewUnit.violations) console.error(`  - ${v}`);
+  process.exit(1);
+}
+
+// Previous external findings (round ≥ 2 must carry them + their digest).
+const priorFindings = meta.priorFindings || "";
+const priorFindingsDigest = priorFindings ? digestOfPayload(priorFindings) : "";
 
 // ── fresh verification (§15): full rerun embedded in the bundle ──
 const testCommands = [
@@ -127,7 +194,17 @@ const testReports = [];
 let allPassed = true;
 let testOutputText = "";
 if (flags.skipFreshVerify) {
-  testReports.push({ cmd: "(skipped by --skip-fresh-verify)", label: "test harness", exitCode: 0, ok: true, output: "" });
+  // Production CLI must never skip fresh verification (fail-closed). The
+  // flag exists ONLY for test fixtures, gated by AUTOLOOP_TEST_FIXTURE=1,
+  // and even then the report is honest (NOT RUN, not PASS).
+  if (process.env.AUTOLOOP_TEST_FIXTURE !== "1") {
+    console.error("HOLD / FRESH_VERIFY_REQUIRED");
+    console.error("  - --skip-fresh-verify is rejected in production (fresh verification is mandatory)");
+    process.exit(1);
+  }
+  testReports.push({ cmd: "(fresh verification SKIPPED — test fixture)", label: "test harness", exitCode: -1, ok: false, output: "" });
+  allPassed = false;
+  testOutputText = "\n===== fresh verification SKIPPED (test fixture) =====\n";
 } else {
   for (const [cmd, label] of testCommands) {
     let output = "";
@@ -156,35 +233,26 @@ if (flags.skipFreshVerify) {
 const testOutputDigest = digestOfPayload(testOutputText);
 const evidenceDigest = digestOfPayload([testOutputDigest, changedTreeIdentity, patchSha256].join("\n"));
 
-// ── security checks (§12) — fail-closed, no UNKNOWN ──
+// ── security checks (§12) — fail-closed, no UNKNOWN, real blocking ──
 const secretScan = scanForSecrets(inventory.patchText + "\n" + testOutputText);
 const securityBlockers = [];
 const securityNotes = [];
 if (secretScan.matches.length > 0) {
   securityBlockers.push(`SECRET_SCAN_MATCHES: ${secretScan.matches.join(",")}`);
 }
-if (inventory.binaries.length > 0) securityNotes.push(`BINARY_FILES: ${inventory.binaries.join(",")}`);
-if (inventory.symlinks.length > 0) securityNotes.push(`SYMLINKS: ${inventory.symlinks.join(",")}`);
-if (inventory.execBitChanges.length > 0) securityNotes.push(`EXEC_BIT_CHANGES: ${inventory.execBitChanges.join(",")}`);
+// Structural anomalies are BLOCKING (unexpected binary / symlink / exec-bit).
+if (inventory.binaries.length > 0) securityBlockers.push(`UNEXPECTED_BINARY: ${inventory.binaries.join(",")}`);
+if (inventory.symlinks.length > 0) securityBlockers.push(`SYMLINK_CHANGES: ${inventory.symlinks.join(",")}`);
+if (inventory.execBitChanges.length > 0) securityBlockers.push(`EXEC_BIT_CHANGES: ${inventory.execBitChanges.join(",")}`);
+// Dependency changes outside the authorized scope are blocking; within the
+// authorized scope they are precisely reported as SECURITY_ITEM.
+const outOfScopeDeps = inventory.dependencyChanges.filter((d) => !scopeCovers(d, top.authorized_paths));
+if (outOfScopeDeps.length > 0) securityBlockers.push(`DEPENDENCY_CHANGES_OUTSIDE_SCOPE: ${outOfScopeDeps.join(",")}`);
 if (inventory.dependencyChanges.length > 0) securityNotes.push(`DEPENDENCY_CHANGES: ${inventory.dependencyChanges.join(",")}`);
 const securityComplete = securityBlockers.length === 0;
 if (!securityComplete) {
   console.error(GOV_HOLD.SECURITY_CHECK_INCOMPLETE);
   for (const b of securityBlockers) console.error(`  - ${b}`);
-  process.exit(1);
-}
-
-// ── bundle path authorization (§11): output must equal authorized path ──
-const outDir = flags.outDir ? resolve(flags.outDir) : join(homedir(), "Desktop", "AutoLoop-Review");
-const archiveDir = join(outDir, "archive");
-const target = join(outDir, "READY_FOR_REVIEW.txt");
-const authorizedBundlePath = top.bundle_path || authority.external_review?.bundle_path || "";
-const canonicalTarget = resolve(target);
-const canonicalAuthorized = authorizedBundlePath ? resolve(expandPath(authorizedBundlePath, REPO_ROOT)) : "";
-if (canonicalAuthorized && canonicalAuthorized !== canonicalTarget) {
-  console.error(GOV_HOLD.BUNDLE_PATH_MISMATCH);
-  console.error(`  authorized: ${canonicalAuthorized}`);
-  console.error(`  actual:     ${canonicalTarget}`);
   process.exit(1);
 }
 
@@ -259,11 +327,12 @@ const bundle = [
   `- git status --short:`,
   statusShort || "(clean)",
   `- git diff --check: ${diffCheck}`,
-  `- inventory: committed(${git(["diff", "--name-status", "--no-renames", `${baseBranch}...HEAD`]).split("\n").filter(Boolean).length}) staged(${inventory.stagedPaths.length}) dirty(${inventory.changedPaths.length}) untracked(${inventory.untracked.length})`,
+  `- inventory: committed(${inventory.committedCount}) staged(${inventory.stagedCount}) dirty(${inventory.dirtyCount}) untracked(${inventory.untrackedCount})  changed_paths_total(${inventory.changedPaths.length})`,
   `- unexpected path 檢查: 見 §4（全路徑逐項標記授權範圍）`,
   "",
   section("4. CHANGED PATHS (complete inventory)"),
   ...inventory.entries.map((e) => `- ${e.path}  [${e.status}]  scope: ${scopeMark(e.path)}${e.symlink ? "  SYMLINK" : ""}${e.binary ? "  BINARY" : ""}${e.execBitChanged ? "  EXEC_BIT_CHANGED" : ""}  mode:${e.mode || "?"}  sha256:${e.contentSha256}`),
+  `- renames (detected via git diff -M): ${inventory.renames.length ? inventory.renames.map((r) => `${r.similarity} ${r.from} -> ${r.to} (${r.source})`).join("; ") : "NONE"}`,
   `- deleted: ${inventory.deleted.length ? inventory.deleted.join(",") : "NONE"}`,
   `- staged: ${inventory.stagedPaths.length ? inventory.stagedPaths.join(",") : "NONE"}`,
   `- untracked: ${inventory.untracked.length ? inventory.untracked.join(",") : "NONE"}`,
@@ -276,18 +345,22 @@ const bundle = [
   ...testReports.map((t) => [
     `- command: ${t.cmd}  (${t.label})`,
     `- exit code: ${t.exitCode}`,
-    `- result: ${t.ok ? "PASS" : "FAIL"}`,
-    t.ok ? "" : `- failure output:\n${t.output.slice(0, 20000)}`,
+    `- result: ${t.ok ? "PASS" : t.exitCode === -1 ? "NOT RUN (skipped — fixture)" : "FAIL"}`,
+    t.ok ? "" : `- output:\n${(t.output || "").slice(0, 20000)}`,
   ].join("\n")),
   `- test_output_digest: ${testOutputDigest}`,
   "",
   section("7. REVIEW AND REPAIR HISTORY"),
+  `- external review round: ${reviewRound}`,
+  `- repair round: ${repairRounds}`,
+  `- remaining repair budget: ${Math.max(0, reviewUnit.limits.maximum_repair_rounds - repairRounds)}`,
+  `- previous external findings (round ${reviewRound - 1}):`,
+  priorFindings ? priorFindings.split("\n").map((l) => `    ${l}`).join("\n") : `    (round ${reviewRound - 1} 無 findings 記錄 — round ${reviewRound - 1} 檔案不存在)`,
+  `- previous findings digest: ${priorFindingsDigest || "(無)"}`,
   `- reviewer invocation identity: ${meta.reviewerIdentity || "(待外部 review)"}`,
   `- executor invocation identity: ${meta.executorIdentity || agent}`,
   `- fresh session: ${meta.freshSession ?? "YES"}`,
-  `- blocking findings: ${meta.blockingFindings || "無（內部 review）"}`,
-  `- repair rounds: ${repairRounds}`,
-  `- repair budget 剩餘: ${meta.repairBudgetLeft ?? "—"}`,
+  `- blocking findings（本輪內部 review）: ${meta.blockingFindings || "無"}`,
   `- 最終 fresh verification: ${allPassed ? "PASS" : "FAIL — 不得請求 PASS"}`,
   `- internal milestones: ${milestones.length ? milestones.join(", ") : "(單一 milestone)"}`,
   `- architecture goal: ${architectureGoal || "(未填)"}`,
@@ -308,10 +381,12 @@ const bundle = [
   `- secret scan（patch + untracked + test output）: ${secretScan.matches.length === 0 ? "NO MATCHES" : `MATCHES: ${secretScan.matches.join(",")}`}`,
   `- binary files: ${inventory.binaries.length ? inventory.binaries.join(",") : "NONE（已完整列舉）"}`,
   `- symlinks（lstat）: ${inventory.symlinks.length ? inventory.symlinks.join(",") : "NONE（已完整列舉）"}`,
-  `- executable-bit changes: ${inventory.execBitChanges.length ? inventory.execBitChanges.join(",") : "NONE（已完整列舉）"}`,
+  `- executable-bit changes (vs base tree): ${inventory.execBitChanges.length ? inventory.execBitChanges.join(",") : "NONE（已完整列舉）"}`,
   `- dependency changes: ${inventory.dependencyChanges.length ? inventory.dependencyChanges.join(",") : "NONE（已完整列舉）"}`,
-  `- external side effect / network write / production write: NONE（本 bundle 產生過程僅讀取 repo 與寫入 ${outDir}）`,
-  `- SECURITY_CHECK_STATUS: ${securityComplete ? "COMPLETE (no UNKNOWN)" : "INCOMPLETE"}`,
+  `- renames: ${inventory.renames.length ? inventory.renames.length : "NONE（已完整列舉）"}`,
+  `- external side effect / network write / production write: 本 bundle 產生過程僅執行本地 git／npm 指令（無 fetch/push/remote）與寫入 ${outDir}；generator 未 import 任何 node:net/http/https 模組（已靜態檢查）；寫入路徑全部落在 outDir 內（見下方 write footprint）`,
+  `- SECURITY_CHECK_STATUS: ${securityComplete ? "COMPLETE (no UNKNOWN, no blocking item)" : "INCOMPLETE — 產生已中止"}`,
+  `- blocking items: ${securityBlockers.length ? securityBlockers.join("; ") : "NONE"}`,
   ...securityNotes.map((n) => `- note: ${n}`),
   "",
   section("10. REVIEW UNIT BOUNDARY"),
@@ -330,8 +405,8 @@ const bundle = [
   section("11. OPEN QUESTIONS AND REVIEW REQUEST"),
   ...(meta.openQuestions || []).map((q) => `- ${q}`),
   "",
-  `NEXT_ACTION_IF_PASS: integration checkpoint commit（digest-bound result artifact）→ feature branch push → Draft PR 建立／更新（整合紀錄＋CI）`,
-  `NEXT_ACTION_IF_REPAIR: 依 reviewer findings 於授權範圍內 bounded repair → fresh verification → 重新產生 bundle`,
+  `NEXT_ACTION_IF_PASS: 驗證 digest-bound result artifact → 推送已審查的 checkpoint HEAD → Draft PR 建立／更新（整合紀錄＋CI；不建立新 commit）`,
+  `NEXT_ACTION_IF_REPAIR: 依 reviewer findings 於授權範圍內 bounded repair → fresh verification → 重新產生 bundle（repair round 遞增）`,
   `NEXT_ACTION_IF_HOLD: 停止，交回 Controller`,
   "",
   SEP,
@@ -352,6 +427,17 @@ writeFileSync(tmp, finalBundle, "utf8");
 renameSync(tmp, target);
 copyFileSync(target, archive);
 
+// ── write-footprint verification (real measurement) ──
+const outDirResolved = resolve(outDir);
+for (const w of [tmp, target, archive]) {
+  if (!w.startsWith(outDirResolved + "/")) {
+    console.error(GOV_HOLD.SECURITY_CHECK_INCOMPLETE);
+    console.error(`  - write outside outDir: ${w}`);
+    process.exit(1);
+  }
+}
+const writeFootprint = [tmp, target, archive].map((p) => p.replace(outDirResolved, "<outDir>"));
+
 const report = {
   review_bundle: target,
   archive_path: archive,
@@ -364,9 +450,12 @@ const report = {
   changed_paths: inventory.changedPaths,
   changed_path_count: inventory.changedPaths.length,
   patch_lines: inventory.patchLines,
+  review_round: reviewRound,
   repair_round: repairRounds,
   remaining_repair_budget: Math.max(0, reviewUnit.limits.maximum_repair_rounds - repairRounds),
+  prior_findings_digest: priorFindingsDigest || null,
   security_complete: securityComplete,
+  write_footprint: writeFootprint,
   worktree,
   branch,
   head,

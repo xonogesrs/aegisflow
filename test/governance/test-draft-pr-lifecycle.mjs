@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decideDraftPrAction, buildDraftPrBody, prViolationsToHold } from "../../src/governance/draft-pr-lifecycle.mjs";
+import { decideDraftPrAction, buildDraftPrBody, prViolationsToHold, prBoundToParentCard } from "../../src/governance/draft-pr-lifecycle.mjs";
 import { normalizeAuthority, defaultDenyAuthority } from "../../src/governance/lifecycle-authorization.mjs";
 import { GOV_HOLD } from "../../src/governance/holds.mjs";
 import { entryBlock, validResult, currentContext, CARD_ID, BRANCH } from "./helpers.mjs";
@@ -99,6 +99,14 @@ test("repository / card / head binding mismatch blocks Draft PR", () => {
   assert.equal(card.action, "NONE");
   const head = decideDraftPrAction({ ...ok, result: validResult({ branch: "other/branch" }) });
   assert.equal(head.action, "NONE");
+});
+
+test("existing PR must be bound to the parent card (body carries card + result digest)", () => {
+  const body = buildDraftPrBody({ cardId: CARD_ID, runId: "r", parentGoal: "g", currentMilestone: "m", reviewResultDigest: "c".repeat(64) });
+  assert.equal(prBoundToParentCard({ body, cardId: CARD_ID, reviewResultDigest: "c".repeat(64) }), true);
+  assert.equal(prBoundToParentCard({ body: "unrelated", cardId: CARD_ID, reviewResultDigest: "c".repeat(64) }), false);
+  assert.equal(prBoundToParentCard({ body, cardId: "OTHER-CARD", reviewResultDigest: "c".repeat(64) }), false);
+  assert.equal(prBoundToParentCard({ body, cardId: CARD_ID, reviewResultDigest: "0".repeat(64) }), false);
 });
 
 test("13.4 draft PR never implies merge", () => {

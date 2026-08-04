@@ -9,11 +9,10 @@
 // REJECTED (self-declared / caller-supplied authority).
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { parseArgs, asBool } from "./shared/gov-args.mjs";
 import { git, loadRecord, buildInventory, rejectSelfDeclaredFlags, contextFor } from "./shared/gov-args.mjs";
 import { normalizeAuthority } from "../src/governance/lifecycle-authorization.mjs";
-import { readExternalReviewResult, validateExternalReviewResult } from "../src/governance/external-review.mjs";
+import { readExternalReviewResult } from "../src/governance/external-review.mjs";
 import { evaluatePushGate, pushViolationsToHold } from "../src/governance/feature-branch-push-gate.mjs";
 import { expandPath } from "../src/governance/change-inventory.mjs";
 
@@ -37,19 +36,28 @@ const runId = flags.runId || record.run_id || "";
 const reviewRound = Number.isInteger(Number(flags.reviewRound)) ? Number(flags.reviewRound) : 1;
 const agentIdentity = flags.agent || "pi-deepseek-v4-flash";
 
-// Harness-owned result artifact.
+// Remote identity check: the remote used for push must resolve to the
+// authorized repository. An arbitrary --remote that points elsewhere is
+// rejected (fail-closed).
+function remoteMatchesAuthorizedRepo(remoteName) {
+  let url = "";
+  try {
+    url = execFileSync("git", ["remote", "get-url", remoteName], { cwd, encoding: "utf8" }).trim();
+  } catch { return false; }
+  const normalized = url.replace(/\.git$/, "").replace(/^[a-z]+:\/\//, "").replace(/^git@/, "").replace(/:/, "/");
+  const repoId = (record.repository || "").replace(/\.git$/, "");
+  return repoId.length > 0 && normalized.includes(repoId);
+}
+if (!remoteMatchesAuthorizedRepo(remote)) {
+  console.error("HOLD / REMOTE_NOT_AUTHORIZED");
+  console.error(`  - remote "${remote}" does not resolve to authorized repository ${record.repository}`);
+  process.exit(1);
+}
+
+// Harness-owned result artifact — fixed controller path only.
 let result = null;
 try {
-  if (flags.resultFile) {
-    const raw = JSON.parse(readFileSync(flags.resultFile, "utf8"));
-    if (!validateExternalReviewResult(raw).valid) {
-      console.error("HOLD / EXTERNAL_REVIEW_RESULT_INVALID");
-      process.exit(1);
-    }
-    result = raw;
-  } else {
-    result = readExternalReviewResult(cwd);
-  }
+  result = readExternalReviewResult(cwd);
 } catch (e) {
   if (e.code === "HOLD / EXTERNAL_REVIEW_RESULT_MISSING" || e.code === "HOLD / EXTERNAL_REVIEW_RESULT_INVALID") {
     console.error(e.code);

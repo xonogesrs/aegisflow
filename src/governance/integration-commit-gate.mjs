@@ -49,9 +49,14 @@ export function evaluateIntegrationCommitGate({
   current,
   lifecycleState = "EXTERNAL_REVIEW_PASS",
   verificationPassed = false,
+  worktreeDirty = false,
   ...checkpointArgs
 }) {
   const violations = [];
+
+  if (worktreeDirty) {
+    violations.push("worktree_dirty: reviewed tree must not drift — no new commit is permitted after review");
+  }
 
   if (!result) {
     violations.push("result_artifact_present: external-review-result missing");

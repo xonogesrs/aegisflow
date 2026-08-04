@@ -1,24 +1,25 @@
 #!/usr/bin/env node
 // scripts/gov-commit-integration.mjs
 //
-// Integration-approved commit CLI (§8.2). Only usable after a *verified*
-// external review PASS. Reads the harness-owned external-review-result.json,
-// RECOMPUTES current identities (bundle / patch / changed-tree / head / base
-// / repo / branch / card / run / review round), evaluates the integration
-// gate, then commits LOCALLY. Push still requires its own post-gate
-// (scripts/gov-push-gate.mjs).
+// Integration attestation CLI (§8.2). After a *verified* external review
+// PASS, this verifies that the CURRENT HEAD and tree exactly match the
+// reviewed artifact (digest-bound) and records INTEGRATION_READY. It NEVER
+// creates a new commit: creating a commit after review would change HEAD and
+// invalidate the reviewed identity (external PASS authorizes pushing the
+// reviewed checkpoint HEAD — push then re-verifies the same identity).
 //
-// Rejects --external-review-status PASS and --reviewed-artifact-identity
-// (self-declared / caller-supplied authority) — the gate reads the artifact.
+// Rejects --external-review-status PASS / --reviewed-artifact-identity and
+// --result-file (self-declared / caller-supplied authority). The result
+// artifact is read from the fixed controller path only.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { parseArgs, asBool, splitList } from "./shared/gov-args.mjs";
-import { git, gitOk, loadRecord, buildInventory, rejectSelfDeclaredFlags, scanChangedFilesForSecrets, contextFor } from "./shared/gov-args.mjs";
-import { normalizeAuthority } from "../src/governance/lifecycle-authorization.mjs";
-import { readExternalReviewResult, validateExternalReviewResult } from "../src/governance/external-review.mjs";
+import { gitOk, loadRecord, buildInventory, rejectSelfDeclaredFlags, scanChangedFilesForSecrets, contextFor } from "./shared/gov-args.mjs";
+import { normalizeAuthority, scopeCovers } from "../src/governance/lifecycle-authorization.mjs";
+import { readExternalReviewResult } from "../src/governance/external-review.mjs";
 import { evaluateIntegrationCommitGate, integrationViolationsToHold } from "../src/governance/integration-commit-gate.mjs";
 import { expandPath } from "../src/governance/change-inventory.mjs";
+import { GOV_HOLD } from "../src/governance/holds.mjs";
 
 const { flags } = parseArgs(process.argv.slice(2));
 const apply = asBool(flags.apply, false);
@@ -38,43 +39,46 @@ const cardId = flags.cardId || record.card_id || "";
 const runId = flags.runId || record.run_id || "";
 const reviewRound = Number.isInteger(Number(flags.reviewRound)) ? Number(flags.reviewRound) : 1;
 const agentIdentity = flags.agent || "pi-deepseek-v4-flash";
-const expectedPaths = splitList(flags.expectedPaths).length ? splitList(flags.expectedPaths) : (record.authorized_paths || []);
-
-// Harness-owned result artifact (never caller-declared).
-let result;
-try {
-  if (flags.resultFile) {
-    const raw = JSON.parse(readFileSync(flags.resultFile, "utf8"));
-    const check = validateExternalReviewResult(raw);
-    if (!check.valid) {
-      console.error("HOLD / EXTERNAL_REVIEW_RESULT_INVALID");
-      for (const e of check.errors) console.error(`  - ${e}`);
+// Scope is authoritative from the record; a CLI --expected-paths override is
+// only accepted when strictly contained in the authorized scope (else HOLD).
+const recordScope = record.authorized_paths || [];
+const cliScope = splitList(flags.expectedPaths);
+const expectedPaths = cliScope.length ? cliScope : recordScope;
+if (cliScope.length) {
+  for (const p of cliScope) {
+    if (!scopeCovers(p, recordScope)) {
+      console.error("HOLD / CLI_OVERRIDE_REJECTED");
+      console.error(`  - --expected-paths expands scope: ${p} not covered by authority record`);
       process.exit(1);
     }
-    result = raw;
-  } else {
-    result = readExternalReviewResult(cwd);
   }
+}
+
+// Harness-owned result artifact — fixed controller path, never --result-file.
+let result;
+try {
+  result = readExternalReviewResult(cwd);
 } catch (e) {
   console.error(e.code ?? e.message);
+  if (e.code === GOV_HOLD.EXTERNAL_REVIEW_RESULT_MISSING) {
+    console.error("  - integration requires a verified external-review-result artifact; PENDING is not enough");
+  }
   process.exit(1);
 }
 
 // Recompute current identities (never trust the artifact for current state).
 const inventory = buildInventory(cwd, baseBranch);
-const bundlePath = flags.bundlePath
-  ? expandPath(flags.bundlePath, cwd)
-  : (record.bundle_path ? expandPath(record.bundle_path, cwd) : "");
-const current = contextFor({
-  authority, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity,
-  record,
-});
+const bundlePath = record.bundle_path ? expandPath(record.bundle_path, cwd) : "";
+const current = contextFor({ authority, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity, record });
 
-const branch = inventory.branch;
+// The integration gate must never leave the tree uncommitted or the HEAD
+// drifted: the reviewed HEAD is the pushable HEAD.
+const worktreeDirty = inventory.dirtyCount > 0 || inventory.untrackedCount > 0;
 const stagedPaths = execFileSync("git", ["diff", "--cached", "--name-only"], { cwd, encoding: "utf8" }).split("\n").filter(Boolean);
+
 const diffCheckClean = gitOk(["diff", "--check"], cwd);
 const scannedSecrets = scanChangedFilesForSecrets(cwd, inventory.changedPaths);
-const repairRounds = Number.isInteger(Number(flags.repairRounds)) ? Number(flags.repairRounds) : 0;
+const repairRounds = Number.isInteger(Number(flags.repairRounds)) ? Number(flags.repairRounds) : 1;
 const reviewUnitActual = {
   repository_count: 1,
   worktree_count: 1,
@@ -92,12 +96,12 @@ const gate = evaluateIntegrationCommitGate({
   current,
   lifecycleState: flags.lifecycleState || "EXTERNAL_REVIEW_PASS",
   verificationPassed: asBool(flags.verificationPassed, false),
-  branch,
+  branch: inventory.branch,
   expectedPaths,
   changedPaths: inventory.changedPaths,
   stagedPaths,
   diffCheckClean,
-  artifactIdentity: flags.artifactIdentity || inventory.changedTreeIdentity,
+  artifactIdentity: inventory.changedTreeIdentity,
   evidenceDigest: flags.evidenceDigest || "",
   reviewBlockingFindings: splitList(flags.reviewBlocking),
   repairConverged: asBool(flags.repairConverged, false),
@@ -108,6 +112,13 @@ const gate = evaluateIntegrationCommitGate({
   reviewUnitActual,
 });
 
+if (worktreeDirty) {
+  const err = integrationViolationsToHold([...gate.violations, "worktree_dirty: reviewed tree drifted — no new commit is permitted after review"]);
+  console.error(err.code);
+  for (const v of err.details?.join?.("; ") ?? [...gate.violations, "worktree_dirty"]) console.error(`  - ${v}`);
+  process.exit(1);
+}
+
 if (!gate.allowed) {
   const err = integrationViolationsToHold(gate.violations);
   console.error(err.code);
@@ -115,19 +126,17 @@ if (!gate.allowed) {
   process.exit(1);
 }
 
-const subject = flags.message || `integration: ${cardId} (external review PASS)`;
-const full = subject + gate.footer;
-
-if (!apply) {
-  console.log(JSON.stringify({ allowed: true, dryRun: true, integrationCommit: true, branch, commitMessage: full, footer: gate.footer, verified: true }, null, 1));
-  process.exit(0);
-}
-
-if (inventory.changedPaths.length === 0) {
-  console.error("integration: no changed paths to commit");
-  process.exit(2);
-}
-git(["add", "--", ...inventory.changedPaths], cwd);
-git(["commit", "-m", full], cwd);
-const head = git(["rev-parse", "HEAD"], cwd);
-console.log(JSON.stringify({ allowed: true, committed: true, integrationCommit: true, head, commitMessage: full }, null, 1));
+// Attestation only — no git mutation. HEAD stays the reviewed checkpoint HEAD.
+const head = inventory.head;
+const report = {
+  allowed: true,
+  integration_ready: true,
+  attestation_only: true,
+  no_commit_created: true,
+  head,
+  reviewed_head: result.current_head,
+  identity_verified: true,
+  lifecycleState: flags.lifecycleState || "EXTERNAL_REVIEW_PASS",
+  apply_requested: apply,
+};
+console.log(JSON.stringify(report, null, 1));

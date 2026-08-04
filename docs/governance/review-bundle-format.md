@@ -38,6 +38,16 @@ review_bundle: $HOME/Desktop/AutoLoop-Review/READY_FOR_REVIEW.txt
 外部 reviewer 明確 PASS 前，不得 integration commit／push／建立或更新 Draft PR／標記 ready／
 merge／release／seal／開始下一張實作卡。
 
+## Round／Repair 帳目
+
+- `REVIEW_ROUND`：外部 review 輪次（REPAIR 後遞增，round ≥ 2 的 result artifact 必須綁定
+  上一輪 `prior_bundle_sha256`＋`prior_findings_digest`）。
+- `repair round`：累計修復輪數，**不得重設**；`remaining repair budget = maximum_repair_rounds
+  − repair round`。
+- Bundle §7 必須包含**上一輪 external findings 全文與其 findings digest**。
+- fresh verification 為強制：production CLI 拒絕 `--skip-fresh-verify`
+  （`HOLD / FRESH_VERIFY_REQUIRED`）。
+
 ## Bundle 章節
 
 1. **AUTHORIZATION AND PROHIBITED ACTIONS** — 授權範圍、禁止清單、AUTHORIZED_BINDINGS

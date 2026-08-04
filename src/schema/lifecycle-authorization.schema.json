@@ -5,7 +5,7 @@
   "description": "Entry-card-level authorization for one coherent review unit: decompose → execute internal milestones → local checkpoint commits → full verification → desktop external review bundle → WAITING_FOR_EXTERNAL_REVIEW → external PASS → integration commit → feature-branch push → draft PR (integration record only). Fail-closed: any capability not explicitly allowed is denied; restrictive requirements can never be cancelled by a looser runtime.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "card_id", "lifecycle_authorization"],
+  "required": ["schema", "card_id", "run_id", "repository", "worktree", "branch", "base", "base_head", "authorized_paths", "bundle_path", "lifecycle_authorization"],
   "properties": {
     "schema": { "type": "string", "const": "autoloop.lifecycle-authorization/v2" },
     "card_id": { "type": "string", "minLength": 1, "maxLength": 128 },

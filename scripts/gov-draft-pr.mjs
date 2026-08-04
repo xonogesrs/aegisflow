@@ -13,8 +13,8 @@ import { readFileSync } from "node:fs";
 import { parseArgs, asBool } from "./shared/gov-args.mjs";
 import { loadRecord, buildInventory, rejectSelfDeclaredFlags, contextFor } from "./shared/gov-args.mjs";
 import { normalizeAuthority } from "../src/governance/lifecycle-authorization.mjs";
-import { readExternalReviewResult, validateExternalReviewResult } from "../src/governance/external-review.mjs";
-import { decideDraftPrAction, buildDraftPrBody, prViolationsToHold } from "../src/governance/draft-pr-lifecycle.mjs";
+import { readExternalReviewResult } from "../src/governance/external-review.mjs";
+import { decideDraftPrAction, buildDraftPrBody, prViolationsToHold, prBoundToParentCard } from "../src/governance/draft-pr-lifecycle.mjs";
 import { expandPath } from "../src/governance/change-inventory.mjs";
 
 const { flags } = parseArgs(process.argv.slice(2));
@@ -38,16 +38,7 @@ const agentIdentity = flags.agent || "pi-deepseek-v4-flash";
 
 let result = null;
 try {
-  if (flags.resultFile) {
-    const raw = JSON.parse(readFileSync(flags.resultFile, "utf8"));
-    if (!validateExternalReviewResult(raw).valid) {
-      console.error("HOLD / EXTERNAL_REVIEW_RESULT_INVALID");
-      process.exit(1);
-    }
-    result = raw;
-  } else {
-    result = readExternalReviewResult(cwd);
-  }
+  result = readExternalReviewResult(cwd);
 } catch (e) {
   if (e.code === "HOLD / EXTERNAL_REVIEW_RESULT_MISSING" || e.code === "HOLD / EXTERNAL_REVIEW_RESULT_INVALID") {
     console.error(e.code);
@@ -58,9 +49,21 @@ try {
   process.exit(1);
 }
 
-const repo = flags.repo || result.repository || record.repository || "";
-const head = flags.head || result.branch || "";
-const base = flags.base || result.base_branch || baseBranch;
+// Repository identity comes ONLY from the reviewed result and must match the
+// authority binding. --repo is rejected as an override (fail-closed).
+const repo = result.repository || "";
+if (flags.repo && flags.repo !== repo) {
+  console.error("HOLD / CLI_OVERRIDE_REJECTED");
+  console.error(`  - --repo ${flags.repo} != reviewed repository ${repo}`);
+  process.exit(1);
+}
+if (authority.repository && repo && authority.repository !== repo) {
+  console.error("HOLD / CLI_OVERRIDE_REJECTED");
+  console.error(`  - reviewed repository ${repo} != authority ${authority.repository}`);
+  process.exit(1);
+}
+const head = result.branch || "";
+const base = result.base_branch || baseBranch;
 const title = flags.title || `Draft: ${cardId || "checkpoint"}`;
 
 // Recompute current identities.
@@ -70,20 +73,29 @@ const bundlePath = flags.bundlePath
   : (record.bundle_path ? expandPath(record.bundle_path, cwd) : "");
 const current = contextFor({ authority, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity, record });
 
-// Find existing PR for this head branch + its draft state (read-only).
+// Find existing PR for this head branch + its draft state + parent-card
+// binding (read-only). An existing PR counts as "for this parent card" only
+// when its body references the card id and the review-result digest.
 let existingPr = null;
-let ghAvailable = false;
 let prIsDraft = null;
+let existingPrBound = false;
+let ghAvailable = false;
 try {
-  const list = execFileSync("gh", ["pr", "list", "--repo", repo, "--head", head, "--state", "open", "--json", "number,title,isDraft", "--limit", "10"], { encoding: "utf8" });
+  const list = execFileSync("gh", ["pr", "list", "--repo", repo, "--head", head, "--state", "open", "--json", "number,title,isDraft,body", "--limit", "10"], { encoding: "utf8" });
   ghAvailable = true;
   const prs = JSON.parse(list || "[]");
   if (prs.length > 0) {
     existingPr = prs[0];
     prIsDraft = existingPr.isDraft === true;
+    existingPrBound = prBoundToParentCard({ body: existingPr.body, cardId, reviewResultDigest: result.changed_tree_identity });
   }
 } catch {
   ghAvailable = false;
+}
+if (existingPr !== null && !existingPrBound) {
+  console.error("HOLD / PR_NOT_BOUND_TO_PARENT_CARD");
+  console.error(`  - existing PR #${existingPr.number} on head ${head} is not bound to card ${cardId} (missing card id / review-result digest in body)`);
+  process.exit(1);
 }
 
 const body = flags.bodyFile

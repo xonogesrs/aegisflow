@@ -65,14 +65,18 @@ export function gitOk(args, cwd) {
   try { git(args, cwd); return true; } catch { return false; }
 }
 
-/** Load the authorization record (exec-dir artifact or authority file). */
+/** Load the authorization record (exec-dir artifact or authority file).
+ * Fail-closed: a record that does not validate against the schema is
+ * REJECTED (no fallback to an unvalidated block — top-level bindings such
+ * as repository / worktree / branch / base / scope / bundle_path / run_id
+ * are mandatory and must pass validation). */
 export function loadRecord(flags) {
   if (flags.execDir) return readLifecycleAuthorization(flags.execDir);
   if (!flags.authorityFile) throw new Error("--exec-dir or --authority-file required");
   const raw = JSON.parse(readFileSync(flags.authorityFile, "utf8"));
-  if (!validateAuthorityRecord(raw).valid) {
-    if (raw.lifecycle_authorization) return raw;
-    throw new Error("authority file does not validate against lifecycle-authorization.schema.json");
+  const check = validateAuthorityRecord(raw);
+  if (!check.valid) {
+    throw new Error(`authority record rejected: ${check.errors.join(",")}`);
   }
   return raw;
 }
@@ -103,6 +107,7 @@ export function rejectSelfDeclaredFlags(flags) {
   if (flags.externalReviewStatus && flags.externalReviewStatus !== "PENDING") hits.push("--external-review-status (self-declared PASS rejected)");
   if (flags.reviewedArtifactIdentity) hits.push("--reviewed-artifact-identity (caller-supplied identity rejected)");
   if (flags.externalReviewStatus === "PASS") hits.push("--external-review-status PASS (self-declared)");
+  if (flags.resultFile) hits.push("--result-file (caller-supplied result artifact rejected — fixed controller path only)");
   return hits;
 }
 

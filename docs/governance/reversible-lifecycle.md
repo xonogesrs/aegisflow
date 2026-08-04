@@ -1,6 +1,6 @@
 # Reversible Lifecycle Governance — Review-Unit Edition
 
-> 狀態：實作完成，待 GitHub 外部 review
+> 狀態：實作完成，待 GitHub 外部 review（round 2）
 > 卡片：`AUTOLOOP-GOVERNANCE-REVIEW-UNIT-FINALIZATION-1`
 > 分支：`governance/reversible-lifecycle-draft-pr`
 > 基底：main（未修改）
@@ -56,6 +56,14 @@ FINALIZATION-1）因授權範圍內完整修復必然超過預設 path/line 上�
 明確宣告 `maximum_changed_paths: 64`、`maximum_patch_lines: 20000`，並於 bundle
 §10 REVIEW UNIT BOUNDARY 逐項揭露 actual vs limit。
 
+**Fail-closed 執行**：
+
+- review-unit gate 失敗 → 立即 `HOLD / REVIEW_UNIT_LIMIT_EXCEEDED`，不產生 bundle。
+- change inventory 無法建立（非 git repo／損毀）→ `HOLD / REVIEW_UNIT_MEASUREMENT_INCOMPLETE`，
+  不得略過邊界檢查。
+- `maximum_repair_rounds` 為真實治理：每輪 REPAIR 後 `repair round` 遞增、剩餘預算遞減，
+  bundle 與 result artifact 都會揭露；重新產生 bundle 不能重設預算。
+
 遇到以下任一情況，**不得繼續擴大 review unit**，必須輸出具體 HOLD reason：
 
 ```text
@@ -78,6 +86,8 @@ Schema：`src/schema/lifecycle-authorization.schema.json`（`autoloop.lifecycle-
 
 - 頂層綁定欄位：`repository`、`worktree`、`branch`、`base`、`base_head`、
   `authorized_paths`（writable scope）、`bundle_path`（canonical bundle 輸出位置）、`run_id`。
+  **頂層 `required` 包含全部綁定欄位** — 缺少任一綁定的 record 直接被拒
+  （`HOLD / AUTHORIZATION_INVALID`，無 fallback）。
 - `lifecycle_authorization.review_unit` 區段（上限契約，見 §2）。
 - 其餘區段（decomposition / independent_review / bounded_repair / checkpoint_commit /
   feature_branch_push / draft_pr / external_review / merge_main / release / seal）。
@@ -85,6 +95,10 @@ Schema：`src/schema/lifecycle-authorization.schema.json`（`autoloop.lifecycle-
 Runtime validator（`src/governance/lifecycle-authorization.mjs`）與 schema 為**同一契約**：
 `additionalProperties:false`、required fields、const、integer bounds、string length 全部一致
 （parity tests：`test/governance/test-schema-parity.mjs`，以獨立 evaluator 交叉驗證）。
+
+**CLI 一律以 authority record 為 scope/repo/remote 的唯一來源**：`--expected-paths` 擴張
+scope、`--repo`／`--remote` 指向非授權目的地 → `HOLD / CLI_OVERRIDE_REJECTED`／
+`HOLD / REMOTE_NOT_AUTHORIZED`。
 
 ## 4. 授權交集方向（effective authority = parent ∩ child ∩ runtime）
 
@@ -159,7 +173,11 @@ CLI：`scripts/gov-commit-checkpoint.mjs`（dry-run 預設；`--apply` 本地 co
 
 Gate：`src/governance/integration-commit-gate.mjs`。CLI：`scripts/gov-commit-integration.mjs`。
 
-**Gate 不得接受** `--external-review-status PASS` 或 `--reviewed-artifact-identity <caller>`
+**Integration 步驟只建立治理 attestation，不建立新 commit**：外部 PASS 直接授權推送
+**已審查的 checkpoint HEAD**（bundle 產生時 worktree 必須 clean，`HOLD / WORKTREE_DIRTY_AT_BUNDLE`）；
+review 之後任何新 commit 都會使 HEAD 偏離被審查 artifact → `HOLD / EVIDENCE_IDENTITY_MISMATCH`。
+
+**Gate 不得接受** `--external-review-status PASS`／`--reviewed-artifact-identity`／`--result-file`
 作為授權來源（`HOLD / RESULT_SELF_DECLARATION_REJECTED`）。
 
 ## 6. External Review Result Artifact（§9）
@@ -170,11 +188,15 @@ Harness-owned、digest-bound：`<execDir>/governance/external-review-result.json
 schema / card_id / run_id / verdict(PASS|REPAIR|HOLD)
 bundle_sha256 / patch_sha256 / changed_tree_identity
 reviewer_identity / reviewed_at / review_round / findings_digest
+authorization_source（Controller 明確授權來源，必填）
+prior_bundle_sha256 / prior_findings_digest（round ≥ 2 必填，綁定上一輪）
 current_head / base_head / repository / branch / base_branch / bundle_path
 ```
 
-Gate 讀取 artifact → 重新計算目前 identity → 比對；任何不一致 →
-`HOLD / EVIDENCE_IDENTITY_MISMATCH`。Agent 不得自行建立 PASS result。
+Gate 讀取 artifact（**固定 controller path，不接受 `--result-file`**）→ 重新計算目前
+identity → 比對；任何不一致 → `HOLD / EVIDENCE_IDENTITY_MISMATCH`。Agent 不得自行建立
+PASS result；artifact 以 exclusive-create（`wx`）建立、不可覆寫
+（`writeExternalReviewResult` 僅供 Controller 使用）。
 
 ## 7. Lifecycle 狀態機
 
@@ -227,13 +249,19 @@ known limitations / open questions
 
 Change inventory（`src/governance/change-inventory.mjs`）不以 `git diff base...HEAD
 --name-status` 為唯一來源，統一涵蓋 committed / staged / tracked dirty / untracked /
-renames / deletions / file modes / symlinks（lstat）/ binaries / dependency changes。
+renames（以 `git diff -M` 偵測並回報）／deletions / file modes（exec-bit 相對 base tree
+比較，committed mode change 也能偵測）／symlinks（lstat）／binaries / dependency changes；
+各類別計數獨立（committed/staged/dirty/untracked），不再以總數冒充 dirty。
 
 Identities 全部由實際內容計算（非信任輸入）：`changedTreeIdentity`、`patchSha256`、
 `testOutputDigest`、`evidenceDigest`、`bundleSha256`。
 
 Security checks（§12）fail-closed：任何檢查無法確定 → `HOLD / SECURITY_CHECK_INCOMPLETE`，
-不產生 bundle；symlink 一律以 lstat 判定。
+不產生 bundle；symlink 一律以 lstat 判定；binary／symlink／exec-bit 變更為 **blocking**
+（產生中止），scope 外之 dependency 變更亦 blocking；scope 內之 dependency 變更精確揭露。
+網路／production write 以實際量測驗證：generator 不得 import node:net/http/https、不得執行
+任何 fetch/push/pull/remote 寫入 git 指令、所有檔案寫入必須落在 outDir 內（write footprint
+於產生後逐一驗證）。
 
 CLI：`scripts/gov-review-bundle.mjs`（寫入協定：暫存檔 → atomic rename → archive copy；
 輸出位置必須等於 authorization 授權之 canonical bundle path）。
