@@ -11,7 +11,9 @@ import { effectiveAuthority } from "../src/governance/lifecycle-authorization.mj
 function load(path) {
   if (!path) return undefined;
   const raw = JSON.parse(readFileSync(path, "utf8"));
-  return raw.lifecycle_authorization ?? raw;
+  // Pass the whole record when present so top-level bindings (repository /
+  // worktree / branch / base / authorized_paths / bundle_path) participate.
+  return raw;
 }
 
 const { flags } = parseArgs(process.argv.slice(2));

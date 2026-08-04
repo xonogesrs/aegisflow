@@ -1,30 +1,74 @@
 #!/usr/bin/env node
 // scripts/gov-push-gate.mjs
 //
-// Feature-branch push gate CLI (§8). Dry-run by default; pass --apply to push.
+// Feature-branch push gate CLI (§8/§13). Push is only allowed after a
+// *verified* external review PASS backed by the harness-owned
+// external-review-result.json. Dry-run by default; pass --apply to push.
 // Never force-pushes; never auto-rebases; diverged remote → HOLD.
+// `--external-review-status PASS` / `--reviewed-artifact-identity` are
+// REJECTED (self-declared / caller-supplied authority).
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { parseArgs, asBool } from "./shared/gov-args.mjs";
+import { git, loadRecord, buildInventory, rejectSelfDeclaredFlags, contextFor } from "./shared/gov-args.mjs";
+import { normalizeAuthority } from "../src/governance/lifecycle-authorization.mjs";
+import { readExternalReviewResult, validateExternalReviewResult } from "../src/governance/external-review.mjs";
 import { evaluatePushGate, pushViolationsToHold } from "../src/governance/feature-branch-push-gate.mjs";
-import { normalizeAuthority, readLifecycleAuthorization } from "../src/governance/lifecycle-authorization.mjs";
-
-function git(args, cwd) {
-  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
-}
+import { expandPath } from "../src/governance/change-inventory.mjs";
 
 const { flags } = parseArgs(process.argv.slice(2));
 const apply = asBool(flags.apply, false);
 const cwd = flags.cwd || process.cwd();
 const remote = flags.remote || "origin";
 
-const authority = flags.execDir
-  ? readLifecycleAuthorization(flags.execDir).lifecycle_authorization
-  : normalizeAuthority(JSON.parse(readFileSync(flags.authorityFile, "utf8")).lifecycle_authorization);
+const selfDeclared = rejectSelfDeclaredFlags(flags);
+if (selfDeclared.length > 0) {
+  console.error("HOLD / RESULT_SELF_DECLARATION_REJECTED");
+  for (const s of selfDeclared) console.error(`  - ${s}`);
+  process.exit(1);
+}
+
+const record = loadRecord(flags);
+const authority = normalizeAuthority(record.lifecycle_authorization);
+const baseBranch = flags.baseBranch || record.base || authority.base || "main";
+const cardId = flags.cardId || record.card_id || "";
+const runId = flags.runId || record.run_id || "";
+const reviewRound = Number.isInteger(Number(flags.reviewRound)) ? Number(flags.reviewRound) : 1;
+const agentIdentity = flags.agent || "pi-deepseek-v4-flash";
+
+// Harness-owned result artifact.
+let result = null;
+try {
+  if (flags.resultFile) {
+    const raw = JSON.parse(readFileSync(flags.resultFile, "utf8"));
+    if (!validateExternalReviewResult(raw).valid) {
+      console.error("HOLD / EXTERNAL_REVIEW_RESULT_INVALID");
+      process.exit(1);
+    }
+    result = raw;
+  } else {
+    result = readExternalReviewResult(cwd);
+  }
+} catch (e) {
+  if (e.code === "HOLD / EXTERNAL_REVIEW_RESULT_MISSING" || e.code === "HOLD / EXTERNAL_REVIEW_RESULT_INVALID") {
+    console.error(e.code);
+    console.error("  - push requires a verified external-review-result artifact; PENDING is not enough");
+    process.exit(1);
+  }
+  console.error(e.code ?? e.message);
+  process.exit(1);
+}
 
 const branch = git(["branch", "--show-current"], cwd);
 const head = git(["rev-parse", "HEAD"], cwd);
+
+// Recompute current identities.
+const inventory = buildInventory(cwd, baseBranch);
+const bundlePath = flags.bundlePath
+  ? expandPath(flags.bundlePath, cwd)
+  : (record.bundle_path ? expandPath(record.bundle_path, cwd) : "");
+const current = contextFor({ authority, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity, record });
 
 // remote probe (read-only)
 let remoteReachable = false;
@@ -34,19 +78,18 @@ try {
   const out = git(["ls-remote", remote, `refs/heads/${branch}`], cwd);
   remoteReachable = true;
   if (out.trim()) { remoteHead = out.split("\t")[0]; remoteBranchKnown = true; }
-  else { remoteHead = null; remoteBranchKnown = true; } // branch absent remotely
+  else { remoteHead = null; remoteBranchKnown = true; }
 } catch {
   remoteReachable = false;
 }
 
-// fast-forward check: local must be ancestor of remote (or remote empty)
 let fastForwardOnly = false;
 if (remoteHead === null) {
-  fastForwardOnly = true; // new branch — nothing to diverge from
+  fastForwardOnly = true;
 } else if (remoteHead) {
   try {
-    const isAncestor = git(["merge-base", "--is-ancestor", remoteHead, head], cwd);
-    fastForwardOnly = isAncestor === "" || isAncestor === undefined; // exit 0
+    git(["merge-base", "--is-ancestor", remoteHead, head], cwd);
+    fastForwardOnly = true;
   } catch {
     fastForwardOnly = false;
   }
@@ -62,8 +105,9 @@ const gate = evaluatePushGate({
   upstream,
   fastForwardOnly,
   force: asBool(flags.force, false),
-  commitIdentity: head,
-  reviewedArtifactIdentity: flags.reviewedArtifactIdentity || head,
+  result,
+  current,
+  lifecycleState: flags.lifecycleState || "EXTERNAL_REVIEW_PASS",
 });
 
 if (!gate.allowed) {
@@ -74,9 +118,9 @@ if (!gate.allowed) {
 }
 
 if (!apply) {
-  console.log(JSON.stringify({ allowed: true, dryRun: true, branch, head, remoteHead }, null, 1));
+  console.log(JSON.stringify({ allowed: true, dryRun: true, branch, head, remoteHead, verified: true }, null, 1));
   process.exit(0);
 }
 
-git(["push", remote, `HEAD:${branch}`], cwd);
+execFileSync("git", ["push", remote, `HEAD:${branch}`], { cwd, encoding: "utf8" });
 console.log(JSON.stringify({ allowed: true, pushed: true, branch, head }, null, 1));

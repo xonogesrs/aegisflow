@@ -1,14 +1,29 @@
 // src/governance/lifecycle-authorization.mjs
 //
-// Reversible lifecycle authorization contract:
-//  - schema-backed validation of the entry-card `lifecycle_authorization` block
+// Review-unit lifecycle authorization contract (schema v2):
+//  - schema-backed validation of the entry-card authorization record
 //  - effective authority = parent ∩ child ∩ runtime policy (fail-closed)
 //  - escalation detection → HOLD / AUTHORITY_ESCALATION_REJECTED
 //
+// Field semantics (§7 of AUTOLOOP-GOVERNANCE-REVIEW-UNIT-FINALIZATION-1):
+//  - RESTRICTIVE_FIELDS  : true = stricter requirement. Effective = union
+//    (p || c || r): no looser party (child or runtime) can cancel a stricter
+//    requirement. Child loosening vs parent is escalation.
+//  - CAPABILITY_FIELDS   : true = more capability. Effective = AND (p && c && r);
+//    child requesting a capability the parent denied is escalation; runtime
+//    deny tightens silently. Runtime can never *grant* beyond the parent.
+//  - MIN_FIELDS          : integer caps. Effective = min(p, c, r); child
+//    exceeding parent is escalation; runtime caps tighten silently.
+//  - PATTERN_FIELDS      : containment intersection; when the intersection
+//    cannot be proven, fail-closed HOLD (never pick the wider pattern).
+//  - IDENTITY_FIELDS     : exact equality across all parties; conflict → HOLD.
+//  - top-level bindings  : repository / worktree / branch / base / base_head /
+//    authorized_paths / bundle_path — real identity intersection, never
+//    `child || parent || runtime`.
+//
 // Reuses c2d conventions (C2dHoldError, canonical digest, fs-atomic) and the
 // existing C3B/C3C fail-closed posture. Never touches git refs, never pushes,
-// never merges, never seals. Existing commit=NO / push=NO / seal=NO defaults
-// are never implicitly overridden: absent authorization ⇒ all denied.
+// never merges, never seals. Absent authorization ⇒ all denied.
 
 import { existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -28,7 +43,7 @@ export const SCHEMA_ID = SCHEMA["$id"];
 export const CAPABILITY_SECTIONS = Object.freeze([
   "decomposition", "independent_review", "bounded_repair",
   "checkpoint_commit", "feature_branch_push", "draft_pr",
-  "merge_main", "release", "seal",
+  "external_review", "review_unit", "merge_main", "release", "seal",
 ]);
 
 // Boolean `allowed` fields per capability (subset of each section).
@@ -39,37 +54,61 @@ const ALLOW_FIELDS = Object.freeze({
   checkpoint_commit: "allowed",
   feature_branch_push: "allowed",
   draft_pr: "allowed",
+  review_unit: "allowed",
   merge_main: "allowed",
   release: "allowed",
   seal: "allowed",
 });
 
-// Per-section scalar parameters that participate in intersection (min).
+// true = stricter requirement; effective is a union (nothing can cancel it).
+const RESTRICTIVE_FIELDS = Object.freeze({
+  independent_review: ["require_fresh_session", "require_same_artifact_digest"],
+  checkpoint_commit: ["require_local_gates_pass", "require_clean_index_before_stage", "require_expected_paths_only"],
+  feature_branch_push: ["require_remote_ancestor_check"],
+  draft_pr: ["draft_only"],
+  external_review: ["required", "require_bundle"],
+});
+
+// true = increases capability; effective is an AND (all parties must allow).
+const CAPABILITY_FIELDS = Object.freeze({
+  bounded_repair: ["scope_expansion"],
+  feature_branch_push: ["force_push"],
+  draft_pr: ["create_if_missing", "update_if_present"],
+});
+
+// Integer caps (child exceeding parent is escalation; effective = min).
 const MIN_FIELDS = Object.freeze({
   decomposition: ["max_depth", "max_total_nodes"],
   bounded_repair: ["max_rounds"],
+  review_unit: [
+    "repository_count", "worktree_count", "parent_card_count",
+    "architecture_goal_count", "maximum_internal_milestones",
+    "maximum_changed_paths", "maximum_patch_lines", "maximum_repair_rounds",
+  ],
 });
 
-// Per-section flags that must be ANDed (both must hold).
-const AND_FIELDS = Object.freeze({
-  independent_review: ["require_fresh_session", "require_same_artifact_digest"],
-  bounded_repair: ["scope_expansion"],
-  checkpoint_commit: ["require_local_gates_pass", "require_clean_index_before_stage", "require_expected_paths_only"],
-  feature_branch_push: ["force_push"],
-  draft_pr: ["draft_only", "create_if_missing", "update_if_present"],
-});
-
-// Per-section string parameters that participate in pattern containment.
+// String patterns participating in containment intersection.
 const PATTERN_FIELDS = Object.freeze({
   feature_branch_push: ["branch_pattern"],
-  draft_pr: ["base_branch"],
 });
+
+// String identity fields: exact equality across all parties, else HOLD.
+const IDENTITY_FIELDS = Object.freeze({
+  draft_pr: ["base_branch"],
+  external_review: ["bundle_path"],
+});
+
+// Top-level binding fields on the authorization record (not the block).
+export const TOP_LEVEL_BINDINGS = Object.freeze([
+  "repository", "worktree", "branch", "base", "base_head",
+  "authorized_paths", "bundle_path",
+]);
 
 // ---------------------------------------------------------------------------
 // Default deny
 // ---------------------------------------------------------------------------
 
-/** Fail-closed empty authority: every capability denied. */
+/** Fail-closed empty authority: every capability denied, no review unit. */
 export function defaultDenyAuthority() {
   return {
     decomposition: { allowed: false, max_depth: 0, max_total_nodes: 0 },
@@ -78,6 +117,43 @@ export function defaultDenyAuthority() {
     checkpoint_commit: { allowed: false, require_local_gates_pass: true, require_clean_index_before_stage: true, require_expected_paths_only: true },
     feature_branch_push: { allowed: false, branch_pattern: "", force_push: false, require_remote_ancestor_check: false },
     draft_pr: { allowed: false, base_branch: "", draft_only: true, create_if_missing: false, update_if_present: false },
+    external_review: { required: false, require_bundle: false, bundle_path: "" },
+    review_unit: { allowed: false, repository_count: 0, worktree_count: 0, parent_card_count: 0, architecture_goal_count: 0, maximum_internal_milestones: 0, maximum_changed_paths: 0, maximum_patch_lines: 0, maximum_repair_rounds: 0 },
+    merge_main: { allowed: false },
+    release: { allowed: false },
+    seal: { allowed: false },
+  };
+}
+
+export function defaultDenyTopLevel() {
+  return {
+    repository: "",
+    worktree: "",
+    branch: "",
+    base: "",
+    base_head: "",
+    authorized_paths: [],
+    bundle_path: "",
+  };
+}
+
+/**
+ * Neutral runtime policy: no narrowing (pass-through). Used only when the
+ * caller supplies NO runtime policy at all. A neutral runtime never grants
+ * beyond parent ∩ child and never zeroes declared caps; it simply does not
+ * add restrictions. An explicitly-provided runtime must be a complete,
+ * schema-valid block (deny-first for omitted fields).
+ */
+export function neutralRuntimeAuthority() {
+  return {
+    decomposition: { allowed: true, max_depth: Infinity, max_total_nodes: Infinity },
+    independent_review: { allowed: true, require_fresh_session: false, require_same_artifact_digest: false },
+    bounded_repair: { allowed: true, max_rounds: Infinity, scope_expansion: true },
+    checkpoint_commit: { allowed: true, require_local_gates_pass: false, require_clean_index_before_stage: false, require_expected_paths_only: false },
+    feature_branch_push: { allowed: true, branch_pattern: "", force_push: true, require_remote_ancestor_check: false },
+    draft_pr: { allowed: true, base_branch: "", draft_only: false, create_if_missing: true, update_if_present: true },
+    external_review: { required: false, require_bundle: false, bundle_path: "" },
+    review_unit: { allowed: true, repository_count: Infinity, worktree_count: Infinity, parent_card_count: Infinity, architecture_goal_count: Infinity, maximum_internal_milestones: Infinity, maximum_changed_paths: Infinity, maximum_patch_lines: Infinity, maximum_repair_rounds: Infinity },
     merge_main: { allowed: false },
     release: { allowed: false },
     seal: { allowed: false },
@@ -85,65 +161,146 @@ export function defaultDenyAuthority() {
 }
 
 // ---------------------------------------------------------------------------
-// Normalization + validation
+// Minimal schema evaluator (parity with lifecycle-authorization.schema.json)
+// ---------------------------------------------------------------------------
+
+function isPlainObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+/**
+ * Evaluate a value against the JSON-Schema subset used by the lifecycle
+ * authorization schema (draft-07): type / required / additionalProperties /
+ * properties / items / minLength / maxLength / minimum / maximum / const /
+ * pattern / enum / format(date-time). Returns list of error strings.
+ */
+export function validateAgainstSchema(schema, value, path) {
+  const errors = [];
+  if (!isPlainObject(schema)) return errors;
+
+  if (schema.const !== undefined && value !== schema.const) {
+    errors.push(`${path}:const expected ${JSON.stringify(schema.const)}`);
+  }
+  if (schema.enum && !schema.enum.includes(value)) {
+    errors.push(`${path}:enum`);
+  }
+  if (schema.type) {
+    const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+    const ok = types.some((t) => {
+      if (t === "object") return isPlainObject(value);
+      if (t === "array") return Array.isArray(value);
+      if (t === "string") return typeof value === "string";
+      if (t === "integer") return Number.isInteger(value);
+      if (t === "boolean") return typeof value === "boolean";
+      if (t === "number") return typeof value === "number" && Number.isFinite(value);
+      return false;
+    });
+    if (!ok) {
+      errors.push(`${path}:type expected ${schema.type.join ? schema.type.join("/") : schema.type}`);
+      return errors; // cannot go deeper on a wrong type
+    }
+  }
+  if (typeof value === "string") {
+    if (schema.minLength !== undefined && value.length < schema.minLength) errors.push(`${path}:minLength ${schema.minLength}`);
+    if (schema.maxLength !== undefined && value.length > schema.maxLength) errors.push(`${path}:maxLength ${schema.maxLength}`);
+    if (schema.pattern && !new RegExp(schema.pattern).test(value)) errors.push(`${path}:pattern`);
+    if (schema.format === "date-time" && Number.isNaN(Date.parse(value))) errors.push(`${path}:format date-time`);
+  }
+  if (typeof value === "number" || Number.isInteger(value)) {
+    if (schema.minimum !== undefined && value < schema.minimum) errors.push(`${path}:below_minimum ${schema.minimum}`);
+    if (schema.maximum !== undefined && value > schema.maximum) errors.push(`${path}:above_maximum ${schema.maximum}`);
+  }
+  if (Array.isArray(value)) {
+    if (schema.minItems !== undefined && value.length < schema.minItems) errors.push(`${path}:minItems ${schema.minItems}`);
+    if (schema.maxItems !== undefined && value.length > schema.maxItems) errors.push(`${path}:maxItems ${schema.maxItems}`);
+    if (schema.items) {
+      value.forEach((item, i) => errors.push(...validateAgainstSchema(schema.items, item, `${path}[${i}]`)));
+    }
+  }
+  if (isPlainObject(value)) {
+    if (schema.additionalProperties === false) {
+      for (const key of Object.keys(value)) {
+        if (!(key in (schema.properties ?? {}))) errors.push(`${path}:additional_properties:${key}`);
+      }
+    }
+    if (schema.required) {
+      for (const key of schema.required) {
+        if (!(key in value)) errors.push(`${path}:required_missing:${key}`);
+      }
+    }
+    for (const [key, subschema] of Object.entries(schema.properties ?? {})) {
+      if (key in value) errors.push(...validateAgainstSchema(subschema, value[key], `${path}.${key}`));
+    }
+  }
+  return errors;
+}
+
+// ---------------------------------------------------------------------------
+// Normalization + validation (single contract with the schema)
 // ---------------------------------------------------------------------------
 
 function normalizeSection(section, value) {
   // Accept missing section as denied (fail-closed).
   if (value === undefined || value === null) return defaultDenyAuthority()[section];
-  if (typeof value !== "object" || Array.isArray(value)) return null;
+  if (!isPlainObject(value)) return null;
   return value;
 }
 
 /**
- * Validate a raw lifecycle_authorization object (as embedded in an entry
- * card). Returns { valid, errors }. Unknown sections, unknown fields,
- * non-boolean allowed, non-const irreversible sections → invalid.
+ * Validate a raw lifecycle_authorization block. Mirrors the schema exactly:
+ * unknown sections/fields rejected, required fields enforced, types, bounds,
+ * consts (merge_main/release/seal allowed=false, review-unit count caps).
  */
 export function validateLifecycleAuthorization(raw) {
-  const errors = [];
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { valid: false, errors: ["not_object"] };
+  if (!isPlainObject(raw)) return { valid: false, errors: ["lifecycle_authorization:type"] };
+  const schema = SCHEMA.properties.lifecycle_authorization;
+  const errors = validateAgainstSchema(schema, raw, "lifecycle_authorization");
   for (const key of Object.keys(raw)) {
-    if (!CAPABILITY_SECTIONS.includes(key)) errors.push(`unknown_capability:${key}`);
+    if (!CAPABILITY_SECTIONS.includes(key)) errors.push(`lifecycle_authorization:unknown_capability:${key}`);
   }
-  for (const section of CAPABILITY_SECTIONS) {
-    const v = normalizeSection(section, raw[section]);
-    if (v === null) { errors.push(`${section}:not_object`); continue; }
-    const schema = SCHEMA.properties.lifecycle_authorization.properties[section];
-    if (!schema) { errors.push(`${section}:no_schema`); continue; }
-    const allowed = schema.properties.allowed;
-    if (allowed && typeof v.allowed !== "boolean") errors.push(`${section}:allowed_not_boolean`);
-    // Irreversible sections must be locked to allowed:false.
-    if (section === "merge_main" || section === "release" || section === "seal") {
-      if (v.allowed !== false) errors.push(`${section}:must_be_false`);
-    }
-    for (const [field, def] of Object.entries(schema.properties)) {
-      if (field === "allowed") continue;
-      if (field in v) {
-        if (def.type === "integer" && !Number.isInteger(v[field])) errors.push(`${section}.${field}:not_integer`);
-        if (def.type === "boolean" && typeof v[field] !== "boolean") errors.push(`${section}.${field}:not_boolean`);
-        if (def.type === "string" && typeof v[field] !== "string") errors.push(`${section}.${field}:not_string`);
-        if (def.type === "integer" && Number.isInteger(v[field])) {
-          if (def.minimum !== undefined && v[field] < def.minimum) errors.push(`${section}.${field}:below_minimum`);
-          if (def.maximum !== undefined && v[field] > def.maximum) errors.push(`${section}.${field}:above_maximum`);
-        }
-      }
-    }
-  }
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Validate a full authorization record (top-level bindings + block).
+ */
+export function validateAuthorityRecord(raw) {
+  if (!isPlainObject(raw)) return { valid: false, errors: ["record:type"] };
+  const errors = validateAgainstSchema(SCHEMA, raw, "record");
+  errors.push(...validateLifecycleAuthorization(raw.lifecycle_authorization).errors);
   return { valid: errors.length === 0, errors };
 }
 
 /** Normalize a raw block into a canonical authority object (deny-first). */
 export function normalizeAuthority(raw) {
   const base = defaultDenyAuthority();
-  if (!raw || typeof raw !== "object") return base;
+  if (!raw || !isPlainObject(raw)) return base;
   const check = validateLifecycleAuthorization(raw);
   if (!check.valid) throw hold(GOV_HOLD.AUTHORIZATION_INVALID, check.errors.join(","));
   const out = {};
   for (const section of CAPABILITY_SECTIONS) {
-    const v = raw[section];
-    if (v === undefined || v === null) { out[section] = base[section]; continue; }
+    const v = normalizeSection(section, raw[section]);
+    if (v === null) throw hold(GOV_HOLD.AUTHORIZATION_INVALID, `${section}:not_object`);
     out[section] = { ...base[section], ...v };
+  }
+  return out;
+}
+
+/** Normalize the top-level binding fields of a record (deny-first). */
+export function normalizeTopLevel(raw) {
+  const base = defaultDenyTopLevel();
+  if (!isPlainObject(raw)) return base;
+  const out = { ...base };
+  for (const field of TOP_LEVEL_BINDINGS) {
+    if (field in raw && raw[field] !== undefined && raw[field] !== null) {
+      if (field === "authorized_paths") {
+        out[field] = Array.isArray(raw[field])
+          ? raw[field].filter((p) => typeof p === "string" && p.length > 0)
+          : [];
+      } else {
+        out[field] = String(raw[field]);
+      }
+    }
   }
   return out;
 }
@@ -168,69 +325,156 @@ export function matchesPattern(pattern, candidate) {
 export function patternContained(childPattern, parentPattern) {
   if (childPattern === parentPattern) return true;
   if (!parentPattern) return false;
-  // Treat both as globs; containment holds when the child glob, restricted to
-  // the parent's static prefix, stays within the parent glob. Conservative
-  // implementation: child must share the parent's non-wildcard prefix and
-  // must not contain "**" or escape segments.
   if (childPattern.includes("**") || parentPattern.includes("**")) return false;
   const parentPrefix = parentPattern.split("*")[0];
   if (!childPattern.startsWith(parentPrefix)) return false;
-  // All child wildcards must be within the parent wildcard span.
   const parentSuffix = parentPattern.split("*").slice(1).join("");
   if (parentSuffix && !childPattern.endsWith(parentSuffix)) return false;
   return true;
+}
+
+/**
+ * True if `candidate` path is inside `scope` (exact file paths, dirs with
+ * trailing slash, or bare directory prefixes).
+ */
+export function scopeCovers(p, scope) {
+  if (!Array.isArray(scope)) return false;
+  return scope.some((allowed) => {
+    if (typeof allowed !== "string") return false;
+    if (allowed === p) return true;
+    if (allowed.endsWith("/") && p.startsWith(allowed)) return true;
+    if (p.startsWith(allowed + "/")) return true;
+    if (p.endsWith("/")) return allowed.startsWith(p) || allowed === p.slice(0, -1);
+    return false;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Intersection helpers
+// ---------------------------------------------------------------------------
+
+function intersectIdentity(parent, child, runtime, label) {
+  const declared = [parent, child, runtime].filter((v) => typeof v === "string" && v.length > 0);
+  if (declared.length === 0) return "";
+  const first = declared[0];
+  if (declared.some((v) => v !== first)) {
+    throw hold(GOV_HOLD.AUTHORITY_ESCALATION_REJECTED, `${label} identity conflict: ${declared.join(" != ")}`);
+  }
+  return first;
+}
+
+function intersectPatterns(parent, child, runtime, label) {
+  const declared = [];
+  if (typeof parent === "string" && parent) declared.push(["parent", parent]);
+  if (typeof child === "string" && child) declared.push(["child", child]);
+  if (typeof runtime === "string" && runtime) declared.push(["runtime", runtime]);
+  if (declared.length === 0) return "";
+  if (declared.length === 1) return declared[0][1];
+  const parentEntry = declared.find(([n]) => n === "parent");
+  const childEntry = declared.find(([n]) => n === "child");
+  if (childEntry && parentEntry && !patternContained(childEntry[1], parentEntry[1])) {
+    throw hold(GOV_HOLD.AUTHORITY_ESCALATION_REJECTED, `${label} escapes parent pattern: ${childEntry[1]} not in ${parentEntry[1]}`);
+  }
+  // Effective = narrowest declared pattern provably contained in all others;
+  // if the intersection cannot be proven, fail-closed HOLD (never the wider).
+  for (const [name, cand] of declared) {
+    if (declared.every(([n2, p2]) => n2 === name || patternContained(cand, p2))) return cand;
+  }
+  throw hold(GOV_HOLD.AUTHORITY_ESCALATION_REJECTED, `${label}: cannot compute safe pattern intersection (fail-closed)`);
+}
+
+function intersectPaths(childPaths, parentPaths, runtimePaths, label) {
+  if (!Array.isArray(childPaths)) childPaths = [];
+  if (!Array.isArray(parentPaths)) parentPaths = [];
+  if (!Array.isArray(runtimePaths)) runtimePaths = [];
+  if (childPaths.length > 0 && parentPaths.length === 0) {
+    throw hold(GOV_HOLD.AUTHORITY_ESCALATION_REJECTED, `${label}: child declares scope with no parent scope (cannot create scope from nothing)`);
+  }
+  if (childPaths.length === 0) {
+    // child inherits the parent scope, narrowed by runtime when it declares one
+    if (runtimePaths.length === 0) return [...parentPaths];
+    return parentPaths.filter((p) => scopeCovers(p, runtimePaths));
+  }
+  const effective = [];
+  for (const p of childPaths) {
+    if (!scopeCovers(p, parentPaths)) {
+      throw hold(GOV_HOLD.AUTHORITY_ESCALATION_REJECTED, `${label}: ${p} escapes parent scope`);
+    }
+    if (runtimePaths.length === 0 || scopeCovers(p, runtimePaths)) effective.push(p);
+  }
+  return effective;
 }
 
 // ---------------------------------------------------------------------------
 // Effective authority = parent ∩ child ∩ runtime
 // ---------------------------------------------------------------------------
 
+function normalizeInput(input, mode = "deny") {
+  if (!isPlainObject(input)) {
+    return mode === "runtime"
+      ? { top: defaultDenyTopLevel(), auth: neutralRuntimeAuthority() }
+      : { top: defaultDenyTopLevel(), auth: defaultDenyAuthority() };
+  }
+  // Accept either a full record { lifecycle_authorization, ... } or a block.
+  if (isPlainObject(input.lifecycle_authorization)) {
+    return { top: normalizeTopLevel(input), auth: normalizeAuthority(input.lifecycle_authorization) };
+  }
+  return { top: defaultDenyTopLevel(), auth: normalizeAuthority(input) };
+}
+
 /**
  * Compute effective authority. Escalation (child exceeding parent, or either
- * exceeding runtime policy) → HOLD / AUTHORITY_ESCALATION_REJECTED.
+ * exceeding runtime policy in the capability direction) → HOLD /
+ * AUTHORITY_ESCALATION_REJECTED.
  *
- * @param {object} parent  — normalized authority (or raw block)
- * @param {object} child   — normalized authority (or raw block)
- * @param {object} runtime — normalized policy (or raw block); default deny
- * @returns {object} effective authority (canonical shape)
+ * @param {object} parent  — full record or raw block
+ * @param {object} child   — full record or raw block
+ * @param {object} runtime — policy record or raw block (default deny)
+ * @returns {object} effective authority record (canonical shape)
  */
 export function effectiveAuthority(parent, child, runtime) {
-  const P = normalizeAuthority(parent);
-  const C = normalizeAuthority(child);
-  const R = normalizeAuthority(runtime);
+  const { top: Tp, auth: P } = normalizeInput(parent, "deny");
+  const { top: Tc, auth: C } = normalizeInput(child, "deny");
+  const { top: Tr, auth: R } = normalizeInput(runtime, "runtime");
   const out = {};
 
   for (const section of CAPABILITY_SECTIONS) {
     const p = P[section], c = C[section], r = R[section];
     const violations = [];
+    const isAllowSection = Boolean(ALLOW_FIELDS[section]);
 
-    // 1. allowed — escalation only vs parent: a child must never enable what
-    //    its parent denied. Runtime denial is *not* escalation: per §13.3
-    //    runtime policy deny overrides card allow (intersection tightens).
-    if (c.allowed === true && p.allowed === false) violations.push(`${section}.allowed parent_denied`);
-    const allowed = c.allowed === true && p.allowed === true && r.allowed === true;
+    // 1. allowed — capability: escalation only vs parent (child must never
+    //    enable what its parent denied); runtime deny is *not* escalation.
+    if (isAllowSection && c.allowed === true && p.allowed === false) violations.push(`${section}.allowed parent_denied`);
+    const allowed = !isAllowSection || (c.allowed === true && p.allowed === true && r.allowed === true);
 
-    // 2. min-parameter caps (max_depth / max_total_nodes / max_rounds) —
-    //    child exceeding parent is escalation; runtime caps tighten silently.
+    // 2. min-parameter caps — child exceeding parent is escalation; runtime
+    //    caps tighten silently.
     for (const f of MIN_FIELDS[section] ?? []) {
       if (c[f] > p[f]) violations.push(`${section}.${f} exceeds parent`);
     }
 
-    // 3. AND-flags (false = tighter) — child loosening vs parent is escalation;
-    //    runtime tightenings intersect silently.
-    for (const f of AND_FIELDS[section] ?? []) {
+    // 3. restrictive requirements (true = stricter) — child loosening vs
+    //    parent is escalation; effective is a union so no looser runtime can
+    //    cancel the stricter requirement.
+    for (const f of RESTRICTIVE_FIELDS[section] ?? []) {
       if (c[f] === false && p[f] === true) violations.push(`${section}.${f} loosened_vs_parent`);
     }
 
-    // 4. force_push is a denial flag: effective true only if any side asks for it.
-    if (section === "feature_branch_push") {
-      if (c.force_push === true) violations.push("feature_branch_push.force_push forbidden");
+    // 4. capability flags (true = more power) — child requesting what the
+    //    parent denied is escalation; effective is AND.
+    for (const f of CAPABILITY_FIELDS[section] ?? []) {
+      if (c[f] === true && p[f] === false) violations.push(`${section}.${f} capability_exceeds_parent`);
     }
 
-    // 5. pattern containment — child escaping parent pattern is escalation;
-    //    runtime pattern narrows silently.
+    // 5. pattern containment — child escaping parent pattern is escalation.
     for (const f of PATTERN_FIELDS[section] ?? []) {
       if (c[f] && !patternContained(c[f], p[f])) violations.push(`${section}.${f} escapes parent pattern`);
+    }
+
+    // 6. identity fields — child differing from parent is escalation.
+    for (const f of IDENTITY_FIELDS[section] ?? []) {
+      if (c[f] && p[f] && c[f] !== p[f]) violations.push(`${section}.${f} identity_conflict`);
     }
 
     if (violations.length > 0) {
@@ -239,17 +483,30 @@ export function effectiveAuthority(parent, child, runtime) {
 
     const merged = { ...p, ...c };
     for (const f of MIN_FIELDS[section] ?? []) merged[f] = Math.min(c[f], p[f], r[f]);
-    for (const f of AND_FIELDS[section] ?? []) merged[f] = c[f] === true && p[f] === true && r[f] === true;
-    if (section === "feature_branch_push") {
-      merged.force_push = c.force_push === true || p.force_push === true || r.force_push === true;
-      merged.branch_pattern = c.branch_pattern || p.branch_pattern || r.branch_pattern;
-      merged.require_remote_ancestor_check = c.require_remote_ancestor_check === true &&
-        p.require_remote_ancestor_check === true && r.require_remote_ancestor_check === true;
+    for (const f of RESTRICTIVE_FIELDS[section] ?? []) merged[f] = p[f] === true || c[f] === true || r[f] === true;
+    for (const f of CAPABILITY_FIELDS[section] ?? []) merged[f] = c[f] === true && p[f] === true && r[f] === true;
+    for (const f of PATTERN_FIELDS[section] ?? []) {
+      merged[f] = intersectPatterns(p[f], c[f], r[f], `${section}.${f}`);
     }
-    merged.allowed = allowed;
+    for (const f of IDENTITY_FIELDS[section] ?? []) {
+      merged[f] = intersectIdentity(p[f], c[f], r[f], `${section}.${f}`);
+    }
+    if (isAllowSection) merged.allowed = allowed;
     out[section] = merged;
   }
-  return out;
+
+  // Top-level bindings (real identity intersection).
+  const top = {
+    repository: intersectIdentity(Tp.repository, Tc.repository, Tr.repository, "repository"),
+    worktree: intersectIdentity(Tp.worktree, Tc.worktree, Tr.worktree, "worktree"),
+    branch: intersectIdentity(Tp.branch, Tc.branch, Tr.branch, "branch"),
+    base: intersectIdentity(Tp.base, Tc.base, Tr.base, "base"),
+    base_head: intersectIdentity(Tp.base_head, Tc.base_head, Tr.base_head, "base_head"),
+    authorized_paths: intersectPaths(Tc.authorized_paths, Tp.authorized_paths, Tr.authorized_paths, "authorized_paths"),
+    bundle_path: intersectIdentity(Tp.bundle_path, Tc.bundle_path, Tr.bundle_path, "bundle_path"),
+  };
+
+  return { ...out, ...top };
 }
 
 // ---------------------------------------------------------------------------
@@ -276,8 +533,9 @@ export function readLifecycleAuthorization(execDir) {
   assertNotSymlink(p);
   let record;
   try { record = JSON.parse(readFileSync(p, "utf8")); } catch { throw hold(GOV_HOLD.AUTHORIZATION_MISSING, "lifecycle authorization unreadable"); }
-  const block = record.lifecycle_authorization;
-  const check = validateLifecycleAuthorization(block);
+  const check = validateAuthorityRecord(record);
   if (!check.valid) throw hold(GOV_HOLD.AUTHORIZATION_INVALID, check.errors.join(","));
   return record;
 }
+
+export { C2dHoldError };

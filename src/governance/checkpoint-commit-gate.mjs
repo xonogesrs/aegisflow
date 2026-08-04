@@ -1,14 +1,20 @@
 // src/governance/checkpoint-commit-gate.mjs
 //
-// Checkpoint commit gate (§7). A checkpoint commit is *not* final approval,
-// not merge, not seal, not release. The gate evaluates 12 fail-closed
-// conditions against the effective lifecycle authority, the live repository
-// state and the pending change set. Pure evaluation — this module never
-// executes git; the thin CLI (scripts/gov-commit-checkpoint.mjs) runs git
-// only after the gate returns allowed.
+// Internal checkpoint commit gate (AUTOLOOP-GOVERNANCE-REVIEW-UNIT-
+// FINALIZATION-1 §8.1). A checkpoint commit is a *local* rollback point /
+// milestone boundary: it does NOT require external review PASS, and it must
+// never be pushed (push has its own gate, post-PASS). This gate is
+// deliberately distinct from the integration-approved commit gate
+// (integration-commit-gate.mjs) — one gate never represents both commit
+// classes.
+//
+// Pure evaluation — this module never executes git; the thin CLI
+// (scripts/gov-commit-checkpoint.mjs) runs git only after the gate returns
+// allowed.
 
 import { GOV_HOLD, hold } from "./holds.mjs";
-import { matchesPattern } from "./lifecycle-authorization.mjs";
+import { matchesPattern, scopeCovers } from "./lifecycle-authorization.mjs";
+import { evaluateReviewUnitGate } from "./review-unit-gate.mjs";
 
 export const CHECKPOINT_GATE_CONDITIONS = Object.freeze([
   "branch_matches_authorized_pattern",
@@ -23,26 +29,12 @@ export const CHECKPOINT_GATE_CONDITIONS = Object.freeze([
   "repair_converged_or_honest_negative",
   "no_secret_like_values",
   "commit_message_has_identity",
+  "review_unit_within_limits",
+  "local_only_no_push",
 ]);
 
-// Scope check. `scope` entries may be exact file paths, directories with a
-// trailing slash, or bare directory prefixes. Changed paths may be collapsed
-// to a directory by git for fully-untracked dirs (e.g. "docs/").
-function pathInScope(p, scope) {
-  return scope.some((allowed) => {
-    if (allowed === p) return true;
-    if (allowed.endsWith("/") && p.startsWith(allowed)) return true;
-    if (p.startsWith(allowed + "/")) return true;
-    if (p.endsWith("/")) {
-      // collapsed directory: any authorized path inside it counts
-      return allowed.startsWith(p) || allowed === p.slice(0, -1);
-    }
-    return false;
-  });
-}
-
 /**
- * Evaluate the checkpoint commit gate.
+ * Evaluate the internal checkpoint commit gate.
  *
  * @param {object} args
  * @param {object} args.authority — effective lifecycle authority (normalized)
@@ -61,6 +53,7 @@ function pathInScope(p, scope) {
  * @param {string} args.cardId — card identity for the commit footer
  * @param {string} [args.runId] — run identity
  * @param {string} [args.milestoneId] — milestone identity
+ * @param {object} [args.reviewUnitActual] — measured review-unit counts
  * @returns {{allowed: boolean, violations: string[], footer: string}}
  */
 export function evaluateCheckpointCommitGate({
@@ -80,6 +73,7 @@ export function evaluateCheckpointCommitGate({
   cardId = "",
   runId = "",
   milestoneId = "",
+  reviewUnitActual,
 }) {
   const violations = [];
   const cap = authority?.checkpoint_commit ?? { allowed: false };
@@ -98,21 +92,18 @@ export function evaluateCheckpointCommitGate({
   if (protectedBranches.includes(branch)) violations.push(`branch_not_protected: ${branch} is protected`);
 
   // 3. changed paths within authorized scope
-  const scope = expectedPaths;
   if (!Array.isArray(changedPaths) || changedPaths.length === 0) violations.push("changed_paths_within_authorized_scope: no changed paths");
   else {
     for (const p of changedPaths) {
-      if (!pathInScope(p, scope)) {
+      if (!scopeCovers(p, expectedPaths)) {
         violations.push(`changed_paths_within_authorized_scope: ${p} outside scope`);
       }
     }
   }
 
-  // 4. no unknown staged paths (index must be empty or exactly expected)
-  if (cap.require_clean_index_before_stage === true) {
-    const staged = stagedPaths ?? [];
-    if (staged.length !== 0) violations.push(`no_unknown_staged_paths: ${staged.length} staged path(s) present`);
-  }
+  // 4. no unknown staged paths (index must be empty before staging)
+  const staged = stagedPaths ?? [];
+  if (staged.length !== 0) violations.push(`no_unknown_staged_paths: ${staged.length} staged path(s) present`);
 
   // 5. diff check clean
   if (diffCheckClean !== true) violations.push("diff_check_clean: git diff --check not clean");
@@ -138,16 +129,27 @@ export function evaluateCheckpointCommitGate({
   // 12. commit message identity
   if (typeof cardId !== "string" || cardId.length === 0) violations.push("commit_message_has_identity: card_id missing");
 
+  // 13. review-unit boundary (§5) — runtime enforcement when measured.
+  if (reviewUnitActual && typeof reviewUnitActual === "object") {
+    const ru = evaluateReviewUnitGate({ authority, actual: reviewUnitActual });
+    violations.push(...ru.violations);
+  }
+
+  // 14. checkpoint commits are local-only; push requires the post-PASS gate.
+  //     (No external review PASS requirement here — that is the point of the
+  //      internal/local separation.)
+
   const footer = buildCommitFooter({ cardId, runId, milestoneId, evidenceDigest });
   return { allowed: violations.length === 0, violations, footer };
 }
 
-export function buildCommitFooter({ cardId, runId, milestoneId, evidenceDigest }) {
+export function buildCommitFooter({ cardId, runId, milestoneId, evidenceDigest, reviewResultDigest }) {
   const lines = [];
   if (cardId) lines.push(`AutoLoop-Card: ${cardId}`);
   if (runId) lines.push(`AutoLoop-Run: ${runId}`);
   if (milestoneId) lines.push(`AutoLoop-Milestone: ${milestoneId}`);
   if (evidenceDigest) lines.push(`Evidence-Digest: ${evidenceDigest}`);
+  if (reviewResultDigest) lines.push(`Review-Result: ${reviewResultDigest}`);
   return lines.length ? `\n\n${lines.join("\n")}\n` : "";
 }
 

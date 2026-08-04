@@ -1,22 +1,35 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "autoloop.lifecycle-authorization/v1",
-  "title": "AutoLoop Reversible Lifecycle Authorization",
-  "description": "Entry-card-level authorization for a controlled, reversible work lifecycle: decompose → execute → independent review → bounded repair → fresh verification → checkpoint commit → feature-branch push → draft PR create/update. Fail-closed: any capability not explicitly allowed is denied.",
+  "$id": "autoloop.lifecycle-authorization/v2",
+  "title": "AutoLoop Review-Unit Lifecycle Authorization",
+  "description": "Entry-card-level authorization for one coherent review unit: decompose → execute internal milestones → local checkpoint commits → full verification → desktop external review bundle → WAITING_FOR_EXTERNAL_REVIEW → external PASS → integration commit → feature-branch push → draft PR (integration record only). Fail-closed: any capability not explicitly allowed is denied; restrictive requirements can never be cancelled by a looser runtime.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "card_id", "lifecycle_authorization"],
   "properties": {
-    "schema": { "type": "string", "const": "autoloop.lifecycle-authorization/v1" },
+    "schema": { "type": "string", "const": "autoloop.lifecycle-authorization/v2" },
     "card_id": { "type": "string", "minLength": 1, "maxLength": 128 },
     "card_revision": { "type": "string", "minLength": 1, "maxLength": 64 },
     "issued_at": { "type": "string", "format": "date-time" },
-    "authorized_by": { "type": "string", "minLength": 1 },
-    "authorization_ref": { "type": "string", "minLength": 1 },
+    "authorized_by": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "authorization_ref": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "run_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "repository": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "worktree": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "branch": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "base": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "base_head": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "authorized_paths": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+    },
+    "bundle_path": { "type": "string", "minLength": 1, "maxLength": 1024 },
     "lifecycle_authorization": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["decomposition", "independent_review", "bounded_repair", "checkpoint_commit", "feature_branch_push", "draft_pr", "merge_main", "release", "seal"],
+      "required": ["decomposition", "independent_review", "bounded_repair", "checkpoint_commit", "feature_branch_push", "draft_pr", "external_review", "review_unit", "merge_main", "release", "seal"],
       "properties": {
         "decomposition": {
           "type": "object", "additionalProperties": false,
@@ -41,7 +54,7 @@
           "required": ["allowed", "max_rounds", "scope_expansion"],
           "properties": {
             "allowed": { "type": "boolean" },
-            "max_rounds": { "type": "integer", "minimum": 0, "maximum": 16 },
+            "max_rounds": { "type": "integer", "minimum": 0, "maximum": 2 },
             "scope_expansion": { "type": "boolean" }
           }
         },
@@ -72,7 +85,32 @@
             "allowed": { "type": "boolean" },
             "base_branch": { "type": "string", "minLength": 1, "maxLength": 128 },
             "draft_only": { "type": "boolean" },
+            "create_if_missing": { "type": "boolean" },
             "update_if_present": { "type": "boolean" }
+          }
+        },
+        "external_review": {
+          "type": "object", "additionalProperties": false,
+          "required": ["required", "require_bundle", "bundle_path"],
+          "properties": {
+            "required": { "type": "boolean" },
+            "require_bundle": { "type": "boolean" },
+            "bundle_path": { "type": "string", "minLength": 1, "maxLength": 1024 }
+          }
+        },
+        "review_unit": {
+          "type": "object", "additionalProperties": false,
+          "required": ["allowed", "repository_count", "worktree_count", "parent_card_count", "architecture_goal_count", "maximum_internal_milestones", "maximum_changed_paths", "maximum_patch_lines", "maximum_repair_rounds"],
+          "properties": {
+            "allowed": { "type": "boolean" },
+            "repository_count": { "type": "integer", "minimum": 1, "maximum": 1 },
+            "worktree_count": { "type": "integer", "minimum": 1, "maximum": 1 },
+            "parent_card_count": { "type": "integer", "minimum": 1, "maximum": 1 },
+            "architecture_goal_count": { "type": "integer", "minimum": 1, "maximum": 1 },
+            "maximum_internal_milestones": { "type": "integer", "minimum": 1, "maximum": 3 },
+            "maximum_changed_paths": { "type": "integer", "minimum": 1, "maximum": 64 },
+            "maximum_patch_lines": { "type": "integer", "minimum": 1, "maximum": 20000 },
+            "maximum_repair_rounds": { "type": "integer", "minimum": 0, "maximum": 2 }
           }
         },
         "merge_main": {
