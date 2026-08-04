@@ -23,14 +23,15 @@ const BUNDLE_DIGEST_MARKER = "BUNDLE_SHA256";
 /** Digest of a bundle file text, stripping the trailing digest footer. */
 export function bundleDigestFromFile(text) {
   const lines = String(text).split("\n");
-  let trimmed = String(text);
+  // scan from the end; the footer is the LAST line that STARTS with the marker
+  // (earlier lines containing the marker text inside the patch are ignored)
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i].includes(BUNDLE_DIGEST_MARKER)) {
-      trimmed = lines.slice(0, i).join("\n");
-      break;
+    if (lines[i].startsWith(BUNDLE_DIGEST_MARKER)) {
+      // preserve the trailing newline that the generator's bundle string owns
+      return sha256Text(lines.slice(0, i).join("\n") + (i > 0 ? "\n" : ""));
     }
   }
-  return sha256Text(trimmed);
+  return sha256Text(String(text));
 }
 
 /**
