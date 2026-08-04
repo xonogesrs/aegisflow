@@ -1,13 +1,17 @@
 // test/governance/test-review-unit-e2e.mjs
-// End-to-end (round 3 findings 1–6):
+// End-to-end (round 3 findings 1–6 + round 4 findings 1–2):
 //
-//   execute → checkpoint → bundle (real minimal verification, NO skip path)
+//   execute → checkpoint → bundle (REAL minimal verification injected via the
+//   library API — NO --verify-config CLI flag, NO skip path)
 //   → PENDING push blocked → Controller ingestion entry creates the PASS
 //   result (exclusive-create, digest computed from the bundle) → integration
 //   attestation (no new commit) → push dry-run PASSES → artifact modified →
 //   blocked again.
 //
-// Plus the 11 required negative tests.
+// Plus the required negative tests. Round 4: the production CLI rejects
+// --verify-config (fixed governance command set) and the production remote
+// policy accepts ONLY the three canonical GitHub forms (local bare remotes
+// are test-only adapter injection).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -16,9 +20,11 @@ import { writeFileSync, mkdirSync, mkdtempSync, readFileSync, existsSync, rmSync
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { createTempRepo, CARD_ID, RUN_ID } from "./helpers.mjs";
+import { createTempRepo, testRemoteMatch, CARD_ID, RUN_ID } from "./helpers.mjs";
 import { buildChangeInventory } from "../../src/governance/change-inventory.mjs";
-import { remoteUrlMatchesAuthorizedRepository } from "../../scripts/shared/gov-args.mjs";
+import { remoteUrlMatchesAuthorizedRepository, productionRemoteMatch } from "../../scripts/shared/gov-args.mjs";
+import { generateReviewBundle } from "../../scripts/gov-review-bundle.mjs";
+import { runPushGate } from "../../scripts/gov-push-gate.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
@@ -30,6 +36,32 @@ const run = (script, args, cwd) => {
     return { status: e.status ?? 1, stdout: String(e.stdout ?? ""), stderr: String(e.stderr ?? "") };
   }
 };
+
+// In-process bundle generation with INTERNAL dependency injection: the
+// verification command set is passed as a function argument (never a CLI
+// flag). Hold failures are thrown and surfaced as `stderr` for uniform
+// assertions (same shape as the subprocess `run` helper).
+function genBundle(argv, verifyCommands) {
+  try {
+    const report = generateReviewBundle({ argv, verifyCommands });
+    return { status: 0, report, stderr: "" };
+  } catch (e) {
+    return { status: 1, report: null, stderr: `${e.code ?? ""}\n${e.message}` };
+  }
+}
+
+// In-process push gate with the TEST-ONLY remote adapter injected (local
+// bare remotes are never part of the production remote policy).
+function pushGate(argv, dir) {
+  try {
+    const report = runPushGate({ argv, cwd: dir, remotePolicy: testRemoteMatch });
+    return { status: 0, report, stderr: "" };
+  } catch (e) {
+    return { status: 1, report: null, stderr: `${e.code ?? ""}\n${e.message}` };
+  }
+}
+
+const GITIGNORE = "authority.json\nmeta.json\nout/\ngovernance/\nremote/\nverify.mjs\n";
 
 function writeAuthorityRecord(dir, bundlePath) {
   const baseHead = execFileSync("git", ["rev-parse", "main"], { cwd: dir, encoding: "utf8" }).trim();
@@ -71,16 +103,17 @@ function inventoryOf(dir) {
   return buildChangeInventory({ git, cwd: dir, baseBranch: "main" });
 }
 
-function writeVerifyFixture(dir) {
+// Minimal but REAL verification command set, injected through the library
+// API. The fixture actually checks the committed work files exist.
+function verifyFixtureCommands(dir) {
   const p = join(dir, "verify.mjs");
   writeFileSync(p, "import { existsSync } from 'node:fs';\nif (!existsSync('work/a.txt') || !existsSync('work/b.txt')) { console.error('missing work files'); process.exit(1); }\nconsole.log('fixture verification ok');\n");
-  writeFileSync(join(dir, "verify-config.json"), JSON.stringify({ commands: [["node verify.mjs", "fixture verification"]] }));
-  return join(dir, "verify-config.json");
+  return [["node verify.mjs", "fixture verification"]];
 }
 
 test("e2e: checkpoint → clean bundle → PENDING push blocked → controller PASS → attestation → push dry-run passes → tamper blocks", (t) => {
   const { dir, git } = createTempRepo(t);
-  writeFileSync(join(dir, ".gitignore"), "authority.json\nmeta.json\nout/\ngovernance/\nremote/\nverify.mjs\nverify-config.json\n");
+  writeFileSync(join(dir, ".gitignore"), GITIGNORE);
   git(["add", ".gitignore"]);
   git(["commit", "-m", "gitignore harness"]);
   const outDir = join(dir, "out");
@@ -89,7 +122,8 @@ test("e2e: checkpoint → clean bundle → PENDING push blocked → controller P
   mkdirSync(join(dir, "work"), { recursive: true });
   const authorityPath = writeAuthorityRecord(dir, bundlePath);
 
-  // bare remote whose URL resolves to the authorized repository
+  // bare remote whose URL resolves to the authorized repository — allowed
+  // only via the TEST-ONLY adapter (production policy is GitHub-only)
   const bareDir = join(dir, "remote", "xonogesrs", "autoloop.git");
   mkdirSync(bareDir, { recursive: true });
   execFileSync("git", ["init", "--bare", "-q"], { cwd: bareDir });
@@ -113,25 +147,23 @@ test("e2e: checkpoint → clean bundle → PENDING push blocked → controller P
   const status = execFileSync("git", ["status", "--porcelain"], { cwd: dir, encoding: "utf8" }).trim();
   assert.equal(status, "", "worktree must be clean before bundling");
 
-  // ── BUNDLE (REAL minimal verification — no skip path exists) ──
-  const verifyConfig = writeVerifyFixture(dir);
+  // ── BUNDLE (REAL minimal verification injected via DI — no CLI flag) ──
+  const verifyCommands = verifyFixtureCommands(dir);
   const metaPath = join(outDir, "meta.json");
   writeFileSync(metaPath, JSON.stringify({ goal: "e2e unit", completed: "m1+m2", openQuestions: [] }));
-  const bundle = run("gov-review-bundle.mjs", [
+  const bundle = genBundle([
     "--cwd", dir, "--authority-file", authorityPath,
     "--card-id", CARD_ID, "--run-id", RUN_ID,
     "--base-branch", "main", "--out-dir", outDir,
-    "--verify-config", verifyConfig, "--milestones", "m1,m2", "--meta", metaPath,
-  ], dir);
+    "--milestones", "m1,m2", "--meta", metaPath,
+  ], verifyCommands);
   assert.equal(bundle.status, 0, bundle.stderr);
   assert.ok(existsSync(bundlePath), "bundle file written");
-  const jsonText = bundle.stdout.slice(bundle.stdout.indexOf("{"), bundle.stdout.lastIndexOf("}") + 1);
-  const bundleJson = JSON.parse(jsonText);
-  assert.equal(bundleJson.bundle_sha256.length, 64);
-  assert.equal(bundleJson.review_round, 1);
+  assert.equal(bundle.report.bundle_sha256.length, 64);
+  assert.equal(bundle.report.review_round, 1);
 
   // ── PENDING blocks push (no result artifact → EXTERNAL_REVIEW_RESULT_MISSING) ──
-  const pushPending = run("gov-push-gate.mjs", ["--authority-file", authorityPath, "--cwd", dir], dir);
+  const pushPending = pushGate(["--authority-file", authorityPath], dir);
   assert.notEqual(pushPending.status, 0);
   assert.match(pushPending.stderr, /EXTERNAL_REVIEW_RESULT_MISSING/);
   const remoteBranches = execFileSync("git", ["--git-dir", bareDir, "branch", "--list"], { encoding: "utf8" }).trim();
@@ -166,10 +198,9 @@ test("e2e: checkpoint → clean bundle → PENDING push blocked → controller P
   assert.equal(headAfter, headBefore, "integration must NOT create a new commit");
 
   // ── PUSH dry-run now PASSES: the reviewed checkpoint HEAD is pushable ──
-  const pushPass = run("gov-push-gate.mjs", ["--authority-file", authorityPath, "--cwd", dir], dir);
+  const pushPass = pushGate(["--authority-file", authorityPath], dir);
   assert.equal(pushPass.status, 0, pushPass.stderr);
-  const pushJson = JSON.parse(pushPass.stdout.slice(pushPass.stdout.indexOf("{")));
-  assert.equal(pushJson.allowed, true);
+  assert.equal(pushPass.report.allowed, true);
 
   // ── ARTIFACT MODIFIED → blocked again (digest mismatch) ──
   const resultPath = join(outDir, "governance", "external-review-result.json");
@@ -182,7 +213,7 @@ test("e2e: checkpoint → clean bundle → PENDING push blocked → controller P
   ], dir);
   assert.notEqual(blocked.status, 0);
   assert.match(blocked.stderr, /EVIDENCE_IDENTITY_MISMATCH/);
-  const pushBlocked = run("gov-push-gate.mjs", ["--authority-file", authorityPath, "--cwd", dir], dir);
+  const pushBlocked = pushGate(["--authority-file", authorityPath], dir);
   assert.notEqual(pushBlocked.status, 0);
 
   const mainHead = execFileSync("git", ["rev-parse", "main"], { cwd: dir, encoding: "utf8" }).trim();
@@ -191,17 +222,20 @@ test("e2e: checkpoint → clean bundle → PENDING push blocked → controller P
   assert.equal(remoteBranches2, "");
 });
 
-test("[neg 1] AUTOLOOP_TEST_FIXTURE cannot make production skip tests (flag removed)", (t) => {
+test("[neg 1] production has no skip-fresh-verify and no --verify-config flag (round 4 finding 1)", (t) => {
   const { dir } = createTempRepo(t);
   const res = run("gov-review-bundle.mjs", ["--cwd", dir, "--skip-fresh-verify", "--card-id", CARD_ID], dir);
   assert.notEqual(res.status, 0);
   // the flag no longer exists — no message about it being accepted
   assert.ok(!res.stdout.includes("NOT RUN"));
+  // an unknown flag cannot make the CLI succeed either
+  const res2 = run("gov-review-bundle.mjs", ["--cwd", dir, "--verify-config", "/nonexistent.json", "--card-id", CARD_ID], dir);
+  assert.notEqual(res2.status, 0);
 });
 
-test("[neg 2] any fresh test FAIL/NOT-RUN → no bundle produced", (t) => {
+test("[neg 12] --verify-config cannot replace the fixed production verification (round 4 finding 1)", (t) => {
   const { dir, git } = createTempRepo(t);
-  writeFileSync(join(dir, ".gitignore"), "authority.json\nmeta.json\nout/\ngovernance/\nremote/\nverify.mjs\nverify-config.json\n");
+  writeFileSync(join(dir, ".gitignore"), GITIGNORE);
   git(["add", ".gitignore"]);
   git(["commit", "-m", "gitignore"]);
   const outDir = join(dir, "out");
@@ -217,14 +251,43 @@ test("[neg 2] any fresh test FAIL/NOT-RUN → no bundle produced", (t) => {
     "--message", "ck", "--apply",
   ], dir);
   assert.equal(applied.status, 0, applied.stderr);
-  // a verify config whose command FAILS
-  const badConfig = join(outDir, "bad-verify-config.json");
-  writeFileSync(badConfig, JSON.stringify({ commands: [["node missing-script.mjs", "must fail"]] }));
+  // the reviewer's exact attack: a config whose only command exits 0
+  const noopConfig = join(outDir, "noop-verify-config.json");
+  writeFileSync(noopConfig, JSON.stringify({ commands: [["node -e \"process.exit(0)\"", "noop"]] }));
   writeFileSync(join(outDir, "meta.json"), JSON.stringify({ goal: "x" }));
   const res = run("gov-review-bundle.mjs", [
     "--cwd", dir, "--authority-file", authorityPath, "--card-id", CARD_ID, "--run-id", RUN_ID,
-    "--base-branch", "main", "--out-dir", outDir, "--verify-config", badConfig, "--meta", join(outDir, "meta.json"),
+    "--base-branch", "main", "--out-dir", outDir, "--verify-config", noopConfig, "--meta", join(outDir, "meta.json"),
   ], dir);
+  assert.notEqual(res.status, 0);
+  assert.match(res.stderr, /FRESH_VERIFY_FAILED/);
+  assert.equal(existsSync(bundlePath), false, "no bundle produced: the production CLI always runs the governance-defined command set");
+});
+
+test("[neg 2] any fresh test FAIL/NOT-RUN → no bundle produced", (t) => {
+  const { dir, git } = createTempRepo(t);
+  writeFileSync(join(dir, ".gitignore"), GITIGNORE);
+  git(["add", ".gitignore"]);
+  git(["commit", "-m", "gitignore"]);
+  const outDir = join(dir, "out");
+  const bundlePath = join(outDir, "READY_FOR_REVIEW.txt");
+  mkdirSync(outDir, { recursive: true });
+  mkdirSync(join(dir, "work"), { recursive: true });
+  const authorityPath = writeAuthorityRecord(dir, bundlePath);
+  writeFileSync(join(dir, "work", "a.txt"), "a\n");
+  const applied = run("gov-commit-checkpoint.mjs", [
+    "--authority-file", authorityPath, "--cwd", dir, "--verification-passed", "true",
+    "--artifact-identity", "x", "--evidence-digest", "e".repeat(64), "--repair-converged", "true",
+    "--card-id", CARD_ID, "--run-id", RUN_ID, "--milestone-id", "m1", "--milestones", "1",
+    "--message", "ck", "--apply",
+  ], dir);
+  assert.equal(applied.status, 0, applied.stderr);
+  writeFileSync(join(outDir, "meta.json"), JSON.stringify({ goal: "x" }));
+  // an injected command set whose command FAILS
+  const res = genBundle([
+    "--cwd", dir, "--authority-file", authorityPath, "--card-id", CARD_ID, "--run-id", RUN_ID,
+    "--base-branch", "main", "--out-dir", outDir, "--meta", join(outDir, "meta.json"),
+  ], [["node missing-script.mjs", "must fail"]]);
   assert.notEqual(res.status, 0);
   assert.match(res.stderr, /FRESH_VERIFY_FAILED/);
   assert.equal(existsSync(bundlePath), false, "no bundle when verification fails");
@@ -272,7 +335,7 @@ test("[neg 4] branch/base/base_head/card/run mismatch → rejected", (t) => {
 
 test("[neg 5] committed out-of-scope path blocks bundle AND push", (t) => {
   const { dir, git } = createTempRepo(t);
-  writeFileSync(join(dir, ".gitignore"), "authority.json\nmeta.json\nout/\ngovernance/\nremote/\nverify.mjs\nverify-config.json\n");
+  writeFileSync(join(dir, ".gitignore"), GITIGNORE);
   git(["add", ".gitignore"]);
   git(["commit", "-m", "gitignore"]);
   const outDir = join(dir, "out");
@@ -288,24 +351,22 @@ test("[neg 5] committed out-of-scope path blocks bundle AND push", (t) => {
   mkdirSync(bareDir, { recursive: true });
   execFileSync("git", ["init", "--bare", "-q"], { cwd: bareDir });
   git(["remote", "add", "origin", bareDir]);
-  const verifyConfig = join(outDir, "verify-config.json");
-  writeFileSync(verifyConfig, JSON.stringify({ commands: [["node -e \"process.exit(0)\"", "minimal"]] }));
   writeFileSync(join(outDir, "meta.json"), JSON.stringify({ goal: "x" }));
-  const bundle = run("gov-review-bundle.mjs", [
+  const bundle = genBundle([
     "--cwd", dir, "--authority-file", authorityPath, "--card-id", CARD_ID, "--run-id", RUN_ID,
-    "--base-branch", "main", "--out-dir", outDir, "--verify-config", verifyConfig, "--meta", join(outDir, "meta.json"),
-  ], dir);
+    "--base-branch", "main", "--out-dir", outDir, "--meta", join(outDir, "meta.json"),
+  ], [["node -e \"1+1\"", "minimal — never executed (scope blocks first)"]]);
   assert.notEqual(bundle.status, 0);
   assert.match(bundle.stderr, /GOVERNANCE_SCOPE_EXPANSION_REQUIRED/);
   assert.equal(existsSync(bundlePath), false, "no bundle when a path is out of scope");
-  const push = run("gov-push-gate.mjs", ["--authority-file", authorityPath, "--cwd", dir], dir);
+  const push = pushGate(["--authority-file", authorityPath], dir);
   assert.notEqual(push.status, 0);
   assert.match(push.stderr, /GOVERNANCE_SCOPE_EXPANSION_REQUIRED/);
 });
 
 test("[neg 6] round 3 must not reset to repair round 1 (history-derived)", (t) => {
   const { dir, git } = createTempRepo(t);
-  writeFileSync(join(dir, ".gitignore"), "authority.json\nmeta.json\nout/\ngovernance/\nremote/\nverify.mjs\nverify-config.json\n");
+  writeFileSync(join(dir, ".gitignore"), GITIGNORE);
   git(["add", ".gitignore"]);
   git(["commit", "-m", "gitignore"]);
   const outDir = join(dir, "out");
@@ -314,6 +375,7 @@ test("[neg 6] round 3 must not reset to repair round 1 (history-derived)", (t) =
   mkdirSync(join(dir, "work"), { recursive: true });
   const authorityPath = writeAuthorityRecord(dir, bundlePath);
   writeFileSync(join(dir, "work", "a.txt"), "a\n");
+  writeFileSync(join(dir, "work", "b.txt"), "b\n");
   const ck = run("gov-commit-checkpoint.mjs", [
     "--authority-file", authorityPath, "--cwd", dir, "--verification-passed", "true",
     "--artifact-identity", "x", "--evidence-digest", "e".repeat(64), "--repair-converged", "true",
@@ -335,33 +397,30 @@ test("[neg 6] round 3 must not reset to repair round 1 (history-derived)", (t) =
   assert.equal(prepare.status, 0, prepare.stderr);
   // bundle generation now derives round 3 / repair 2 — attempting to reset via
   // meta.repairRounds=1 must be REJECTED
-  const verifyConfig = join(outDir, "verify-config.json");
-  writeFileSync(verifyConfig, JSON.stringify({ commands: [["node -e \"process.exit(0)\"", "minimal"]] }));
   const resetMeta = join(outDir, "meta-reset.json");
   writeFileSync(resetMeta, JSON.stringify({ goal: "x", repairRounds: 1 }));
-  const res = run("gov-review-bundle.mjs", [
+  const res = genBundle([
     "--cwd", dir, "--authority-file", authorityPath, "--card-id", CARD_ID, "--run-id", RUN_ID,
-    "--base-branch", "main", "--out-dir", outDir, "--verify-config", verifyConfig, "--meta", resetMeta,
-  ], dir);
+    "--base-branch", "main", "--out-dir", outDir, "--meta", resetMeta,
+  ], verifyFixtureCommands(dir));
   assert.notEqual(res.status, 0);
   assert.match(res.stderr, /REVIEW_HISTORY_INVALID/);
   // without the reset attempt, the generator derives round 3 / repair 2 from history
   const okMeta = join(outDir, "meta-ok.json");
   writeFileSync(okMeta, JSON.stringify({ goal: "x" }));
-  const ok = run("gov-review-bundle.mjs", [
+  const ok = genBundle([
     "--cwd", dir, "--authority-file", authorityPath, "--card-id", CARD_ID, "--run-id", RUN_ID,
-    "--base-branch", "main", "--out-dir", outDir, "--verify-config", verifyConfig, "--meta", okMeta,
-  ], dir);
+    "--base-branch", "main", "--out-dir", outDir, "--meta", okMeta,
+  ], verifyFixtureCommands(dir));
   assert.equal(ok.status, 0, ok.stderr);
-  const okJson = JSON.parse(ok.stdout.slice(ok.stdout.indexOf("{"), ok.stdout.lastIndexOf("}") + 1));
-  assert.equal(okJson.review_round, 3);
-  assert.equal(okJson.repair_round, 2);
-  assert.equal(okJson.remaining_repair_budget, 0);
+  assert.equal(ok.report.review_round, 3);
+  assert.equal(ok.report.repair_round, 2);
+  assert.equal(ok.report.remaining_repair_budget, 0);
 });
 
 test("[neg 7] prior bundle/findings mismatch blocks the CLI", (t) => {
   const { dir, git } = createTempRepo(t);
-  writeFileSync(join(dir, ".gitignore"), "authority.json\nmeta.json\nout/\ngovernance/\nremote/\nverify.mjs\nverify-config.json\n");
+  writeFileSync(join(dir, ".gitignore"), GITIGNORE);
   git(["add", ".gitignore"]);
   git(["commit", "-m", "gitignore"]);
   const outDir = join(dir, "out");
@@ -391,20 +450,18 @@ test("[neg 7] prior bundle/findings mismatch blocks the CLI", (t) => {
     updated_at: new Date().toISOString(),
   };
   writeFileSync(join(outDir, "governance", "review-history.json"), JSON.stringify(staleHistory, null, 2));
-  const verifyConfig = join(outDir, "verify-config.json");
-  writeFileSync(verifyConfig, JSON.stringify({ commands: [["node -e \"process.exit(0)\"", "minimal"]] }));
   writeFileSync(join(outDir, "meta.json"), JSON.stringify({ goal: "x" }));
-  const res = run("gov-review-bundle.mjs", [
+  const res = genBundle([
     "--cwd", dir, "--authority-file", authorityPath, "--card-id", CARD_ID, "--run-id", RUN_ID,
-    "--base-branch", "main", "--out-dir", outDir, "--verify-config", verifyConfig, "--meta", join(outDir, "meta.json"),
-  ], dir);
+    "--base-branch", "main", "--out-dir", outDir, "--meta", join(outDir, "meta.json"),
+  ], verifyFixtureCommands(dir));
   assert.notEqual(res.status, 0);
   assert.match(res.stderr, /REVIEW_HISTORY_INVALID|REVIEW_HISTORY_MISSING/);
 });
 
 test("[neg 8] a declared stop condition prevents bundle production", (t) => {
   const { dir, git } = createTempRepo(t);
-  writeFileSync(join(dir, ".gitignore"), "authority.json\nmeta.json\nout/\ngovernance/\nremote/\nverify.mjs\nverify-config.json\n");
+  writeFileSync(join(dir, ".gitignore"), GITIGNORE);
   git(["add", ".gitignore"]);
   git(["commit", "-m", "gitignore"]);
   const outDir = join(dir, "out");
@@ -420,14 +477,12 @@ test("[neg 8] a declared stop condition prevents bundle production", (t) => {
     "--message", "ck", "--apply",
   ], dir);
   assert.equal(ck.status, 0, ck.stderr);
-  const verifyConfig = join(outDir, "verify-config.json");
-  writeFileSync(verifyConfig, JSON.stringify({ commands: [["node -e \"process.exit(0)\"", "minimal"]] }));
   const metaStop = join(outDir, "meta-stop.json");
   writeFileSync(metaStop, JSON.stringify({ goal: "x", stopConditions: ["SECOND_WORKTREE_REQUIRED"] }));
-  const res = run("gov-review-bundle.mjs", [
+  const res = genBundle([
     "--cwd", dir, "--authority-file", authorityPath, "--card-id", CARD_ID, "--run-id", RUN_ID,
-    "--base-branch", "main", "--out-dir", outDir, "--verify-config", verifyConfig, "--meta", metaStop,
-  ], dir);
+    "--base-branch", "main", "--out-dir", outDir, "--meta", metaStop,
+  ], verifyFixtureCommands(dir));
   assert.notEqual(res.status, 0);
   assert.match(res.stderr, /REVIEW_UNIT_LIMIT_EXCEEDED/);
   assert.equal(existsSync(bundlePath), false);
@@ -443,20 +498,31 @@ test("[neg 9] executor cannot create a PASS result via the production API", asyn
   }
 });
 
-test("[neg 10] remote URL with only a substring match is rejected", () => {
+test("[neg 10] remote URL: only canonical GitHub forms pass the production policy (round 4 finding 2)", () => {
   const target = "xonogesrs/autoloop";
+  // allowed hosts / exact owner+repo only
   assert.equal(remoteUrlMatchesAuthorizedRepository("https://evil.example/xonogesrs/autoloop.git", target), false);
-  assert.equal(remoteUrlMatchesAuthorizedRepository("/tmp/xonogesrs/autoloop-backup.git", target), false);
   assert.equal(remoteUrlMatchesAuthorizedRepository("git@evil.example:xonogesrs/autoloop.git", target), false);
+  assert.equal(remoteUrlMatchesAuthorizedRepository("ssh://git@evil.example/xonogesrs/autoloop.git", target), false);
   assert.equal(remoteUrlMatchesAuthorizedRepository("https://github.com/xonogesrs/autoloop-evil.git", target), false);
-  assert.equal(remoteUrlMatchesAuthorizedRepository("git@github.com:xonogesrs/autoloop.git", target), true);
   assert.equal(remoteUrlMatchesAuthorizedRepository("https://github.com/xonogesrs/autoloop.git", target), true);
-  assert.equal(remoteUrlMatchesAuthorizedRepository("/var/tmp/xonogesrs/autoloop.git", target), true);
+  assert.equal(remoteUrlMatchesAuthorizedRepository("git@github.com:xonogesrs/autoloop.git", target), true);
+  assert.equal(remoteUrlMatchesAuthorizedRepository("ssh://git@github.com/xonogesrs/autoloop.git", target), true);
+  // round 4 finding 2: a LOCAL path must NOT pass even with matching trailing
+  // owner/repo segments (a bare mirror on disk never impersonates GitHub)
+  assert.equal(remoteUrlMatchesAuthorizedRepository("/var/tmp/xonogesrs/autoloop.git", target), false);
+  assert.equal(remoteUrlMatchesAuthorizedRepository("/tmp/xonogesrs/autoloop-backup.git", target), false);
+  assert.equal(remoteUrlMatchesAuthorizedRepository("file:///var/tmp/xonogesrs/autoloop.git", target), false);
+  // the production policy is the default; the test-only adapter must be
+  // injected EXPLICITLY and is never the production default
+  assert.equal(remoteUrlMatchesAuthorizedRepository("/var/tmp/xonogesrs/autoloop.git", target, testRemoteMatch), true);
+  assert.equal(productionRemoteMatch("git@github.com:xonogesrs/autoloop.git", target), true);
+  assert.equal(productionRemoteMatch("/var/tmp/xonogesrs/autoloop.git", target), false);
 });
 
 test("[neg 11] custom PR body missing card/result binding is rejected", (t) => {
   const { dir, git } = createTempRepo(t);
-  writeFileSync(join(dir, ".gitignore"), "authority.json\nmeta.json\nout/\ngovernance/\nremote/\nverify.mjs\nverify-config.json\n");
+  writeFileSync(join(dir, ".gitignore"), GITIGNORE);
   git(["add", ".gitignore"]);
   git(["commit", "-m", "gitignore"]);
   const outDir = join(dir, "out");
@@ -465,6 +531,7 @@ test("[neg 11] custom PR body missing card/result binding is rejected", (t) => {
   mkdirSync(join(dir, "work"), { recursive: true });
   const authorityPath = writeAuthorityRecord(dir, bundlePath);
   writeFileSync(join(dir, "work", "a.txt"), "a\n");
+  writeFileSync(join(dir, "work", "b.txt"), "b\n");
   const ck = run("gov-commit-checkpoint.mjs", [
     "--authority-file", authorityPath, "--cwd", dir, "--verification-passed", "true",
     "--artifact-identity", "x", "--evidence-digest", "e".repeat(64), "--repair-converged", "true",
@@ -473,13 +540,11 @@ test("[neg 11] custom PR body missing card/result binding is rejected", (t) => {
   ], dir);
   assert.equal(ck.status, 0, ck.stderr);
   // bundle so the controller can ingest a PASS result
-  const verifyConfig = join(outDir, "verify-config.json");
-  writeFileSync(verifyConfig, JSON.stringify({ commands: [["node -e \"process.exit(0)\"", "minimal"]] }));
   writeFileSync(join(outDir, "meta.json"), JSON.stringify({ goal: "x" }));
-  const bundle = run("gov-review-bundle.mjs", [
+  const bundle = genBundle([
     "--cwd", dir, "--authority-file", authorityPath, "--card-id", CARD_ID, "--run-id", RUN_ID,
-    "--base-branch", "main", "--out-dir", outDir, "--verify-config", verifyConfig, "--meta", join(outDir, "meta.json"),
-  ], dir);
+    "--base-branch", "main", "--out-dir", outDir, "--meta", join(outDir, "meta.json"),
+  ], verifyFixtureCommands(dir));
   assert.equal(bundle.status, 0, bundle.stderr);
   const findingsFile = join(outDir, "findings.txt");
   writeFileSync(findingsFile, "pass");
@@ -513,7 +578,7 @@ test("e2e: self-declared PASS flags are rejected by the CLIs", (t) => {
   ], dir);
   assert.notEqual(selfDeclared.status, 0);
   assert.match(selfDeclared.stderr, /RESULT_SELF_DECLARATION_REJECTED/);
-  const callerIdentity = run("gov-push-gate.mjs", [
+  const callerIdentity = pushGate([
     "--authority-file", authorityPath, "--cwd", dir,
     "--reviewed-artifact-identity", "x".repeat(64),
   ], dir);
@@ -535,10 +600,10 @@ test("e2e: bundle path mismatch → HOLD / BUNDLE_PATH_MISMATCH", (t) => {
   const res = run("gov-review-bundle.mjs", [
     "--cwd", dir, "--authority-file", wrongPath,
     "--card-id", CARD_ID, "--run-id", RUN_ID,
-    "--base-branch", "main", "--out-dir", outDir, "--verify-config", join(dir, "verify-config.json"),
+    "--base-branch", "main", "--out-dir", outDir,
     "--meta", join(dir, "meta.json"),
   ], dir);
-  // bundle-path check fires before the (missing) verify config matters
+  // bundle-path check fires before verification matters
   assert.notEqual(res.status, 0);
   assert.match(res.stderr, /BUNDLE_PATH_MISMATCH/);
 });

@@ -294,6 +294,20 @@ CLI：`scripts/gov-review-bundle.mjs`（寫入協定：暫存檔 → atomic rena
 （digest-bound result artifact）之後；remote 分支未知／diverged → `HOLD / REMOTE_BRANCH_DIVERGED`；
 不得自動 rebase／覆蓋／force-push。CLI：`scripts/gov-push-gate.mjs`。
 
+**Remote 目的地授權（round 4 finding 2）**：production 只接受三種 canonical GitHub remote：
+
+```text
+https://github.com/<owner>/<repo>.git
+git@github.com:<owner>/<repo>.git
+ssh://git@github.com/<owner>/<repo>.git
+```
+
+（`<owner>/<repo>` 必須與 authority record 的 repository 完全相等；其餘 host／transport、
+`file://` URL、以及任何本機路徑一律 `HOLD / REMOTE_NOT_AUTHORIZED` — 本機路徑即使最後兩段
+名稱相同也不得冒充授權 GitHub repository）。本機 bare remote 只能透過 test-only adapter
+（`runPushGate({ remotePolicy })` 的函式參數）注入，不能進入 production 驗證路徑，也不存在
+任何 CLI flag 可切換 remote policy。
+
 ## 10. Draft PR Lifecycle（§13）
 
 `src/governance/draft-pr-lifecycle.mjs` — Draft PR 僅在 `EXTERNAL_REVIEW_PASS` 或

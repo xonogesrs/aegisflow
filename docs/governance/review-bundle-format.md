@@ -45,9 +45,13 @@ merge／release／seal／開始下一張實作卡。
 - `repair round`：累計修復輪數，**不得重設**；`remaining repair budget = maximum_repair_rounds
   − repair round`。
 - Bundle §7 必須包含**上一輪 external findings 全文與其 findings digest**。
-- fresh verification 為強制：production CLI 完全移除 `--skip-fresh-verify`；任一測試 FAIL 或
-  NOT RUN → `HOLD / FRESH_VERIFY_FAILED`，**不產生 bundle**。測試 fixture 可注入真正執行的
-  最小命令集（`--verify-config <file>`），不得經由環境變數開後門。
+- fresh verification 為強制：production CLI 完全移除 `--skip-fresh-verify` 與任何
+  `--verify-config` 旗標（round 4 finding 1：`--verify-config` 一併明確拒絕，無法以任意
+  命令集取代驗證）；任一測試 FAIL 或 NOT RUN → `HOLD / FRESH_VERIFY_FAILED`，**不產生
+  bundle**。Production 固定執行治理定義的完整命令集（`npm run check` / `npm run
+  test:governance` / `npm run test:v1` / `npm run test:v2` / `git diff --check`）。
+  測試注入只能透過程式內部 dependency injection（`generateReviewBundle({ verifyCommands })`
+  的函式參數），不得暴露成 production CLI flag，也不得經由環境變數開後門。
 - bundle §6 內嵌每項命令的 parsed totals（`ℹ tests / pass / fail` 行）供 reviewer 獨立核對；
   §1 內嵌完整 authorization record 與 effective authority。
 

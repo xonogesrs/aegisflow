@@ -1,6 +1,8 @@
 // test/governance/helpers.mjs
 // Shared fixtures for governance tests (schema v2 contract).
 
+import { productionRemoteMatch } from "../../scripts/shared/gov-args.mjs";
+
 export const CARD_ID = "AUTOLOOP-GOVERNANCE-REVIEW-UNIT-FINALIZATION-1";
 export const RUN_ID = "run-final-1";
 export const REPOSITORY = "xonogesrs/autoloop";
@@ -127,6 +129,24 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+/**
+ * Test-only remote-URL adapter (round 4 finding 2). Production accepts ONLY
+ * the three canonical GitHub forms (productionRemoteMatch). Tests need a
+ * LOCAL bare remote to exercise the push path without network access, so
+ * they inject this adapter through the library API (runPushGate's
+ * `remotePolicy` / remoteUrlMatchesAuthorizedRepository's `matcher`) — it is
+ * never reachable from a production CLI flag.
+ */
+export function testRemoteMatch(url, repoId) {
+  if (productionRemoteMatch(url, repoId)) return true;
+  const target = String(repoId || "").replace(/\.git$/, "");
+  if (!target || !target.includes("/")) return false;
+  const s = String(url || "").replace(/^file:\/\//, "").replace(/\.git$/, "");
+  const segments = s.split("/").filter(Boolean);
+  if (segments.length < 2) return false;
+  return segments.slice(-2).join("/") === target;
+}
 
 export function createTempRepo(t) {
   const dir = mkdtempSync(join(tmpdir(), "autoloop-gov-"));

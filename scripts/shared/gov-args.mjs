@@ -160,41 +160,45 @@ export function assertScopeCoversInventory(inventory, authorizedPaths) {
 }
 
 /**
- * Precise remote-URL authorization (round 3 finding 6): substring checks are
- * bypassable (evil.example/xonogesrs/autoloop, /tmp/xonogesrs/autoloop-
- * backup.git). Parse the URL, require an allowed host/transport and an EXACT
- * trailing `owner/repository` match.
+ * Production remote-URL policy (round 4 finding 2). The production push path
+ * accepts ONLY the three canonical GitHub forms for the authorized
+ * repository:
+ *
+ *   https://github.com/<owner>/<repo>.git
+ *   git@github.com:<owner>/<repo>.git
+ *   ssh://git@github.com/<owner>/<repo>.git
+ *
+ * Anything else — other hosts, other transports, file:// URLs, local
+ * absolute paths — is REJECTED. In particular a LOCAL path whose trailing
+ * owner/repo segments happen to match is NOT an authorized remote: a bare
+ * mirror on disk must never impersonate the GitHub remote.
+ *
+ * Test-only adapters (local bare remotes) are injected through the library
+ * API — see remoteUrlMatchesAuthorizedRepository's optional `matcher`
+ * argument — and are never reachable from a production CLI flag.
  */
-export function remoteUrlMatchesAuthorizedRepository(url, repoId) {
+export function productionRemoteMatch(url, repoId) {
   if (typeof url !== "string" || url.length === 0) return false;
   const target = String(repoId || "").replace(/\.git$/, "");
   if (!target || !target.includes("/")) return false;
-  let host = "";
-  let path = "";
-  const s = url.replace(/\.git$/, "");
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
-    // https://host/owner/repo  (or file:///abs/path)
-    const rest = s.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
-    const slash = rest.indexOf("/");
-    host = slash === -1 ? rest : rest.slice(0, slash);
-    path = slash === -1 ? "" : rest.slice(slash + 1);
-  } else if (/^git@/.test(s)) {
-    // git@host:owner/repo
-    const rest = s.replace(/^git@/, "");
-    const colon = rest.indexOf(":");
-    host = colon === -1 ? "" : rest.slice(0, colon);
-    path = colon === -1 ? rest : rest.slice(colon + 1);
-  } else {
-    // local absolute path: /tmp/.../owner/repo  → host empty, path = the path
-    path = s.replace(/^\//, "");
-  }
-  const allowedHosts = ["github.com", "git@github.com"];
-  if (host && !allowedHosts.includes(host)) return false;
-  // extract the trailing owner/repository segments exactly
-  const segments = path.split("/").filter(Boolean);
-  if (segments.length < 2) return false;
-  const ownerRepo = segments.slice(-2).join("/");
-  return ownerRepo === target;
+  const norm = (s) => s.replace(/\.git$/, "");
+  const u = norm(url);
+  return (
+    u === norm(`https://github.com/${target}`) ||
+    u === norm(`git@github.com:${target}`) ||
+    u === norm(`ssh://git@github.com/${target}`)
+  );
+}
+
+/**
+ * Remote-URL authorization. Production callers use the strict
+ * `productionRemoteMatch` policy (the default). Tests inject a test-only
+ * adapter (local bare remotes) as the optional third argument — internal
+ * dependency injection, never a CLI flag. A matcher receives
+ * (url, repoId) and returns a boolean.
+ */
+export function remoteUrlMatchesAuthorizedRepository(url, repoId, matcher = productionRemoteMatch) {
+  return matcher(url, repoId);
 }
 
 /** Reject explicitly self-declared PASS flags (fail-closed, §9). */
