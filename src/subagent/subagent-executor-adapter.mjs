@@ -22,6 +22,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { assertAdapterRequest } from "../adapter/contract.mjs";
 import { runTask, assertMountAllowlist } from "../runtime/colima-runtime.mjs";
+import { governSearch } from "../admission/search-scope-governor.mjs";
 import {
   buildSubagentEnvelope,
   validateSubagentResult,
@@ -187,11 +188,34 @@ export function createSubagentExecutorAdapter({ profile, repoPath, scratchRoot, 
       CRASH_AFTER: runtime.crashAfter ? "1" : "0",
     };
 
+    // RB-SSG（invariants A/G at the execution boundary）: the agent's planned
+    // commands are governed BEFORE any container is started. A recursive
+    // search must be bounded（maxdepth / prune / exclusions / tracked-indexed
+    // / allowlist / declaration）and may never start at a forbidden root.
+    // The envelope's authorizedPaths is the subtree allowlist; a search root
+    // outside it (e.g. $HOME, Desktop) is rejected fail-closed — no runTask.
+    const agentCommand = buildAgentCommand(taskType);
+    const searchGate = governSearch({
+      command: agentCommand,
+      cwd: "/",
+      authorizedRoots: envelope.authorizedPaths,
+    });
+    if (searchGate.decision === "REJECT") {
+      const error = `search_scope_governor:${searchGate.holdCode}:${searchGate.reason}`;
+      const gateResult = { status: "error", executionId: request.executionId, error, stdout: "", stderr: "", metadata: { mode: "subagent-readonly", searchScope: searchGate } };
+      resultSink?.(request.executionId, gateResult);
+      if (request.taskCard && typeof request.taskCard === "object") {
+        request.taskCard.runtime = request.taskCard.runtime ?? {};
+        request.taskCard.runtime.lastExecutorResult = gateResult;
+      }
+      return gateResult;
+    }
+
     const run = await runTask({
       profile,
       executionId: request.executionId,
       taskId: `agent-${request.attempt}`,
-      command: buildAgentCommand(taskType),
+      command: agentCommand,
       roMounts,
       rwMounts,
       network: "none",

@@ -16,6 +16,7 @@
 // node cannot PASS（executor/reviewer treat it as REPAIR/error -> HOLD path）.
 
 import { createHash } from "node:crypto";
+import { assertAuthorizedPathsBounded } from "../admission/search-scope-governor.mjs";
 
 export const SUBAGENT_RESULT_SCHEMA = "autoloop.subagent.structured-result/v1";
 export const SUBAGENT_WRITER_RESULT_SCHEMA = "autoloop.subagent.writer-result/v1";
@@ -179,6 +180,14 @@ export function validateSubagentEnvelope(envelope) {
   }
   if (envelope.authorizedPaths !== undefined && !Array.isArray(envelope.authorizedPaths)) {
     errors.push("authorizedPaths_must_be_array");
+  }
+  // RB-SSG（invariant B）: an envelope may not authorize an unbounded
+  // traversal root（$HOME / user home / Desktop / filesystem root / multi-user
+  // parent）. Absolute forbidden roots are rejected fail-closed; relative
+  // paths are worktree-scoped and never flagged here.
+  if (Array.isArray(envelope.authorizedPaths)) {
+    const bounded = assertAuthorizedPathsBounded(envelope.authorizedPaths);
+    if (!bounded.ok) errors.push(...bounded.errors);
   }
   // Writer envelope hard requirements（fail-closed before any task starts）.
   // The repair agent（repairer）carries the same writer contract AND must be
