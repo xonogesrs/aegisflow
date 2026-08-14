@@ -1,0 +1,42 @@
+{
+  "schema": "autoloop.machine-readable-admission-contract/v1",
+  "card": "AUTOLOOP-TA1",
+  "generatedAt": "2026-08-09T00:00:00.000Z",
+  "proposal": "A single machine-readable admission result per task, schema autoloop.task-admission/v1 (see ta1-admission-schema.json), produced by a deterministic classifier BEFORE Graph execution, consumed by the scheduler, sub-agent envelope builder, writer/reviewer enforcement, durable layer, review bundle and telemetry.",
+  "requirements": {
+    "deterministic": "same task inputs + same classifier_version -> same size/risk/profile/admission_id (pure functions, canonical JSON input digest). Re-classification on resume must reproduce the identical admission_id or HOLD (drift guard).",
+    "explainable": "reasons array required; size_details.dimensions carry per-dimension reasons; risk_details.signals carry triggered + reason; escalation_log records every fail-closed escalation. Every decision traceable to input evidence.",
+    "fail_closed": "unknown capability id -> denied; malformed admission -> HOLD; missing evidence -> under_classified -> escalate, never default-allow; runtime cannot invent capability grants.",
+    "machine_verifiable": "validates against the JSON schema; admission_id = sha256(canonical(payload-without-admission_id)); capability grants must be a subset of the capability registry; profile must match the (size, risk) matrix cell; subset_of_lifecycle_authorization enforced against the authority record digest.",
+    "versioned": "classifier_version constant '1.0.0' in v1; schema_version int; every admission record pins both.",
+    "backward_compatible_strategy": [
+      "additive-only field evolution: new optional fields; required set never grows for old consumers",
+      "extensions object is the sanctioned growth point; extensions never grant capability",
+      "new enum values require classifier_version bump; consumers must fail-closed on unknown enum values (never coerce)",
+      "old admission records remain valid under their schema_version; a new classifier may re-classify only with explicit re-admission (never silently at resume)"
+    ]
+  },
+  "lifecycle": {
+    "produce": "at task intake, after parent-card binding, BEFORE decomposition",
+    "bounded_refinement": "allowed exactly once, after preliminary read-only discovery and before any mutation; refinement must preserve risk monotonicity",
+    "freeze": "bound into the durable checkpoint fingerprint; resume compares admission_id — mismatch -> HOLD / ADMISSION_DRIFT",
+    "consume": {
+      "scheduler": "node role grants + repair budget + durability flags",
+      "subagent_envelope": "toolPermissions + mutationScope filled FROM admission (never guessed)",
+      "writer": "mutation scope + isolation from admission",
+      "reviewer": "review strength + strict routing from admission",
+      "durable_layer": "durability + checkpoint policy + frozen admission digest",
+      "review_bundle": "admission decision recorded in the bundle (evidence + explainability)",
+      "telemetry": "admission quality metrics: overkill (heavy profile on trivial outcome) / under-classification (fast path that later failed) / escalation frequency"
+    },
+    "authority": "admission is a DERIVED decision: it can only narrow the lifecycle authority record (parent ∩ child ∩ runtime). A conflict between admission result and authority record -> HOLD / AUTHORITY_CONFLICT. The admission runtime itself is subject to governance (RS.SELF_MODIFICATION) and may not be modified by the tasks it admits."
+  },
+  "sample": {
+    "task_id": "AUTOLOOP-TA2-EX",
+    "size": "S",
+    "risk": "MEDIUM",
+    "profile": "MEDIUM",
+    "admission_id": "sha256(canonical(...))",
+    "note": "full sample records live in ta1-sample-admissions.json and are machine-validated by scripts/ta1-verify.mjs against this schema"
+  }
+}

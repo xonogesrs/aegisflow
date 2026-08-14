@@ -5,11 +5,17 @@
   "type": "module",
   "scripts": {
     "check": "find src -name '*.mjs' -exec node --check {} +",
+    "pi:autoloop": "bash scripts/pi-autoloop.sh",
     "gate:card5e": "node scripts/card5e-parity-gate.mjs",
     "test:card5e": "node --test test/v2/test-card5e-parity.mjs",
     "test:pi-rpc-adapter": "node --test test/test-pi-rpc-adapter.mjs test/test-pi-lifecycle-integration.mjs",
     "test:pi-rpc-smoke": "node test/pi-rpc-real-smoke.mjs",
     "test:scripted-lifecycle": "node --test test/test-scripted-adapter.mjs test/test-lifecycle-runner.mjs test/test-standalone-paths.mjs test/test-normalize-reviewer-json.mjs",
+    "test:c3-colima": "node --test test/test-c3-colima-pipeline.mjs test/test-colima-runtime.mjs",
+    "test:subagent-writer": "node --test test/test-subagent-writer-graph.mjs",
+    "test:review-repair": "node --test test/test-subagent-review-repair-graph.mjs",
+    "test:colima-all": "node --test --test-concurrency=1 test/test-colima-runtime.mjs test/test-c3-colima-pipeline.mjs test/test-colima-graph.mjs test/test-subagent-graph.mjs test/test-subagent-writer-graph.mjs test/test-subagent-review-repair-graph.mjs test/test-graph-closeout-integration.mjs test/test-durable-subagent-resume.mjs test/memory/test-graph-colima-writeback.mjs",
+    "run:c3": "node scripts/c3-colima-task.mjs",
     "test:c2": "node --test test/test-autoloop-entrypoint.mjs test/v2/test-production-pipeline.mjs test/v2/test-execution-orchestrator.mjs",
     "test:c3": "node --test test/test-run-evidence-store.mjs test/test-run-manifest.mjs test/v2/test-checkpoint-bridge.mjs test/v2/test-durable-execution.mjs",
     "test:c4r": "node --test test/v2/test-phase-response-contract.mjs",
@@ -20,10 +26,19 @@
     "test:c4j": "node --test test/v2/test-executor-evidence-observability.mjs",
     "test:c4l": "node --test test/v2/test-executor-strict-json-prompt.mjs",
     "test:c4n": "node --test test/v2/test-review-evidence-delivery.mjs",
+    "test:review-bundle": "node --test test/governance/test-review-bundle.mjs",
+    "test:external-review-delivery": "node --test test/governance/test-external-review-delivery.mjs",
+    "test:graph-closeout": "node --test test/governance/test-graph-closeout.mjs test/governance/test-git-status-parsing.mjs",
+    "test:graph-closeout-e2e": "node --test test/test-graph-closeout-integration.mjs",
+    "test:memory-contract": "node --test test/memory/test-canonical.mjs test/memory/test-jsonl.mjs test/memory/test-record-schema.mjs test/memory/test-security.mjs test/memory/test-sqlite.mjs test/memory/test-trust-validity.mjs",
+    "test:memory-retrieval": "node --test test/memory/test-query-schema.mjs test/memory/test-local-store.mjs test/memory/test-retrieval.mjs test/memory/test-snapshot.mjs test/memory/test-rebuild-determinism.mjs test/memory/test-retrieval-security.mjs test/memory/test-graph-context.mjs",
+    "test:telemetry": "node --test test/telemetry/test-telemetry-contract.mjs test/telemetry/test-telemetry-security.mjs test/telemetry/test-telemetry-lifecycle.mjs test/telemetry/test-telemetry-cbm3-invariance.mjs test/telemetry/test-telemetry-graph-invariance.mjs test/telemetry/test-telemetry-overhead.mjs",
+    "test:writeback": "node --test test/memory/test-writeback-candidate.mjs test/memory/test-writeback-trust.mjs test/memory/test-writeback-gate.mjs test/memory/test-writeback-closed-loop.mjs test/memory/test-writeback-telemetry.mjs test/memory/test-writeback-graph.mjs test/memory/test-writeback-perf.mjs",
     "test:c4q": "node --test test/v2/test-harness-owned-evidence.mjs",
     "test:c4s": "node --test test/v2/test-system-delta.mjs",
     "test:governance": "node --test test/governance/*.mjs",
-    "gov:effective": "node scripts/gov-effective-authority.mjs"
+    "gov:effective": "node scripts/gov-effective-authority.mjs",
+    "test:de2r": "node --test --test-concurrency=1 test/test-durable-subagent-resume.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.83.0"

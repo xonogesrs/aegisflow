@@ -1,0 +1,96 @@
+{
+  "schema": "autoloop.closeout-state/v1",
+  "task": {
+    "cardId": "AUTOLOOP-PI-GRAPH-REPORT-LIFECYCLE-REPAIR-1",
+    "cardTitle": "State-Driven Mandatory Closeout and Fail-Closed Review Surface Delivery",
+    "cardType": "implementation"
+  },
+  "requiresReview": true,
+  "reviewRequiredAt": "2026-08-08T15:58:00.000Z",
+  "outDir": "/Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/report-lifecycle-repair-1",
+  "authorizedScope": [
+    "src/governance/review-bundle.mjs",
+    "src/governance/closeout-state.mjs",
+    "src/runtime/colima-graph-runner.mjs",
+    "scripts/gov-closeout-bundle.mjs",
+    "test/governance/test-closeout-lifecycle.mjs",
+    "test/governance/test-external-review-surface.mjs",
+    "test/governance/test-graph-closeout.mjs",
+    "test/governance/test-card-inventory.mjs",
+    "docs/pi-graph-output/report-lifecycle-repair-1/"
+  ],
+  "unauthorizedScope": [
+    "FM-3 CARD_IMPLEMENTATION_FILES inventory consistency",
+    "modify Sol Advisor / model routing / reviewer selection",
+    "modify DE-2 / DE-2R sealed evidence",
+    "commit / push / merge / seal"
+  ],
+  "cardFiles": {
+    "cardImplementation": [
+      "src/governance/review-bundle.mjs",
+      "src/governance/closeout-state.mjs",
+      "src/runtime/colima-graph-runner.mjs",
+      "scripts/gov-closeout-bundle.mjs"
+    ],
+    "closeoutOutputs": [
+      "test/governance/test-closeout-lifecycle.mjs",
+      "test/governance/test-external-review-surface.mjs",
+      "test/governance/test-graph-closeout.mjs",
+      "test/governance/test-card-inventory.mjs",
+      "docs/pi-graph-output/report-lifecycle-repair-1/closeout-state.json"
+    ],
+    "preExistingDirty": []
+  },
+  "designDecisions": [
+    "R1/R3: review requirement is a persisted autoloop.closeout-state/v1 record; runStateDrivenCloseout is the SINGLE script-free production trigger, wired into runColimaGraph at card completion via closeout.statePath. Legacy in-memory requiresReview path unchanged.",
+    "R2: materializeCloseoutContract fails closed as CLOSEOUT_METADATA_INCOMPLETE when task identity/outDir is missing — never a silent skip, never a PASS.",
+    "R4/R5/R6: runCloseoutGate now treats delivery as part of success — AWAITING_BUNDLE_DELIVERY propagates to top-level non-PASS; the fixed-surface channel is re-verified (identity + recomputed SHA + delivery record) before a PASS.",
+    "R7: deliverToExternalReviewSurface auto-rotates a RESOLVED occupant (verdict bound to its own bundle) under the same publication lock before publishing the next card; an UNRESOLVED occupant still blocks (surface_occupied). No verdict is ever auto-generated.",
+    "Idempotency: runStateDrivenCloseout records the disposition back into the state record; an APPLIED+PASS state is skipped on re-entry; a non-PASS disposition is retryable with the same deterministic bundle identity."
+  ],
+  "negativeCases": [
+    "surface write failure -> top-level final AWAITING_BUNDLE_DELIVERY (never PASS) — T4",
+    "occupied unresolved surface -> blocked, old artifact untouched — T5",
+    "missing closeout metadata -> CLOSEOUT_METADATA_INCOMPLETE, no report, no PASS — T2",
+    "crash between generation and delivery -> resume recovers deterministically, single artifact, same identity — T7"
+  ],
+  "regression": [
+    {
+      "suite": "test/governance/test-closeout-lifecycle.mjs (T1-T10 + R7 + sanity)",
+      "tests": 12,
+      "pass": 12,
+      "fail": 0
+    },
+    {
+      "suite": "test:governance (full governance suite, incl. new lifecycle tests)",
+      "tests": 241,
+      "pass": 241,
+      "fail": 0
+    },
+    {
+      "suite": "test-graph-closeout-integration (real runColimaGraph wiring)",
+      "tests": 2,
+      "pass": 2,
+      "fail": 0
+    },
+    {
+      "suite": "lifecycle-runner / scripted-adapter / standalone-paths / normalize-reviewer",
+      "tests": 43,
+      "pass": 43,
+      "fail": 0
+    }
+  ],
+  "regressionSummary": "state-driven closeout lifecycle tests 12/12; full governance 241/241; graph-closeout integration 2/2; lifecycle-runner set 43/43. Colima-dependent suites (colima-all 43/43, test:v2 372/372) were green at the DE-2R closeout and are unaffected by this additive change; not re-run in this session (colima environment unavailable).",
+  "objective": "Close the lifecycle gap: review-required lifecycle state -> mandatory closeout materialization -> bundle generation -> validation -> Current/ delivery -> external-review waiting state, driven by structured state instead of a remembered card-specific script; and make required delivery failure produce a top-level non-PASS closeout.",
+  "recommendedNextStep": "Controller external review of this card's bundle (AWAITING_EXTERNAL_REVIEW on Current/); then FM-3 bounded repair card for authorized/touched/inventory consistency.",
+  "repairBudgetMaxAttempts": 1,
+  "closeout": {
+    "status": "APPLIED",
+    "final": "PASS",
+    "bundleIdentity": "e9de8343fc3f7cd1823acbc1726a034f7a195bd9f7c4e3cf3637022898c6292e",
+    "bundleSha256": "983986e589088afbc57a1534d0ad105e12d6845924652db3c1419d5ea5c80af2",
+    "externalReviewStatus": "AWAITING_EXTERNAL_REVIEW",
+    "appliedAt": "2026-08-08T16:12:22.193Z",
+    "blockedReason": null
+  }
+}

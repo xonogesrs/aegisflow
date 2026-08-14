@@ -1,0 +1,130 @@
+{
+  "schema": "autoloop.rld2.negative-cases/v1",
+  "card": "AUTOLOOP-RLD2",
+  "negativeCases": [
+    {
+      "id": "NEG-RLD1",
+      "claim": "no new bundle -> NO_NEW_REVIEW_BUNDLE; a stale COMPLETE bundle is never substituted",
+      "test": "test/governance/test-rld2-stale-delivery.mjs",
+      "outcome": "pass"
+    },
+    {
+      "id": "NEG-RLD2",
+      "claim": "Current card != bundle CARD_ID -> STALE_CARD_IDENTITY (the incident)",
+      "test": "test/governance/test-rld2-stale-delivery.mjs",
+      "outcome": "pass"
+    },
+    {
+      "id": "NEG-RLD3",
+      "claim": "current identity != delivery source identity -> fail closed",
+      "test": "test/governance/test-rld2-stale-delivery.mjs",
+      "outcome": "pass"
+    },
+    {
+      "id": "NEG-RLD4",
+      "claim": "copy/export SHA change -> SURFACE_SHA_MISMATCH",
+      "test": "test/governance/test-rld2-stale-delivery.mjs",
+      "outcome": "pass"
+    },
+    {
+      "id": "NEG-RLD5",
+      "claim": "already externally-reviewed generation re-delivered as new -> STALE_GENERATION_ALREADY_REVIEWED",
+      "test": "test/governance/test-rld2-stale-delivery.mjs",
+      "outcome": "pass"
+    },
+    {
+      "id": "NEG-RLD6",
+      "claim": "card B not closed out -> never deliver card A",
+      "test": "test/governance/test-rld2-stale-delivery.mjs",
+      "outcome": "pass"
+    },
+    {
+      "id": "NEG-RLD7",
+      "claim": "crash/resume must not roll back to the previous authoritative generation",
+      "test": "test/governance/test-rld2-stale-delivery.mjs",
+      "outcome": "pass"
+    },
+    {
+      "id": "NEG-RLD8",
+      "claim": "stale cached path -> identity check rejects",
+      "test": "test/governance/test-rld2-stale-delivery.mjs",
+      "outcome": "pass"
+    },
+    {
+      "id": "NEG-RLD9",
+      "claim": "partial Current/Archive rotation -> fail closed, no fallback",
+      "test": "test/governance/test-rld2-stale-delivery.mjs",
+      "outcome": "pass"
+    },
+    {
+      "id": "NEG-RLD10",
+      "claim": "delivery receipt vs actual delivered SHA mismatch -> fail closed",
+      "test": "test/governance/test-rld2-stale-delivery.mjs",
+      "outcome": "pass"
+    },
+    {
+      "id": "R1",
+      "claim": "card A COMPLETE + reviewed -> card B starts -> card A not delivered as card B output",
+      "test": "scripts/rld2-reproduction.mjs R1",
+      "outcome": "pre:OK / post:OK"
+    },
+    {
+      "id": "R2",
+      "claim": "card A COMPLETE -> card B admitted, no closeout -> NO_NEW; never silently return card A",
+      "test": "scripts/rld2-reproduction.mjs R2",
+      "outcome": "pre:VIOLATED(STALE) / post:OK(fail-closed)"
+    },
+    {
+      "id": "R3",
+      "claim": "card B bundle generated -> Current rotates -> delivery returns B identity",
+      "test": "scripts/rld2-reproduction.mjs R3",
+      "outcome": "pre:OK / post:OK"
+    },
+    {
+      "id": "R4",
+      "claim": "Current changes between selection and copy -> identity verification prevents stale",
+      "test": "scripts/rld2-reproduction.mjs R4",
+      "outcome": "pre:VIOLATED(STALE) / post:OK(fail-closed)"
+    },
+    {
+      "id": "R5",
+      "claim": "repeated delivery invocation -> idempotent; never reinterprets old artifact as a new generation",
+      "test": "scripts/rld2-reproduction.mjs R5",
+      "outcome": "pre:VIOLATED(STALE) / post:OK(fail-closed)"
+    },
+    {
+      "id": "R6",
+      "claim": "crash between bundle generation and Current rotation",
+      "test": "scripts/rld2-reproduction.mjs R6",
+      "outcome": "pre:VIOLATED(STALE) / post:OK(fail-closed)"
+    },
+    {
+      "id": "R7",
+      "claim": "crash between Current rotation and delivery receipt commit",
+      "test": "scripts/rld2-reproduction.mjs R7",
+      "outcome": "pre:OK(NO_NEW) / post:OK(NO_NEW)"
+    },
+    {
+      "id": "R8",
+      "claim": "resume after crash does not roll back to previous authoritative generation",
+      "test": "scripts/rld2-reproduction.mjs R8",
+      "outcome": "pre:OK / post:OK"
+    },
+    {
+      "id": "R9",
+      "claim": "old attachment/file-handle/path cache remains -> identity verification rejects stale source",
+      "test": "scripts/rld2-reproduction.mjs R9 + NEG-RLD8",
+      "outcome": "pre:VIOLATED(STALE) / post:OK(fail-closed)"
+    },
+    {
+      "id": "R10",
+      "claim": "two cards with identical filename convention, different identity -> identity decides",
+      "test": "scripts/rld2-reproduction.mjs R10",
+      "outcome": "pre:VIOLATED(STALE) / post:OK(fail-closed)"
+    }
+  ],
+  "reproductionAccounting": {
+    "pre_repair": "pre_repair 4/10 ok, 6 stale; R2 (the incident) STALE_CARD_IDENTITY",
+    "post_repair": "post_repair 10/10 ok, 0 stale — fail-closed, no stale generation delivered"
+  }
+}

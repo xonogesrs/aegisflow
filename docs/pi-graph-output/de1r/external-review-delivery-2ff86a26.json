@@ -1,0 +1,28 @@
+{
+  "schema": "autoloop.external-review-delivery/v2",
+  "cardId": "AUTOLOOP-PI-GRAPH-DE1R",
+  "fileName": "delivery.json",
+  "reviewBundleGenerated": true,
+  "reviewBundleValidated": true,
+  "reviewBundleDeliveryRequired": true,
+  "externalReviewStatus": "PASS",
+  "externalReviewStatusReason": "verdict PASS bound to reviewBundleIdentity=2ff86a262ad9e75f1c2b8efbaffbc0ea53e9fc4dc4237c601b8d480830a6f182（verdict is the receipt: RECEIVED + REVIEWED proven in one step）",
+  "delivery": {
+    "required": true,
+    "attempted": true,
+    "method": "sender-provided",
+    "attemptedAt": "2026-08-08T05:27:05.797Z",
+    "bundlePath": "docs/pi-graph-output/de1r/card-closeout-bundle-20260808-2ff86a26.txt",
+    "reviewBundleIdentity": "2ff86a262ad9e75f1c2b8efbaffbc0ea53e9fc4dc4237c601b8d480830a6f182",
+    "reviewBundleSha256": "a1353d0ae761066aac688587d477c1e944c9eca8c4209fd14cbb471b3d43f00d"
+  },
+  "verdict": {
+    "verdict": "PASS",
+    "reviewerIdentity": "Controller / External Reviewer",
+    "reviewedAt": "2026-08-08T05:40:00Z",
+    "bundleIdentity": "2ff86a262ad9e75f1c2b8efbaffbc0ea53e9fc4dc4237c601b8d480830a6f182",
+    "bundleSha256": "a1353d0ae761066aac688587d477c1e944c9eca8c4209fd14cbb471b3d43f00d",
+    "findingsDigest": "e0c3fefa060f1a46934baf81da396ac7e154be8b00b4ec6a5060b3d180f011f9"
+  },
+  "supersedes": null
+}

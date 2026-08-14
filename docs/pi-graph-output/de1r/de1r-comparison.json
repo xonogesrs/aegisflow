@@ -1,0 +1,25 @@
+{
+  "schema": "autoloop.durable-comparison/de1r/v1",
+  "card": "AUTOLOOP-PI-GRAPH-DE1R",
+  "generatedAt": "2026-08-08T05:28:00.000Z",
+  "note": "apples-to-apples now holds: Candidate A measured live in DE-1 (real SIGKILL, T0-T12); Candidate B measured live in DE-1R (real SIGKILL, S0-S6, same 4-phase DAG shape); Candidate C eliminated by gate (see de1r-restate-disposition.json).",
+  "matrix": [
+    { "metric": "correctness (lost completed results)", "A_existing": "0 lost (all 22 runs; server-side verified)", "B_temporal_live": "0 lost (all 7 scenarios; server history verified)" },
+    { "metric": "correctness (duplicate writer mutation)", "A_existing": "0 in every run (writer fails CLOSED — RECOVERY_REQUIRED, never re-executed)", "B_temporal_live": "1 duplicate in S3 (RAW at-least-once re-execution); 0 with idempotent commit-token pattern (S4, app-level code)" },
+    { "metric": "correctness (false PASS)", "A_existing": "0", "B_temporal_live": "0" },
+    { "metric": "recovery on crash during node", "A_existing": "safe-boundary resume works; sub-window crashes RESUME_FINGERPRINT_MISMATCH (fail-closed, needs DE-2 F1 whitelist)", "B_temporal_live": "automatic re-dispatch + replay; whole activity re-executed; recoveryMs=7292 (includes full activity re-run + 2s heartbeat timeout)" },
+    { "metric": "recovery on result-persisted / successor-not-scheduled", "A_existing": "F1/F2 edges (fail-closed)", "B_temporal_live": "result persisted, successor re-dispatched, no duplicate (ro1Started=1)" },
+    { "metric": "recovery on duplicate invocation", "A_existing": "repeated resume -> COMPLETE, zero re-execution (T11)", "B_temporal_live": "no automatic guard: default workflowId reuse allows a NEW execution after completion; REJECT_DUPLICATE only blocks while RUNNING" },
+    { "metric": "recovery on corrupt state", "A_existing": "tampered CURRENT.json -> resume REJECTED at startup (fail-closed, T12)", "B_temporal_live": "SQLite integrity_check detects corruption; server does NOT validate proactively, fails lazily on access; no wrong data observed (S6)" },
+    { "metric": "recovery latency", "A_existing": "resumeMs 2.8-2901ms at safe boundaries", "B_temporal_live": "recoveryMs 6249-7292 (activity re-run dominates); re-dispatch after heartbeat timeout ~2s" },
+    { "metric": "resource / service footprint", "A_existing": "0 added services; local disk only", "B_temporal_live": "1 server process (196MB RSS) + SQLite (1.6MB) + 3 listeners (7233/8233/61177) + worker process + SDK deps (154 npm packages)" },
+    { "metric": "operational complexity", "A_existing": "zero added services; no upgrade/versioning surface", "B_temporal_live": "1 binary to run + DB + namespace + workflow versioning/worker-version-set burden + deterministic-workflow constraints (all IO in activities)" },
+    { "metric": "constraints on workflow code", "A_existing": "none added", "B_temporal_live": "deterministic workflow code required; all model IO must be activities; activity side effects at-least-once -> app-level idempotency required for writer phases" }
+  ],
+  "rubric": "Do Temporal's recovery improvements justify adding a server + DB + deterministic-workflow constraints over the existing engine?",
+  "rubricApplication": {
+    "recoveryImprovement": "automatic re-dispatch + replay (no manual resume), and no sub-window recoverability gaps like F1/F2/F3",
+    "cost": "server + DB + 3 listeners + worker lifecycle + SDK + workflow versioning + determinism constraints + app-level idempotency for writer side effects (Temporal does NOT remove the writer-dedup problem; it relocates it)",
+    "verdict": "The improvement is real but does not offset the cost for AutoLoop's graph model: (a) AutoLoop's writer phases already fail CLOSED (0 duplicates) while Temporal's RAW semantics re-execute and duplicate unless the app writes idempotency code — the exact pattern DE-2 would add to STACK_A anyway; (b) F1/F2/F3 are bounded in-process fixes (DE-2 scope), not architectural gaps; (c) AutoLoop does not need durable timers/signals/long-running workflows (DE-1 fitNotes confirmed); (d) the operational surface grows from zero to server+DB+versioning."
+  }
+}

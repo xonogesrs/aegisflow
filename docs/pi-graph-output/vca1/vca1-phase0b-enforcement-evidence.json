@@ -1,0 +1,84 @@
+{
+  "schema": "autoloop.vca1-phase0b-evidence/v1",
+  "cardId": "VCA-1",
+  "phase": "PHASE_0B_ENFORCEMENT_WIRING",
+  "executor": "BOOTSTRAP_EXECUTOR (Claude Code, outside AutoLoop lifecycle, per Controller authorization, continuing the Phase 0A BOOTSTRAP_EXCEPTION)",
+  "priorPhase": "docs/pi-graph-output/vca1/vca1-phase0-guardrail-evidence.json (Phase 0A — guard primitive, PASS, no call sites)",
+  "controllerFeedbackAddressed": [
+    "guard had no call site — Pi could still emit an equivalent unbounded grep bypassing the module",
+    "readCloseoutState/surface state exists but nothing forced Pi toward it",
+    "guard contract description was imprecise: it is allowlist-based (explicit authorized roots), not a blanket 'deny all HOME descendants except two carve-outs' — Phase 0A code was already correct, only the report language was corrected"
+  ],
+  "architecturalConstraintFound": {
+    "finding": "Pi's shell tool execution happens inside the Pi child process itself (src/adapter/pi-rpc-adapter.mjs spawns `pi --mode rpc`); this repo's adapter code does not intercept or see individual shell commands Pi runs — it only controls whether Pi HAS tool access at all (toolPolicy: --no-tools / --tools / --exclude-tools) and what text is delivered as the prompt. The adapter's own header comment already documents this: \"PI TOOL POLICY IS NOT AN OS SANDBOX ... Pi does not include a built-in sandbox.\"",
+    "implication": "A code-level call-site guard (item 2 of the Controller's Phase 0B request) cannot be wired into a shell-command dispatch point in THIS repo, because no such dispatch point exists here — Pi executes its own shell tool independently once given tool access. The only in-repo levers are: (a) the toolPolicy passed when spawning Pi, and (b) the prompt text delivered inside the task card, which IS constructed in this repo (src/v2/phase-response-contract.mjs) and IS read by Pi as its operative instruction.",
+    "conclusion": "Enforcement wiring for this phase targets the prompt-text lever (item 3, and effectively also closes item 2's intent within this repo's actual architecture) plus the authoritative-lookup lever (item 1). A hard OS-level sandbox around Pi's shell tool is out of VCA-1 bootstrap scope (would be a sandboxing/process-isolation project, not a bounded repair) and is not claimed as done here."
+  },
+  "changesImplemented": {
+    "1_authoritativeClosoutLookup": {
+      "file": "src/governance/review-bundle.mjs",
+      "export": "currentSurfaceReviewStatus({ surfaceDir })",
+      "behavior": "Single structured-file read of Current/delivery.json via the existing readExternalReviewDeliveryRecord(). Returns { cardId, status, present }. present:false is itself the authoritative answer for 'nothing awaiting review' — never a trigger to search further, because the review surface holds at most one card by design (see externalReviewSurfaceDir doc comment).",
+      "docComment": "Explicitly tells future callers/readers to use this instead of grepping for the status string, and points at the VCA1-F1 incident."
+    },
+    "2_verificationExecutionBoundary": {
+      "status": "PARTIAL — see architecturalConstraintFound above",
+      "whatWasDone": "verification-scope-guard.mjs (Phase 0A) is proven against realistic agent-constructed root strings (NEG1/2/3/8/9/10) and is available for import by any future in-repo dispatch point (e.g. if a future card adds a structured verification-request channel between Pi and AutoLoop). No such dispatch point exists yet to wire it into.",
+      "whatWasNotDone": "No OS-level interception of Pi's own shell tool calls — architecturally not possible from this repo's adapter layer, confirmed by the adapter's own documented limitation."
+    },
+    "3_piPolicyInstruction": {
+      "file": "src/v2/phase-response-contract.mjs",
+      "function": "sectionVerification(taskCard)",
+      "change": "Appended a VERIFICATION SCOPE (VCA-1) block to the VERIFICATION OBLIGATIONS section, present in BOTH executor and reviewer prompts (sectionVerification is called unconditionally in buildPhaseExecutionPrompt). States: authoritative-source-first (read structured state directly, never grep for a status string), bound every verification command's root to repository_root or an explicitly-named path, never target '/', '~', $HOME or a dynamically-resolved path landing there, and HOLD / VERIFICATION_SCOPE_UNBOUNDED instead of self-widening when evidence isn't reachable from an authorized root.",
+      "goldenHashPinUpdated": "test/v2/test-pre-decomposition-interruption.mjs C4I-20 pinned src/v2/phase-response-contract.mjs sha256 from 82e521c2... to d7f35987... with an inline comment explaining the VCA-1 Phase 0B change, matching this repo's existing convention for authorized prompt-text changes (C4L/C4N precedent in the same test)."
+    }
+  },
+  "filesModified": [
+    "src/governance/review-bundle.mjs (currentSurfaceReviewStatus added)",
+    "src/v2/phase-response-contract.mjs (sectionVerification: bounded-verification instruction added)",
+    "test/v2/test-pre-decomposition-interruption.mjs (C4I-20 golden-hash pin updated + comment)",
+    "test/governance/test-vca1-phase0b-enforcement.mjs (new)"
+  ],
+  "integrationTestsAdded": {
+    "file": "test/governance/test-vca1-phase0b-enforcement.mjs",
+    "cases": [
+      "authoritative lookup on empty surface answers present:false without filesystem search",
+      "authoritative lookup reads AWAITING_EXTERNAL_REVIEW directly from delivery.json",
+      "authoritative lookup on malformed delivery record reports invalid, does not widen search",
+      "scope guard blocks $HOME before an executor would traverse it",
+      "scope guard blocks /Users/zhengfengqing before an executor would traverse it",
+      "scope guard allows an explicit repo-scoped root",
+      "scope guard allowlist contract: a caller-authorized root under $HOME is allowed (confirms allowlist semantics, addresses Controller's precision concern)",
+      "executor prompt text carries AUTHORITATIVE_SOURCE_FIRST + VERIFICATION_SCOPE_UNBOUNDED + explicit forbidden-root language",
+      "reviewer prompt text also carries the instruction"
+    ]
+  },
+  "testsRun": {
+    "targeted": "node --test test/governance/test-vca1-phase0b-enforcement.mjs",
+    "targetedResult": { "tests": 9, "pass": 9, "fail": 0 },
+    "impactRegression": [
+      { "scope": "test/governance/*.mjs", "tests": 309, "pass": 309, "fail": 0 },
+      { "scope": "test/v2/*.mjs", "tests": 372, "pass": 372, "fail": 0, "note": "1 failure before pin update (C4I-20, expected golden-hash drift from the intentional prompt-text change), 0 after pin update" },
+      { "scope": "test/test-graph-closeout-integration.mjs + test/admission/test-review-surface.mjs + test/admission/test-closeout-hardening.mjs (other importers of review-bundle.mjs/phase-response-contract.mjs)", "tests": 20, "pass": 20, "fail": 0 }
+    ],
+    "syntaxCheck": "npm run check — clean",
+    "otherStaleHashPinsChecked": "grep -rl for the old phase-response-contract.mjs sha256 across test/ src/ scripts/ — no other references found",
+    "blanketRegressionRun": false,
+    "blanketRegressionNote": "Impact regression covers every test dir found to import the two changed modules; a full 900+ suite run was not performed, matching Controller's Phase-0-scoped authorization."
+  },
+  "negativeTestsCovered": {
+    "NEG1": "covered (Phase 0A + re-verified here)",
+    "NEG2": "covered (Phase 0A + re-verified here)",
+    "NEG3": "covered (Phase 0A)",
+    "NEG4": "covered — AWAITING_EXTERNAL_REVIEW now determinable via currentSurfaceReviewStatus() with zero filesystem search, proven by test",
+    "NEG5_NEG7": "not yet — external verdict fast path (card section 5) is a later VCA-1 phase, not part of Phase 0B's authorized scope",
+    "NEG8": "covered (Phase 0A + re-verified here)",
+    "NEG9": "covered (Phase 0A)",
+    "NEG10": "covered (Phase 0A)",
+    "NEG11_NEG14": "not yet — regression tiering / evidence reuse are later VCA-1 phases"
+  },
+  "canStillBypassGuardViaArbitraryPiShellCommand": true,
+  "canStillBypassGuardViaArbitraryPiShellCommandNote": "Yes, in principle — Pi's shell tool is not OS-sandboxed by this codebase (documented pre-existing limitation, not introduced by VCA-1). What changed: (1) the authoritative answer to the question that triggered the original 896s grep is now a single structured read Pi is explicitly instructed to use instead, and (2) Pi's own operative prompt now explicitly forbids constructing a whole-home/root verification command and requires HOLD instead of self-widening scope. This is a strong behavioral deterrent at the instruction layer, not a hard technical guarantee — full technical prevention would require either (a) actually sandboxing Pi's shell tool (out of bounded-repair scope), or (b) never granting Pi unrestricted shell tool access for verification-only phases (a toolPolicy/graph-design question for a later phase, since toolPolicy is already a per-phase-card parameter — see src/adapter/pi-rpc-adapter.mjs toolPolicyArgs).",
+  "safeToReturnRemainingVCA1ToPiPlusAutoLoop": "Yes for R1/R2 (read-only inventory/cost-reconstruction work) — those phases don't need to answer 'is anything AWAITING_EXTERNAL_REVIEW' via search (they now have currentSurfaceReviewStatus if needed) and are instructed against unbounded scans by the updated prompt. Recommend a follow-on (VCA-1 W1 or VCA-2) to evaluate restricting toolPolicy for phases that are verification-only and don't need general shell access, which would close the remaining gap technically rather than only by instruction.",
+  "commitPushMergeSeal": "NONE — no git operations performed, per card header (COMMIT: NO, PUSH: NO, MERGE: NO, SEAL: NO)."
+}

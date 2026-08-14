@@ -1,0 +1,184 @@
+{
+  "schema": "autoloop.review-bundle.graph-closeout-evidence/v1",
+  "graphRunId": "de1r-self-closeout-20260808",
+  "final": "PASS",
+  "holdCode": null,
+  "reason": null,
+  "task": {
+    "cardId": "AUTOLOOP-PI-GRAPH-DE1R",
+    "cardTitle": "External Candidate Live Prototype Bake-off (DE-1R)",
+    "cardType": "research"
+  },
+  "scheduler": {
+    "verdict": "PASS",
+    "order": [
+      "SA-R1",
+      "SA-R2",
+      "SA-W1",
+      "SA-V1"
+    ],
+    "statuses": {
+      "SA-R1": "passed",
+      "SA-R2": "passed",
+      "SA-W1": "passed",
+      "SA-V1": "passed"
+    },
+    "skipped": [],
+    "writerViolations": [],
+    "leaseHolderAfter": null
+  },
+  "nodes": [
+    {
+      "nodeId": "SA-R1",
+      "phaseExecutionId": "exec_de1r_r1",
+      "taskType": "temporal_live_deployment_research",
+      "dependencies": [],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786166520000,
+      "completedAt": 1786166525000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 1,
+        "failed": 0,
+        "total": 1
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "SA-R2",
+      "phaseExecutionId": "exec_de1r_r2",
+      "taskType": "restate_stage13_disposition",
+      "dependencies": [],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786166520000,
+      "completedAt": 1786166525000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 1,
+        "failed": 0,
+        "total": 1
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "SA-W1",
+      "phaseExecutionId": "exec_de1r_w1",
+      "taskType": "live_bakeoff_execution",
+      "dependencies": [
+        "SA-R1",
+        "SA-R2"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786166525000,
+      "completedAt": 1786166730000,
+      "worktreeVerified": true,
+      "worktreeRevoked": true,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 6,
+        "failed": 1,
+        "total": 7,
+        "note": "S0-S6 live Temporal bake-off; S3 FAIL_DUPLICATE is the documented RAW at-least-once finding, not a harness failure"
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "SA-V1",
+      "phaseExecutionId": "exec_de1r_v1",
+      "taskType": "comparison_selection_finalization",
+      "dependencies": [
+        "SA-W1"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786166730000,
+      "completedAt": 1786166735000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 1,
+        "failed": 0,
+        "total": 1
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    }
+  ],
+  "transitions": [
+    {
+      "phaseId": "SA-R1",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    },
+    {
+      "phaseId": "SA-R2",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    },
+    {
+      "phaseId": "SA-W1",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    },
+    {
+      "phaseId": "SA-V1",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    }
+  ]
+}

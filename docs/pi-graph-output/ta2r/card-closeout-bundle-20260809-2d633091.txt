@@ -1,0 +1,990 @@
+================================================================================
+AUTOLOOP REVIEW BUNDLE (CLOSEOUT)
+================================================================================
+REVIEW_BUNDLE_SCHEMA: autoloop.review-bundle/v1
+REVIEW_BUNDLE_IDENTITY: 2d63309140c7cd1f4563e0db073876c410482326fd72fcbf25cdfec5f7c84c05
+CARD_ID: AUTOLOOP-TA2
+CARD_TITLE: Task Admission + Capability Policy Implementation and Graph Wiring (TA-2)
+CARD_TYPE: implementation
+GENERATED_AT: 2026-08-09T04:30:20.552Z
+
+================================================================================
+1. Review Request
+================================================================================
+CARD_ID: AUTOLOOP-TA2
+CARD_TITLE: Task Admission + Capability Policy Implementation and Graph Wiring (TA-2)
+CARD_TYPE: implementation
+GRAPH_RUN_ID: ta2r-closeout-accounting-20260809
+NODE_ID: R1-repair-scope-confirmation, W1-mandatory-admission-gate, W2-content-identity-delta, W3-bundle-surface-accounting, V1-verify-and-regress, V2-independent-review
+PHASE_EXECUTION_ID: ta2r-closeout-accounting-20260809:R1, ta2r-closeout-accounting-20260809:W1, ta2r-closeout-accounting-20260809:W2, ta2r-closeout-accounting-20260809:W3, ta2r-closeout-accounting-20260809:V1, ta2r-closeout-accounting-20260809:V2
+STAGE_IDS: NOT_APPLICABLE
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+REQUESTED_REVIEW_VERDICT: PASS / REPAIR / HOLD
+This bundle is the single complete text artifact submitted for external review of card AUTOLOOP-TA2.
+
+================================================================================
+2. Executive Status
+================================================================================
+EXECUTIVE_STATUS: PASS
+EXECUTION_PASS: true
+VERIFIER_PASS: true
+INDEPENDENT_REVIEW_PASS: true
+REVIEW_BUNDLE_READY: true
+REVIEW_BUNDLE_DELIVERY_REQUIRED: true
+EXTERNAL_REVIEW_STATUS: AWAITING_EXTERNAL_REVIEW
+SUMMARY: TA-2R closeout-accounting correction (external review REPAIR / TA2R_REPAIR_BUDGET_ACCOUNTING_INCONSISTENT): the F1-F3 repairs are resolved and unchanged; this generation fixes the section-14 lifecycle/accounting — REPAIR_BUDGET_USED now counts external-review-triggered superseding repair generations（USED=1 / MAX=1: TA-2R supersedes a bundle archived with the external REPAIR verdict, so the single bounded repair IS consumed）, the closeout validator rejects a SUPERSEDES_BUNDLE_VERDICT: REPAIR binding with USED==0（fail-closed）, section 14 declares the superseded verdict, and the duplicate summary count is dropped. This is a surface/accounting correction of the SAME bounded repair（TA-1 reseal precedent）— NOT a second bounded repair; the budget stays 1/1. Core card scope（unchanged, verified）: ONE mandatory production admission gate（runAdmittedGraph in src/admission/admission-gate.mjs）now makes a frozen admission a hard precondition for decomposition/execution — no admission -> HOLD/ADMISSION_REQUIRED, malformed -> ADMISSION_INVALID, tampered -> ADMISSION_DRIFT, and the runner is provably never invoked（NEG19 spy proof）; the low-level runner parameter stays a documented compatibility surface only. Delta attribution is now CONTENT-IDENTITY based（content-v1 card-start baselines）: pre-existing dirty files modified by this generation classify MODIFIED with a card-start->closeout sha proof, unchanged pre-existing files stay excluded, and any unattributable path fails the closeout closed — the TA-2 wire-edit attribution is honestly declared NOT machine-attributable from the pre-content baseline instead of guessed. The final-surface contract is closed: the complete bundle is fail-closed scanned for template residue（dollar-brace literals / stale placeholders -> HOLD TEMPLATE_RESIDUE）, every summary count renders from the structured verification results（867/867 (V1-V8); admission 76/76, governance 271/271, review-bundle 26/26, graph-closeout 26/26, external-review-delivery 16/16, scripted-lifecycle 43/43, telemetry 37/37, v2 372/372）, and section 11（graph nodes）and section 16（regression suites）carry one accounting semantics each — the old TESTS_TOTAL: 0 vs 849 conflict is eliminated. CURRENT_CARD_DELTA_PATHS (24 paths), ADDED/MODIFIED/DELETED, DELTA_ATTRIBUTION and the Diff Summary all derive from the SAME machine delta against the card-start baseline 287 paths（content-v1）. Machine verification 20/20; independent review 8/8; regression 867/867 (V1-V8) across admission + governance + review-bundle + graph-closeout + external-review-delivery + scripted-lifecycle + telemetry + v2. This generation SUPERSEDES the previous authoritative bundle 82831126（archived with the external REPAIR verdict TA2R_REPAIR_BUDGET_ACCOUNTING_INCONSISTENT）and linearly supersedes it; the bounded repair budget is fully consumed（USED=1 / MAX=1）. Next: TA-3 per the roadmap.
+
+
+================================================================================
+3. Task Identity
+================================================================================
+CARD_ID: AUTOLOOP-TA2
+CARD_TITLE: Task Admission + Capability Policy Implementation and Graph Wiring (TA-2)
+CARD_TYPE: implementation
+GRAPH_RUN_ID: ta2r-closeout-accounting-20260809
+NODE_ID: R1-repair-scope-confirmation, W1-mandatory-admission-gate, W2-content-identity-delta, W3-bundle-surface-accounting, V1-verify-and-regress, V2-independent-review
+PHASE_EXECUTION_ID: ta2r-closeout-accounting-20260809:R1, ta2r-closeout-accounting-20260809:W1, ta2r-closeout-accounting-20260809:W2, ta2r-closeout-accounting-20260809:W3, ta2r-closeout-accounting-20260809:V1, ta2r-closeout-accounting-20260809:V2
+STAGE_IDS: NOT_APPLICABLE
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+
+
+================================================================================
+4. Repository and Worktree Identity
+================================================================================
+REPOSITORY: git@github.com:xonogesrs/autoloop.git
+BRANCH: governance/reversible-lifecycle-draft-pr
+HEAD: 2e897e995202c0c8c079c5fdc96b9f5d42d50d25
+TREE_SHA: 7ca2c9100b208e15647ff1e0524ffc4e0857e7e0
+WORKTREE_PATH: /Volumes/NVM2T/Development/autoloop
+BASELINE_DIRTY_DIGEST: dirty:7c511297505bc0085ab98e6058e8c1a00f7e590a8119c69fd0dd061e8705b837
+FINAL_DIRTY_DIGEST: dirty:9fa3a7cc160d4fdd4b134c6472f8e117a76ca87d21103c3b256608aa18f371c5
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+5. Objective
+================================================================================
+TA-2R closeout-accounting correction of the Task Admission + Capability Policy Implementation and Graph Wiring card (external review REPAIR / TA2R_REPAIR_BUDGET_ACCOUNTING_INCONSISTENT, findings digest 3b00107a): the F1-F3 repairs (mandatory admission authority, content-identity delta attribution, final-surface rendering/accounting) are RESOLVED and unchanged; this generation corrects the section-14 lifecycle/accounting that made the previous surface internally contradictory — REPAIR_BUDGET_USED now counts external-review-triggered superseding repair generations (TA-2R supersedes a bundle archived with the external REPAIR verdict, so USED=1/MAX=1), the closeout validator rejects SUPERSEDES_BUNDLE_VERDICT: REPAIR with USED==0 (fail-closed invariant), the section-14 binding declares the superseded verdict, and the Executive Summary duplicate admission count is dropped. The bounded repair budget stays consumed 1 of MAX 1 — this is a surface/accounting correction of the same repair, NOT a second bounded repair (one-card-one-review-surface; linear supersede of 82831126). Full card scope (unchanged): (F1) make the production admission authority MANDATORY and non-bypassable — a frozen admission is required before any decomposition/execution via the production entrypoint runAdmittedGraph (src/admission/admission-gate.mjs; runner `admission` stays a documented compatibility surface), with a negative suite proving the runner is never invoked without one; (F2) establish content-identity delta attribution — card-start per-path sha256 baselines, content-modified pre-existing dirty files classified MODIFIED with a start->end sha proof, unattributable paths fail the closeout closed (DELTA_ATTRIBUTION_FAIL_CLOSED), and the TA-2 wire-edit attribution is declared NOT machine-attributable from the pre-content-identity baseline (never guessed); (F3) close the final-surface contract — complete-bundle template-residue scan (any residual dollar-brace template literal or stale placeholder -> HOLD TEMPLATE_RESIDUE), all summary counts rendered from structured verification results, and section 11/16 accounting semantics unified (graph nodes vs regression suites). Pi Agent model policy untouched (R9): deepseek-v4-flash only.
+
+================================================================================
+6. Authorized Scope
+================================================================================
+  - src/admission/
+  - test/admission/
+  - test/governance/
+  - docs/pi-graph-output/ta2r/
+  - docs/pi-graph-output/ta2/
+  - src/subagent/
+  - src/runtime/
+  - src/v2/
+  - src/telemetry/
+  - src/governance/
+  - src/schema/
+  - scripts/ta2-verify.mjs
+  - scripts/ta2-self-closeout.mjs
+  - scripts/ta2-resolve-ta1-verdict.mjs
+  - scripts/ta2r-capture-baseline.mjs
+  - scripts/ta2r-verify.mjs
+  - scripts/ta2r-independent-review.mjs
+  - scripts/ta2r-resolve-ta2-verdict.mjs
+  - scripts/ta2r-resolve-ta2r-verdict.mjs
+  - scripts/ta2r-self-closeout.mjs
+AUTHORIZED_PATHS: src/admission/, test/admission/, test/governance/, docs/pi-graph-output/ta2r/, docs/pi-graph-output/ta2/, src/subagent/, src/runtime/, src/v2/, src/telemetry/, src/governance/, src/schema/, scripts/ta2-verify.mjs, scripts/ta2-self-closeout.mjs, scripts/ta2-resolve-ta1-verdict.mjs, scripts/ta2r-capture-baseline.mjs, scripts/ta2r-verify.mjs, scripts/ta2r-independent-review.mjs, scripts/ta2r-resolve-ta2-verdict.mjs, scripts/ta2r-resolve-ta2r-verdict.mjs, scripts/ta2r-self-closeout.mjs
+
+
+================================================================================
+7. Explicitly Unauthorized Scope
+================================================================================
+  - new isolation runtime / new container backend / new Graph scheduler architecture
+  - self-evolution / automatic capability invention / automatic plugin installation
+  - full telemetry budget enforcement / cost optimizer / Central AutoLoop Control Plane / GUI
+  - multi-model Pi routing / DeepSeek fallback / enabling deepseek-v4-pro
+  - commit / push / merge / release / seal
+  - modify FM-3 sealed evidence / Current/ semantics / any historical bundle
+UNAUTHORIZED_PATHS: new isolation runtime / new container backend / new Graph scheduler architecture, self-evolution / automatic capability invention / automatic plugin installation, full telemetry budget enforcement / cost optimizer / Central AutoLoop Control Plane / GUI, multi-model Pi routing / DeepSeek fallback / enabling deepseek-v4-pro, commit / push / merge / release / seal, modify FM-3 sealed evidence / Current/ semantics / any historical bundle
+
+
+================================================================================
+8. Architecture and Design Decisions
+================================================================================
+  - TA-2R F1 — MANDATORY production admission authority: src/admission/admission-gate.mjs is the single production entrypoint. runAdmittedGraph / runColimaGraphAdmitted / runSubagentGraphAdmitted / runDurableGraphAdmitted enforce assertProductionAdmission BEFORE any dispatch: no admission -> HOLD/ADMISSION_REQUIRED, malformed -> ADMISSION_INVALID, tampered/unfrozen -> ADMISSION_DRIFT — and the runner is NEVER invoked（the negative suite injects a spy runner to prove non-bypassability）. The low-level runner `admission` parameter stays a documented compatibility surface（internal sub-graph calls, legacy callers）; it can no longer be mistaken for the production path.
+  - TA-2R F2 — content-identity delta attribution: card-start baselines now bind per-path content sha256（pathShas + contentDigest, attributionModel content-v1）. computeInventoryDelta classifies a pre-existing dirty path as MODIFIED ONLY when its card-start sha != closeout sha（DELTA_ATTRIBUTION renders the start->end proof）; an unchanged pre-existing dirty path stays excluded（R3）; a path whose card-start sha is unavailable makes the closeout HOLD / DELTA_ATTRIBUTION_FAIL_CLOSED — attribution is never guessed. The TA-2 card-start baseline predates content capture, so TA-2's wire-edit attribution is declared NOT machine-attributable（fail-closed position recorded in §21）; TA-2R's own delta is fully machine-proven.
+  - TA-2R F3 — final-surface rendering/accounting: renderReviewBundle + the closeout gate + the independent validator ALL run a complete-bundle template-residue scan（any residual dollar-brace template literal and stale 24-family literals -> HOLD TEMPLATE_RESIDUE / INVALID template_residue）. Summary counts render from the structured ta2r-verification.json（renderVerifierAccounting + derived per-suite lines）— no hand-written X/Y and no unresolved dollar-brace literals. Section 11 counts GRAPH NODES（NODES_EXECUTED/PASSED/FAILED/TOTAL）, section 16 the regression suites — two distinct surfaces, never mixed（the old TESTS_TOTAL: 0 vs 849 conflict is gone）.
+  - TA-2R F4 — closeout-accounting（external review REPAIR / TA2R_REPAIR_BUDGET_ACCOUNTING_INCONSISTENT）: REPAIR_BUDGET_USED is DEFINED to count external-review-triggered superseding repair generations — a generation that linearly supersedes a bundle archived with the external REPAIR verdict IS itself one bounded-repair iteration consumed against the card-level budget（TA-2R: TA-2 -> external REPAIR -> TA-2R consumes 1 of REPAIR_BUDGET_MAX=1）. The production closeout layer（buildGraphCloseoutSource）derives the count from closeout.supersedes.verdict and records the attempt（external-review-superseding-repair）; section 14 declares SUPERSEDES_BUNDLE_VERDICT; the closeout validator independently rejects SUPERSEDES_BUNDLE_VERDICT: REPAIR with REPAIR_BUDGET_USED == 0（repair_budget_unconsumed_despite_superseding_repair）— the control plane can never observe a superseding repair generation with an unconsumed budget（which would still allow another repair round）. The previous bundle（82831126）reported NOT_APPLICABLE/USED=0 next to its supersede of 432e85b5（a REPAIR-archived bundle）— that contradiction is what this generation corrects; the correction is a surface/accounting fix of the SAME bounded repair, NOT a second repair（budget stays 1/1; TA-1 reseal precedent）.
+  - ONE admission authority (A1) unchanged: src/admission/* remains the ONLY writer of admission records; the mandatory gate consumes a frozen record and hands it to the runner unchanged.
+  - Size and risk stay SEPARATE axes (A2); risk dominates（unchanged）; fail-closed everywhere (A3)（unchanged）.
+  - One card, one review surface (U/NEG9/NEG10): TA-2R supersedes the previous authoritative bundle linearly; the surface was rotated to Archive/ with the external REPAIR verdict; partial supersede bindings still fail closed.
+  - Post-FM-3 closeout hardening (V1-V5) extended by TA-2R: V1 baseline gate + content-v1 gate（BASELINE_CONTENT_IDENTITY_MISSING on pre-content baselines）; V2 single machine delta truth now content-identity aware; V3 derived narrative counts; V4 structured verifier accounting; V5 stale-count regression + complete-bundle residue scan（NEG18）.
+  - Pi Agent model policy (W/R9) untouched: deepseek-v4-flash only.
+  - Scope discipline: no commit/push/merge/seal; no new isolation runtime; no scheduler architecture change; the TA-2 bundle and evidence were archived（not modified）.
+
+================================================================================
+9. Files Added / Modified / Deleted
+================================================================================
+CARD_IMPLEMENTATION_FILES:
+    - src/admission/admission-gate.mjs
+    - src/governance/card-inventory.mjs
+    - src/governance/review-bundle.mjs
+    - src/runtime/colima-graph-runner.mjs
+    - src/subagent/subagent-graph-runner.mjs
+    - src/v2/durable-graph.mjs
+    - test/admission/test-admission-gate.mjs
+    - test/admission/test-closeout-hardening.mjs
+    - test/governance/test-external-review-delivery.mjs
+    - test/governance/test-graph-closeout.mjs
+    - scripts/ta2r-capture-baseline.mjs
+    - scripts/ta2r-verify.mjs
+    - scripts/ta2r-independent-review.mjs
+    - scripts/ta2r-resolve-ta2-verdict.mjs
+    - scripts/ta2r-resolve-ta2r-verdict.mjs
+    - scripts/ta2r-self-closeout.mjs
+GRAPH_CLOSEOUT_OUTPUTS:
+    - docs/pi-graph-output/ta2r/card-closeout-bundle-20260808-82831126.txt
+    - docs/pi-graph-output/ta2r/card-closeout-bundle-20260809-2d633091.txt
+    - docs/pi-graph-output/ta2r/ta2r-card-start-baseline.json
+    - docs/pi-graph-output/ta2r/ta2r-closeout-accounting-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/ta2r/ta2r-independent-review.json
+    - docs/pi-graph-output/ta2r/ta2r-sample-admissions.json
+    - docs/pi-graph-output/ta2r/ta2r-self-closeout-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/ta2r/ta2r-verification.json
+PRE_EXISTING_DIRTY_FILES:
+    - docs/pi-graph-output/cbm2/card-closeout-bundle-20260806-f484fae1.txt
+    - docs/pi-graph-output/cbm2/cbm2-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-443d736c.txt
+    - docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-955e9ce1.txt
+    - docs/pi-graph-output/cbm2r/cbm2r-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-083f246b.txt
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-59dc320e.txt
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-b1c61eb1.txt
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-c03d9205.txt
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-dc09c31f.txt
+    - docs/pi-graph-output/cbm3/cbm3-memory-probe-20260807-evidence.json
+    - docs/pi-graph-output/cbm3/cbm3-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-3e10eef3.txt
+    - docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-58a30a9a.txt
+    - docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-f96491fd.txt
+    - docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-4ebc2fcc.txt
+    - docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-c61c841c.txt
+    - docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-ea9832df.txt
+    - docs/pi-graph-output/cbm4/cbm4-perf-closeout-20260808-evidence.json
+    - docs/pi-graph-output/cbm4/cbm4-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/cost1/card-closeout-bundle-20260807-185a348f.txt
+    - docs/pi-graph-output/cost1/card-closeout-bundle-20260807-5d5dcfae.txt
+    - docs/pi-graph-output/cost1/card-closeout-bundle-20260807-baa718e0.txt
+    - docs/pi-graph-output/cost1/cost1-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/cost1/cost1-telemetry-overhead-20260807-evidence.json
+    - docs/pi-graph-output/de1/DE-1R-card-spec.md
+    - docs/pi-graph-output/de1/card-closeout-bundle-20260808-90b0bca8.txt
+    - docs/pi-graph-output/de1/card-closeout-bundle-20260808-aedcafcc.txt
+    - docs/pi-graph-output/de1/de1-bakeoff-results.json
+    - docs/pi-graph-output/de1/de1-candidate-research.json
+    - docs/pi-graph-output/de1/de1-decision-evidence.json
+    - docs/pi-graph-output/de1/de1-durable-capability-map.json
+    - docs/pi-graph-output/de1/de1-durable-invariants.json
+    - docs/pi-graph-output/de1/de1-external-review-resolution.json
+    - docs/pi-graph-output/de1/de1-external-review-verdict.md
+    - docs/pi-graph-output/de1/de1-failure-model.json
+    - docs/pi-graph-output/de1/de1-independent-review.json
+    - docs/pi-graph-output/de1/de1-provider-contract.json
+    - docs/pi-graph-output/de1/de1-security-findings.json
+    - docs/pi-graph-output/de1/de1-self-closeout-20260808-graph-closeout-evidence.json
+    - docs/pi-graph-output/de1/external-review-delivery-aedcafcc.json
+    - docs/pi-graph-output/de1r/card-closeout-bundle-20260808-2ff86a26.txt
+    - docs/pi-graph-output/de1r/de1r-bakeoff-results.json
+    - docs/pi-graph-output/de1r/de1r-comparison.json
+    - docs/pi-graph-output/de1r/de1r-decision.json
+    - docs/pi-graph-output/de1r/de1r-deployment.json
+    - docs/pi-graph-output/de1r/de1r-external-review-verdict.md
+    - docs/pi-graph-output/de1r/de1r-restate-disposition.json
+    - docs/pi-graph-output/de1r/de1r-self-closeout-20260808-graph-closeout-evidence.json
+    - docs/pi-graph-output/de1r/external-review-delivery-2ff86a26.json
+    - docs/pi-graph-output/de2/card-closeout-bundle-20260808-0a1af929.txt
+    - docs/pi-graph-output/de2/card-closeout-bundle-20260808-1c546aba.txt
+    - docs/pi-graph-output/de2/card-closeout-bundle-20260808-90d8676f.txt
+    - docs/pi-graph-output/de2/card-closeout-bundle-20260808-a1de29be.txt
+    - docs/pi-graph-output/de2/card-closeout-bundle-20260808-cf7d7351.txt
+    - docs/pi-graph-output/de2/de2-baseline.json
+    - docs/pi-graph-output/de2/de2-crash-matrix.json
+    - docs/pi-graph-output/de2/de2-decision.json
+    - docs/pi-graph-output/de2/de2-external-review-resolution.json
+    - docs/pi-graph-output/de2/de2-external-review-verdict.md
+    - docs/pi-graph-output/de2/de2-integration-map.json
+    - docs/pi-graph-output/de2/de2-performance.json
+    - docs/pi-graph-output/de2/de2-persistence-boundary-map.json
+    - docs/pi-graph-output/de2/de2-self-closeout-20260808-graph-closeout-evidence.json
+    - docs/pi-graph-output/de2/external-review-delivery-1c546aba.json
+    - docs/pi-graph-output/de2/external-review-delivery-90d8676f.json
+    - docs/pi-graph-output/de2r/DE-2R-card-spec.md
+    - docs/pi-graph-output/de2r/card-closeout-bundle-20260808-98a2ba3b.txt
+    - docs/pi-graph-output/de2r/de2r-external-review-verdict.md
+    - docs/pi-graph-output/de2r/de2r-self-closeout-20260808-graph-closeout-evidence.json
+    - docs/pi-graph-output/de2r/de2r-subagent-resume.json
+    - docs/pi-graph-output/de2r/external-review-delivery-98a2ba3b.json
+    - docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-02d07222.txt
+    - docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-c3c1e727.txt
+    - docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-d82c7010.txt
+    - docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-dae4430a.txt
+    - docs/pi-graph-output/fm3-rbi/closeout-state.json
+    - docs/pi-graph-output/fm3-rbi/fm3-rbi-1-self-closeout-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/fm3-rbi/fm3-rbi-2-final-closeout-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-646b9cb9.txt
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-890417e7.txt
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-89fe0bcf.txt
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-a9279a81.txt
+    - docs/pi-graph-output/rb1g/external-review-delivery-646b9cb9.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-890417e7.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-89fe0bcf.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-91cf6d38.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-a9279a81.json
+    - docs/pi-graph-output/rb1g/rb1g-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-20a147b5.txt
+    - docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-cbf3a4c5.txt
+    - docs/pi-graph-output/rb1h/rb1h-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/report-lifecycle-repair-1/card-closeout-bundle-20260808-e9de8343.txt
+    - docs/pi-graph-output/report-lifecycle-repair-1/closeout-state.json
+    - docs/pi-graph-output/report-lifecycle-repair-1/report-lifecycle-repair-1-self-closeout-20260808-graph-closeout-evidence.json
+    - docs/pi-graph-output/ta1/TA-1-card-spec.md
+    - docs/pi-graph-output/ta1/card-closeout-bundle-20260808-0fc4d420.txt
+    - docs/pi-graph-output/ta1/card-closeout-bundle-20260808-10de563b.txt
+    - docs/pi-graph-output/ta1/card-closeout-bundle-20260808-5d47f1bf.txt
+    - docs/pi-graph-output/ta1/card-closeout-bundle-20260808-e8b046cc.txt
+    - docs/pi-graph-output/ta1/card-closeout-bundle-20260808-f134374c.txt
+    - docs/pi-graph-output/ta1/ta1-admission-decision-matrix.json
+    - docs/pi-graph-output/ta1/ta1-admission-schema.json
+    - docs/pi-graph-output/ta1/ta1-capability-inventory.json
+    - docs/pi-graph-output/ta1/ta1-capability-usage-matrix.json
+    - docs/pi-graph-output/ta1/ta1-card-start-baseline.json
+    - docs/pi-graph-output/ta1/ta1-high-risk-escalation.json
+    - docs/pi-graph-output/ta1/ta1-implementation-recommendation.json
+    - docs/pi-graph-output/ta1/ta1-independent-review.json
+    - docs/pi-graph-output/ta1/ta1-integration-map.json
+    - docs/pi-graph-output/ta1/ta1-machine-readable-admission-contract.json
+    - docs/pi-graph-output/ta1/ta1-negative-case-matrix.json
+    - docs/pi-graph-output/ta1/ta1-one-card-one-review-surface-contract.json
+    - docs/pi-graph-output/ta1/ta1-risk-tier-model.json
+    - docs/pi-graph-output/ta1/ta1-sample-admissions.json
+    - docs/pi-graph-output/ta1/ta1-self-closeout-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/ta1/ta1-small-task-fast-path.json
+    - docs/pi-graph-output/ta1/ta1-summary.md
+    - docs/pi-graph-output/ta1/ta1-surface-reseal-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/ta1/ta1-task-size-model.json
+    - docs/pi-graph-output/ta2/card-closeout-bundle-20260808-432e85b5.txt
+    - docs/pi-graph-output/ta2/card-closeout-bundle-20260808-4e3796fe.txt
+    - docs/pi-graph-output/ta2/card-closeout-bundle-20260808-6f0fa848.txt
+    - docs/pi-graph-output/ta2/card-closeout-bundle-20260808-e66bd0dd.txt
+    - docs/pi-graph-output/ta2/ta2-card-start-baseline.json
+    - docs/pi-graph-output/ta2/ta2-independent-review.json
+    - docs/pi-graph-output/ta2/ta2-sample-admissions.json
+    - docs/pi-graph-output/ta2/ta2-self-closeout-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/ta2/ta2-summary.md
+    - docs/pi-graph-output/ta2/ta2-verification.json
+    - package.json
+    - scripts/c3-colima-task.mjs
+    - scripts/capture-review-repair-evidence.mjs
+    - scripts/capture-subagent-writer-evidence.mjs
+    - scripts/cbm2-self-closeout.mjs
+    - scripts/cbm2r-self-closeout.mjs
+    - scripts/cbm3-memory-probe.mjs
+    - scripts/cbm3-self-closeout.mjs
+    - scripts/cbm4-self-closeout.mjs
+    - scripts/colima-runtime-integration.mjs
+    - scripts/collect-test-accounting.mjs
+    - scripts/cost1-self-closeout.mjs
+    - scripts/cost1-telemetry-probe.mjs
+    - scripts/de1-bakeoff-worker.mjs
+    - scripts/de1-bakeoff-workload.mjs
+    - scripts/de1-bakeoff.mjs
+    - scripts/de1-provider-contract-check.mjs
+    - scripts/de1-self-closeout.mjs
+    - scripts/de1r-activities.mjs
+    - scripts/de1r-bakeoff.mjs
+    - scripts/de1r-self-closeout.mjs
+    - scripts/de1r-worker.mjs
+    - scripts/de1r-workflow.mjs
+    - scripts/de2-crash-matrix.mjs
+    - scripts/de2-crash-worker.mjs
+    - scripts/de2-perf-probe.mjs
+    - scripts/de2-self-closeout.mjs
+    - scripts/de2r-self-closeout.mjs
+    - scripts/de2r-subagent-resume-probe.mjs
+    - scripts/de2r-subagent-resume-worker.mjs
+    - scripts/gov-closeout-bundle.mjs
+    - scripts/gov-external-review-surface.mjs
+    - scripts/rb1g-self-closeout.mjs
+    - scripts/rb1h-self-closeout.mjs
+    - scripts/rb1r-self-closeout.mjs
+    - scripts/ta1-repair-baseline.mjs
+    - scripts/ta1-self-closeout.mjs
+    - scripts/ta1-verify.mjs
+    - scripts/ta2-resolve-ta1-verdict.mjs
+    - scripts/ta2-self-closeout.mjs
+    - scripts/ta2-verify.mjs
+    - src/admission/admission-record.mjs
+    - src/admission/classify.mjs
+    - src/admission/policy-projection.mjs
+    - src/admission/registry.mjs
+    - src/governance/card-inventory.mjs
+    - src/governance/closeout-state.mjs
+    - src/governance/review-bundle.mjs
+    - src/memory/canonical.mjs
+    - src/memory/contract.mjs
+    - src/memory/graph-context.mjs
+    - src/memory/identity.mjs
+    - src/memory/index.mjs
+    - src/memory/jsonl-journal.mjs
+    - src/memory/local-store.mjs
+    - src/memory/query-schema.mjs
+    - src/memory/retrieval.mjs
+    - src/memory/schema.mjs
+    - src/memory/snapshot.mjs
+    - src/memory/sqlite-schema.mjs
+    - src/memory/validation.mjs
+    - src/memory/writeback/candidate.mjs
+    - src/memory/writeback/gate.mjs
+    - src/memory/writeback/graph.mjs
+    - src/memory/writeback/index.mjs
+    - src/memory/writeback/source-map.mjs
+    - src/memory/writeback/telemetry.mjs
+    - src/memory/writeback/trust.mjs
+    - src/runtime/colima-executor-adapter.mjs
+    - src/runtime/colima-graph-runner.mjs
+    - src/runtime/colima-pipeline.mjs
+    - src/runtime/colima-reviewer-adapter.mjs
+    - src/runtime/colima-runtime.mjs
+    - src/runtime/colima-worktree.mjs
+    - src/schema/card-input.schema.json
+    - src/subagent/subagent-contract.mjs
+    - src/subagent/subagent-executor-adapter.mjs
+    - src/subagent/subagent-graph-runner.mjs
+    - src/subagent/subagent-review-agent.mjs
+    - src/subagent/subagent-reviewer-adapter.mjs
+    - src/subagent/subagent-writer-executor-adapter.mjs
+    - src/telemetry/aggregate.mjs
+    - src/telemetry/budgets.mjs
+    - src/telemetry/contract.mjs
+    - src/telemetry/graph-observer.mjs
+    - src/telemetry/index.mjs
+    - src/telemetry/security.mjs
+    - src/telemetry/source-map.mjs
+    - src/telemetry/store.mjs
+    - src/v2/checkpoint-bridge.mjs
+    - src/v2/durable-execution.mjs
+    - src/v2/durable-graph.mjs
+    - src/v2/execution-orchestrator.mjs
+    - src/v2/phase-task-card.mjs
+    - src/v2/review-evidence.mjs
+    - test/admission/test-admission-record.mjs
+    - test/admission/test-capability-registry.mjs
+    - test/admission/test-classifier.mjs
+    - test/admission/test-closeout-hardening.mjs
+    - test/admission/test-durable-binding.mjs
+    - test/admission/test-envelope-enforcement.mjs
+    - test/admission/test-graph-wiring.mjs
+    - test/admission/test-review-surface.mjs
+    - test/governance/test-card-inventory.mjs
+    - test/governance/test-closeout-lifecycle.mjs
+    - test/governance/test-external-review-delivery.mjs
+    - test/governance/test-external-review-surface.mjs
+    - test/governance/test-git-status-parsing.mjs
+    - test/governance/test-graph-closeout.mjs
+    - test/governance/test-inventory-consistency.mjs
+    - test/governance/test-review-bundle.mjs
+    - test/memory/helpers-cbm3.mjs
+    - test/memory/helpers.mjs
+    - test/memory/test-canonical.mjs
+    - test/memory/test-graph-colima-writeback.mjs
+    - test/memory/test-graph-context.mjs
+    - test/memory/test-jsonl.mjs
+    - test/memory/test-local-store.mjs
+    - test/memory/test-query-schema.mjs
+    - test/memory/test-rebuild-determinism.mjs
+    - test/memory/test-record-schema.mjs
+    - test/memory/test-retrieval-security.mjs
+    - test/memory/test-retrieval.mjs
+    - test/memory/test-security.mjs
+    - test/memory/test-snapshot.mjs
+    - test/memory/test-sqlite.mjs
+    - test/memory/test-trust-validity.mjs
+    - test/memory/test-writeback-candidate.mjs
+    - test/memory/test-writeback-closed-loop.mjs
+    - test/memory/test-writeback-gate.mjs
+    - test/memory/test-writeback-graph.mjs
+    - test/memory/test-writeback-perf.mjs
+    - test/memory/test-writeback-telemetry.mjs
+    - test/memory/test-writeback-trust.mjs
+    - test/telemetry/test-telemetry-cbm3-invariance.mjs
+    - test/telemetry/test-telemetry-contract.mjs
+    - test/telemetry/test-telemetry-graph-invariance.mjs
+    - test/telemetry/test-telemetry-lifecycle.mjs
+    - test/telemetry/test-telemetry-overhead.mjs
+    - test/telemetry/test-telemetry-security.mjs
+    - test/test-c3-colima-pipeline.mjs
+    - test/test-colima-graph.mjs
+    - test/test-colima-runtime.mjs
+    - test/test-durable-subagent-resume.mjs
+    - test/test-graph-closeout-integration.mjs
+    - test/test-subagent-graph.mjs
+    - test/test-subagent-review-repair-graph.mjs
+    - test/test-subagent-writer-graph.mjs
+    - test/v2/test-decomposition-hold-observability.mjs
+    - test/v2/test-durable-graph.mjs
+    - test/v2/test-durable-subagent-resume.mjs
+    - test/v2/test-executor-evidence-observability.mjs
+    - test/v2/test-executor-strict-json-prompt.mjs
+    - test/v2/test-harness-owned-evidence.mjs
+    - test/v2/test-pre-decomposition-interruption.mjs
+    - test/v2/test-review-evidence-delivery.mjs
+    - test/v2/test-system-delta.mjs
+CARD_INVENTORY_MODEL: delta-v1
+ATTRIBUTION_MODEL: content-v1
+BASELINE_HEAD: 2e897e995202c0c8c079c5fdc96b9f5d42d50d25
+BASELINE_DIRTY_DIGEST: dirty:7c511297505bc0085ab98e6058e8c1a00f7e590a8119c69fd0dd061e8705b837
+BASELINE_CONTENT_DIGEST: b06f2d368092189b42c1ac0ff55a2279198fac883f13e9fd92710558f85a4a7c
+BASELINE_DIRTY_PATHS:
+    - docs/pi-graph-output/cbm2/card-closeout-bundle-20260806-f484fae1.txt
+    - docs/pi-graph-output/cbm2/cbm2-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-443d736c.txt
+    - docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-955e9ce1.txt
+    - docs/pi-graph-output/cbm2r/cbm2r-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-083f246b.txt
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-59dc320e.txt
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-b1c61eb1.txt
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-c03d9205.txt
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-dc09c31f.txt
+    - docs/pi-graph-output/cbm3/cbm3-memory-probe-20260807-evidence.json
+    - docs/pi-graph-output/cbm3/cbm3-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-3e10eef3.txt
+    - docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-58a30a9a.txt
+    - docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-f96491fd.txt
+    - docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-4ebc2fcc.txt
+    - docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-c61c841c.txt
+    - docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-ea9832df.txt
+    - docs/pi-graph-output/cbm4/cbm4-perf-closeout-20260808-evidence.json
+    - docs/pi-graph-output/cbm4/cbm4-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/cost1/card-closeout-bundle-20260807-185a348f.txt
+    - docs/pi-graph-output/cost1/card-closeout-bundle-20260807-5d5dcfae.txt
+    - docs/pi-graph-output/cost1/card-closeout-bundle-20260807-baa718e0.txt
+    - docs/pi-graph-output/cost1/cost1-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/cost1/cost1-telemetry-overhead-20260807-evidence.json
+    - docs/pi-graph-output/de1/DE-1R-card-spec.md
+    - docs/pi-graph-output/de1/card-closeout-bundle-20260808-90b0bca8.txt
+    - docs/pi-graph-output/de1/card-closeout-bundle-20260808-aedcafcc.txt
+    - docs/pi-graph-output/de1/de1-bakeoff-results.json
+    - docs/pi-graph-output/de1/de1-candidate-research.json
+    - docs/pi-graph-output/de1/de1-decision-evidence.json
+    - docs/pi-graph-output/de1/de1-durable-capability-map.json
+    - docs/pi-graph-output/de1/de1-durable-invariants.json
+    - docs/pi-graph-output/de1/de1-external-review-resolution.json
+    - docs/pi-graph-output/de1/de1-external-review-verdict.md
+    - docs/pi-graph-output/de1/de1-failure-model.json
+    - docs/pi-graph-output/de1/de1-independent-review.json
+    - docs/pi-graph-output/de1/de1-provider-contract.json
+    - docs/pi-graph-output/de1/de1-security-findings.json
+    - docs/pi-graph-output/de1/de1-self-closeout-20260808-graph-closeout-evidence.json
+    - docs/pi-graph-output/de1/external-review-delivery-aedcafcc.json
+    - docs/pi-graph-output/de1r/card-closeout-bundle-20260808-2ff86a26.txt
+    - docs/pi-graph-output/de1r/de1r-bakeoff-results.json
+    - docs/pi-graph-output/de1r/de1r-comparison.json
+    - docs/pi-graph-output/de1r/de1r-decision.json
+    - docs/pi-graph-output/de1r/de1r-deployment.json
+    - docs/pi-graph-output/de1r/de1r-external-review-verdict.md
+    - docs/pi-graph-output/de1r/de1r-restate-disposition.json
+    - docs/pi-graph-output/de1r/de1r-self-closeout-20260808-graph-closeout-evidence.json
+    - docs/pi-graph-output/de1r/external-review-delivery-2ff86a26.json
+    - docs/pi-graph-output/de2/card-closeout-bundle-20260808-0a1af929.txt
+    - docs/pi-graph-output/de2/card-closeout-bundle-20260808-1c546aba.txt
+    - docs/pi-graph-output/de2/card-closeout-bundle-20260808-90d8676f.txt
+    - docs/pi-graph-output/de2/card-closeout-bundle-20260808-a1de29be.txt
+    - docs/pi-graph-output/de2/card-closeout-bundle-20260808-cf7d7351.txt
+    - docs/pi-graph-output/de2/de2-baseline.json
+    - docs/pi-graph-output/de2/de2-crash-matrix.json
+    - docs/pi-graph-output/de2/de2-decision.json
+    - docs/pi-graph-output/de2/de2-external-review-resolution.json
+    - docs/pi-graph-output/de2/de2-external-review-verdict.md
+    - docs/pi-graph-output/de2/de2-integration-map.json
+    - docs/pi-graph-output/de2/de2-performance.json
+    - docs/pi-graph-output/de2/de2-persistence-boundary-map.json
+    - docs/pi-graph-output/de2/de2-self-closeout-20260808-graph-closeout-evidence.json
+    - docs/pi-graph-output/de2/external-review-delivery-1c546aba.json
+    - docs/pi-graph-output/de2/external-review-delivery-90d8676f.json
+    - docs/pi-graph-output/de2r/DE-2R-card-spec.md
+    - docs/pi-graph-output/de2r/card-closeout-bundle-20260808-98a2ba3b.txt
+    - docs/pi-graph-output/de2r/de2r-external-review-verdict.md
+    - docs/pi-graph-output/de2r/de2r-self-closeout-20260808-graph-closeout-evidence.json
+    - docs/pi-graph-output/de2r/de2r-subagent-resume.json
+    - docs/pi-graph-output/de2r/external-review-delivery-98a2ba3b.json
+    - docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-02d07222.txt
+    - docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-c3c1e727.txt
+    - docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-d82c7010.txt
+    - docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-dae4430a.txt
+    - docs/pi-graph-output/fm3-rbi/closeout-state.json
+    - docs/pi-graph-output/fm3-rbi/fm3-rbi-1-self-closeout-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/fm3-rbi/fm3-rbi-2-final-closeout-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-646b9cb9.txt
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-890417e7.txt
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-89fe0bcf.txt
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-a9279a81.txt
+    - docs/pi-graph-output/rb1g/external-review-delivery-646b9cb9.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-890417e7.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-89fe0bcf.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-91cf6d38.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-a9279a81.json
+    - docs/pi-graph-output/rb1g/rb1g-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-20a147b5.txt
+    - docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-cbf3a4c5.txt
+    - docs/pi-graph-output/rb1h/rb1h-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/report-lifecycle-repair-1/card-closeout-bundle-20260808-e9de8343.txt
+    - docs/pi-graph-output/report-lifecycle-repair-1/closeout-state.json
+    - docs/pi-graph-output/report-lifecycle-repair-1/report-lifecycle-repair-1-self-closeout-20260808-graph-closeout-evidence.json
+    - docs/pi-graph-output/ta1/TA-1-card-spec.md
+    - docs/pi-graph-output/ta1/card-closeout-bundle-20260808-0fc4d420.txt
+    - docs/pi-graph-output/ta1/card-closeout-bundle-20260808-10de563b.txt
+    - docs/pi-graph-output/ta1/card-closeout-bundle-20260808-5d47f1bf.txt
+    - docs/pi-graph-output/ta1/card-closeout-bundle-20260808-e8b046cc.txt
+    - docs/pi-graph-output/ta1/card-closeout-bundle-20260808-f134374c.txt
+    - docs/pi-graph-output/ta1/ta1-admission-decision-matrix.json
+    - docs/pi-graph-output/ta1/ta1-admission-schema.json
+    - docs/pi-graph-output/ta1/ta1-capability-inventory.json
+    - docs/pi-graph-output/ta1/ta1-capability-usage-matrix.json
+    - docs/pi-graph-output/ta1/ta1-card-start-baseline.json
+    - docs/pi-graph-output/ta1/ta1-high-risk-escalation.json
+    - docs/pi-graph-output/ta1/ta1-implementation-recommendation.json
+    - docs/pi-graph-output/ta1/ta1-independent-review.json
+    - docs/pi-graph-output/ta1/ta1-integration-map.json
+    - docs/pi-graph-output/ta1/ta1-machine-readable-admission-contract.json
+    - docs/pi-graph-output/ta1/ta1-negative-case-matrix.json
+    - docs/pi-graph-output/ta1/ta1-one-card-one-review-surface-contract.json
+    - docs/pi-graph-output/ta1/ta1-risk-tier-model.json
+    - docs/pi-graph-output/ta1/ta1-sample-admissions.json
+    - docs/pi-graph-output/ta1/ta1-self-closeout-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/ta1/ta1-small-task-fast-path.json
+    - docs/pi-graph-output/ta1/ta1-summary.md
+    - docs/pi-graph-output/ta1/ta1-surface-reseal-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/ta1/ta1-task-size-model.json
+    - docs/pi-graph-output/ta2/card-closeout-bundle-20260808-432e85b5.txt
+    - docs/pi-graph-output/ta2/card-closeout-bundle-20260808-4e3796fe.txt
+    - docs/pi-graph-output/ta2/card-closeout-bundle-20260808-6f0fa848.txt
+    - docs/pi-graph-output/ta2/card-closeout-bundle-20260808-e66bd0dd.txt
+    - docs/pi-graph-output/ta2/ta2-card-start-baseline.json
+    - docs/pi-graph-output/ta2/ta2-independent-review.json
+    - docs/pi-graph-output/ta2/ta2-sample-admissions.json
+    - docs/pi-graph-output/ta2/ta2-self-closeout-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/ta2/ta2-summary.md
+    - docs/pi-graph-output/ta2/ta2-verification.json
+    - package.json
+    - scripts/c3-colima-task.mjs
+    - scripts/capture-review-repair-evidence.mjs
+    - scripts/capture-subagent-writer-evidence.mjs
+    - scripts/cbm2-self-closeout.mjs
+    - scripts/cbm2r-self-closeout.mjs
+    - scripts/cbm3-memory-probe.mjs
+    - scripts/cbm3-self-closeout.mjs
+    - scripts/cbm4-self-closeout.mjs
+    - scripts/colima-runtime-integration.mjs
+    - scripts/collect-test-accounting.mjs
+    - scripts/cost1-self-closeout.mjs
+    - scripts/cost1-telemetry-probe.mjs
+    - scripts/de1-bakeoff-worker.mjs
+    - scripts/de1-bakeoff-workload.mjs
+    - scripts/de1-bakeoff.mjs
+    - scripts/de1-provider-contract-check.mjs
+    - scripts/de1-self-closeout.mjs
+    - scripts/de1r-activities.mjs
+    - scripts/de1r-bakeoff.mjs
+    - scripts/de1r-self-closeout.mjs
+    - scripts/de1r-worker.mjs
+    - scripts/de1r-workflow.mjs
+    - scripts/de2-crash-matrix.mjs
+    - scripts/de2-crash-worker.mjs
+    - scripts/de2-perf-probe.mjs
+    - scripts/de2-self-closeout.mjs
+    - scripts/de2r-self-closeout.mjs
+    - scripts/de2r-subagent-resume-probe.mjs
+    - scripts/de2r-subagent-resume-worker.mjs
+    - scripts/gov-closeout-bundle.mjs
+    - scripts/gov-external-review-surface.mjs
+    - scripts/rb1g-self-closeout.mjs
+    - scripts/rb1h-self-closeout.mjs
+    - scripts/rb1r-self-closeout.mjs
+    - scripts/ta1-repair-baseline.mjs
+    - scripts/ta1-self-closeout.mjs
+    - scripts/ta1-verify.mjs
+    - scripts/ta2-resolve-ta1-verdict.mjs
+    - scripts/ta2-self-closeout.mjs
+    - scripts/ta2-verify.mjs
+    - src/admission/admission-record.mjs
+    - src/admission/classify.mjs
+    - src/admission/policy-projection.mjs
+    - src/admission/registry.mjs
+    - src/governance/card-inventory.mjs
+    - src/governance/closeout-state.mjs
+    - src/governance/review-bundle.mjs
+    - src/memory/canonical.mjs
+    - src/memory/contract.mjs
+    - src/memory/graph-context.mjs
+    - src/memory/identity.mjs
+    - src/memory/index.mjs
+    - src/memory/jsonl-journal.mjs
+    - src/memory/local-store.mjs
+    - src/memory/query-schema.mjs
+    - src/memory/retrieval.mjs
+    - src/memory/schema.mjs
+    - src/memory/snapshot.mjs
+    - src/memory/sqlite-schema.mjs
+    - src/memory/validation.mjs
+    - src/memory/writeback/candidate.mjs
+    - src/memory/writeback/gate.mjs
+    - src/memory/writeback/graph.mjs
+    - src/memory/writeback/index.mjs
+    - src/memory/writeback/source-map.mjs
+    - src/memory/writeback/telemetry.mjs
+    - src/memory/writeback/trust.mjs
+    - src/runtime/colima-executor-adapter.mjs
+    - src/runtime/colima-graph-runner.mjs
+    - src/runtime/colima-pipeline.mjs
+    - src/runtime/colima-reviewer-adapter.mjs
+    - src/runtime/colima-runtime.mjs
+    - src/runtime/colima-worktree.mjs
+    - src/schema/card-input.schema.json
+    - src/subagent/subagent-contract.mjs
+    - src/subagent/subagent-executor-adapter.mjs
+    - src/subagent/subagent-graph-runner.mjs
+    - src/subagent/subagent-review-agent.mjs
+    - src/subagent/subagent-reviewer-adapter.mjs
+    - src/subagent/subagent-writer-executor-adapter.mjs
+    - src/telemetry/aggregate.mjs
+    - src/telemetry/budgets.mjs
+    - src/telemetry/contract.mjs
+    - src/telemetry/graph-observer.mjs
+    - src/telemetry/index.mjs
+    - src/telemetry/security.mjs
+    - src/telemetry/source-map.mjs
+    - src/telemetry/store.mjs
+    - src/v2/checkpoint-bridge.mjs
+    - src/v2/durable-execution.mjs
+    - src/v2/durable-graph.mjs
+    - src/v2/execution-orchestrator.mjs
+    - src/v2/phase-task-card.mjs
+    - src/v2/review-evidence.mjs
+    - test/admission/test-admission-record.mjs
+    - test/admission/test-capability-registry.mjs
+    - test/admission/test-classifier.mjs
+    - test/admission/test-closeout-hardening.mjs
+    - test/admission/test-durable-binding.mjs
+    - test/admission/test-envelope-enforcement.mjs
+    - test/admission/test-graph-wiring.mjs
+    - test/admission/test-review-surface.mjs
+    - test/governance/test-card-inventory.mjs
+    - test/governance/test-closeout-lifecycle.mjs
+    - test/governance/test-external-review-delivery.mjs
+    - test/governance/test-external-review-surface.mjs
+    - test/governance/test-git-status-parsing.mjs
+    - test/governance/test-graph-closeout.mjs
+    - test/governance/test-inventory-consistency.mjs
+    - test/governance/test-review-bundle.mjs
+    - test/memory/helpers-cbm3.mjs
+    - test/memory/helpers.mjs
+    - test/memory/test-canonical.mjs
+    - test/memory/test-graph-colima-writeback.mjs
+    - test/memory/test-graph-context.mjs
+    - test/memory/test-jsonl.mjs
+    - test/memory/test-local-store.mjs
+    - test/memory/test-query-schema.mjs
+    - test/memory/test-rebuild-determinism.mjs
+    - test/memory/test-record-schema.mjs
+    - test/memory/test-retrieval-security.mjs
+    - test/memory/test-retrieval.mjs
+    - test/memory/test-security.mjs
+    - test/memory/test-snapshot.mjs
+    - test/memory/test-sqlite.mjs
+    - test/memory/test-trust-validity.mjs
+    - test/memory/test-writeback-candidate.mjs
+    - test/memory/test-writeback-closed-loop.mjs
+    - test/memory/test-writeback-gate.mjs
+    - test/memory/test-writeback-graph.mjs
+    - test/memory/test-writeback-perf.mjs
+    - test/memory/test-writeback-telemetry.mjs
+    - test/memory/test-writeback-trust.mjs
+    - test/telemetry/test-telemetry-cbm3-invariance.mjs
+    - test/telemetry/test-telemetry-contract.mjs
+    - test/telemetry/test-telemetry-graph-invariance.mjs
+    - test/telemetry/test-telemetry-lifecycle.mjs
+    - test/telemetry/test-telemetry-overhead.mjs
+    - test/telemetry/test-telemetry-security.mjs
+    - test/test-c3-colima-pipeline.mjs
+    - test/test-colima-graph.mjs
+    - test/test-colima-runtime.mjs
+    - test/test-durable-subagent-resume.mjs
+    - test/test-graph-closeout-integration.mjs
+    - test/test-subagent-graph.mjs
+    - test/test-subagent-review-repair-graph.mjs
+    - test/test-subagent-writer-graph.mjs
+    - test/v2/test-decomposition-hold-observability.mjs
+    - test/v2/test-durable-graph.mjs
+    - test/v2/test-durable-subagent-resume.mjs
+    - test/v2/test-executor-evidence-observability.mjs
+    - test/v2/test-executor-strict-json-prompt.mjs
+    - test/v2/test-harness-owned-evidence.mjs
+    - test/v2/test-pre-decomposition-interruption.mjs
+    - test/v2/test-review-evidence-delivery.mjs
+    - test/v2/test-system-delta.mjs
+CURRENT_CARD_DELTA_PATHS:
+    - docs/pi-graph-output/ta2r/card-closeout-bundle-20260808-82831126.txt
+    - docs/pi-graph-output/ta2r/card-closeout-bundle-20260809-2d633091.txt
+    - docs/pi-graph-output/ta2r/ta2r-card-start-baseline.json
+    - docs/pi-graph-output/ta2r/ta2r-closeout-accounting-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/ta2r/ta2r-independent-review.json
+    - docs/pi-graph-output/ta2r/ta2r-sample-admissions.json
+    - docs/pi-graph-output/ta2r/ta2r-self-closeout-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/ta2r/ta2r-verification.json
+    - scripts/ta2r-capture-baseline.mjs
+    - scripts/ta2r-independent-review.mjs
+    - scripts/ta2r-resolve-ta2-verdict.mjs
+    - scripts/ta2r-resolve-ta2r-verdict.mjs
+    - scripts/ta2r-self-closeout.mjs
+    - scripts/ta2r-verify.mjs
+    - src/admission/admission-gate.mjs
+    - src/governance/card-inventory.mjs
+    - src/governance/review-bundle.mjs
+    - src/runtime/colima-graph-runner.mjs
+    - src/subagent/subagent-graph-runner.mjs
+    - src/v2/durable-graph.mjs
+    - test/admission/test-admission-gate.mjs
+    - test/admission/test-closeout-hardening.mjs
+    - test/governance/test-external-review-delivery.mjs
+    - test/governance/test-graph-closeout.mjs
+DELTA_ATTRIBUTION:
+    - ADDED docs/pi-graph-output/ta2r/card-closeout-bundle-20260808-82831126.txt
+    - ADDED docs/pi-graph-output/ta2r/card-closeout-bundle-20260809-2d633091.txt
+    - ADDED docs/pi-graph-output/ta2r/ta2r-card-start-baseline.json
+    - ADDED docs/pi-graph-output/ta2r/ta2r-closeout-accounting-20260809-graph-closeout-evidence.json
+    - ADDED docs/pi-graph-output/ta2r/ta2r-independent-review.json
+    - ADDED docs/pi-graph-output/ta2r/ta2r-sample-admissions.json
+    - ADDED docs/pi-graph-output/ta2r/ta2r-self-closeout-20260809-graph-closeout-evidence.json
+    - ADDED docs/pi-graph-output/ta2r/ta2r-verification.json
+    - ADDED scripts/ta2r-capture-baseline.mjs
+    - ADDED scripts/ta2r-independent-review.mjs
+    - ADDED scripts/ta2r-resolve-ta2-verdict.mjs
+    - ADDED scripts/ta2r-resolve-ta2r-verdict.mjs
+    - ADDED scripts/ta2r-self-closeout.mjs
+    - ADDED scripts/ta2r-verify.mjs
+    - ADDED src/admission/admission-gate.mjs
+    - MODIFIED src/governance/card-inventory.mjs (content: 50d64e4f3ac1... -> 615680e48a39...)
+    - MODIFIED src/governance/review-bundle.mjs (content: 654fb21d68bd... -> e72e4006b7cf...)
+    - MODIFIED src/runtime/colima-graph-runner.mjs (content: e4cda1016112... -> 62227cbf9a64...)
+    - MODIFIED src/subagent/subagent-graph-runner.mjs (content: fbab91a76d92... -> d6e902641569...)
+    - MODIFIED src/v2/durable-graph.mjs (content: f419ed570626... -> 58a411b3bd8d...)
+    - ADDED test/admission/test-admission-gate.mjs
+    - MODIFIED test/admission/test-closeout-hardening.mjs (content: 45d90d9cc2ad... -> e49dc445cc1e...)
+    - MODIFIED test/governance/test-external-review-delivery.mjs (content: 7fbe8d917412... -> e1da405c5df3...)
+    - MODIFIED test/governance/test-graph-closeout.mjs (content: 3090ca4ff0b0... -> 46542d65f6c7...)
+ADDED:
+    - docs/pi-graph-output/ta2r/card-closeout-bundle-20260808-82831126.txt
+    - docs/pi-graph-output/ta2r/card-closeout-bundle-20260809-2d633091.txt
+    - docs/pi-graph-output/ta2r/ta2r-card-start-baseline.json
+    - docs/pi-graph-output/ta2r/ta2r-closeout-accounting-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/ta2r/ta2r-independent-review.json
+    - docs/pi-graph-output/ta2r/ta2r-sample-admissions.json
+    - docs/pi-graph-output/ta2r/ta2r-self-closeout-20260809-graph-closeout-evidence.json
+    - docs/pi-graph-output/ta2r/ta2r-verification.json
+    - scripts/ta2r-capture-baseline.mjs
+    - scripts/ta2r-independent-review.mjs
+    - scripts/ta2r-resolve-ta2-verdict.mjs
+    - scripts/ta2r-resolve-ta2r-verdict.mjs
+    - scripts/ta2r-self-closeout.mjs
+    - scripts/ta2r-verify.mjs
+    - src/admission/admission-gate.mjs
+    - test/admission/test-admission-gate.mjs
+MODIFIED:
+    - src/governance/card-inventory.mjs
+    - src/governance/review-bundle.mjs
+    - src/runtime/colima-graph-runner.mjs
+    - src/subagent/subagent-graph-runner.mjs
+    - src/v2/durable-graph.mjs
+    - test/admission/test-closeout-hardening.mjs
+    - test/governance/test-external-review-delivery.mjs
+    - test/governance/test-graph-closeout.mjs
+DELETED:
+  (none)
+
+================================================================================
+10. Diff Summary
+================================================================================
+Graph ta2r-closeout-accounting-20260809: 6 node(s) all PASS; 16 added / 8 modified / 0 deleted (worktree outputs)
+
+================================================================================
+11. Execution Results
+================================================================================
+NODES_EXECUTED:
+    - graph node R1-repair-scope-confirmation:readonly-confirmation
+    - graph node W1-mandatory-admission-gate:implement-admission-gate
+    - graph node W2-content-identity-delta:content-identity-delta
+    - graph node W3-bundle-surface-accounting:bundle-surface-accounting
+    - graph node V1-verify-and-regress:verify-and-regress
+    - graph node V2-independent-review:independent-review
+NODES_PASSED: 6
+NODES_FAILED: 0
+NODES_TOTAL: 6
+EXECUTION_PASS: true
+
+
+================================================================================
+12. Verification Results
+================================================================================
+VERIFIER_PASS: true
+VERIFIER_RESULT: PASS
+VERIFIER_SUMMARY: scheduler verdict PASS; join: R1-repair-scope-confirmation:PASS -> W1-mandatory-admission-gate:PASS -> W2-content-identity-delta:PASS -> W3-bundle-surface-accounting:PASS -> V1-verify-and-regress:PASS -> V2-independent-review:PASS
+
+
+================================================================================
+13. Independent Review Results
+================================================================================
+REVIEW_PASS: true
+REVIEW_RESULT: PASS
+REVIEW_RESULT_IDENTITY: 92e526e1265920e6f905d918f560cfaeeec84d37793db4a38b46e8b3bd062501
+BLOCKING_FINDINGS: []
+REVIEW_SUMMARY: independent review cross-check (deterministic, local): 8/8 PASS (ta2r-independent-review.json, digest c4158b77e197)
+
+
+================================================================================
+14. Repair Attempts
+================================================================================
+  - attempt=0 taskType=external-review-superseding-repair status=REPAIR resultIdentity=external-review:82831126badcc733cc108b3b8c5726308f90275be363c412aa69e0ad12ec43ae:REPAIR
+REPAIR_BUDGET_MAX: 1
+REPAIR_BUDGET_USED: 1
+SUPERSEDES_BUNDLE_IDENTITY: 82831126badcc733cc108b3b8c5726308f90275be363c412aa69e0ad12ec43ae
+SUPERSEDES_BUNDLE_SHA256: 11b9a7a375a41f64eeba170945e33708de5186603ac431e70b11ad644d59c275
+SUPERSEDES_BUNDLE_PATH: /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/ta2r/card-closeout-bundle-20260808-82831126.txt
+SUPERSEDES_BUNDLE_VERDICT: REPAIR
+
+
+================================================================================
+15. Negative and Fail-Closed Cases
+================================================================================
+  - NEG1 trivial task wrongly escalated -> classifier emits FAST_PATH for XS/LOW typo; overkill measured via telemetry
+  - NEG2/NEG7 high-risk tiny task / destructive action masked by size -> risk scan independent of size; CRITICAL profile; fast path forbidden
+  - NEG3 writer gains write under read-only admission -> envelope toolPermissions + mutationScope FROM admission; violation -> ADMISSION_MUTATION_SCOPE_VIOLATION
+  - NEG4 unauthorized capability smuggled -> registry subset + alias resolution + full enumeration (deny-by-default) -> HOLD/ADMISSION_INVALID
+  - NEG5 memory write-back not authorized -> WRITEBACK_AUTHORITY_INSUFFICIENT; default deny in every profile
+  - NEG6 remote/network action not escalated -> RS.NETWORK_REMOTE (HIGH) scan; never LOW
+  - NEG8 capability vs lifecycle authority conflict -> authority_binding subset contract; HOLD/AUTHORITY_CONFLICT（never guess）
+  - NEG9 multiple authoritative review surfaces -> single-surface contract; delivery refuses second non-superseding bundle
+  - NEG10 repair generation without supersede -> partial supersede binding fails closed（supersedes_sha256_missing）; TA-2R supersedes 432e85b5 explicitly
+  - NEG11 task runtime modifies its own admission -> frozen admission_id; tamper/drift -> HOLD/ADMISSION_DRIFT（fingerprint + artifact re-verification + production gate）
+  - NEG12 evidence insufficient yet default-allow -> under_classified -> minimum MEDIUM; never LOW
+  - NEG13 post-FM-3 closeout missing card-start baseline -> HOLD/CARD_START_BASELINE_MISSING（V1 gate）
+  - NEG14 delta views use different truth -> single machine delta（classifyDeltaFromFacts）derives CURRENT_CARD_DELTA_PATHS == ADDED ∪ MODIFIED ∪ DELETED == Diff Summary
+  - NEG15 surface narrative count stale -> 24/287 placeholders rendered from the machine inventory
+  - NEG16 claimed verifier check not in formal accounting -> verifier accounting rendered from structured ta2r-verification.json（assertAccountingMatches fail-closed）
+  - NEG17 (TA-2R) content-identity attribution fail-closed: a pre-existing dirty path with an unavailable card-start sha -> HOLD/DELTA_ATTRIBUTION_FAIL_CLOSED; the TA-2 wire-edit attribution is declared NOT machine-attributable from the pre-content baseline（never guessed）
+  - NEG18 (TA-2R) complete-bundle template residue: any residual dollar-brace template literal / stale placeholder on the FINAL bundle -> HOLD/TEMPLATE_RESIDUE（renderer + gate + validator all scan the complete artifact）
+  - NEG19 (TA-2R) production entry without a frozen admission -> HOLD/ADMISSION_REQUIRED before dispatch（spy-runner proof: no admission, no execution）
+  - NEG20 (TA-2R) superseding repair generation with unconsumed budget -> the closeout validator rejects SUPERSEDES_BUNDLE_VERDICT: REPAIR with REPAIR_BUDGET_USED == 0（repair_budget_unconsumed_despite_superseding_repair）; the production layer counts the superseding repair generation automatically（USED=1/MAX=1 for TA-2R）— the control plane can never see a superseding repair generation that did not consume budget
+
+================================================================================
+16. Regression Results
+================================================================================
+  - suite=test:admission tests=76 pass=76 fail=0
+  - suite=test:governance tests=271 pass=271 fail=0
+  - suite=test:review-bundle tests=26 pass=26 fail=0
+  - suite=test:graph-closeout tests=26 pass=26 fail=0
+  - suite=test:external-review-delivery tests=16 pass=16 fail=0
+  - suite=test:scripted-lifecycle tests=43 pass=43 fail=0
+  - suite=test:telemetry tests=37 pass=37 fail=0
+  - suite=test:v2 tests=372 pass=372 fail=0
+REGRESSION_OVERALL: TA-2R closeout-accounting correction of the TA-2 card: mandatory production admission gate (finding 1) + content-identity delta attribution (finding 2) + final-surface rendering/accounting (finding 3) + closeout-accounting (finding 4: REPAIR_BUDGET_USED counts the external-review-triggered superseding repair generation — USED=1/MAX=1; validator invariant on SUPERSEDES_BUNDLE_VERDICT: REPAIR). Machine contract verification 20/20 (V1-V20, scripts/ta2r-verify.mjs); independent review cross-check 8/8 (ta2r-independent-review.json); regression suites all green — admission 76/76, governance 271/271, review-bundle 26/26, graph-closeout 26/26, external-review-delivery 16/16, scripted-lifecycle 43/43, telemetry 37/37, v2 372/372. Verifier accounting: 867/867 (V1-V8). Colima-dependent suites (subagent/writer/durable-resume) stay unaffected by the additive wiring and were re-verified green at DE-2R closeout; the production gate short-circuits before any instance work.
+
+
+================================================================================
+17. Evidence Inventory
+================================================================================
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/ta2r/ta2r-closeout-accounting-20260809-graph-closeout-evidence.json
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/ta2r/ta2r-card-start-baseline.json
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/ta2r/ta2r-independent-review.json
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/ta2r/ta2r-sample-admissions.json
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/ta2r/ta2r-self-closeout-20260809-graph-closeout-evidence.json
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/ta2r/ta2r-verification.json
+EVIDENCE_MANIFEST_DIGEST: e18bec847ace3b2c6205e3e26dc3304f97898b75adc4be7ac991037dd5d65526
+
+
+================================================================================
+18. Evidence Hashes
+================================================================================
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/ta2r/ta2r-closeout-accounting-20260809-graph-closeout-evidence.json
+      sha256=62ec54b356fa67cb31b6dab90204a6f6bfbd873d1a6e2ae905079fd4aa694f14
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/ta2r/ta2r-card-start-baseline.json
+      sha256=89aa43a89cbc963cd063655d6368c35a4505035bb6e19b7813988e2b85235f73
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/ta2r/ta2r-independent-review.json
+      sha256=9f70f8743349439938cb4997cb33f0420ca28aad3f28fdd7db9c58729fb035fb
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/ta2r/ta2r-sample-admissions.json
+      sha256=5178f7d3b48677c16f5265e43be8dd344cf3a3dc5eeb48482ac29af0a3615d3c
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/ta2r/ta2r-self-closeout-20260809-graph-closeout-evidence.json
+      sha256=8d1f070b02d24a80dbf13bdad9f38fd9ca4b3041911dcac45b78031224ad5333
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/ta2r/ta2r-verification.json
+      sha256=f16ee8a0d7bc6fc1b943efa21d09136cf95133973440e0ba68e0adf5302506f0
+
+================================================================================
+19. Security and Secret Scan
+================================================================================
+SECRET_SCAN_RESULT: clean
+SECRET_SCAN_NOTES: NOT_APPLICABLE
+SECRET_DETECTED: false
+INGESTION_ALLOWLIST: structured graph node results, review-agent results, lifecycle transitions, closeout evidence snapshot
+INGESTION_DENYLIST: secrets/credentials/private keys/logs/db contents/user data, unvalidated free-text stdout
+
+================================================================================
+20. Repository Integrity
+================================================================================
+HEAD: 2e897e995202c0c8c079c5fdc96b9f5d42d50d25
+TREE_SHA: 7ca2c9100b208e15647ff1e0524ffc4e0857e7e0
+WORKTREE_CLEAN: false
+DIRTY_PATHS: package.json, src/schema/card-input.schema.json, src/v2/checkpoint-bridge.mjs, src/v2/durable-execution.mjs, src/v2/execution-orchestrator.mjs, src/v2/phase-task-card.mjs, src/v2/review-evidence.mjs, test/v2/test-decomposition-hold-observability.mjs, test/v2/test-executor-evidence-observability.mjs, test/v2/test-executor-strict-json-prompt.mjs, test/v2/test-harness-owned-evidence.mjs, test/v2/test-pre-decomposition-interruption.mjs, test/v2/test-review-evidence-delivery.mjs, test/v2/test-system-delta.mjs, docs/pi-graph-output/cbm2/card-closeout-bundle-20260806-f484fae1.txt, docs/pi-graph-output/cbm2/cbm2-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-443d736c.txt, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-955e9ce1.txt, docs/pi-graph-output/cbm2r/cbm2r-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-083f246b.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-59dc320e.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-b1c61eb1.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-c03d9205.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-dc09c31f.txt, docs/pi-graph-output/cbm3/cbm3-memory-probe-20260807-evidence.json, docs/pi-graph-output/cbm3/cbm3-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-3e10eef3.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-58a30a9a.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-f96491fd.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-4ebc2fcc.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-c61c841c.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-ea9832df.txt, docs/pi-graph-output/cbm4/cbm4-perf-closeout-20260808-evidence.json, docs/pi-graph-output/cbm4/cbm4-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cost1/card-closeout-bundle-20260807-185a348f.txt, docs/pi-graph-output/cost1/card-closeout-bundle-20260807-5d5dcfae.txt, docs/pi-graph-output/cost1/card-closeout-bundle-20260807-baa718e0.txt, docs/pi-graph-output/cost1/cost1-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cost1/cost1-telemetry-overhead-20260807-evidence.json, docs/pi-graph-output/de1/DE-1R-card-spec.md, docs/pi-graph-output/de1/card-closeout-bundle-20260808-90b0bca8.txt, docs/pi-graph-output/de1/card-closeout-bundle-20260808-aedcafcc.txt, docs/pi-graph-output/de1/de1-bakeoff-results.json, docs/pi-graph-output/de1/de1-candidate-research.json, docs/pi-graph-output/de1/de1-decision-evidence.json, docs/pi-graph-output/de1/de1-durable-capability-map.json, docs/pi-graph-output/de1/de1-durable-invariants.json, docs/pi-graph-output/de1/de1-external-review-resolution.json, docs/pi-graph-output/de1/de1-external-review-verdict.md, docs/pi-graph-output/de1/de1-failure-model.json, docs/pi-graph-output/de1/de1-independent-review.json, docs/pi-graph-output/de1/de1-provider-contract.json, docs/pi-graph-output/de1/de1-security-findings.json, docs/pi-graph-output/de1/de1-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/de1/external-review-delivery-aedcafcc.json, docs/pi-graph-output/de1r/card-closeout-bundle-20260808-2ff86a26.txt, docs/pi-graph-output/de1r/de1r-bakeoff-results.json, docs/pi-graph-output/de1r/de1r-comparison.json, docs/pi-graph-output/de1r/de1r-decision.json, docs/pi-graph-output/de1r/de1r-deployment.json, docs/pi-graph-output/de1r/de1r-external-review-verdict.md, docs/pi-graph-output/de1r/de1r-restate-disposition.json, docs/pi-graph-output/de1r/de1r-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/de1r/external-review-delivery-2ff86a26.json, docs/pi-graph-output/de2/card-closeout-bundle-20260808-0a1af929.txt, docs/pi-graph-output/de2/card-closeout-bundle-20260808-1c546aba.txt, docs/pi-graph-output/de2/card-closeout-bundle-20260808-90d8676f.txt, docs/pi-graph-output/de2/card-closeout-bundle-20260808-a1de29be.txt, docs/pi-graph-output/de2/card-closeout-bundle-20260808-cf7d7351.txt, docs/pi-graph-output/de2/de2-baseline.json, docs/pi-graph-output/de2/de2-crash-matrix.json, docs/pi-graph-output/de2/de2-decision.json, docs/pi-graph-output/de2/de2-external-review-resolution.json, docs/pi-graph-output/de2/de2-external-review-verdict.md, docs/pi-graph-output/de2/de2-integration-map.json, docs/pi-graph-output/de2/de2-performance.json, docs/pi-graph-output/de2/de2-persistence-boundary-map.json, docs/pi-graph-output/de2/de2-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/de2/external-review-delivery-1c546aba.json, docs/pi-graph-output/de2/external-review-delivery-90d8676f.json, docs/pi-graph-output/de2r/DE-2R-card-spec.md, docs/pi-graph-output/de2r/card-closeout-bundle-20260808-98a2ba3b.txt, docs/pi-graph-output/de2r/de2r-external-review-verdict.md, docs/pi-graph-output/de2r/de2r-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/de2r/de2r-subagent-resume.json, docs/pi-graph-output/de2r/external-review-delivery-98a2ba3b.json, docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-02d07222.txt, docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-c3c1e727.txt, docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-d82c7010.txt, docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-dae4430a.txt, docs/pi-graph-output/fm3-rbi/closeout-state.json, docs/pi-graph-output/fm3-rbi/fm3-rbi-1-self-closeout-20260809-graph-closeout-evidence.json, docs/pi-graph-output/fm3-rbi/fm3-rbi-2-final-closeout-20260809-graph-closeout-evidence.json, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-646b9cb9.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-890417e7.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-89fe0bcf.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-a9279a81.txt, docs/pi-graph-output/rb1g/external-review-delivery-646b9cb9.json, docs/pi-graph-output/rb1g/external-review-delivery-890417e7.json, docs/pi-graph-output/rb1g/external-review-delivery-89fe0bcf.json, docs/pi-graph-output/rb1g/external-review-delivery-91cf6d38.json, docs/pi-graph-output/rb1g/external-review-delivery-a9279a81.json, docs/pi-graph-output/rb1g/rb1g-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-20a147b5.txt, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-cbf3a4c5.txt, docs/pi-graph-output/rb1h/rb1h-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/report-lifecycle-repair-1/card-closeout-bundle-20260808-e9de8343.txt, docs/pi-graph-output/report-lifecycle-repair-1/closeout-state.json, docs/pi-graph-output/report-lifecycle-repair-1/report-lifecycle-repair-1-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/ta1/TA-1-card-spec.md, docs/pi-graph-output/ta1/card-closeout-bundle-20260808-0fc4d420.txt, docs/pi-graph-output/ta1/card-closeout-bundle-20260808-10de563b.txt, docs/pi-graph-output/ta1/card-closeout-bundle-20260808-5d47f1bf.txt, docs/pi-graph-output/ta1/card-closeout-bundle-20260808-e8b046cc.txt, docs/pi-graph-output/ta1/card-closeout-bundle-20260808-f134374c.txt, docs/pi-graph-output/ta1/ta1-admission-decision-matrix.json, docs/pi-graph-output/ta1/ta1-admission-schema.json, docs/pi-graph-output/ta1/ta1-capability-inventory.json, docs/pi-graph-output/ta1/ta1-capability-usage-matrix.json, docs/pi-graph-output/ta1/ta1-card-start-baseline.json, docs/pi-graph-output/ta1/ta1-high-risk-escalation.json, docs/pi-graph-output/ta1/ta1-implementation-recommendation.json, docs/pi-graph-output/ta1/ta1-independent-review.json, docs/pi-graph-output/ta1/ta1-integration-map.json, docs/pi-graph-output/ta1/ta1-machine-readable-admission-contract.json, docs/pi-graph-output/ta1/ta1-negative-case-matrix.json, docs/pi-graph-output/ta1/ta1-one-card-one-review-surface-contract.json, docs/pi-graph-output/ta1/ta1-risk-tier-model.json, docs/pi-graph-output/ta1/ta1-sample-admissions.json, docs/pi-graph-output/ta1/ta1-self-closeout-20260809-graph-closeout-evidence.json, docs/pi-graph-output/ta1/ta1-small-task-fast-path.json, docs/pi-graph-output/ta1/ta1-summary.md, docs/pi-graph-output/ta1/ta1-surface-reseal-20260809-graph-closeout-evidence.json, docs/pi-graph-output/ta1/ta1-task-size-model.json, docs/pi-graph-output/ta2/card-closeout-bundle-20260808-432e85b5.txt, docs/pi-graph-output/ta2/card-closeout-bundle-20260808-4e3796fe.txt, docs/pi-graph-output/ta2/card-closeout-bundle-20260808-6f0fa848.txt, docs/pi-graph-output/ta2/card-closeout-bundle-20260808-e66bd0dd.txt, docs/pi-graph-output/ta2/ta2-card-start-baseline.json, docs/pi-graph-output/ta2/ta2-independent-review.json, docs/pi-graph-output/ta2/ta2-sample-admissions.json, docs/pi-graph-output/ta2/ta2-self-closeout-20260809-graph-closeout-evidence.json, docs/pi-graph-output/ta2/ta2-summary.md, docs/pi-graph-output/ta2/ta2-verification.json, docs/pi-graph-output/ta2r/card-closeout-bundle-20260808-82831126.txt, docs/pi-graph-output/ta2r/card-closeout-bundle-20260809-2d633091.txt, docs/pi-graph-output/ta2r/ta2r-card-start-baseline.json, docs/pi-graph-output/ta2r/ta2r-closeout-accounting-20260809-graph-closeout-evidence.json, docs/pi-graph-output/ta2r/ta2r-independent-review.json, docs/pi-graph-output/ta2r/ta2r-sample-admissions.json, docs/pi-graph-output/ta2r/ta2r-self-closeout-20260809-graph-closeout-evidence.json, docs/pi-graph-output/ta2r/ta2r-verification.json, scripts/c3-colima-task.mjs, scripts/capture-review-repair-evidence.mjs, scripts/capture-subagent-writer-evidence.mjs, scripts/cbm2-self-closeout.mjs, scripts/cbm2r-self-closeout.mjs, scripts/cbm3-memory-probe.mjs, scripts/cbm3-self-closeout.mjs, scripts/cbm4-self-closeout.mjs, scripts/colima-runtime-integration.mjs, scripts/collect-test-accounting.mjs, scripts/cost1-self-closeout.mjs, scripts/cost1-telemetry-probe.mjs, scripts/de1-bakeoff-worker.mjs, scripts/de1-bakeoff-workload.mjs, scripts/de1-bakeoff.mjs, scripts/de1-provider-contract-check.mjs, scripts/de1-self-closeout.mjs, scripts/de1r-activities.mjs, scripts/de1r-bakeoff.mjs, scripts/de1r-self-closeout.mjs, scripts/de1r-worker.mjs, scripts/de1r-workflow.mjs, scripts/de2-crash-matrix.mjs, scripts/de2-crash-worker.mjs, scripts/de2-perf-probe.mjs, scripts/de2-self-closeout.mjs, scripts/de2r-self-closeout.mjs, scripts/de2r-subagent-resume-probe.mjs, scripts/de2r-subagent-resume-worker.mjs, scripts/gov-closeout-bundle.mjs, scripts/gov-external-review-surface.mjs, scripts/rb1g-self-closeout.mjs, scripts/rb1h-self-closeout.mjs, scripts/rb1r-self-closeout.mjs, scripts/ta1-repair-baseline.mjs, scripts/ta1-self-closeout.mjs, scripts/ta1-verify.mjs, scripts/ta2-resolve-ta1-verdict.mjs, scripts/ta2-self-closeout.mjs, scripts/ta2-verify.mjs, scripts/ta2r-capture-baseline.mjs, scripts/ta2r-independent-review.mjs, scripts/ta2r-resolve-ta2-verdict.mjs, scripts/ta2r-resolve-ta2r-verdict.mjs, scripts/ta2r-self-closeout.mjs, scripts/ta2r-verify.mjs, src/admission/admission-gate.mjs, src/admission/admission-record.mjs, src/admission/classify.mjs, src/admission/policy-projection.mjs, src/admission/registry.mjs, src/governance/card-inventory.mjs, src/governance/closeout-state.mjs, src/governance/review-bundle.mjs, src/memory/canonical.mjs, src/memory/contract.mjs, src/memory/graph-context.mjs, src/memory/identity.mjs, src/memory/index.mjs, src/memory/jsonl-journal.mjs, src/memory/local-store.mjs, src/memory/query-schema.mjs, src/memory/retrieval.mjs, src/memory/schema.mjs, src/memory/snapshot.mjs, src/memory/sqlite-schema.mjs, src/memory/validation.mjs, src/memory/writeback/candidate.mjs, src/memory/writeback/gate.mjs, src/memory/writeback/graph.mjs, src/memory/writeback/index.mjs, src/memory/writeback/source-map.mjs, src/memory/writeback/telemetry.mjs, src/memory/writeback/trust.mjs, src/runtime/colima-executor-adapter.mjs, src/runtime/colima-graph-runner.mjs, src/runtime/colima-pipeline.mjs, src/runtime/colima-reviewer-adapter.mjs, src/runtime/colima-runtime.mjs, src/runtime/colima-worktree.mjs, src/subagent/subagent-contract.mjs, src/subagent/subagent-executor-adapter.mjs, src/subagent/subagent-graph-runner.mjs, src/subagent/subagent-review-agent.mjs, src/subagent/subagent-reviewer-adapter.mjs, src/subagent/subagent-writer-executor-adapter.mjs, src/telemetry/aggregate.mjs, src/telemetry/budgets.mjs, src/telemetry/contract.mjs, src/telemetry/graph-observer.mjs, src/telemetry/index.mjs, src/telemetry/security.mjs, src/telemetry/source-map.mjs, src/telemetry/store.mjs, src/v2/durable-graph.mjs, test/admission/test-admission-gate.mjs, test/admission/test-admission-record.mjs, test/admission/test-capability-registry.mjs, test/admission/test-classifier.mjs, test/admission/test-closeout-hardening.mjs, test/admission/test-durable-binding.mjs, test/admission/test-envelope-enforcement.mjs, test/admission/test-graph-wiring.mjs, test/admission/test-review-surface.mjs, test/governance/test-card-inventory.mjs, test/governance/test-closeout-lifecycle.mjs, test/governance/test-external-review-delivery.mjs, test/governance/test-external-review-surface.mjs, test/governance/test-git-status-parsing.mjs, test/governance/test-graph-closeout.mjs, test/governance/test-inventory-consistency.mjs, test/governance/test-review-bundle.mjs, test/memory/helpers-cbm3.mjs, test/memory/helpers.mjs, test/memory/test-canonical.mjs, test/memory/test-graph-colima-writeback.mjs, test/memory/test-graph-context.mjs, test/memory/test-jsonl.mjs, test/memory/test-local-store.mjs, test/memory/test-query-schema.mjs, test/memory/test-rebuild-determinism.mjs, test/memory/test-record-schema.mjs, test/memory/test-retrieval-security.mjs, test/memory/test-retrieval.mjs, test/memory/test-security.mjs, test/memory/test-snapshot.mjs, test/memory/test-sqlite.mjs, test/memory/test-trust-validity.mjs, test/memory/test-writeback-candidate.mjs, test/memory/test-writeback-closed-loop.mjs, test/memory/test-writeback-gate.mjs, test/memory/test-writeback-graph.mjs, test/memory/test-writeback-perf.mjs, test/memory/test-writeback-telemetry.mjs, test/memory/test-writeback-trust.mjs, test/telemetry/test-telemetry-cbm3-invariance.mjs, test/telemetry/test-telemetry-contract.mjs, test/telemetry/test-telemetry-graph-invariance.mjs, test/telemetry/test-telemetry-lifecycle.mjs, test/telemetry/test-telemetry-overhead.mjs, test/telemetry/test-telemetry-security.mjs, test/test-c3-colima-pipeline.mjs, test/test-colima-graph.mjs, test/test-colima-runtime.mjs, test/test-durable-subagent-resume.mjs, test/test-graph-closeout-integration.mjs, test/test-subagent-graph.mjs, test/test-subagent-review-repair-graph.mjs, test/test-subagent-writer-graph.mjs, test/v2/test-durable-graph.mjs, test/v2/test-durable-subagent-resume.mjs
+UNTRACKED_FILES: docs/pi-graph-output/cbm2/card-closeout-bundle-20260806-f484fae1.txt, docs/pi-graph-output/cbm2/cbm2-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-443d736c.txt, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-955e9ce1.txt, docs/pi-graph-output/cbm2r/cbm2r-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-083f246b.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-59dc320e.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-b1c61eb1.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-c03d9205.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-dc09c31f.txt, docs/pi-graph-output/cbm3/cbm3-memory-probe-20260807-evidence.json, docs/pi-graph-output/cbm3/cbm3-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-3e10eef3.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-58a30a9a.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-f96491fd.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-4ebc2fcc.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-c61c841c.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-ea9832df.txt, docs/pi-graph-output/cbm4/cbm4-perf-closeout-20260808-evidence.json, docs/pi-graph-output/cbm4/cbm4-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cost1/card-closeout-bundle-20260807-185a348f.txt, docs/pi-graph-output/cost1/card-closeout-bundle-20260807-5d5dcfae.txt, docs/pi-graph-output/cost1/card-closeout-bundle-20260807-baa718e0.txt, docs/pi-graph-output/cost1/cost1-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cost1/cost1-telemetry-overhead-20260807-evidence.json, docs/pi-graph-output/de1/DE-1R-card-spec.md, docs/pi-graph-output/de1/card-closeout-bundle-20260808-90b0bca8.txt, docs/pi-graph-output/de1/card-closeout-bundle-20260808-aedcafcc.txt, docs/pi-graph-output/de1/de1-bakeoff-results.json, docs/pi-graph-output/de1/de1-candidate-research.json, docs/pi-graph-output/de1/de1-decision-evidence.json, docs/pi-graph-output/de1/de1-durable-capability-map.json, docs/pi-graph-output/de1/de1-durable-invariants.json, docs/pi-graph-output/de1/de1-external-review-resolution.json, docs/pi-graph-output/de1/de1-external-review-verdict.md, docs/pi-graph-output/de1/de1-failure-model.json, docs/pi-graph-output/de1/de1-independent-review.json, docs/pi-graph-output/de1/de1-provider-contract.json, docs/pi-graph-output/de1/de1-security-findings.json, docs/pi-graph-output/de1/de1-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/de1/external-review-delivery-aedcafcc.json, docs/pi-graph-output/de1r/card-closeout-bundle-20260808-2ff86a26.txt, docs/pi-graph-output/de1r/de1r-bakeoff-results.json, docs/pi-graph-output/de1r/de1r-comparison.json, docs/pi-graph-output/de1r/de1r-decision.json, docs/pi-graph-output/de1r/de1r-deployment.json, docs/pi-graph-output/de1r/de1r-external-review-verdict.md, docs/pi-graph-output/de1r/de1r-restate-disposition.json, docs/pi-graph-output/de1r/de1r-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/de1r/external-review-delivery-2ff86a26.json, docs/pi-graph-output/de2/card-closeout-bundle-20260808-0a1af929.txt, docs/pi-graph-output/de2/card-closeout-bundle-20260808-1c546aba.txt, docs/pi-graph-output/de2/card-closeout-bundle-20260808-90d8676f.txt, docs/pi-graph-output/de2/card-closeout-bundle-20260808-a1de29be.txt, docs/pi-graph-output/de2/card-closeout-bundle-20260808-cf7d7351.txt, docs/pi-graph-output/de2/de2-baseline.json, docs/pi-graph-output/de2/de2-crash-matrix.json, docs/pi-graph-output/de2/de2-decision.json, docs/pi-graph-output/de2/de2-external-review-resolution.json, docs/pi-graph-output/de2/de2-external-review-verdict.md, docs/pi-graph-output/de2/de2-integration-map.json, docs/pi-graph-output/de2/de2-performance.json, docs/pi-graph-output/de2/de2-persistence-boundary-map.json, docs/pi-graph-output/de2/de2-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/de2/external-review-delivery-1c546aba.json, docs/pi-graph-output/de2/external-review-delivery-90d8676f.json, docs/pi-graph-output/de2r/DE-2R-card-spec.md, docs/pi-graph-output/de2r/card-closeout-bundle-20260808-98a2ba3b.txt, docs/pi-graph-output/de2r/de2r-external-review-verdict.md, docs/pi-graph-output/de2r/de2r-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/de2r/de2r-subagent-resume.json, docs/pi-graph-output/de2r/external-review-delivery-98a2ba3b.json, docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-02d07222.txt, docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-c3c1e727.txt, docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-d82c7010.txt, docs/pi-graph-output/fm3-rbi/card-closeout-bundle-20260808-dae4430a.txt, docs/pi-graph-output/fm3-rbi/closeout-state.json, docs/pi-graph-output/fm3-rbi/fm3-rbi-1-self-closeout-20260809-graph-closeout-evidence.json, docs/pi-graph-output/fm3-rbi/fm3-rbi-2-final-closeout-20260809-graph-closeout-evidence.json, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-646b9cb9.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-890417e7.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-89fe0bcf.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-a9279a81.txt, docs/pi-graph-output/rb1g/external-review-delivery-646b9cb9.json, docs/pi-graph-output/rb1g/external-review-delivery-890417e7.json, docs/pi-graph-output/rb1g/external-review-delivery-89fe0bcf.json, docs/pi-graph-output/rb1g/external-review-delivery-91cf6d38.json, docs/pi-graph-output/rb1g/external-review-delivery-a9279a81.json, docs/pi-graph-output/rb1g/rb1g-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-20a147b5.txt, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-cbf3a4c5.txt, docs/pi-graph-output/rb1h/rb1h-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/report-lifecycle-repair-1/card-closeout-bundle-20260808-e9de8343.txt, docs/pi-graph-output/report-lifecycle-repair-1/closeout-state.json, docs/pi-graph-output/report-lifecycle-repair-1/report-lifecycle-repair-1-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/ta1/TA-1-card-spec.md, docs/pi-graph-output/ta1/card-closeout-bundle-20260808-0fc4d420.txt, docs/pi-graph-output/ta1/card-closeout-bundle-20260808-10de563b.txt, docs/pi-graph-output/ta1/card-closeout-bundle-20260808-5d47f1bf.txt, docs/pi-graph-output/ta1/card-closeout-bundle-20260808-e8b046cc.txt, docs/pi-graph-output/ta1/card-closeout-bundle-20260808-f134374c.txt, docs/pi-graph-output/ta1/ta1-admission-decision-matrix.json, docs/pi-graph-output/ta1/ta1-admission-schema.json, docs/pi-graph-output/ta1/ta1-capability-inventory.json, docs/pi-graph-output/ta1/ta1-capability-usage-matrix.json, docs/pi-graph-output/ta1/ta1-card-start-baseline.json, docs/pi-graph-output/ta1/ta1-high-risk-escalation.json, docs/pi-graph-output/ta1/ta1-implementation-recommendation.json, docs/pi-graph-output/ta1/ta1-independent-review.json, docs/pi-graph-output/ta1/ta1-integration-map.json, docs/pi-graph-output/ta1/ta1-machine-readable-admission-contract.json, docs/pi-graph-output/ta1/ta1-negative-case-matrix.json, docs/pi-graph-output/ta1/ta1-one-card-one-review-surface-contract.json, docs/pi-graph-output/ta1/ta1-risk-tier-model.json, docs/pi-graph-output/ta1/ta1-sample-admissions.json, docs/pi-graph-output/ta1/ta1-self-closeout-20260809-graph-closeout-evidence.json, docs/pi-graph-output/ta1/ta1-small-task-fast-path.json, docs/pi-graph-output/ta1/ta1-summary.md, docs/pi-graph-output/ta1/ta1-surface-reseal-20260809-graph-closeout-evidence.json, docs/pi-graph-output/ta1/ta1-task-size-model.json, docs/pi-graph-output/ta2/card-closeout-bundle-20260808-432e85b5.txt, docs/pi-graph-output/ta2/card-closeout-bundle-20260808-4e3796fe.txt, docs/pi-graph-output/ta2/card-closeout-bundle-20260808-6f0fa848.txt, docs/pi-graph-output/ta2/card-closeout-bundle-20260808-e66bd0dd.txt, docs/pi-graph-output/ta2/ta2-card-start-baseline.json, docs/pi-graph-output/ta2/ta2-independent-review.json, docs/pi-graph-output/ta2/ta2-sample-admissions.json, docs/pi-graph-output/ta2/ta2-self-closeout-20260809-graph-closeout-evidence.json, docs/pi-graph-output/ta2/ta2-summary.md, docs/pi-graph-output/ta2/ta2-verification.json, docs/pi-graph-output/ta2r/card-closeout-bundle-20260808-82831126.txt, docs/pi-graph-output/ta2r/card-closeout-bundle-20260809-2d633091.txt, docs/pi-graph-output/ta2r/ta2r-card-start-baseline.json, docs/pi-graph-output/ta2r/ta2r-closeout-accounting-20260809-graph-closeout-evidence.json, docs/pi-graph-output/ta2r/ta2r-independent-review.json, docs/pi-graph-output/ta2r/ta2r-sample-admissions.json, docs/pi-graph-output/ta2r/ta2r-self-closeout-20260809-graph-closeout-evidence.json, docs/pi-graph-output/ta2r/ta2r-verification.json, scripts/c3-colima-task.mjs, scripts/capture-review-repair-evidence.mjs, scripts/capture-subagent-writer-evidence.mjs, scripts/cbm2-self-closeout.mjs, scripts/cbm2r-self-closeout.mjs, scripts/cbm3-memory-probe.mjs, scripts/cbm3-self-closeout.mjs, scripts/cbm4-self-closeout.mjs, scripts/colima-runtime-integration.mjs, scripts/collect-test-accounting.mjs, scripts/cost1-self-closeout.mjs, scripts/cost1-telemetry-probe.mjs, scripts/de1-bakeoff-worker.mjs, scripts/de1-bakeoff-workload.mjs, scripts/de1-bakeoff.mjs, scripts/de1-provider-contract-check.mjs, scripts/de1-self-closeout.mjs, scripts/de1r-activities.mjs, scripts/de1r-bakeoff.mjs, scripts/de1r-self-closeout.mjs, scripts/de1r-worker.mjs, scripts/de1r-workflow.mjs, scripts/de2-crash-matrix.mjs, scripts/de2-crash-worker.mjs, scripts/de2-perf-probe.mjs, scripts/de2-self-closeout.mjs, scripts/de2r-self-closeout.mjs, scripts/de2r-subagent-resume-probe.mjs, scripts/de2r-subagent-resume-worker.mjs, scripts/gov-closeout-bundle.mjs, scripts/gov-external-review-surface.mjs, scripts/rb1g-self-closeout.mjs, scripts/rb1h-self-closeout.mjs, scripts/rb1r-self-closeout.mjs, scripts/ta1-repair-baseline.mjs, scripts/ta1-self-closeout.mjs, scripts/ta1-verify.mjs, scripts/ta2-resolve-ta1-verdict.mjs, scripts/ta2-self-closeout.mjs, scripts/ta2-verify.mjs, scripts/ta2r-capture-baseline.mjs, scripts/ta2r-independent-review.mjs, scripts/ta2r-resolve-ta2-verdict.mjs, scripts/ta2r-resolve-ta2r-verdict.mjs, scripts/ta2r-self-closeout.mjs, scripts/ta2r-verify.mjs, src/admission/admission-gate.mjs, src/admission/admission-record.mjs, src/admission/classify.mjs, src/admission/policy-projection.mjs, src/admission/registry.mjs, src/governance/card-inventory.mjs, src/governance/closeout-state.mjs, src/governance/review-bundle.mjs, src/memory/canonical.mjs, src/memory/contract.mjs, src/memory/graph-context.mjs, src/memory/identity.mjs, src/memory/index.mjs, src/memory/jsonl-journal.mjs, src/memory/local-store.mjs, src/memory/query-schema.mjs, src/memory/retrieval.mjs, src/memory/schema.mjs, src/memory/snapshot.mjs, src/memory/sqlite-schema.mjs, src/memory/validation.mjs, src/memory/writeback/candidate.mjs, src/memory/writeback/gate.mjs, src/memory/writeback/graph.mjs, src/memory/writeback/index.mjs, src/memory/writeback/source-map.mjs, src/memory/writeback/telemetry.mjs, src/memory/writeback/trust.mjs, src/runtime/colima-executor-adapter.mjs, src/runtime/colima-graph-runner.mjs, src/runtime/colima-pipeline.mjs, src/runtime/colima-reviewer-adapter.mjs, src/runtime/colima-runtime.mjs, src/runtime/colima-worktree.mjs, src/subagent/subagent-contract.mjs, src/subagent/subagent-executor-adapter.mjs, src/subagent/subagent-graph-runner.mjs, src/subagent/subagent-review-agent.mjs, src/subagent/subagent-reviewer-adapter.mjs, src/subagent/subagent-writer-executor-adapter.mjs, src/telemetry/aggregate.mjs, src/telemetry/budgets.mjs, src/telemetry/contract.mjs, src/telemetry/graph-observer.mjs, src/telemetry/index.mjs, src/telemetry/security.mjs, src/telemetry/source-map.mjs, src/telemetry/store.mjs, src/v2/durable-graph.mjs, test/admission/test-admission-gate.mjs, test/admission/test-admission-record.mjs, test/admission/test-capability-registry.mjs, test/admission/test-classifier.mjs, test/admission/test-closeout-hardening.mjs, test/admission/test-durable-binding.mjs, test/admission/test-envelope-enforcement.mjs, test/admission/test-graph-wiring.mjs, test/admission/test-review-surface.mjs, test/governance/test-card-inventory.mjs, test/governance/test-closeout-lifecycle.mjs, test/governance/test-external-review-delivery.mjs, test/governance/test-external-review-surface.mjs, test/governance/test-git-status-parsing.mjs, test/governance/test-graph-closeout.mjs, test/governance/test-inventory-consistency.mjs, test/governance/test-review-bundle.mjs, test/memory/helpers-cbm3.mjs, test/memory/helpers.mjs, test/memory/test-canonical.mjs, test/memory/test-graph-colima-writeback.mjs, test/memory/test-graph-context.mjs, test/memory/test-jsonl.mjs, test/memory/test-local-store.mjs, test/memory/test-query-schema.mjs, test/memory/test-rebuild-determinism.mjs, test/memory/test-record-schema.mjs, test/memory/test-retrieval-security.mjs, test/memory/test-retrieval.mjs, test/memory/test-security.mjs, test/memory/test-snapshot.mjs, test/memory/test-sqlite.mjs, test/memory/test-trust-validity.mjs, test/memory/test-writeback-candidate.mjs, test/memory/test-writeback-closed-loop.mjs, test/memory/test-writeback-gate.mjs, test/memory/test-writeback-graph.mjs, test/memory/test-writeback-perf.mjs, test/memory/test-writeback-telemetry.mjs, test/memory/test-writeback-trust.mjs, test/telemetry/test-telemetry-cbm3-invariance.mjs, test/telemetry/test-telemetry-contract.mjs, test/telemetry/test-telemetry-graph-invariance.mjs, test/telemetry/test-telemetry-lifecycle.mjs, test/telemetry/test-telemetry-overhead.mjs, test/telemetry/test-telemetry-security.mjs, test/test-c3-colima-pipeline.mjs, test/test-colima-graph.mjs, test/test-colima-runtime.mjs, test/test-durable-subagent-resume.mjs, test/test-graph-closeout-integration.mjs, test/test-subagent-graph.mjs, test/test-subagent-review-repair-graph.mjs, test/test-subagent-writer-graph.mjs, test/v2/test-durable-graph.mjs, test/v2/test-durable-subagent-resume.mjs
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+21. Known Risks and Limitations
+================================================================================
+  - admission adds a classification step at task intake — deterministic + local by construction; evidence quality determines under/over-classification rates（telemetry-measurable）
+  - registry parity with the envelope vocabulary is enforced at module load + verification — a future envelope change must update the registry or drift (CAPABILITY_REGISTRY_DRIFT)
+  - fast-path eligibility is a permission not a mandate; the full-task-statement signal scan + monotonic escalation guard against over-broad use
+  - Pi model allowlist reconciliation is documentation-only; runtime enforcement stays in pi-transport-adapter.mjs（deepseek-v4-flash pinned）
+  - the production gate makes admission mandatory for PRODUCTION task execution; legacy in-process callers that still pass `admission = null` to the low-level runners are now outside the production path（documented, not silently upgraded）
+  - TA-2 wire-edit attribution is NOT machine-attributable from the TA-2 card-start baseline（it predates content-identity capture）— the fail-closed position is recorded in §21; content-v1 attribution applies from TA-2R onward and the bundle's own delta is fully machine-proven
+  - telemetry budget enforcement remains simulated（admission may select budgets by profile only）— full enforcement is a later stage
+  - full crash/resume with admission was verified at the fingerprint/artifact level; a full Colima crash-matrix run with admission binding is a follow-on integration test
+
+================================================================================
+22. Rollback Procedure
+================================================================================
+TA-2R is a linear repair generation superseding 82831126（archived with the REPAIR verdict in ~/Desktop/AutoLoop-Review/Archive/20260809-AUTOLOOP-TA2-82831126-REPAIR-*; the prior authoritative generation 432e85b5 remains archived as 20260809-AUTOLOOP-TA2-432e85b5-REPAIR-*）— the previous bundles and evidence are retained, never overwritten. To roll back TA-2R specifically: delete docs/pi-graph-output/ta2r/ and the ta2r-* scripts; revert the TA-2R content-attributed edits（card-inventory.mjs content-identity delta, review-bundle.mjs surface/attribution/closeout-accounting machinery, admission-gate.mjs + runner doc comments, test-admission-gate.mjs + closeout-hardening additions, test-external-review-delivery.mjs + test-graph-closeout.mjs accounting invariants）— each is a TA-2R delta path with a machine-recorded card-start->closeout sha proof in DELTA_ATTRIBUTION, so the exact revert set is provable. To roll back the whole TA-2/TA-2R admission work: delete src/admission/, test/admission/, scripts/ta2-*.mjs, scripts/ta2r-*.mjs and docs/pi-graph-output/ta2*/; revert the wire edits documented in the TA-2 bundle §22. No schema migration, no persistence format change, no dependency change.
+
+================================================================================
+23. Open Questions
+================================================================================
+  - should FAST_PATH tasks be tracked as first-class admission records（recommended: yes, minimal — they are）or a lighter entry?
+  - is a bounded re-admission by the controller acceptable for CRITICAL tasks after external review?（recommended: yes, superseding the old admission with a logged reason）
+  - should memory write-back ever be auto-allowed for VERIFIED/REVIEWED evidence from a HIGH task?（recommended: still explicit admission — the classifier marks memory write-back CRITICAL）
+  - should the pre-content-identity baselines of HISTORICAL cards（ta1/ta2）be re-captured with provenance proofs（like ta1-repair-baseline did）so their deltas become content-attributable?（recommended: only when a repair touches them — fail-closed otherwise）
+  - TA-3 scope: budget enforcement wiring vs control-plane vs cost optimizer — Controller to sequence.
+
+================================================================================
+24. Recommended Next Step
+================================================================================
+TA-2R closes the bounded repair: mandatory admission authority + content-identity delta provenance + final-surface rendering/accounting + closeout-accounting（REPAIR_BUDGET_USED counts the superseding repair generation; USED=1/MAX=1; validator invariant）are all delivered and machine-verified. Next candidates per the roadmap: (1) TA-3 admission-driven telemetry budget enforcement（full enforcement, not simulated）; (2) Central AutoLoop Control Plane / cost optimizer; (3) any follow-on integration the Controller authorizes. No commit / push / merge / seal was performed — the worktree stays dirty by design for the external review receipt.
+
+================================================================================
+25. External Reviewer Verdict Template
+================================================================================
+VERDICT: PASS / REPAIR / HOLD
+REVIEWER_IDENTITY: <reviewer>
+REVIEWED_AT: <date>
+FINDINGS_DIGEST: <sha256>
+NEXT_ACTION_IF_PASS: <next card>
+NEXT_ACTION_IF_REPAIR: <bounded repair within budget>
+NEXT_ACTION_IF_HOLD: <stop downstream>
+
+
+=== END OF REVIEW BUNDLE ===
+REVIEW_BUNDLE_SHA256: 483054ab9f998de3d59acd6cabfa4fbc671fb5b92ead8287fedc328a48d49bb8

@@ -1,0 +1,63 @@
+{
+  "schema": "autoloop.rld2-independent-review/v1",
+  "card": "AUTOLOOP-RLD2",
+  "generation": "root-cause-investigation-with-bounded-repair",
+  "reviewedAt": "2026-08-09T07:20:53.386Z",
+  "total": 10,
+  "passed": 10,
+  "failed": 0,
+  "ok": true,
+  "checks": [
+    {
+      "id": "IR-1.verification_ok",
+      "ok": true,
+      "detail": "rld2-verify 14/14"
+    },
+    {
+      "id": "IR-2.incident_truth",
+      "ok": true,
+      "detail": "Current=AUTOLOOP-TA2/AWAITING_EXTERNAL_REVIEW identity=f7f168aa; Archive f7f168aa PASS=ABSENT; Current sha==ta2r bundle=true"
+    },
+    {
+      "id": "IR-3.repro_before_after",
+      "ok": true,
+      "detail": "production export produced card AUTOLOOP-TA2 (stale); publish B blocked=true; verified selector -> STALE_CARD_IDENTITY"
+    },
+    {
+      "id": "IR-4.current_review_delivery",
+      "ok": true,
+      "detail": "currentReviewDelivery exports with STALE_CARD_IDENTITY / SURFACE_SHA_MISMATCH / SURFACE_RECORD_INVALID"
+    },
+    {
+      "id": "IR-5.no_new_no_fallback",
+      "ok": true,
+      "detail": "NO_NEW_REVIEW_BUNDLE — no fallback to a stale COMPLETE bundle"
+    },
+    {
+      "id": "IR-6.already_reviewed_guard",
+      "ok": true,
+      "detail": "STALE_GENERATION_ALREADY_REVIEWED — an externally-reviewed COMPLETE generation is never re-delivered as a new generation"
+    },
+    {
+      "id": "IR-7.publish_card_guard",
+      "ok": true,
+      "detail": "publish refuses a wrong-card bundle (delivery_card_id_mismatch); occupant block is identity-explicit"
+    },
+    {
+      "id": "IR-8.history_untouched",
+      "ok": true,
+      "detail": "all historical artifacts unchanged"
+    },
+    {
+      "id": "IR-9.surface_preserved",
+      "ok": true,
+      "detail": "the incident Current/review-bundle.txt is byte-preserved (TA-2R f7f168aa) — RLD2 never deleted/overwrote incident evidence"
+    },
+    {
+      "id": "IR-10.neg_suite_and_regression",
+      "ok": true,
+      "detail": "NEG-RLD suite 14/14; regression 899 tests all green"
+    }
+  ],
+  "digest": "fae4aabf727efd42ec2834f9f335f03a0f4167c25bbbb0fcbf45a4652baa4ef1"
+}

@@ -1,0 +1,45 @@
+{
+  "schema": "autoloop.durable-security-findings/v1",
+  "card": "AUTOLOOP-PI-GRAPH-DE1",
+  "generatedAt": "2026-08-08T00:00:00.000Z",
+  "method": "npm registry metadata inspection (2026-08-08) + official docs; no binary execution of either candidate server",
+  "findings": [
+    {
+      "id": "SEC-1",
+      "candidate": "Restate",
+      "severity": "BLOCKER",
+      "component": "@restatedev/restate-server@1.7.3",
+      "finding": "The server npm package depends on @scarf/scarf (^1.4.0) — a third-party software-analytics/telemetry package that collects and sends usage data by default (verified from the published package dependencies metadata on the npm registry).",
+      "conflict": "AutoLoop's security contract (COST-1/CBM ingestion deny-list: 'unexplained network behavior'; telemetry must be explicit, validated, replay-aware) — a default-phone-home analytics dependency in the durability backend is exactly the class of unexplained network behavior the project rejects. Stage 13 rule: 'a candidate with unexplained network behavior must not be directly adopted'.",
+      "mitigation_required_before_adoption": "publish/build the server without the Scarf dependency, or run a self-built image with the analytics code removed, with a source audit"
+    },
+    {
+      "id": "SEC-2",
+      "candidate": "Restate",
+      "severity": "HIGH",
+      "component": "@restatedev/restate-server@1.7.3",
+      "finding": "The server is licensed under the Business Source License (BSL) — source-available, NOT an OSI open-source license. Redistribution and production use have license-trigger terms.",
+      "conflict": "AutoLoop's reuse-first principle and long-term maintenance posture prefer OSI licenses; BSL adds legal surface for the durability backend.",
+      "mitigation_required_before_adoption": "legal review of BSL trigger terms; otherwise reject"
+    },
+    {
+      "id": "SEC-3",
+      "candidate": "Temporal",
+      "severity": "INFO",
+      "component": "temporalio@1.9.3 (SDK)",
+      "finding": "The npm SDK meta-package depends only on @temporalio/* packages (proto, client, common, worker, activity, workflow, testing, interceptors-opentelemetry). No third-party analytics/phone-home dependencies detected in the SDK.",
+      "conflict": "none for the SDK; the Temporal SERVER (separate deployment, MIT) listens on network ports (frontend/history/matching/worker) — listener exposure is a deployment decision (bind localhost for a single-machine control plane).",
+      "mitigation_required_before_adoption": "bind server to localhost; separate DB credentials; audit the server image supply chain"
+    },
+    {
+      "id": "SEC-4",
+      "candidate": "Temporal / Restate",
+      "severity": "INFO",
+      "component": "deployment",
+      "finding": "Both external candidates introduce a server process + database (Temporal: SQLite dev / PostgreSQL / MySQL; Restate: RocksDB or PostgreSQL) and new network listeners + storage, expanding the attack surface of a single-machine AutoLoop control plane.",
+      "conflict": "AutoLoop's existing durable path is in-process with local-filesystem-only storage (no new listeners, no DB credentials, no server supply chain).",
+      "mitigation_required_before_adoption": "isolated control-plane service on localhost with minimal privileges; secret-free config; container sandboxing"
+    }
+  ],
+  "summary": "Restate fails the Stage 13 gate on SEC-1 (Scarf telemetry) and carries a BSL license (SEC-2). Temporal's SDK is clean (SEC-3) but still adds a server+DB deployment surface (SEC-4). The existing AutoLoop durable path (Candidate A) adds zero new supply-chain surface. Under Stage 13 rules, Restate cannot be adopted without mitigation; Temporal requires deployment hardening."
+}

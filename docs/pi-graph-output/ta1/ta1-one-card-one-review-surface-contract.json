@@ -1,0 +1,39 @@
+{
+  "schema": "autoloop.one-card-one-review-surface/v1",
+  "card": "AUTOLOOP-TA1",
+  "generatedAt": "2026-08-09T00:00:00.000Z",
+  "source": "Formalized from FM-3 external review requirements (bundle d82c7010, PASS 2026-08-09) + the fixed-surface delivery mechanism (Current/ + Archive/, linear supersede).",
+  "contract": {
+    "statement": "一张 logical card 在正常 lifecycle 中只能有一个 authoritative review surface。",
+    "rules": [
+      "implementation / repair / closeout / evidence / reseal artifacts are INTERNAL; they never become separate manual review cards for the controller/external reviewer",
+      "internal execution may produce multiple artifacts (graph evidence, attempt generations, reseal copies) but the external/controller review converges to ONE authoritative surface: the single review bundle delivered to Current/",
+      "the authoritative surface is the LATEST valid bundle in the card's linear supersede chain"
+    ],
+    "newGenerationAllowedOnlyWhen": [
+      "previous review = REPAIR (external or internal verdict)",
+      "previous surface invalid (validator HOLD / evidence identity mismatch)",
+      "evidence identity must be resealed (bundle digest changes)",
+      "authoritative state genuinely changed (authorized scope / closeout contract changed)"
+    ],
+    "newGenerationMust": [
+      "supersede the previous authoritative generation (linear binding: identity + sha + path of predecessor recorded)",
+      "preserve historical artifacts (previous generations archived, never deleted or rewritten)",
+      "keep a LINEAR chain (each generation has exactly one predecessor; no branching)",
+      "carry a self-contained chain explanation (each generation's role: original sealed / intermediate reseal / prior final / current target; exceptions documented IN the bundle, e.g. c3c1e727 evidence-reference reuse)",
+      "NOT depend on chat context (all chain facts and exceptions live in the bundle artifact)",
+      "re-validate PASS under the current validator before delivery"
+    ],
+    "exceptions": {
+      "evidenceReferenceReuse": "an intermediate generation may legitimately reference a shared evidence path superseded by a later generation, provided (a) the exception is written into the bundle, (b) the generation's own evidence copy is preserved in the archived SUPERSEDED trio, (c) the final authoritative generation carries its own evidence path",
+      "controllerDirectedReseal": "a controller-directed bounded reseal is permitted and produces a new generation with a NEW identity and the supersede binding",
+      "surfaceOccupied": "an unresolved occupant blocks delivery (fail-closed surface_occupied); resolution requires the controller to record the verdict or rotate"
+    },
+    "fastPath": "tasks admitted with external_review_required=false are exempt from bundle generation entirely — they have no review surface, which is itself the admission decision (evidence_level none). No separate mini-surfaces are created.",
+    "enforcementHooksForTA2": [
+      "admission record carries review_surface_policy { authoritative: true, chain: linear, generations: [...] }",
+      "closeout gate refuses to deliver a second non-superseding bundle for the same card (one authoritative surface)",
+      "bundle §8/§14 must already carry the self-contained chain (FM-3 mechanism — keep, do not weaken)"
+    ]
+  }
+}

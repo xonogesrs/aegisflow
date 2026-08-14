@@ -1,0 +1,170 @@
+{
+  "schema": "autoloop.review-bundle.graph-closeout-evidence/v1",
+  "graphRunId": "rld2-root-cause-repair-20260809",
+  "final": "PASS",
+  "holdCode": null,
+  "reason": null,
+  "task": {
+    "cardId": "AUTOLOOP-RLD2",
+    "cardTitle": "Recurring Stale Review Bundle Delivery Root-Cause Investigation (RLD2)",
+    "cardType": "repair"
+  },
+  "scheduler": {
+    "verdict": "PASS",
+    "order": [
+      "W1-freeze-incident-truth",
+      "W2-delivery-chain-audit",
+      "W3-reproduce",
+      "W4-root-cause-confirm",
+      "W5-bounded-repair",
+      "V1-verify-and-regress",
+      "V2-independent-review"
+    ],
+    "statuses": {
+      "W1-freeze-incident-truth": "passed",
+      "W2-delivery-chain-audit": "passed",
+      "W3-reproduce": "passed",
+      "W4-root-cause-confirm": "passed",
+      "W5-bounded-repair": "passed",
+      "V1-verify-and-regress": "passed",
+      "V2-independent-review": "passed"
+    },
+    "skipped": [],
+    "writerViolations": [],
+    "leaseHolderAfter": null
+  },
+  "nodes": [
+    {
+      "nodeId": "W1-freeze-incident-truth",
+      "phaseExecutionId": "rld2-root-cause-repair-20260809:W1",
+      "taskType": "readonly-capture",
+      "dependencies": [],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786402000000,
+      "completedAt": 1786402300000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "W2-delivery-chain-audit",
+      "phaseExecutionId": "rld2-root-cause-repair-20260809:W2",
+      "taskType": "delivery-chain-audit",
+      "dependencies": [
+        "W1-freeze-incident-truth"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786402300000,
+      "completedAt": 1786402600000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "W3-reproduce",
+      "phaseExecutionId": "rld2-root-cause-repair-20260809:W3",
+      "taskType": "isolated-reproduction",
+      "dependencies": [
+        "W2-delivery-chain-audit"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786402600000,
+      "completedAt": 1786403000000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "W4-root-cause-confirm",
+      "phaseExecutionId": "rld2-root-cause-repair-20260809:W4",
+      "taskType": "root-cause-confirmation",
+      "dependencies": [
+        "W3-reproduce"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786403000000,
+      "completedAt": 1786403300000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "W5-bounded-repair",
+      "phaseExecutionId": "rld2-root-cause-repair-20260809:W5",
+      "taskType": "bounded-minimal-repair",
+      "dependencies": [
+        "W4-root-cause-confirm"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786403300000,
+      "completedAt": 1786403800000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "V1-verify-and-regress",
+      "phaseExecutionId": "rld2-root-cause-repair-20260809:V1",
+      "taskType": "verify-and-regress",
+      "dependencies": [
+        "W5-bounded-repair"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786403800000,
+      "completedAt": 1786404200000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "V2-independent-review",
+      "phaseExecutionId": "rld2-root-cause-repair-20260809:V2",
+      "taskType": "independent-review",
+      "dependencies": [
+        "V1-verify-and-regress"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786404200000,
+      "completedAt": 1786404500000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    }
+  ],
+  "transitions": []
+}

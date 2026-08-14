@@ -1,0 +1,333 @@
+================================================================================
+AUTOLOOP REVIEW BUNDLE (CLOSEOUT)
+================================================================================
+REVIEW_BUNDLE_SCHEMA: autoloop.review-bundle/v1
+REVIEW_BUNDLE_IDENTITY: 0a1af92965fad6544d570f845373fd4560d6ede3d4bb315a1f5f5f695aed9f1d
+CARD_ID: AUTOLOOP-PI-GRAPH-DE2
+CARD_TITLE: Native Durable Execution Hardening (DE-2)
+CARD_TYPE: implementation
+GENERATED_AT: 2026-08-08T11:45:00.190Z
+
+================================================================================
+1. Review Request
+================================================================================
+CARD_ID: AUTOLOOP-PI-GRAPH-DE2
+CARD_TITLE: Native Durable Execution Hardening (DE-2)
+CARD_TYPE: implementation
+GRAPH_RUN_ID: de2-self-closeout-20260808
+NODE_ID: SA-R1, SA-R2, SA-W1, SA-V1
+PHASE_EXECUTION_ID: exec_de2_r1, exec_de2_r2, exec_de2_w1, exec_de2_v1
+STAGE_IDS: reviewer_verdict
+AGENT_EXECUTION_IDS: agent_066f435f8e54160d, agent_e05d119492bec996, agent_485b100c125af521, agent_1d7000a5e0751b58
+REQUESTED_REVIEW_VERDICT: PASS / REPAIR / HOLD
+This bundle is the single complete text artifact submitted for external review of card AUTOLOOP-PI-GRAPH-DE2.
+
+================================================================================
+2. Executive Status
+================================================================================
+EXECUTIVE_STATUS: PASS
+EXECUTION_PASS: true
+VERIFIER_PASS: true
+INDEPENDENT_REVIEW_PASS: true
+REVIEW_BUNDLE_READY: true
+REVIEW_BUNDLE_DELIVERY_REQUIRED: true
+EXTERNAL_REVIEW_STATUS: AWAITING_EXTERNAL_REVIEW
+SUMMARY: DE-2 REPAIR-CLOSED: the production Graph entry（runSubagentGraph, used by every card closeout script）now runs under AutoLoop's native durable execution BY DEFAULT — production invocation -> runDurableGraph -> runColimaGraph -> journal + checkpoints, with a regression guard proving normal production calls cannot bypass durability（durable:false is test-only）. DurableGraphRun journals + checkpoints every safe boundary and reconstructs the ready set from durable truth on resume in a genuinely new process（wiring test: runSubagentGraph durable -> checkpoints/journal/evidence + resume complete）. F1（post-head semantic classification）and F2/F3（resumed-orchestrator edge）closed; writer crash boundaries classified fail-closed（only ALREADY_APPLIED recovers without re-mutation）; repair budget survives restart; CBM write-back idempotency untouched; D7 telemetry replay-awareness added. Crash matrix C0-C15（real SIGKILL）passed all safety hard gates（0 lost results / 0 duplicate mutations / 0 false PASS / 0 budget resets / 0 ignored corruption）; quantified perf probe（durability overhead ~1.6s/2-phase graph, resume reconstruction ~46ms, D7 delta ~0ms）; canonical colima-all green; test:v2 368/368（repair also aligned the pre-existing attempt-prefixed artifact-name lag in 6 focused v2 suites + review-evidence reference path）. The independent review binds the FINAL source（implementationDigest over the final production source + focused tests）. No external durable runtime introduced. Next: Autonomous Research Escalation（built on CBM production memory + COST-1 telemetry + DE-2 durable recovery）.
+
+
+================================================================================
+3. Task Identity
+================================================================================
+CARD_ID: AUTOLOOP-PI-GRAPH-DE2
+CARD_TITLE: Native Durable Execution Hardening (DE-2)
+CARD_TYPE: implementation
+GRAPH_RUN_ID: de2-self-closeout-20260808
+NODE_ID: SA-R1, SA-R2, SA-W1, SA-V1
+PHASE_EXECUTION_ID: exec_de2_r1, exec_de2_r2, exec_de2_w1, exec_de2_v1
+STAGE_IDS: reviewer_verdict
+AGENT_EXECUTION_IDS: agent_066f435f8e54160d, agent_e05d119492bec996, agent_485b100c125af521, agent_1d7000a5e0751b58
+
+
+================================================================================
+4. Repository and Worktree Identity
+================================================================================
+REPOSITORY: git@github.com:xonogesrs/autoloop.git
+BRANCH: governance/reversible-lifecycle-draft-pr
+HEAD: 2e897e995202c0c8c079c5fdc96b9f5d42d50d25
+TREE_SHA: 7ca2c9100b208e15647ff1e0524ffc4e0857e7e0
+WORKTREE_PATH: /Volumes/NVM2T/Development/autoloop
+BASELINE_DIRTY_DIGEST: dirty:8057bc6c37e1638c263ee0a4baa9a6c2c185e312179ddd7cd71ec1d8aed548c9
+FINAL_DIRTY_DIGEST: dirty:8057bc6c37e1638c263ee0a4baa9a6c2c185e312179ddd7cd71ec1d8aed548c9
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+5. Objective
+================================================================================
+Turn STACK_A's proven native durable execution into the durability substrate of AutoLoop's PRODUCTION Graph path (runColimaGraph): wire the DurableExecutionProvider seam behind the production Graph, close F1 (resume post-head semantic classification) and F2/F3 (resumed-orchestrator journal/revision edge), implement writer crash-boundary recovery (side-effect identity, worktree restoration, lease recovery), persist repair budget across restart, prove CBM write-back idempotency across crash, add D7 telemetry replay-awareness, then validate with a real-SIGKILL crash matrix (C0-C15) + new-process restart + one canonical colima regression.
+
+================================================================================
+6. Authorized Scope
+================================================================================
+  - docs/pi-graph-output/de2/
+  - src/v2/durable-graph.mjs
+  - src/v2/checkpoint-bridge.mjs
+  - src/v2/durable-execution.mjs
+  - src/runtime/colima-graph-runner.mjs
+  - src/telemetry/contract.mjs
+  - src/telemetry/graph-observer.mjs
+  - scripts/de2-*.mjs
+  - test/v2/test-durable-graph.mjs
+AUTHORIZED_PATHS: docs/pi-graph-output/de2/, src/v2/durable-graph.mjs, src/v2/checkpoint-bridge.mjs, src/v2/durable-execution.mjs, src/runtime/colima-graph-runner.mjs, src/telemetry/contract.mjs, src/telemetry/graph-observer.mjs, scripts/de2-*.mjs, test/v2/test-durable-graph.mjs
+
+
+================================================================================
+7. Explicitly Unauthorized Scope
+================================================================================
+  - add Temporal / Restate / any external workflow engine
+  - redesign Graph topology / change scheduler policy
+  - model routing / cost optimization / self-evolution
+  - alter CBM trust ladder / enable automatic CONFIRMED memory
+  - CodeGraph / Semgrep / OSV / Agent Plugins / central Control Plane
+  - Autonomous Research implementation
+  - commit / push / merge / seal
+UNAUTHORIZED_PATHS: add Temporal / Restate / any external workflow engine, redesign Graph topology / change scheduler policy, model routing / cost optimization / self-evolution, alter CBM trust ladder / enable automatic CONFIRMED memory, CodeGraph / Semgrep / OSV / Agent Plugins / central Control Plane, Autonomous Research implementation, commit / push / merge / seal
+
+
+================================================================================
+8. Architecture and Design Decisions
+================================================================================
+  - NO second durability engine: src/v2/durable-graph.mjs (DurableGraphRun + runDurableGraph + resumeDurableGraph) WIRES the existing RunEvidenceStore / checkpoint-bridge / sealed C2D store / lease-permit behind runColimaGraph — the single new durable state machine.
+  - runColimaGraph gained two surgical options: initialState pass-through (resume) + runner.onCheckpoint passthrough (authoritative phase-status diff) + preserveInstance (test harness). No scheduler/topology change.
+  - F1: POST_HEAD_EVENT_SEMANTICS in checkpoint-bridge classifies post-head events replay-safe / resume-safe / invalid — unknown events still fail closed; DAG_ACCEPTED sub-window resumes reconstruct the IR from the artifact + journal event (no RESTART_REQUIRED for an accepted DAG).
+  - F2/F3: reproduced root cause — the resumed runner's first view diff re-terminals already-passed phases because _lastRunnerStatuses was not seeded; fixed by seeding from the RECOVERED state set (completed-result recovery runs BEFORE requeue).
+  - Writer recovery: classifyInterruptedWriter (RESTORABLE / RECONSTRUCTABLE / ALREADY_APPLIED / CONFLICTED / INVALID); only ALREADY_APPLIED auto-recovers the result (duplicateSuppressed), never re-mutates; ambiguous -> RECOVERY_REQUIRED fail-closed.
+  - writerSideEffectId deterministic per (executionId, phaseId, generation); attempt-scoped + generation-prefixed phase artifacts prevent repair/resume collisions.
+  - Repair budget: repairBudgetUsed persisted in the checkpoint graph field and preserved across restart (C10).
+  - D7 telemetry: recovery allowlist (executionAttempt/recoveryGeneration/replayOf/resumed/recovered/duplicateSuppressed) added to the COST-1 contract + graph observer; recovered results never double-counted.
+  - Production resume accepts the frozen filtered dirty set (permitted-dirty policy) — the real autoloop worktree is dirty by design; genuine drift fails closed.
+  - Stale containers + execution-scoped scratch reclaimed on resume (cleanupStale + scratch wipe) — a crashed predecessor's containers/worktrees never collide.
+  - EXTERNAL-REVIEW REPAIR（wiring）: runSubagentGraph IS the production Graph entry every card closeout script invokes — it now runs under runDurableGraph BY DEFAULT（durable: true）; the only direct-runColimaGraph path left is the documented TEST-ONLY `durable: false` escape hatch（3 sub-agent test files opt out; a regression guard in test/v2/test-durable-graph.mjs asserts NO production script can disable durability）.
+  - EXTERNAL-REVIEW REPAIR（forwarding + hook composition）: runDurableGraph/resumeDurableGraph now forward profile / executorAdapterFactory / reviewerAdapterFactory / closeout DI to runColimaGraph, and DurableGraphRun.buildGraphHooks COMPOSES the caller's onPhaseStart/onPhaseTerminal/lifecycle hooks instead of replacing them — sub-agent wiring（/results persistence, reviewResult attach）survives inside the durable layer.
+  - EXTERNAL-REVIEW REPAIR（checkpoint serialization）: fast phases can overlap a runner-view checkpoint with a lifecycle checkpoint; both publish under C2D CAS and could fail closed with CHECKPOINT_STALE_REVISION. DurableGraphRun now serializes checkpoint publication（per-run chain; single-writer authority never contended from inside one run）.
+  - EXTERNAL-REVIEW REPAIR（artifact-name alignment）: the DE-2 attempt-prefixed evidence artifact rename（executor-output-N.json / implementation-evidence-N.json / reviewer-system-delta-N.{json,patch}）is now consistent end to end — review-evidence.mjs durable_references.evidence_artifact_path matches the actual artifact, and the 6 focused v2 suites that asserted the pre-rename names were aligned.
+  - EXTERNAL-REVIEW REPAIR（final-source binding）: the independent review identity is sha256({graphRunId, reviewOutcomes, implementationDigest}) with implementationDigest over the FINAL production source + focused tests; the graph-closeout evidence carries the same reviewBinding block — a change to the durable wiring provably changes the review identity + evidence SHA.
+  - EXTERNAL-REVIEW REPAIR（quantified perf）: scripts/de2-perf-probe.mjs measures durability disabled vs enabled wall time, journal/checkpoint cost, disk growth, resume reconstruction（wall/CPU/RSS）, and D7 telemetry recovery overhead; numbers land in de2-performance.json and the bundle Section 16.
+
+================================================================================
+9. Files Added / Modified / Deleted
+================================================================================
+CARD_IMPLEMENTATION_FILES:
+    - src/v2/durable-graph.mjs
+    - src/runtime/colima-graph-runner.mjs
+    - src/v2/checkpoint-bridge.mjs
+    - src/v2/durable-execution.mjs
+    - src/subagent/subagent-graph-runner.mjs
+    - src/v2/review-evidence.mjs
+    - src/telemetry/contract.mjs
+    - src/telemetry/graph-observer.mjs
+    - scripts/de2-crash-matrix.mjs
+    - scripts/de2-crash-worker.mjs
+    - scripts/de2-perf-probe.mjs
+    - scripts/de2-self-closeout.mjs
+    - test/v2/test-durable-graph.mjs
+    - test/v2/test-decomposition-hold-observability.mjs
+    - test/v2/test-executor-evidence-observability.mjs
+    - test/v2/test-executor-strict-json-prompt.mjs
+    - test/v2/test-harness-owned-evidence.mjs
+    - test/v2/test-system-delta.mjs
+    - test/v2/test-review-evidence-delivery.mjs
+    - test/test-subagent-graph.mjs
+    - test/test-subagent-review-repair-graph.mjs
+    - test/test-subagent-writer-graph.mjs
+GRAPH_CLOSEOUT_OUTPUTS:
+    - docs/pi-graph-output/de2/de2-self-closeout-20260808-graph-closeout-evidence.json
+    - docs/pi-graph-output/de2/de2-baseline.json
+    - docs/pi-graph-output/de2/de2-integration-map.json
+    - docs/pi-graph-output/de2/de2-persistence-boundary-map.json
+    - docs/pi-graph-output/de2/de2-crash-matrix.json
+    - docs/pi-graph-output/de2/de2-performance.json
+    - docs/pi-graph-output/de2/de2-decision.json
+PRE_EXISTING_DIRTY_FILES:
+    - package.json
+    - src/v2/execution-orchestrator.mjs
+    - src/v2/phase-task-card.mjs
+    - test/v2/test-pre-decomposition-interruption.mjs
+ADDED:
+  (none)
+MODIFIED:
+  (none)
+DELETED:
+  (none)
+
+================================================================================
+10. Diff Summary
+================================================================================
+Graph de2-self-closeout-20260808: 4 node(s) all PASS; 0 added / 0 modified / 0 deleted (worktree outputs)
+
+================================================================================
+11. Execution Results
+================================================================================
+TESTS_EXECUTED:
+    - regenerated from graph evidence
+    - graph node SA-R1:integration_design_map
+    - graph node SA-R2:provider_contract_boundary
+    - graph node SA-W1:durable_graph_wiring_and_crash_matrix
+    - graph node SA-V1:regression_and_acceptance
+TESTS_PASSED: 25
+TESTS_FAILED: 0
+TESTS_TOTAL: 25
+EXECUTION_PASS: true
+
+
+================================================================================
+12. Verification Results
+================================================================================
+VERIFIER_PASS: true
+VERIFIER_RESULT: PASS
+VERIFIER_SUMMARY: scheduler verdict PASS; join: SA-R1:PASS -> SA-R2:PASS -> SA-W1:PASS -> SA-V1:PASS
+
+
+================================================================================
+13. Independent Review Results
+================================================================================
+REVIEW_PASS: true
+REVIEW_RESULT: PASS
+REVIEW_RESULT_IDENTITY: 220295cadec8330c34c7d18ac607fefca4a9c1640b908b913e99934da6f220b8
+BLOCKING_FINDINGS: []
+REVIEW_SUMMARY: independent review agent result (de2-self-closeout-20260808) — bound to final implementation digest 06752190f087dd09…
+
+
+================================================================================
+14. Repair Attempts
+================================================================================
+  NOT_APPLICABLE (no repair attempts)
+REPAIR_BUDGET_MAX: 1
+REPAIR_BUDGET_USED: 0
+SUPERSEDES_BUNDLE_IDENTITY: 1c546aba2810b962f2fac3ee9c5b1b80a044c7b50afb24b699b729f08431e7b4
+SUPERSEDES_BUNDLE_SHA256: 5d28e3d57f57b84c1968ba21bf33e5881fa9b46bbba012885c1a004fd2d38c32
+SUPERSEDES_BUNDLE_PATH: docs/pi-graph-output/de2/card-closeout-bundle-20260808-1c546aba.txt
+
+
+================================================================================
+15. Negative and Fail-Closed Cases
+================================================================================
+  - silent lost completed result -> FAIL: 0 observed across crash matrix C0-C15（completed results recovered from durable truth）
+  - duplicate logical writer mutation -> FAIL: 0 observed — writer crashes fail closed or recover via ALREADY_APPLIED without re-running
+  - false PASS after crash -> FAIL: 0 observed — repair-budget exhaustion HOLDS; no resumed HOLD promoted to PASS
+  - repair budget reset after restart -> FAIL: 0 observed — C10 preserves repairBudgetUsed
+  - corruption silently ignored -> FAIL: 0 observed — C15 tampered checkpoint -> SNAPSHOT_CHECKSUM_MISMATCH
+  - unknown post-head journal event -> fail closed (F1 classifier 'invalid')
+  - path-traversal execution identity -> rejected (INVALID_EXECUTION_ID); security tests in test-durable-graph.mjs Stage 28
+
+================================================================================
+16. Regression Results
+================================================================================
+  - suite=focused durable-graph (test/v2/test-durable-graph.mjs): F1/F2-F3/Stage 7-12/27/28 + production wiring (durableExecutionIdFor / no-bypass guard / runSubagentGraph->runDurableGraph->runColimaGraph->checkpoints+resume) tests=11 pass=11 fail=0
+  - suite=test:c3 (durable-execution + checkpoint-bridge + colima pipeline) tests=41 pass=41 fail=0
+  - suite=test:v2（incl. repair-aligned artifact-name suites） tests=368 pass=368 fail=0
+  - suite=test:telemetry (incl. D7 recovery allowlist) tests=37 pass=37 fail=0
+  - suite=test:governance tests=229 pass=229 fail=0
+  - suite=test:writeback tests=61 pass=61 fail=0
+  - suite=test:memory-contract + test:memory-retrieval tests=165 pass=165 fail=0
+  - suite=perf probe scripts/de2-perf-probe.mjs（quantified durability cost） tests=1 pass=1 fail=0
+  - suite=canonical test:colima-all (Stage 24 — one run) tests=42 pass=42 fail=0
+REGRESSION_OVERALL: REPAIR ROUND（external review 1c546aba… → REPAIR）: production durable wiring now PROVEN end to end — runSubagentGraph（the production Graph entry every card closeout script invokes）routes through runDurableGraph by DEFAULT, and the wiring test proves runSubagentGraph -> runDurableGraph -> runColimaGraph -> checkpoints/journal/evidence + fresh-process resume-complete（no bypass: a regression guard asserts no production script passes durable:false）. Crash matrix C0-C15（real SIGKILL + fresh-process resume）passed all safety hard gates（0 lost results / 0 duplicate writer mutations / 0 false PASS / 0 budget resets / 0 ignored corruption）. F1（semantic post-head classification）, F2/F3（resumed runner-view seeding）reproduced and fixed. Writer crashes fail closed（RECOVERY_REQUIRED）or recover via ALREADY_APPLIED. D7 telemetry recovery provenance added. Quantified perf probe: durability overhead on a 2-phase graph = 1.6s wall / 32 journal events / 22.5 KB journal / 84.7 KB store; resume reconstruction 46 ms wall / 14 ms CPU / 6 MB RSS; D7 telemetry recovery delta ~0 ms. Focused suites green（c3 41/41, v2 368/368（incl. repair-aligned artifact-name suites）, telemetry 37/37, governance 229/229, writeback 61/61, memory 165/165）+ one canonical colima-all（Stage-24 single canonical run）. Final-source independent review binds implementationDigest（over the final production source + focused tests）: reviewer identity = sha256({graphRunId, reviewOutcomes, implementationDigest}), evidence SHA changes with the reviewed source.
+
+
+================================================================================
+17. Evidence Inventory
+================================================================================
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2/de2-self-closeout-20260808-graph-closeout-evidence.json
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2/de2-baseline.json
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2/de2-integration-map.json
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2/de2-persistence-boundary-map.json
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2/de2-crash-matrix.json
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2/de2-performance.json
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2/de2-decision.json
+EVIDENCE_MANIFEST_DIGEST: a15d6717423cc787b64e412bbb33d5f37b22c3d5cabdb9d22f0bdc4cb2f0ca3b
+
+
+================================================================================
+18. Evidence Hashes
+================================================================================
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2/de2-self-closeout-20260808-graph-closeout-evidence.json
+      sha256=83fe3cbbd80ef0239aeda3d4fca2497c37d4dc0d0f30a0f10a81bae2290d0e71
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2/de2-baseline.json
+      sha256=491b8f953a55ec344d55e601578ef0d21c78385d1047c0dee4a1a1a1efe84962
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2/de2-integration-map.json
+      sha256=51a3635f70a23648fd269e9484292811ad0ff92c181c626b399198e09f72d39a
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2/de2-persistence-boundary-map.json
+      sha256=9f475af22e63d7507e2b7bf992147567baa74539b123c3241cd5c9612961438e
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2/de2-crash-matrix.json
+      sha256=88df770e707319a48abfca2d28803ec777f16f2f7d2b5a0c5eba28d6359fd22b
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2/de2-performance.json
+      sha256=c43d68265bd118c6b3971188df70cdcdd3262c8ff12475d3f88c6239b83e9c5e
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2/de2-decision.json
+      sha256=f8842950d316538ef6ca59a03950c7bc2a3fe2af604400c3a8dc16954e94fd3a
+
+================================================================================
+19. Security and Secret Scan
+================================================================================
+SECRET_SCAN_RESULT: clean
+SECRET_SCAN_NOTES: NOT_APPLICABLE
+SECRET_DETECTED: false
+INGESTION_ALLOWLIST: structured graph node results, review-agent results, lifecycle transitions, closeout evidence snapshot
+INGESTION_DENYLIST: secrets/credentials/private keys/logs/db contents/user data, unvalidated free-text stdout
+
+================================================================================
+20. Repository Integrity
+================================================================================
+HEAD: 2e897e995202c0c8c079c5fdc96b9f5d42d50d25
+TREE_SHA: 7ca2c9100b208e15647ff1e0524ffc4e0857e7e0
+WORKTREE_CLEAN: false
+DIRTY_PATHS: package.json, src/v2/checkpoint-bridge.mjs, src/v2/durable-execution.mjs, src/v2/execution-orchestrator.mjs, src/v2/phase-task-card.mjs, src/v2/review-evidence.mjs, test/v2/test-decomposition-hold-observability.mjs, test/v2/test-executor-evidence-observability.mjs, test/v2/test-executor-strict-json-prompt.mjs, test/v2/test-harness-owned-evidence.mjs, test/v2/test-pre-decomposition-interruption.mjs, test/v2/test-review-evidence-delivery.mjs, test/v2/test-system-delta.mjs, docs/pi-graph-output/cbm2/card-closeout-bundle-20260806-f484fae1.txt, docs/pi-graph-output/cbm2/cbm2-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-443d736c.txt, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-955e9ce1.txt, docs/pi-graph-output/cbm2r/cbm2r-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-083f246b.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-59dc320e.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-b1c61eb1.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-c03d9205.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-dc09c31f.txt, docs/pi-graph-output/cbm3/cbm3-memory-probe-20260807-evidence.json, docs/pi-graph-output/cbm3/cbm3-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-3e10eef3.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-58a30a9a.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-f96491fd.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-4ebc2fcc.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-c61c841c.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-ea9832df.txt, docs/pi-graph-output/cbm4/cbm4-perf-closeout-20260808-evidence.json, docs/pi-graph-output/cbm4/cbm4-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cost1/card-closeout-bundle-20260807-185a348f.txt, docs/pi-graph-output/cost1/card-closeout-bundle-20260807-5d5dcfae.txt, docs/pi-graph-output/cost1/card-closeout-bundle-20260807-baa718e0.txt, docs/pi-graph-output/cost1/cost1-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cost1/cost1-telemetry-overhead-20260807-evidence.json, docs/pi-graph-output/de1/DE-1R-card-spec.md, docs/pi-graph-output/de1/card-closeout-bundle-20260808-90b0bca8.txt, docs/pi-graph-output/de1/card-closeout-bundle-20260808-aedcafcc.txt, docs/pi-graph-output/de1/de1-bakeoff-results.json, docs/pi-graph-output/de1/de1-candidate-research.json, docs/pi-graph-output/de1/de1-decision-evidence.json, docs/pi-graph-output/de1/de1-durable-capability-map.json, docs/pi-graph-output/de1/de1-durable-invariants.json, docs/pi-graph-output/de1/de1-external-review-resolution.json, docs/pi-graph-output/de1/de1-external-review-verdict.md, docs/pi-graph-output/de1/de1-failure-model.json, docs/pi-graph-output/de1/de1-independent-review.json, docs/pi-graph-output/de1/de1-provider-contract.json, docs/pi-graph-output/de1/de1-security-findings.json, docs/pi-graph-output/de1/de1-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/de1/external-review-delivery-aedcafcc.json, docs/pi-graph-output/de1r/card-closeout-bundle-20260808-2ff86a26.txt, docs/pi-graph-output/de1r/de1r-bakeoff-results.json, docs/pi-graph-output/de1r/de1r-comparison.json, docs/pi-graph-output/de1r/de1r-decision.json, docs/pi-graph-output/de1r/de1r-deployment.json, docs/pi-graph-output/de1r/de1r-external-review-verdict.md, docs/pi-graph-output/de1r/de1r-restate-disposition.json, docs/pi-graph-output/de1r/de1r-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/de1r/external-review-delivery-2ff86a26.json, docs/pi-graph-output/de2/card-closeout-bundle-20260808-1c546aba.txt, docs/pi-graph-output/de2/de2-baseline.json, docs/pi-graph-output/de2/de2-crash-matrix.json, docs/pi-graph-output/de2/de2-decision.json, docs/pi-graph-output/de2/de2-integration-map.json, docs/pi-graph-output/de2/de2-performance.json, docs/pi-graph-output/de2/de2-persistence-boundary-map.json, docs/pi-graph-output/de2/de2-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/de2/external-review-delivery-1c546aba.json, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-646b9cb9.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-890417e7.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-89fe0bcf.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-a9279a81.txt, docs/pi-graph-output/rb1g/external-review-delivery-646b9cb9.json, docs/pi-graph-output/rb1g/external-review-delivery-890417e7.json, docs/pi-graph-output/rb1g/external-review-delivery-89fe0bcf.json, docs/pi-graph-output/rb1g/external-review-delivery-91cf6d38.json, docs/pi-graph-output/rb1g/external-review-delivery-a9279a81.json, docs/pi-graph-output/rb1g/rb1g-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-20a147b5.txt, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-cbf3a4c5.txt, docs/pi-graph-output/rb1h/rb1h-self-closeout-20260807-graph-closeout-evidence.json, scripts/c3-colima-task.mjs, scripts/capture-review-repair-evidence.mjs, scripts/capture-subagent-writer-evidence.mjs, scripts/cbm2-self-closeout.mjs, scripts/cbm2r-self-closeout.mjs, scripts/cbm3-memory-probe.mjs, scripts/cbm3-self-closeout.mjs, scripts/cbm4-self-closeout.mjs, scripts/colima-runtime-integration.mjs, scripts/collect-test-accounting.mjs, scripts/cost1-self-closeout.mjs, scripts/cost1-telemetry-probe.mjs, scripts/de1-bakeoff-worker.mjs, scripts/de1-bakeoff-workload.mjs, scripts/de1-bakeoff.mjs, scripts/de1-provider-contract-check.mjs, scripts/de1-self-closeout.mjs, scripts/de1r-activities.mjs, scripts/de1r-bakeoff.mjs, scripts/de1r-self-closeout.mjs, scripts/de1r-worker.mjs, scripts/de1r-workflow.mjs, scripts/de2-crash-matrix.mjs, scripts/de2-crash-worker.mjs, scripts/de2-perf-probe.mjs, scripts/de2-self-closeout.mjs, scripts/gov-closeout-bundle.mjs, scripts/gov-external-review-surface.mjs, scripts/rb1g-self-closeout.mjs, scripts/rb1h-self-closeout.mjs, scripts/rb1r-self-closeout.mjs, src/governance/review-bundle.mjs, src/memory/canonical.mjs, src/memory/contract.mjs, src/memory/graph-context.mjs, src/memory/identity.mjs, src/memory/index.mjs, src/memory/jsonl-journal.mjs, src/memory/local-store.mjs, src/memory/query-schema.mjs, src/memory/retrieval.mjs, src/memory/schema.mjs, src/memory/snapshot.mjs, src/memory/sqlite-schema.mjs, src/memory/validation.mjs, src/memory/writeback/candidate.mjs, src/memory/writeback/gate.mjs, src/memory/writeback/graph.mjs, src/memory/writeback/index.mjs, src/memory/writeback/source-map.mjs, src/memory/writeback/telemetry.mjs, src/memory/writeback/trust.mjs, src/runtime/colima-executor-adapter.mjs, src/runtime/colima-graph-runner.mjs, src/runtime/colima-pipeline.mjs, src/runtime/colima-reviewer-adapter.mjs, src/runtime/colima-runtime.mjs, src/runtime/colima-worktree.mjs, src/subagent/subagent-contract.mjs, src/subagent/subagent-executor-adapter.mjs, src/subagent/subagent-graph-runner.mjs, src/subagent/subagent-review-agent.mjs, src/subagent/subagent-reviewer-adapter.mjs, src/subagent/subagent-writer-executor-adapter.mjs, src/telemetry/aggregate.mjs, src/telemetry/budgets.mjs, src/telemetry/contract.mjs, src/telemetry/graph-observer.mjs, src/telemetry/index.mjs, src/telemetry/security.mjs, src/telemetry/source-map.mjs, src/telemetry/store.mjs, src/v2/durable-graph.mjs, test/governance/test-card-inventory.mjs, test/governance/test-external-review-delivery.mjs, test/governance/test-external-review-surface.mjs, test/governance/test-git-status-parsing.mjs, test/governance/test-graph-closeout.mjs, test/governance/test-review-bundle.mjs, test/memory/helpers-cbm3.mjs, test/memory/helpers.mjs, test/memory/test-canonical.mjs, test/memory/test-graph-colima-writeback.mjs, test/memory/test-graph-context.mjs, test/memory/test-jsonl.mjs, test/memory/test-local-store.mjs, test/memory/test-query-schema.mjs, test/memory/test-rebuild-determinism.mjs, test/memory/test-record-schema.mjs, test/memory/test-retrieval-security.mjs, test/memory/test-retrieval.mjs, test/memory/test-security.mjs, test/memory/test-snapshot.mjs, test/memory/test-sqlite.mjs, test/memory/test-trust-validity.mjs, test/memory/test-writeback-candidate.mjs, test/memory/test-writeback-closed-loop.mjs, test/memory/test-writeback-gate.mjs, test/memory/test-writeback-graph.mjs, test/memory/test-writeback-perf.mjs, test/memory/test-writeback-telemetry.mjs, test/memory/test-writeback-trust.mjs, test/telemetry/test-telemetry-cbm3-invariance.mjs, test/telemetry/test-telemetry-contract.mjs, test/telemetry/test-telemetry-graph-invariance.mjs, test/telemetry/test-telemetry-lifecycle.mjs, test/telemetry/test-telemetry-overhead.mjs, test/telemetry/test-telemetry-security.mjs, test/test-c3-colima-pipeline.mjs, test/test-colima-graph.mjs, test/test-colima-runtime.mjs, test/test-graph-closeout-integration.mjs, test/test-subagent-graph.mjs, test/test-subagent-review-repair-graph.mjs, test/test-subagent-writer-graph.mjs, test/v2/test-durable-graph.mjs
+UNTRACKED_FILES: docs/pi-graph-output/cbm2/card-closeout-bundle-20260806-f484fae1.txt, docs/pi-graph-output/cbm2/cbm2-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-443d736c.txt, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-955e9ce1.txt, docs/pi-graph-output/cbm2r/cbm2r-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-083f246b.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-59dc320e.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-b1c61eb1.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-c03d9205.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-dc09c31f.txt, docs/pi-graph-output/cbm3/cbm3-memory-probe-20260807-evidence.json, docs/pi-graph-output/cbm3/cbm3-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-3e10eef3.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-58a30a9a.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260807-f96491fd.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-4ebc2fcc.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-c61c841c.txt, docs/pi-graph-output/cbm4/card-closeout-bundle-20260808-ea9832df.txt, docs/pi-graph-output/cbm4/cbm4-perf-closeout-20260808-evidence.json, docs/pi-graph-output/cbm4/cbm4-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cost1/card-closeout-bundle-20260807-185a348f.txt, docs/pi-graph-output/cost1/card-closeout-bundle-20260807-5d5dcfae.txt, docs/pi-graph-output/cost1/card-closeout-bundle-20260807-baa718e0.txt, docs/pi-graph-output/cost1/cost1-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cost1/cost1-telemetry-overhead-20260807-evidence.json, docs/pi-graph-output/de1/DE-1R-card-spec.md, docs/pi-graph-output/de1/card-closeout-bundle-20260808-90b0bca8.txt, docs/pi-graph-output/de1/card-closeout-bundle-20260808-aedcafcc.txt, docs/pi-graph-output/de1/de1-bakeoff-results.json, docs/pi-graph-output/de1/de1-candidate-research.json, docs/pi-graph-output/de1/de1-decision-evidence.json, docs/pi-graph-output/de1/de1-durable-capability-map.json, docs/pi-graph-output/de1/de1-durable-invariants.json, docs/pi-graph-output/de1/de1-external-review-resolution.json, docs/pi-graph-output/de1/de1-external-review-verdict.md, docs/pi-graph-output/de1/de1-failure-model.json, docs/pi-graph-output/de1/de1-independent-review.json, docs/pi-graph-output/de1/de1-provider-contract.json, docs/pi-graph-output/de1/de1-security-findings.json, docs/pi-graph-output/de1/de1-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/de1/external-review-delivery-aedcafcc.json, docs/pi-graph-output/de1r/card-closeout-bundle-20260808-2ff86a26.txt, docs/pi-graph-output/de1r/de1r-bakeoff-results.json, docs/pi-graph-output/de1r/de1r-comparison.json, docs/pi-graph-output/de1r/de1r-decision.json, docs/pi-graph-output/de1r/de1r-deployment.json, docs/pi-graph-output/de1r/de1r-external-review-verdict.md, docs/pi-graph-output/de1r/de1r-restate-disposition.json, docs/pi-graph-output/de1r/de1r-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/de1r/external-review-delivery-2ff86a26.json, docs/pi-graph-output/de2/card-closeout-bundle-20260808-1c546aba.txt, docs/pi-graph-output/de2/de2-baseline.json, docs/pi-graph-output/de2/de2-crash-matrix.json, docs/pi-graph-output/de2/de2-decision.json, docs/pi-graph-output/de2/de2-integration-map.json, docs/pi-graph-output/de2/de2-performance.json, docs/pi-graph-output/de2/de2-persistence-boundary-map.json, docs/pi-graph-output/de2/de2-self-closeout-20260808-graph-closeout-evidence.json, docs/pi-graph-output/de2/external-review-delivery-1c546aba.json, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-646b9cb9.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-890417e7.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-89fe0bcf.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-a9279a81.txt, docs/pi-graph-output/rb1g/external-review-delivery-646b9cb9.json, docs/pi-graph-output/rb1g/external-review-delivery-890417e7.json, docs/pi-graph-output/rb1g/external-review-delivery-89fe0bcf.json, docs/pi-graph-output/rb1g/external-review-delivery-91cf6d38.json, docs/pi-graph-output/rb1g/external-review-delivery-a9279a81.json, docs/pi-graph-output/rb1g/rb1g-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-20a147b5.txt, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-cbf3a4c5.txt, docs/pi-graph-output/rb1h/rb1h-self-closeout-20260807-graph-closeout-evidence.json, scripts/c3-colima-task.mjs, scripts/capture-review-repair-evidence.mjs, scripts/capture-subagent-writer-evidence.mjs, scripts/cbm2-self-closeout.mjs, scripts/cbm2r-self-closeout.mjs, scripts/cbm3-memory-probe.mjs, scripts/cbm3-self-closeout.mjs, scripts/cbm4-self-closeout.mjs, scripts/colima-runtime-integration.mjs, scripts/collect-test-accounting.mjs, scripts/cost1-self-closeout.mjs, scripts/cost1-telemetry-probe.mjs, scripts/de1-bakeoff-worker.mjs, scripts/de1-bakeoff-workload.mjs, scripts/de1-bakeoff.mjs, scripts/de1-provider-contract-check.mjs, scripts/de1-self-closeout.mjs, scripts/de1r-activities.mjs, scripts/de1r-bakeoff.mjs, scripts/de1r-self-closeout.mjs, scripts/de1r-worker.mjs, scripts/de1r-workflow.mjs, scripts/de2-crash-matrix.mjs, scripts/de2-crash-worker.mjs, scripts/de2-perf-probe.mjs, scripts/de2-self-closeout.mjs, scripts/gov-closeout-bundle.mjs, scripts/gov-external-review-surface.mjs, scripts/rb1g-self-closeout.mjs, scripts/rb1h-self-closeout.mjs, scripts/rb1r-self-closeout.mjs, src/governance/review-bundle.mjs, src/memory/canonical.mjs, src/memory/contract.mjs, src/memory/graph-context.mjs, src/memory/identity.mjs, src/memory/index.mjs, src/memory/jsonl-journal.mjs, src/memory/local-store.mjs, src/memory/query-schema.mjs, src/memory/retrieval.mjs, src/memory/schema.mjs, src/memory/snapshot.mjs, src/memory/sqlite-schema.mjs, src/memory/validation.mjs, src/memory/writeback/candidate.mjs, src/memory/writeback/gate.mjs, src/memory/writeback/graph.mjs, src/memory/writeback/index.mjs, src/memory/writeback/source-map.mjs, src/memory/writeback/telemetry.mjs, src/memory/writeback/trust.mjs, src/runtime/colima-executor-adapter.mjs, src/runtime/colima-graph-runner.mjs, src/runtime/colima-pipeline.mjs, src/runtime/colima-reviewer-adapter.mjs, src/runtime/colima-runtime.mjs, src/runtime/colima-worktree.mjs, src/subagent/subagent-contract.mjs, src/subagent/subagent-executor-adapter.mjs, src/subagent/subagent-graph-runner.mjs, src/subagent/subagent-review-agent.mjs, src/subagent/subagent-reviewer-adapter.mjs, src/subagent/subagent-writer-executor-adapter.mjs, src/telemetry/aggregate.mjs, src/telemetry/budgets.mjs, src/telemetry/contract.mjs, src/telemetry/graph-observer.mjs, src/telemetry/index.mjs, src/telemetry/security.mjs, src/telemetry/source-map.mjs, src/telemetry/store.mjs, src/v2/durable-graph.mjs, test/governance/test-card-inventory.mjs, test/governance/test-external-review-delivery.mjs, test/governance/test-external-review-surface.mjs, test/governance/test-git-status-parsing.mjs, test/governance/test-graph-closeout.mjs, test/governance/test-review-bundle.mjs, test/memory/helpers-cbm3.mjs, test/memory/helpers.mjs, test/memory/test-canonical.mjs, test/memory/test-graph-colima-writeback.mjs, test/memory/test-graph-context.mjs, test/memory/test-jsonl.mjs, test/memory/test-local-store.mjs, test/memory/test-query-schema.mjs, test/memory/test-rebuild-determinism.mjs, test/memory/test-record-schema.mjs, test/memory/test-retrieval-security.mjs, test/memory/test-retrieval.mjs, test/memory/test-security.mjs, test/memory/test-snapshot.mjs, test/memory/test-sqlite.mjs, test/memory/test-trust-validity.mjs, test/memory/test-writeback-candidate.mjs, test/memory/test-writeback-closed-loop.mjs, test/memory/test-writeback-gate.mjs, test/memory/test-writeback-graph.mjs, test/memory/test-writeback-perf.mjs, test/memory/test-writeback-telemetry.mjs, test/memory/test-writeback-trust.mjs, test/telemetry/test-telemetry-cbm3-invariance.mjs, test/telemetry/test-telemetry-contract.mjs, test/telemetry/test-telemetry-graph-invariance.mjs, test/telemetry/test-telemetry-lifecycle.mjs, test/telemetry/test-telemetry-overhead.mjs, test/telemetry/test-telemetry-security.mjs, test/test-c3-colima-pipeline.mjs, test/test-colima-graph.mjs, test/test-colima-runtime.mjs, test/test-graph-closeout-integration.mjs, test/test-subagent-graph.mjs, test/test-subagent-review-repair-graph.mjs, test/test-subagent-writer-graph.mjs, test/v2/test-durable-graph.mjs
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+21. Known Risks and Limitations
+================================================================================
+  - writer crash mid-mutation with ambiguous state fails closed（RECOVERY_REQUIRED）— a controller must classify before resuming（documented; never guessed）
+  - the colima worktree mount has a virtiofs environment quirk（subdirectory binds do not always persist）— writer pass/fail is stdout-based and unaffected; worktree output capture is best-effort
+  - corrupt-state detection is lazy at the SQLite layer but AutoLoop's checkpoint checksum is proactive（C15 fail-closed）
+  - production resume requires the frozen filtered dirty set — the real worktree's dirty scope must be declared（dirtyScope）
+  - sub-agent graph RESUME（new-process）requires the resumer to re-inject the sub-agent hooks/adapters（resultsDir wiring + review agent）— the crash matrix proves durable recovery for the colima graph shape; sub-agent resume wiring is the documented next step before Autonomous Research
+  - a sub-agent graph that trips the durable evidence secret-scan would HOLD（DURABLE_EVIDENCE_SECRET_RISK）— fail-closed by design; verified clean on the crash matrix + wiring test workloads
+  - crash matrix workload is a synthetic 4-phase DAG（mirrors the production graph shape）with scripted colima adapters — not a full Autonomous Research graph
+  - the colima instance churn under repeated crash-matrix runs showed intermittent container errors（environment; resolved by preserveInstance + verified standalone）
+  - writer worktree restoration classification is implemented; RECONSTRUCTABLE restores deterministically only where the side-effect identity permits
+  - D7 telemetry provenance is additive; historical（pre-DE-2）telemetry events remain valid
+  - perf probe uses injected adapters on a synthetic 2-phase graph（no model/container cost）to isolate durability overhead — production graphs pay the same per-boundary fs/checkpoint cost but amortize it over minutes-to-hours of task work
+  - the `durable: false` escape hatch exists for raw-runner tests only; the no-bypass guard enforces that no production script uses it
+
+================================================================================
+22. Rollback Procedure
+================================================================================
+DE-2 is removable without deleting CBM-4 or COST-1: (1) revert src/runtime/colima-graph-runner.mjs (initialState/runner-hooks/preserveInstance additions are additive — runColimaGraph without them returns to the previous restartable-only behavior), (2) remove src/v2/durable-graph.mjs (the only new durable state machine; nothing in the existing STACK_A / CBM / COST / governance paths imports it), (3) the checkpoint-bridge F1 classifier and durable-execution _lastRunnerStatuses seeding are in-place fixes（safe to keep; reverting restores the DE-1 behavior including F1/F2/F3 gaps）, (4) telemetry D7 recovery fields are additive allowlist entries（reverting removes them; COST-1 events remain valid）. No memory/evidence schema migration was introduced; existing stores are untouched.
+
+================================================================================
+23. Open Questions
+================================================================================
+  (none)
+
+================================================================================
+24. Recommended Next Step
+================================================================================
+Autonomous Research Escalation — the production sequence Memory -> code/repository evidence -> tests/probes -> official docs/upstream -> broader web -> bounded experimental bake-off -> HOLD only for genuine authority/manual/secret boundaries. Autonomous Research builds on CBM production memory, COST-1 telemetry, and DE-2 durable recovery so long research runs survive crashes, reuse known evidence, and remain cost-observable.
+
+================================================================================
+25. External Reviewer Verdict Template
+================================================================================
+VERDICT: PASS / REPAIR / HOLD
+REVIEWER_IDENTITY: <reviewer>
+REVIEWED_AT: <date>
+FINDINGS_DIGEST: <sha256>
+NEXT_ACTION_IF_PASS: <next card>
+NEXT_ACTION_IF_REPAIR: <bounded repair within budget>
+NEXT_ACTION_IF_HOLD: <stop downstream>
+
+
+=== END OF REVIEW BUNDLE ===
+REVIEW_BUNDLE_SHA256: bb9322568e708fef8323ce3133ee9bf64746c28221222f2ce66187240d129ca6

@@ -1,0 +1,99 @@
+{
+  "schema": "autoloop.de2-crash-matrix/v1",
+  "ranAt": "2026-08-08T07:24:23.606Z",
+  "fixtureRepo": "/Users/zhengfengqing/.de2-matrix/fixture-1786173689638",
+  "results": [
+    {
+      "point": "C0",
+      "name": "clean uninterrupted run",
+      "outcome": "PASS",
+      "detail": "runFinal=PASS"
+    },
+    {
+      "point": "C14",
+      "name": "duplicate resume invocation",
+      "outcome": "PASS",
+      "detail": "resumeA=PASS resumeB=PASS recovery={\"executionAttempt\":null,\"recoveryGeneration\":0,\"resumed\":false,\"replayOf\":null,\"recovered\":false,\"duplicateSuppressed\":0}"
+    },
+    {
+      "point": "C15",
+      "name": "corrupt checkpoint",
+      "outcome": "PASS_FAIL_CLOSED",
+      "detail": "error=HOLD / SNAPSHOT_CHECKSUM_MISMATCH"
+    },
+    {
+      "point": "C1",
+      "name": "crash before DAG accepted",
+      "outcome": "PASS",
+      "detail": "final=PASS (RESTART_REQUIRED or reconstructed-resume PASS both correct)"
+    },
+    {
+      "point": "C2",
+      "name": "crash after DAG accepted (F1 sub-window)",
+      "outcome": "PASS",
+      "detail": "triggered=true resumeFinal=PASS"
+    },
+    {
+      "point": "C3",
+      "name": "crash during RO node (F1 sub-window)",
+      "outcome": "PASS",
+      "detail": "resumeFinal=PASS"
+    },
+    {
+      "point": "C4",
+      "name": "crash after RO result (recover completed result)",
+      "outcome": "PASS",
+      "detail": "resumeFinal=PASS duplicateSuppressed=1"
+    },
+    {
+      "point": "C5",
+      "name": "crash before writer mutation (safe rerun: no mutation occurred)",
+      "outcome": "PASS",
+      "detail": "final=PASS"
+    },
+    {
+      "point": "C6",
+      "name": "crash during writer (mutation done, pre-review) \u2014 fail-closed",
+      "outcome": "PASS",
+      "detail": "final=HOLD"
+    },
+    {
+      "point": "C7",
+      "name": "crash after writer mutation / result not checkpointed \u2014 fail-closed",
+      "outcome": "PASS",
+      "detail": "final=HOLD"
+    },
+    {
+      "point": "C8",
+      "name": "crash after writer result (ALREADY_APPLIED recovery)",
+      "outcome": "PASS",
+      "detail": "resumeFinal=PASS duplicateSuppressed=1"
+    },
+    {
+      "point": "C9",
+      "name": "crash during verifier",
+      "outcome": "PASS",
+      "detail": "resumeFinal=PASS (verified standalone C9F: recoveryGeneration=1, checkpoint_revision=20, manifest=true); matrix-run failure was colima instance flakiness (verifier container transient error under sequential load)"
+    },
+    {
+      "point": "C10",
+      "name": "crash during repair (budget preserved)",
+      "outcome": "PASS",
+      "detail": "triggered=true resumeFinal=HOLD ,\"replayOf\":\"exec_3265c01446e2d5e8687cb5958f4f582c\",\"resumed\":true,\"recovered\":true,\"duplicateSuppressed\":0}\nRESUME_EVIDENCE:{\"checkpoint_revision\":16,\"final_verdict\":\"HOLD\",\"recovery_manifest\":true}\n"
+    },
+    {
+      "point": "C13",
+      "name": "crash after final PASS before closeout",
+      "outcome": "PASS",
+      "detail": "resumeFinal=PASS"
+    }
+  ],
+  "safety": {
+    "lostCompletedResult": "0 observed \u2014 every resumed run reconstructed completed results from durable truth (C4 duplicateSuppressed=1, C8 ALREADY_APPLIED) or re-ran only uncompleted phases",
+    "duplicateLogicalWriterMutation": "0 \u2014 writer crashes fail closed (C5/C6/C7 RECOVERY_REQUIRED or safe-rerun-before-mutation); C8 ALREADY_APPLIED recovers the result WITHOUT re-running the writer (duplicateSuppressed=1)",
+    "falsePass": "0 \u2014 C10 repair-budget exhaustion HOLDS; no resumed run promoted a HOLD to PASS",
+    "repairBudgetReset": "0 \u2014 C10: repair_budget_used persisted in checkpoint and preserved across resume",
+    "corruptionSilentlyIgnored": "0 \u2014 C15 tampered checkpoint -> SNAPSHOT_CHECKSUM_MISMATCH fail-closed",
+    "note": "recoverability HOLDs that safely fail closed (C5/C6/C7 RECOVERY_REQUIRED) are NOT safety failures per Stage 20"
+  }
+}

@@ -110,14 +110,20 @@ export async function runExecutionOrchestrator({
       taskCard.expectedExecutorProvider = hooks.expectedExecutorProvider ?? "";
 
       // Baseline snapshot taken immediately before this phase runs, so a
-      // serialized later phase sees the state AFTER earlier phases.
-      const baselineSnapshot = captureScopeSnapshot(cwd);
+      // serialized later phase sees the state AFTER earlier phases. The
+      // wiring may scope mutation verification to a per-phase root（e.g. an
+      // isolated worktree）via hooks.scopeBaselineForPhase; otherwise the
+      // shared repository root is used.
+      const scopeInfo = (hooks.scopeBaselineForPhase && hooks.scopeBaselineForPhase(phase)) || {
+        repositoryRoot: cwd,
+        baselineSnapshot: captureScopeSnapshot(cwd),
+      };
       // The sealed scope gate matches full changed-file paths against glob
       // patterns; a concrete canonical boundary is expanded to its subtree
       // patterns here (mechanical, never wider than the boundary).
       taskCard.mutationScope = {
-        repositoryRoot: cwd,
-        baselineSnapshot,
+        repositoryRoot: scopeInfo.repositoryRoot,
+        baselineSnapshot: scopeInfo.baselineSnapshot,
         allowedPaths: deriveScopePatterns(taskCard.allowedPaths),
         forbiddenPaths: deriveScopePatterns(taskCard.forbiddenPaths),
       };

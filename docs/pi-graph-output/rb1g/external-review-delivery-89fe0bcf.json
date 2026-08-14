@@ -1,0 +1,25 @@
+{
+  "schema": "autoloop.external-review-delivery/v2",
+  "cardId": "AUTOLOOP-PI-GRAPH-RB1G-1",
+  "fileName": "external-review-delivery-89fe0bcf.json",
+  "reviewBundleGenerated": true,
+  "reviewBundleValidated": true,
+  "reviewBundleDeliveryRequired": true,
+  "externalReviewStatus": "AWAITING_EXTERNAL_REVIEW",
+  "externalReviewStatusReason": null,
+  "delivery": {
+    "required": true,
+    "attempted": true,
+    "method": "presented-in-conversation",
+    "attemptedAt": "2026-08-07T10:35:21.609Z",
+    "bundlePath": "/Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-89fe0bcf.txt",
+    "reviewBundleIdentity": "89fe0bcfcde867b6edd3919479159a6a08b6357b89f7017d3f441306166dba3e",
+    "reviewBundleSha256": "5b12ba870fe604c95bffd142c6ba9584a2943fbe25a549beea3b2768aabf817f"
+  },
+  "verdict": null,
+  "supersedes": {
+    "reviewBundleIdentity": "890417e7035dcb31daacd7f4421ecda009672775bb8c2653dc7fd5fcb73fde00",
+    "reviewBundleSha256": "25a06fa28a13978ec7dc111d3f1839cf818bc5a18914e23d10e9a1e4aab57c6d",
+    "bundlePath": "/Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-890417e7.txt"
+  }
+}

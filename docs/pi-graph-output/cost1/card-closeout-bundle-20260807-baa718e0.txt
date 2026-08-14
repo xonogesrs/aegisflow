@@ -1,0 +1,398 @@
+================================================================================
+AUTOLOOP REVIEW BUNDLE (CLOSEOUT)
+================================================================================
+REVIEW_BUNDLE_SCHEMA: autoloop.review-bundle/v1
+REVIEW_BUNDLE_IDENTITY: baa718e09222ad6ae6558a05137ac89179c85b200172a7cc72fc8a51efe0a32d
+CARD_ID: AUTOLOOP-PI-GRAPH-COST1-1
+CARD_TITLE: Cost-Aware Telemetry Foundation
+CARD_TYPE: implementation
+GENERATED_AT: 2026-08-07T16:45:48.651Z
+
+================================================================================
+1. Review Request
+================================================================================
+CARD_ID: AUTOLOOP-PI-GRAPH-COST1-1
+CARD_TITLE: Cost-Aware Telemetry Foundation
+CARD_TYPE: implementation
+GRAPH_RUN_ID: cost1-self-closeout-20260807
+NODE_ID: SA-R1, SA-R2, SA-W1, SA-V1
+PHASE_EXECUTION_ID: exec_1952749a35bef0629162fb2fd9648ef3, exec_eaedca0b579bb9252bd0710ec34b8488, exec_781be5b456b6bcae9834407bad549b33, exec_672cff60e1594b6f1662d58fbb482058
+STAGE_IDS: executor, mutation_scope_gate, reviewer, reviewer_verdict
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+REQUESTED_REVIEW_VERDICT: PASS / REPAIR / HOLD
+This bundle is the single complete text artifact submitted for external review of card AUTOLOOP-PI-GRAPH-COST1-1.
+
+================================================================================
+2. Executive Status
+================================================================================
+EXECUTIVE_STATUS: PASS
+EXECUTION_PASS: true
+VERIFIER_PASS: true
+INDEPENDENT_REVIEW_PASS: true
+REVIEW_BUNDLE_READY: true
+REVIEW_BUNDLE_DELIVERY_REQUIRED: true
+EXTERNAL_REVIEW_STATUS: AWAITING_EXTERNAL_REVIEW
+SUMMARY: COST-1 complete: Cost-Aware Telemetry Foundation — autoloop.telemetry-event/v1 allowlist contract, local fail-closed JSONL store with bounded rotation, passive post-result Graph observation（opt-in; zero hot-path interference; TELEMETRY_UNAVAILABLE / TELEMETRY_STORE_INVALID semantics）, honest token + tool-call provenance（NOT_REPORTED until a provider/agent surface exposes usage; aggregates report reportedTokens / tokenCoverage / unknownUsageCount AND reportedToolCalls / toolCallCoverage / unknownToolUsageCount — unknown is never a measured 0）, run aggregates, budget contract WITHOUT production enforcement, machine-readable metric source map, overhead gate（CONTROLLED paired benchmark: 1.68ms/graph = 0.006% of a real graph, PASS）, focused tests + full regression（incl. canonical colima-all 42/42）. This superseding generation repairs the external REPAIR verdict（COST1_MEASUREMENT_TRUTH_AND_CLOSEOUT_EVIDENCE_INCOMPLETE）: controlled overhead evidence, honest tool-call semantics, complete rollback, complete closeout-outputs inventory. Measure first — no automatic optimization, no routing/review/scheduler changes, no CBM-4 write-back.
+
+
+================================================================================
+3. Task Identity
+================================================================================
+CARD_ID: AUTOLOOP-PI-GRAPH-COST1-1
+CARD_TITLE: Cost-Aware Telemetry Foundation
+CARD_TYPE: implementation
+GRAPH_RUN_ID: cost1-self-closeout-20260807
+NODE_ID: SA-R1, SA-R2, SA-W1, SA-V1
+PHASE_EXECUTION_ID: exec_1952749a35bef0629162fb2fd9648ef3, exec_eaedca0b579bb9252bd0710ec34b8488, exec_781be5b456b6bcae9834407bad549b33, exec_672cff60e1594b6f1662d58fbb482058
+STAGE_IDS: executor, mutation_scope_gate, reviewer, reviewer_verdict
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+
+
+================================================================================
+4. Repository and Worktree Identity
+================================================================================
+REPOSITORY: git@github.com:xonogesrs/autoloop.git
+BRANCH: governance/reversible-lifecycle-draft-pr
+HEAD: 2e897e995202c0c8c079c5fdc96b9f5d42d50d25
+TREE_SHA: 7ca2c9100b208e15647ff1e0524ffc4e0857e7e0
+WORKTREE_PATH: /Volumes/NVM2T/Development/autoloop
+BASELINE_DIRTY_DIGEST: dirty:9c3c51816b71e81b6825651d699d81809972d8f6fd1eb8113a59aa7aea967178
+FINAL_DIRTY_DIGEST: dirty:9c3c51816b71e81b6825651d699d81809972d8f6fd1eb8113a59aa7aea967178
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+5. Objective
+================================================================================
+Build AutoLoop's minimal, reliable, low-intrusion Cost-Aware Telemetry Foundation（autoloop.telemetry-event/v1）: a bounded allowlist event contract, local deterministic fail-closed store, passive post-result observation of the production Graph path, honest token provenance（NOT_REPORTED until a provider surface exposes usage）, run/task aggregates with coverage semantics, a budget contract WITHOUT production enforcement, a machine-readable metric source map, an overhead gate, and full focused tests. Measure first; optimize later — no scheduler/model/review/repair/routing changes, no automatic optimization, no CBM-4 write-back.
+
+================================================================================
+6. Authorized Scope
+================================================================================
+  - src/telemetry/
+  - src/runtime/colima-graph-runner.mjs
+  - src/subagent/subagent-graph-runner.mjs
+  - test/telemetry/
+  - scripts/cost1-self-closeout.mjs
+  - scripts/cost1-telemetry-probe.mjs
+  - package.json
+  - docs/pi-graph-output/cost1/
+AUTHORIZED_PATHS: src/telemetry/, src/runtime/colima-graph-runner.mjs, src/subagent/subagent-graph-runner.mjs, test/telemetry/, scripts/cost1-self-closeout.mjs, scripts/cost1-telemetry-probe.mjs, package.json, docs/pi-graph-output/cost1/
+
+
+================================================================================
+7. Explicitly Unauthorized Scope
+================================================================================
+  - automatic token-budget reduction
+  - automatic model switching
+  - automatic top-k / review-depth / sub-agent reduction
+  - automatic research-depth modification
+  - scheduler policy modification
+  - self-evolution policy modification
+  - CBM-4 automatic write-back
+  - Temporal / Restate / CodeGraph / DSPy / GEPA / MCP
+  - heavy observability backend（Grafana / Tempo / Jaeger / Prometheus / cloud backend）
+  - commit / push / merge / seal
+UNAUTHORIZED_PATHS: automatic token-budget reduction, automatic model switching, automatic top-k / review-depth / sub-agent reduction, automatic research-depth modification, scheduler policy modification, self-evolution policy modification, CBM-4 automatic write-back, Temporal / Restate / CodeGraph / DSPy / GEPA / MCP, heavy observability backend（Grafana / Tempo / Jaeger / Prometheus / cloud backend）, commit / push / merge / seal
+
+
+================================================================================
+8. Architecture and Design Decisions
+================================================================================
+  - contract autoloop.telemetry-event/v1: allowlist schema（unknown fields/versions fail closed）; deterministic eventId = sha256(canonical({graphRunId, eventType, nodeId, attempt, sequence})); event types graph.run / node.run / node.repair / graph.closeout / retrieval.observed / verification.recorded / telemetry.availability / telemetry.overhead
+  - token policy: tokenSource is NOT_REPORTED and token counters MUST be null unless a provider surface reports usage（PROVIDER_REPORTED）. Audit finding: the execution layer exposes no LLM usage metadata（executor = colima-container, reviewer = deterministic-c3; sub-agent results carry no tokens/model/tool counters）→ aggregates surface reportedTokens / tokenCoverage / unknownUsageCount instead of fabricated totals
+  - tool-call policy（same honest-unknown principle as tokens）: tools.toolCallSource is NOT_REPORTED with null counters unless a real tool-use report exists（REPORTED）. The aggregate NEVER emits toolCallCount=0 for an unknown — it outputs toolCallSource + reportedToolCalls + toolCallCoverage + unknownToolUsageCount（and toolCallCount stays null while NOT_REPORTED）. “unknown” and “measured zero” are different data
+  - security boundary（allowlist）: telemetry stores identities + counters + timings + digests ONLY; secrets/credentials/prompts/responses/memory bodies/source blobs/stdout/stderr/db contents/user data denied at schema + content-scan layers（reuse review-bundle secret-scan principle）; memory-content leakage prevented by recording retrieval COUNTERS + digests, never selectedRecords
+  - storage: local JSONL（autoloop.telemetry-store/v1）with header + per-line validation; open re-validates the full stream（corrupt line / tampered event → TELEMETRY_STORE_INVALID fail-closed）; bounded growth via rotation（active cap maxEvents/maxBytes → archived chunks, no silent loss）; explicit lifecycle open/append/readAll/close; no cloud / no external service
+  - passive instrumentation: runColimaGraph gains an OPT-IN telemetry param; the observer runs AFTER the graph result + closeout gate are final（try/catch; failures degrade to TELEMETRY_UNAVAILABLE and never alter task semantics / scheduler ordering / writer lease / review verdict / repair budget / retrieval ranking / model / context selection）; a corrupt telemetry store surfaces TELEMETRY_STORE_INVALID（caller decides fail-closed policy for canonical metrics; the graph itself already completed）
+  - aggregate autoloop.telemetry-aggregate/v1: totalDurationMs, reportedTokens（input/output/cachedInput/total）, tokenCoverage, unknownUsageCount, toolCallCount, retrieval counters/bytes/digests, subAgentCount, repairCount, reviewerCount, verification sums, finalVerdict/holdCode, aggregateIdentity（deterministic）
+  - budget contract autoloop.telemetry-budget/v1: tokenBudget / timeBudget / toolCallBudget / retrievalByteBudget / researchQueryBudget / retryBudget / repairBudget / subAgentBudget with {limit, unit, policy, enforced:false} — validation + simulateBudgetEnforcement only; enforced MUST be false in COST-1（no production routing change）
+  - metric source map（src/telemetry/source-map.mjs）: machine-readable; every metric tagged source / authoritative / availability / lifecycleBoundary / deterministic / nullable / providerExposed. Summary: 34 metrics = 24 available / 2 partial / 8 NOT_REPORTED
+  - overhead gate（stage 8）: CONTROLLED paired benchmark（scripts/cost1-telemetry-probe.mjs, median of 40 identical-workload iterations）: baseline（telemetry disabled）0.03ms vs enabled 1.71ms per graph-completion proxy → observer cost 1.68ms/graph = 0.006% of a documented ~30s real-graph duration（PASS: <100ms absolute AND <1% relative）; RSS delta 45MiB process-level allocator retention; event count linear; storage 1.22KB/event bounded by rotation. colima-all is a correctness regression, NOT a performance comparison — the paired numbers above are the benchmark evidence
+  - OpenTelemetry readiness: naming/semantic mapping + exporter seam are research output only（source map + contract are OTel-compatible event/span abstractions）; no collector / backend deployed
+  - budget enforcement, model routing, review-depth reduction, self-evolution tuning, and CBM-4 write-back are EXPLICITLY deferred（later Cost Optimization / CBM-4 stages）
+
+================================================================================
+9. Files Added / Modified / Deleted
+================================================================================
+CARD_IMPLEMENTATION_FILES:
+    - src/telemetry/aggregate.mjs
+    - src/telemetry/budgets.mjs
+    - src/telemetry/contract.mjs
+    - src/telemetry/graph-observer.mjs
+    - src/telemetry/index.mjs
+    - src/telemetry/security.mjs
+    - src/telemetry/source-map.mjs
+    - src/telemetry/store.mjs
+    - src/runtime/colima-graph-runner.mjs
+    - src/subagent/subagent-graph-runner.mjs
+    - test/telemetry/test-telemetry-cbm3-invariance.mjs
+    - test/telemetry/test-telemetry-contract.mjs
+    - test/telemetry/test-telemetry-graph-invariance.mjs
+    - test/telemetry/test-telemetry-lifecycle.mjs
+    - test/telemetry/test-telemetry-overhead.mjs
+    - test/telemetry/test-telemetry-security.mjs
+    - scripts/cost1-self-closeout.mjs
+    - scripts/cost1-telemetry-probe.mjs
+    - package.json
+GRAPH_CLOSEOUT_OUTPUTS:
+    - docs/pi-graph-output/cost1/cost1-telemetry-overhead-20260807-evidence.json
+    - docs/pi-graph-output/cost1/cost1-self-closeout-20260807-graph-closeout-evidence.json
+PRE_EXISTING_DIRTY_FILES:
+    - docs/pi-graph-output/cbm2/card-closeout-bundle-20260806-f484fae1.txt
+    - docs/pi-graph-output/cbm2/cbm2-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-443d736c.txt
+    - docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-955e9ce1.txt
+    - docs/pi-graph-output/cbm2r/cbm2r-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-083f246b.txt
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-59dc320e.txt
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-b1c61eb1.txt
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-c03d9205.txt
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-dc09c31f.txt
+    - docs/pi-graph-output/cbm3/cbm3-memory-probe-20260807-evidence.json
+    - docs/pi-graph-output/cbm3/cbm3-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-646b9cb9.txt
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-890417e7.txt
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-89fe0bcf.txt
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-a9279a81.txt
+    - docs/pi-graph-output/rb1g/external-review-delivery-646b9cb9.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-890417e7.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-89fe0bcf.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-91cf6d38.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-a9279a81.json
+    - docs/pi-graph-output/rb1g/rb1g-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-20a147b5.txt
+    - docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-cbf3a4c5.txt
+    - docs/pi-graph-output/rb1h/rb1h-self-closeout-20260807-graph-closeout-evidence.json
+    - scripts/c3-colima-task.mjs
+    - scripts/capture-review-repair-evidence.mjs
+    - scripts/capture-subagent-writer-evidence.mjs
+    - scripts/cbm2-self-closeout.mjs
+    - scripts/cbm2r-self-closeout.mjs
+    - scripts/cbm3-memory-probe.mjs
+    - scripts/cbm3-self-closeout.mjs
+    - scripts/colima-runtime-integration.mjs
+    - scripts/collect-test-accounting.mjs
+    - scripts/gov-closeout-bundle.mjs
+    - scripts/gov-external-review-surface.mjs
+    - scripts/rb1g-self-closeout.mjs
+    - scripts/rb1h-self-closeout.mjs
+    - scripts/rb1r-self-closeout.mjs
+    - src/governance/review-bundle.mjs
+    - src/memory/canonical.mjs
+    - src/memory/contract.mjs
+    - src/memory/graph-context.mjs
+    - src/memory/identity.mjs
+    - src/memory/index.mjs
+    - src/memory/jsonl-journal.mjs
+    - src/memory/local-store.mjs
+    - src/memory/query-schema.mjs
+    - src/memory/retrieval.mjs
+    - src/memory/schema.mjs
+    - src/memory/snapshot.mjs
+    - src/memory/sqlite-schema.mjs
+    - src/memory/validation.mjs
+    - src/runtime/colima-executor-adapter.mjs
+    - src/runtime/colima-pipeline.mjs
+    - src/runtime/colima-reviewer-adapter.mjs
+    - src/runtime/colima-runtime.mjs
+    - src/runtime/colima-worktree.mjs
+    - src/subagent/subagent-contract.mjs
+    - src/subagent/subagent-executor-adapter.mjs
+    - src/subagent/subagent-review-agent.mjs
+    - src/subagent/subagent-reviewer-adapter.mjs
+    - src/subagent/subagent-writer-executor-adapter.mjs
+    - src/v2/execution-orchestrator.mjs
+    - src/v2/phase-task-card.mjs
+    - test/governance/test-card-inventory.mjs
+    - test/governance/test-external-review-delivery.mjs
+    - test/governance/test-external-review-surface.mjs
+    - test/governance/test-git-status-parsing.mjs
+    - test/governance/test-graph-closeout.mjs
+    - test/governance/test-review-bundle.mjs
+    - test/memory/helpers-cbm3.mjs
+    - test/memory/helpers.mjs
+    - test/memory/test-canonical.mjs
+    - test/memory/test-graph-colima-writeback.mjs
+    - test/memory/test-graph-context.mjs
+    - test/memory/test-jsonl.mjs
+    - test/memory/test-local-store.mjs
+    - test/memory/test-query-schema.mjs
+    - test/memory/test-rebuild-determinism.mjs
+    - test/memory/test-record-schema.mjs
+    - test/memory/test-retrieval-security.mjs
+    - test/memory/test-retrieval.mjs
+    - test/memory/test-security.mjs
+    - test/memory/test-snapshot.mjs
+    - test/memory/test-sqlite.mjs
+    - test/memory/test-trust-validity.mjs
+    - test/test-c3-colima-pipeline.mjs
+    - test/test-colima-graph.mjs
+    - test/test-colima-runtime.mjs
+    - test/test-graph-closeout-integration.mjs
+    - test/test-subagent-graph.mjs
+    - test/test-subagent-review-repair-graph.mjs
+    - test/test-subagent-writer-graph.mjs
+    - test/v2/test-pre-decomposition-interruption.mjs
+ADDED:
+  (none)
+MODIFIED:
+  (none)
+DELETED:
+  (none)
+
+================================================================================
+10. Diff Summary
+================================================================================
+Graph cost1-self-closeout-20260807: 4 node(s) all PASS; 0 added / 0 modified / 0 deleted (worktree outputs)
+
+================================================================================
+11. Execution Results
+================================================================================
+TESTS_EXECUTED:
+    - graph node SA-R1:subagent
+    - graph node SA-R2:subagent
+    - regenerated from graph evidence
+    - graph node SA-W1:subagent
+    - graph node SA-V1:subagent
+TESTS_PASSED: 1
+TESTS_FAILED: 0
+TESTS_TOTAL: 1
+EXECUTION_PASS: true
+
+
+================================================================================
+12. Verification Results
+================================================================================
+VERIFIER_PASS: true
+VERIFIER_RESULT: PASS
+VERIFIER_SUMMARY: scheduler verdict PASS; join: SA-R1:PASS -> SA-R2:PASS -> SA-W1:PASS -> SA-V1:PASS
+
+
+================================================================================
+13. Independent Review Results
+================================================================================
+REVIEW_PASS: true
+REVIEW_RESULT: PASS
+REVIEW_RESULT_IDENTITY: 53dcd1b4c7a825855f4795462642b67d20a8bfc259dbf7d7f1a0770da76efba6
+BLOCKING_FINDINGS: []
+REVIEW_SUMMARY: independent review agent result
+
+
+================================================================================
+14. Repair Attempts
+================================================================================
+  - attempt=0 taskType=subagent (repair) status=REPAIR resultIdentity=graph:cost1-self-closeout-20260807:SA-W1:repair:0
+  - attempt=1 taskType=subagent (repair) status=PASS resultIdentity=graph:cost1-self-closeout-20260807:SA-W1:attempt:1
+REPAIR_BUDGET_MAX: 1
+REPAIR_BUDGET_USED: 1
+SUPERSEDES_BUNDLE_IDENTITY: 5d5dcfae235bb4478f392232382f65d574f269fa722619bc50e27eeaaa3a13cf
+SUPERSEDES_BUNDLE_SHA256: 6d30dd47f0b26cf1bf78aca9bdb161aecb7065abb1fba5ff6e3472be5b9756c9
+SUPERSEDES_BUNDLE_PATH: /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/cost1/card-closeout-bundle-20260807-5d5dcfae.txt
+
+
+================================================================================
+15. Negative and Fail-Closed Cases
+================================================================================
+  - unknown event field / schema / version / eventType → TELEMETRY_EVENT_INVALID（fail closed; never recorded）
+  - NOT_REPORTED token source with non-null token counters → invalid（never fabricate usage）
+  - secret-shaped content in any field → TELEMETRY_SECRET_DETECTED before disk write
+  - banned fields（prompt/response/stdout/body/content）present → validation fails
+  - toolCallSource NOT_REPORTED with non-null toolCallCount/failures → invalid（unknown must never be presented as measured 0）
+  - memory record bodies / selectedRecords never copied into telemetry（counters + digests only）
+  - corrupt store header / line / tampered event → TELEMETRY_STORE_INVALID（never silently serve bad data）
+  - telemetry store unavailable → TELEMETRY_UNAVAILABLE（graph outcome unchanged — passive contract）
+  - budget with enforced=true → TELEMETRY_BUDGET_INVALID（COST-1 must not enforce）
+  - CBM-3 retrieval identity / digests / ranking / memoryContext unchanged by observation（test-frozen）
+  - scheduler verdict / node ordering / writer lease / review / repair semantics unchanged（test-frozen）
+
+================================================================================
+16. Regression Results
+================================================================================
+  - suite=npm run check (syntax) tests=1 pass=1 fail=0
+  - suite=test:memory-contract（CBM-2 preserved） tests=80 pass=80 fail=0
+  - suite=test:memory-retrieval（CBM-3 preserved） tests=85 pass=85 fail=0
+  - suite=test:telemetry（new focused suite） tests=35 pass=35 fail=0
+  - suite=test:governance tests=229 pass=229 fail=0
+  - suite=test:scripted-lifecycle tests=43 pass=43 fail=0
+  - suite=test:v2 tests=357 pass=357 fail=0
+  - suite=test:c2 tests=43 pass=43 fail=0
+  - suite=test:c3 tests=41 pass=41 fail=0
+  - suite=test:colima-all（canonical; telemetry wiring touches the Graph path） tests=42 pass=42 fail=0
+REGRESSION_OVERALL: At COST-1 closeout time: check OK; memory-contract 80/80（CBM-2 unchanged）; memory-retrieval 85/85（CBM-3 unchanged）; telemetry 35/35（new focused suite）; governance 229/229; scripted-lifecycle 43/43; v2 357/357; c2 43/43; c3 41/41; colima-all 42/42 in ONE full clean run（canonical, telemetry wiring is opt-in and passive — the graph path behavior is unchanged; the run doubles as the CBM-3 zero-writeback boundary re-check）.
+
+
+================================================================================
+17. Evidence Inventory
+================================================================================
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/cost1/cost1-self-closeout-20260807-graph-closeout-evidence.json
+EVIDENCE_MANIFEST_DIGEST: ae0d16dc42d13d5272103b2b6d769bc28a0c935fa060d9b12aa363ef6ac46530
+
+
+================================================================================
+18. Evidence Hashes
+================================================================================
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/cost1/cost1-self-closeout-20260807-graph-closeout-evidence.json
+      sha256=5ea953e5edac44c66cfe048836a63227fb0e88444bc9f4f626e91afca2463dba
+
+================================================================================
+19. Security and Secret Scan
+================================================================================
+SECRET_SCAN_RESULT: clean
+SECRET_SCAN_NOTES: NOT_APPLICABLE
+SECRET_DETECTED: false
+INGESTION_ALLOWLIST: structured graph node results, review-agent results, lifecycle transitions, closeout evidence snapshot
+INGESTION_DENYLIST: secrets/credentials/private keys/logs/db contents/user data, unvalidated free-text stdout
+
+================================================================================
+20. Repository Integrity
+================================================================================
+HEAD: 2e897e995202c0c8c079c5fdc96b9f5d42d50d25
+TREE_SHA: 7ca2c9100b208e15647ff1e0524ffc4e0857e7e0
+WORKTREE_CLEAN: false
+DIRTY_PATHS: package.json, src/v2/execution-orchestrator.mjs, src/v2/phase-task-card.mjs, test/v2/test-pre-decomposition-interruption.mjs, docs/pi-graph-output/cbm2/card-closeout-bundle-20260806-f484fae1.txt, docs/pi-graph-output/cbm2/cbm2-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-443d736c.txt, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-955e9ce1.txt, docs/pi-graph-output/cbm2r/cbm2r-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-083f246b.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-59dc320e.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-b1c61eb1.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-c03d9205.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-dc09c31f.txt, docs/pi-graph-output/cbm3/cbm3-memory-probe-20260807-evidence.json, docs/pi-graph-output/cbm3/cbm3-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cost1/card-closeout-bundle-20260807-5d5dcfae.txt, docs/pi-graph-output/cost1/cost1-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cost1/cost1-telemetry-overhead-20260807-evidence.json, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-646b9cb9.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-890417e7.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-89fe0bcf.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-a9279a81.txt, docs/pi-graph-output/rb1g/external-review-delivery-646b9cb9.json, docs/pi-graph-output/rb1g/external-review-delivery-890417e7.json, docs/pi-graph-output/rb1g/external-review-delivery-89fe0bcf.json, docs/pi-graph-output/rb1g/external-review-delivery-91cf6d38.json, docs/pi-graph-output/rb1g/external-review-delivery-a9279a81.json, docs/pi-graph-output/rb1g/rb1g-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-20a147b5.txt, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-cbf3a4c5.txt, docs/pi-graph-output/rb1h/rb1h-self-closeout-20260807-graph-closeout-evidence.json, scripts/c3-colima-task.mjs, scripts/capture-review-repair-evidence.mjs, scripts/capture-subagent-writer-evidence.mjs, scripts/cbm2-self-closeout.mjs, scripts/cbm2r-self-closeout.mjs, scripts/cbm3-memory-probe.mjs, scripts/cbm3-self-closeout.mjs, scripts/colima-runtime-integration.mjs, scripts/collect-test-accounting.mjs, scripts/cost1-self-closeout.mjs, scripts/cost1-telemetry-probe.mjs, scripts/gov-closeout-bundle.mjs, scripts/gov-external-review-surface.mjs, scripts/rb1g-self-closeout.mjs, scripts/rb1h-self-closeout.mjs, scripts/rb1r-self-closeout.mjs, src/governance/review-bundle.mjs, src/memory/canonical.mjs, src/memory/contract.mjs, src/memory/graph-context.mjs, src/memory/identity.mjs, src/memory/index.mjs, src/memory/jsonl-journal.mjs, src/memory/local-store.mjs, src/memory/query-schema.mjs, src/memory/retrieval.mjs, src/memory/schema.mjs, src/memory/snapshot.mjs, src/memory/sqlite-schema.mjs, src/memory/validation.mjs, src/runtime/colima-executor-adapter.mjs, src/runtime/colima-graph-runner.mjs, src/runtime/colima-pipeline.mjs, src/runtime/colima-reviewer-adapter.mjs, src/runtime/colima-runtime.mjs, src/runtime/colima-worktree.mjs, src/subagent/subagent-contract.mjs, src/subagent/subagent-executor-adapter.mjs, src/subagent/subagent-graph-runner.mjs, src/subagent/subagent-review-agent.mjs, src/subagent/subagent-reviewer-adapter.mjs, src/subagent/subagent-writer-executor-adapter.mjs, src/telemetry/aggregate.mjs, src/telemetry/budgets.mjs, src/telemetry/contract.mjs, src/telemetry/graph-observer.mjs, src/telemetry/index.mjs, src/telemetry/security.mjs, src/telemetry/source-map.mjs, src/telemetry/store.mjs, test/governance/test-card-inventory.mjs, test/governance/test-external-review-delivery.mjs, test/governance/test-external-review-surface.mjs, test/governance/test-git-status-parsing.mjs, test/governance/test-graph-closeout.mjs, test/governance/test-review-bundle.mjs, test/memory/helpers-cbm3.mjs, test/memory/helpers.mjs, test/memory/test-canonical.mjs, test/memory/test-graph-colima-writeback.mjs, test/memory/test-graph-context.mjs, test/memory/test-jsonl.mjs, test/memory/test-local-store.mjs, test/memory/test-query-schema.mjs, test/memory/test-rebuild-determinism.mjs, test/memory/test-record-schema.mjs, test/memory/test-retrieval-security.mjs, test/memory/test-retrieval.mjs, test/memory/test-security.mjs, test/memory/test-snapshot.mjs, test/memory/test-sqlite.mjs, test/memory/test-trust-validity.mjs, test/telemetry/test-telemetry-cbm3-invariance.mjs, test/telemetry/test-telemetry-contract.mjs, test/telemetry/test-telemetry-graph-invariance.mjs, test/telemetry/test-telemetry-lifecycle.mjs, test/telemetry/test-telemetry-overhead.mjs, test/telemetry/test-telemetry-security.mjs, test/test-c3-colima-pipeline.mjs, test/test-colima-graph.mjs, test/test-colima-runtime.mjs, test/test-graph-closeout-integration.mjs, test/test-subagent-graph.mjs, test/test-subagent-review-repair-graph.mjs, test/test-subagent-writer-graph.mjs
+UNTRACKED_FILES: docs/pi-graph-output/cbm2/card-closeout-bundle-20260806-f484fae1.txt, docs/pi-graph-output/cbm2/cbm2-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-443d736c.txt, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-955e9ce1.txt, docs/pi-graph-output/cbm2r/cbm2r-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-083f246b.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-59dc320e.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-b1c61eb1.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-c03d9205.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-dc09c31f.txt, docs/pi-graph-output/cbm3/cbm3-memory-probe-20260807-evidence.json, docs/pi-graph-output/cbm3/cbm3-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cost1/card-closeout-bundle-20260807-5d5dcfae.txt, docs/pi-graph-output/cost1/cost1-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cost1/cost1-telemetry-overhead-20260807-evidence.json, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-646b9cb9.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-890417e7.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-89fe0bcf.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-a9279a81.txt, docs/pi-graph-output/rb1g/external-review-delivery-646b9cb9.json, docs/pi-graph-output/rb1g/external-review-delivery-890417e7.json, docs/pi-graph-output/rb1g/external-review-delivery-89fe0bcf.json, docs/pi-graph-output/rb1g/external-review-delivery-91cf6d38.json, docs/pi-graph-output/rb1g/external-review-delivery-a9279a81.json, docs/pi-graph-output/rb1g/rb1g-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-20a147b5.txt, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-cbf3a4c5.txt, docs/pi-graph-output/rb1h/rb1h-self-closeout-20260807-graph-closeout-evidence.json, scripts/c3-colima-task.mjs, scripts/capture-review-repair-evidence.mjs, scripts/capture-subagent-writer-evidence.mjs, scripts/cbm2-self-closeout.mjs, scripts/cbm2r-self-closeout.mjs, scripts/cbm3-memory-probe.mjs, scripts/cbm3-self-closeout.mjs, scripts/colima-runtime-integration.mjs, scripts/collect-test-accounting.mjs, scripts/cost1-self-closeout.mjs, scripts/cost1-telemetry-probe.mjs, scripts/gov-closeout-bundle.mjs, scripts/gov-external-review-surface.mjs, scripts/rb1g-self-closeout.mjs, scripts/rb1h-self-closeout.mjs, scripts/rb1r-self-closeout.mjs, src/governance/review-bundle.mjs, src/memory/canonical.mjs, src/memory/contract.mjs, src/memory/graph-context.mjs, src/memory/identity.mjs, src/memory/index.mjs, src/memory/jsonl-journal.mjs, src/memory/local-store.mjs, src/memory/query-schema.mjs, src/memory/retrieval.mjs, src/memory/schema.mjs, src/memory/snapshot.mjs, src/memory/sqlite-schema.mjs, src/memory/validation.mjs, src/runtime/colima-executor-adapter.mjs, src/runtime/colima-graph-runner.mjs, src/runtime/colima-pipeline.mjs, src/runtime/colima-reviewer-adapter.mjs, src/runtime/colima-runtime.mjs, src/runtime/colima-worktree.mjs, src/subagent/subagent-contract.mjs, src/subagent/subagent-executor-adapter.mjs, src/subagent/subagent-graph-runner.mjs, src/subagent/subagent-review-agent.mjs, src/subagent/subagent-reviewer-adapter.mjs, src/subagent/subagent-writer-executor-adapter.mjs, src/telemetry/aggregate.mjs, src/telemetry/budgets.mjs, src/telemetry/contract.mjs, src/telemetry/graph-observer.mjs, src/telemetry/index.mjs, src/telemetry/security.mjs, src/telemetry/source-map.mjs, src/telemetry/store.mjs, test/governance/test-card-inventory.mjs, test/governance/test-external-review-delivery.mjs, test/governance/test-external-review-surface.mjs, test/governance/test-git-status-parsing.mjs, test/governance/test-graph-closeout.mjs, test/governance/test-review-bundle.mjs, test/memory/helpers-cbm3.mjs, test/memory/helpers.mjs, test/memory/test-canonical.mjs, test/memory/test-graph-colima-writeback.mjs, test/memory/test-graph-context.mjs, test/memory/test-jsonl.mjs, test/memory/test-local-store.mjs, test/memory/test-query-schema.mjs, test/memory/test-rebuild-determinism.mjs, test/memory/test-record-schema.mjs, test/memory/test-retrieval-security.mjs, test/memory/test-retrieval.mjs, test/memory/test-security.mjs, test/memory/test-snapshot.mjs, test/memory/test-sqlite.mjs, test/memory/test-trust-validity.mjs, test/telemetry/test-telemetry-cbm3-invariance.mjs, test/telemetry/test-telemetry-contract.mjs, test/telemetry/test-telemetry-graph-invariance.mjs, test/telemetry/test-telemetry-lifecycle.mjs, test/telemetry/test-telemetry-overhead.mjs, test/telemetry/test-telemetry-security.mjs, test/test-c3-colima-pipeline.mjs, test/test-colima-graph.mjs, test/test-colima-runtime.mjs, test/test-graph-closeout-integration.mjs, test/test-subagent-graph.mjs, test/test-subagent-review-repair-graph.mjs, test/test-subagent-writer-graph.mjs
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+21. Known Risks and Limitations
+================================================================================
+  - token coverage will be 0 until a real provider usage surface exists — budget/optimization stages must gate on coverage before trusting totals
+  - tool-call counters are NOT_REPORTED today（envelope carries allowed permissions, not actual calls）— a future agent surface must report actual tool use
+  - verification durations are caller-provided（not measured in-process）— a later stage can instrument the harness directly
+  - store growth is bounded by rotation, not compaction — high-volume future graphs may need compaction
+  - no automatic optimization / model routing / review-depth changes（deliberate; Measure first）
+  - no production budget enforcement（contract + simulation only）
+  - no heavy observability backend（OTel-compatible naming + exporter seam only）
+  - no CBM-4 write-back
+
+================================================================================
+22. Rollback Procedure
+================================================================================
+Remove src/telemetry/（contract/security/store/aggregate/budgets/source-map/graph-observer/index）; revert the opt-in telemetry param + post-result observer block in src/runtime/colima-graph-runner.mjs AND the telemetry param + forward in src/subagent/subagent-graph-runner.mjs (both carry the COST-1 wiring; both are in Authorized Scope + CARD_IMPLEMENTATION_FILES); remove test/telemetry/ + scripts/cost1-self-closeout.mjs + scripts/cost1-telemetry-probe.mjs; revert package.json test:telemetry script. CBM-3/CBM-2 memory behavior and all other suites stay green（telemetry is fully opt-in and passive）.
+
+================================================================================
+23. Open Questions
+================================================================================
+  (none)
+
+================================================================================
+24. Recommended Next Step
+================================================================================
+CBM-4 — Governed Production Memory Write-back（telemetry-observed from the first write-back）
+
+================================================================================
+25. External Reviewer Verdict Template
+================================================================================
+VERDICT: PASS / REPAIR / HOLD
+REVIEWER_IDENTITY: <reviewer>
+REVIEWED_AT: <date>
+FINDINGS_DIGEST: <sha256>
+NEXT_ACTION_IF_PASS: <next card>
+NEXT_ACTION_IF_REPAIR: <bounded repair within budget>
+NEXT_ACTION_IF_HOLD: <stop downstream>
+
+
+=== END OF REVIEW BUNDLE ===
+REVIEW_BUNDLE_SHA256: 865a9fe91790add6b2aa5722d277b1934eed05df876b7467df8a6283db425607

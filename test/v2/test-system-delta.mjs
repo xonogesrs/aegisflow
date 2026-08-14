@@ -479,19 +479,19 @@ test("C4S-5 patch SHA is consistent across artifact / manifest / evidence / bund
     const phaseId = "p_impl";
 
     // 1. durable raw patch artifact bytes hash to the same SHA.
-    const patchPath = join(execDir, "phases", phaseId, "reviewer-system-delta.patch");
+    const patchPath = join(execDir, "phases", phaseId, "reviewer-system-delta-0.patch");
     assert.ok(existsSync(patchPath), "patch artifact persisted");
     const rawBytes = readFileSync(patchPath);
     assert.equal(sha256Text(rawBytes.toString("utf8")), patchSha);
     assert.equal(rawBytes.toString("utf8"), bundle.system_delta.patch.text, "durable patch == inline patch");
 
     // 2. durable json artifact（metadata projection）hashes to its reference.
-    const jsonPath = join(execDir, "phases", phaseId, "reviewer-system-delta.json");
+    const jsonPath = join(execDir, "phases", phaseId, "reviewer-system-delta-0.json");
     assert.ok(existsSync(jsonPath), "json artifact persisted");
     assert.equal(sha256Text(readFileSync(jsonPath, "utf8")), jsonArtifactSha);
 
     // 3. implementation evidence binds patch_sha256 to the same patch.
-    const implEvidence = JSON.parse(readFileSync(join(execDir, "phases", phaseId, "implementation-evidence.json"), "utf8"));
+    const implEvidence = JSON.parse(readFileSync(join(execDir, "phases", phaseId, "implementation-evidence-0.json"), "utf8"));
     assert.equal(implEvidence.patch_sha256, patchSha);
 
     // 4. journal SYSTEM_DELTA_READY carries the same SHA.
@@ -504,8 +504,8 @@ test("C4S-5 patch SHA is consistent across artifact / manifest / evidence / bund
     // 5. manifest artifact inventory lists both artifacts with matching SHAs.
     const manifest = JSON.parse(readFileSync(join(execDir, "manifest.json"), "utf8"));
     const inv = manifest.artifact_inventory || [];
-    const patchInv = inv.find((a) => a.path === `phases/${phaseId}/reviewer-system-delta.patch`);
-    const jsonInv = inv.find((a) => a.path === `phases/${phaseId}/reviewer-system-delta.json`);
+    const patchInv = inv.find((a) => a.path === `phases/${phaseId}/reviewer-system-delta-0.patch`);
+    const jsonInv = inv.find((a) => a.path === `phases/${phaseId}/reviewer-system-delta-0.json`);
     assert.ok(patchInv, "manifest lists the patch artifact");
     assert.ok(jsonInv, "manifest lists the json artifact");
     assert.equal(patchInv.sha256, patchSha);
@@ -645,7 +645,7 @@ test("C4S-9 credential pattern blocks the delta；no durable artifact；no echo"
       const store = new RunEvidenceStore({ root, executionId: mintExecutionId(), chainId: "c", checkpointId: "c", repoRoot: dir });
       store.init();
       assert.throws(
-        () => store.writePhaseRawArtifact("p_impl", "reviewer-system-delta.patch", `diff\n+token=${SYNTH}\n`),
+        () => store.writePhaseRawArtifact("p_impl", "reviewer-system-delta-0.patch", `diff\n+token=${SYNTH}\n`),
         (e) => e?.code === "DURABLE_EVIDENCE_SECRET_RISK",
       );
     } finally { cleanup(root); }
@@ -700,7 +700,7 @@ test("C4S-11 patch/metadata persistence failure is journaled and HOLDS", async (
     const store = new RunEvidenceStore({ root, executionId: mintExecutionId(), chainId: "c", checkpointId: "c", repoRoot: dir2 });
     store.init();
     assert.throws(
-      () => store.writePhaseRawArtifact("p_impl", "reviewer-system-delta.patch", "diff --git a/x b/x\n+\u0007bell\n"),
+      () => store.writePhaseRawArtifact("p_impl", "reviewer-system-delta-0.patch", "diff --git a/x b/x\n+\u0007bell\n"),
       (e) => e?.code === "DURABLE_EVIDENCE_SECRET_RISK",
     );
     cleanup(dir2);

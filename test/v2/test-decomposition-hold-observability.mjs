@@ -327,8 +327,8 @@ test("C4F-5 success path keeps the pre-C4F evidence shape", async () => {
     assert.ok(journal.includes("DAG_ACCEPTED"));
     assert.ok(journal.includes("RUN_PASSED"));
     // C4Q: the persisted evidence artifact is harness-owned.
-    assert.ok(existsSync(join(r.execDir, "phases", "fix_add_implementation", "implementation-evidence.json")));
-    assert.ok(existsSync(join(r.execDir, "phases", "fix_add_implementation", "executor-output.json")));
+    assert.ok(existsSync(join(r.execDir, "phases", "fix_add_implementation", "implementation-evidence-0.json")));
+    assert.ok(existsSync(join(r.execDir, "phases", "fix_add_implementation", "executor-output-0.json")));
     // PASS-path validation artifact keeps the original shape（no diagnostic_meta）
     const validation = readArtifact(r.execDir, "decomposition-validation.json");
     assert.ok(validation.schema_valid === true);

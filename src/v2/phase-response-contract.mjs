@@ -341,6 +341,11 @@ function sectionVerification(taskCard) {
     `success criteria: ${success}`,
     `failure criteria: ${failure}`,
     "Run the verification command from repository_root and record its real output.",
+    "",
+    "VERIFICATION SCOPE (VCA-1): AUTHORITATIVE_SOURCE_FIRST.",
+    "If the fact you need already exists as structured state (e.g. a closeout-state record, a delivery.json on the review surface, a lifecycle field), read that record directly. Never answer a state question by searching the filesystem for a status string.",
+    `Bound every verification command's search root to repository_root (${taskCard.repositoryRoot ?? ""}) or a path this task card explicitly names. Never construct or run a command whose root is "/", "~", $HOME, or any parent directory reachable outside repository_root — including dynamically-resolved paths (e.g. "../.." chains) that land there.`,
+    "If the evidence you need is not reachable from an authorized bounded root, stop and report HOLD / VERIFICATION_SCOPE_UNBOUNDED in your evidence — do not widen the search root on your own initiative to find it.",
   ].join("\n");
 }
 

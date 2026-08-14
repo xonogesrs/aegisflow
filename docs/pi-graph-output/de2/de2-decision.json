@@ -1,0 +1,30 @@
+{
+  "schema": "autoloop.de2-decision/v1",
+  "card": "AUTOLOOP-PI-GRAPH-DE2",
+  "generatedAt": "2026-08-08T10:22:00Z",
+  "selectionConfirmed": {
+    "candidate": "A — Existing AutoLoop durable execution (STACK_A)",
+    "outcome": "PASS / EXISTING_DURABLE_EXECUTION_SELECTED — CONFIRMED at production-path integration",
+    "basis": "DE-2 wired STACK_A's journal/checkpoint/fingerprint machinery behind the PRODUCTION Graph entry（runSubagentGraph -> runDurableGraph -> runColimaGraph, durable BY DEFAULT）and validated recovery under real process death（crash matrix C0-C15 + production-wiring proof）. DE-1's measured decision（Temporal's recovery improvement does not offset server+DB+deterministic constraints）stands.",
+    "externalRuntimes": "Temporal and Restate remain NOT production dependencies."
+  },
+  "outcomes": {
+    "stage3_wiring": "Production Graph entry（runSubagentGraph — every card closeout script invokes it）now runs under the native durable execution seam BY DEFAULT: runSubagentGraph -> runDurableGraph（DurableGraphRun）-> runColimaGraph -> journal + checkpoints; durableExecutionIdFor maps logical run ids to C2D-minted ids deterministically（stable across crash + resume）; durable:false is a TEST-ONLY escape hatch（regression guard asserts no production script uses it）.",
+    "f1": "Post-head journal events are SEMANTICALLY classified (replay-safe / resume-safe / invalid) — DE-1's F1 gap (DAG_ACCEPTED/PHASE_STARTED/EXECUTOR_COMPLETED/REVIEWER_COMPLETED/PHASE_PASSED/PHASE_SKIPPED beyond head refused resume) closed; verified C1-C4.",
+    "f2_f3": "Resumed-orchestrator JOURNAL_OUT_OF_ORDER root cause reproduced (unseeded runner view re-terminals already-passed phases -> result-artifact EEXIST) and fixed by seeding _lastRunnerStatuses from the RECOVERED state set; verified C0/C13/C14 + focused test.",
+    "writerRecovery": "Writer crash boundaries classified（RESTORABLE/RECONSTRUCTABLE/ALREADY_APPLIED/CONFLICTED/INVALID）; only ALREADY_APPLIED recovers the result WITHOUT re-running the writer（C8 duplicateSuppressed=1）; ambiguous state fails closed（C5/C6/C7 RECOVERY_REQUIRED）.",
+    "sideEffectDedup": "writerSideEffectId deterministic per (executionId, phase, generation); commit-marker persisted before successors（effectively-once within the governed writer contract）.",
+    "worktreeRestoration": "worktree identity + verified flag + baseline digest persisted in the checkpoint; resume wipes execution-scoped scratch and reconstructs（no stale worktree/clone collisions）.",
+    "leaseRecovery": "stale containers reclaimed on resume（cleanupStale）; single-writer invariant preserved（scheduler lease unchanged）.",
+    "repairBudget": "repairBudgetUsed persisted in the checkpoint and preserved across restart（C10 verified）.",
+    "cbmRecovery": "write-back remains post-final + idempotent（CBM-4 contract unchanged）; resume never re-runs write-back of a completed run（terminal detection）.",
+    "d7Telemetry": "recovery provenance（executionAttempt/recoveryGeneration/replayOf/resumed/recovered/duplicateSuppressed）added to the COST-1 allowlist + graph observer; recovered results are never double-counted（test:telemetry 37/37 green）.",
+    "corruptState": "tampered checkpoint -> SNAPSHOT_CHECKSUM_MISMATCH fail-closed（C15）; unknown post-head events fail closed（F1 classifier 'invalid'）.",
+    "emptyProcessRestart": "crash matrix runs resume in a genuinely NEW process（child worker SIGKILL -> fresh resume worker）reconstructing from durable artifacts only（Stage 25）.",
+    "recoveryManifest": "autoloop.recovery-manifest/v1 emitted（graphRunId/recoveryGeneration/checkpointIdentity/journalHead/nodeStates/writerState/repairBudget/finalDisposition — no content blobs）.",
+    "checkpointSerialization": "REPAIR: per-run chain serializes checkpoint publication — fast phases can no longer CAS-collide（CHECKPOINT_STALE_REVISION）between runner-view and lifecycle checkpoints.",
+    "finalSourceBinding": "REPAIR: implementationDigest over the final production source + focused tests; reviewer identity = sha256({graphRunId, reviewOutcomes, implementationDigest}); graph-closeout evidence carries the same reviewBinding block — a change to the durable wiring provably changes the review identity + evidence SHA."
+  },
+  "safetyHardGates": "crash matrix C0-C15: lostCompletedResult=0, duplicateLogicalWriterMutation=0, falsePass=0, repairBudgetReset=0, corruptionSilentlyIgnored=0. Recoverability HOLDs（C5/C6/C7 RECOVERY_REQUIRED）are documented fail-closed classifications, not safety failures.",
+  "compatibility": "scheduler / ready set / single writer / colima isolation / reviewer / repair / CBM / COST-1 / governance closeout / evidence identity all preserved — durability adds lifecycle metadata only（existing suites green: c3 41/41, v2 368/368, telemetry 37/37, governance 229/229, writeback/security/retrieval green; canonical colima-all per Stage 24）. Perf probe: durability overhead ~1.6s/2-phase graph, resume reconstruction ~46ms, D7 delta ~0ms."
+}

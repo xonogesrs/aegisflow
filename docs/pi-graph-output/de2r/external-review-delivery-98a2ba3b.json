@@ -1,0 +1,32 @@
+{
+  "schema": "autoloop.external-review-delivery/v2",
+  "cardId": "AUTOLOOP-PI-GRAPH-DE2R",
+  "fileName": "external-review-delivery-98a2ba3b.json",
+  "reviewBundleGenerated": true,
+  "reviewBundleValidated": true,
+  "reviewBundleDeliveryRequired": true,
+  "externalReviewStatus": "PASS",
+  "externalReviewStatusReason": "verdict PASS bound to reviewBundleIdentity=98a2ba3b4b0e247dd540fa6b3a9a2a0dbb6baf772499f6e7fcf4f8905e427f83（verdict is the receipt: RECEIVED + REVIEWED proven in one step）",
+  "delivery": {
+    "required": true,
+    "attempted": true,
+    "method": "external-review-surface",
+    "attemptedAt": "2026-08-08T15:21:30.818Z",
+    "bundlePath": "/Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/de2r/card-closeout-bundle-20260808-98a2ba3b.txt",
+    "reviewBundleIdentity": "98a2ba3b4b0e247dd540fa6b3a9a2a0dbb6baf772499f6e7fcf4f8905e427f83",
+    "reviewBundleSha256": "ccbcc07d3f1d37e75fdad6f6511be4122399fd4a5c2e949b7684805d5d419bd1"
+  },
+  "verdict": {
+    "verdict": "PASS",
+    "reviewerIdentity": "Controller / External Reviewer",
+    "reviewedAt": "2026-08-08T23:05:00Z",
+    "bundleIdentity": "98a2ba3b4b0e247dd540fa6b3a9a2a0dbb6baf772499f6e7fcf4f8905e427f83",
+    "bundleSha256": "ccbcc07d3f1d37e75fdad6f6511be4122399fd4a5c2e949b7684805d5d419bd1",
+    "findingsDigest": "244f3119ac2b4ad5f68d0e2f0be74f16504bb877b4b2ac7886aa8385b1fed7ce"
+  },
+  "supersedes": {
+    "reviewBundleIdentity": "90d8676f1666bb186f9ea4a7aa25b5b3336072cd00f82b7fd0755843f9678690",
+    "reviewBundleSha256": "1309e24d5cdc5cb07575da405bf80df734db4a5c4161554d177aeb43193a0dcf",
+    "bundlePath": "docs/pi-graph-output/de2/card-closeout-bundle-20260808-90d8676f.txt"
+  }
+}

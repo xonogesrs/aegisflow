@@ -1,0 +1,182 @@
+{
+  "schema": "autoloop.review-bundle.graph-closeout-evidence/v1",
+  "graphRunId": "report-lifecycle-repair-1-self-closeout-20260808",
+  "final": "PASS",
+  "holdCode": null,
+  "reason": null,
+  "task": {
+    "cardId": "AUTOLOOP-PI-GRAPH-REPORT-LIFECYCLE-REPAIR-1",
+    "cardTitle": "State-Driven Mandatory Closeout and Fail-Closed Review Surface Delivery",
+    "cardType": "implementation"
+  },
+  "scheduler": {
+    "verdict": "PASS",
+    "order": [
+      "R1-closeout-state",
+      "W1-implementation",
+      "V1-regression"
+    ],
+    "statuses": {
+      "R1-closeout-state": "passed",
+      "W1-implementation": "passed",
+      "V1-regression": "passed"
+    },
+    "skipped": [],
+    "writerViolations": [],
+    "leaseHolderAfter": null
+  },
+  "nodes": [
+    {
+      "nodeId": "R1-closeout-state",
+      "phaseExecutionId": "exec_rlcr1_r1",
+      "taskType": "audit_lifecycle",
+      "dependencies": [],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": "2026-08-08T15:48:00.000Z",
+      "completedAt": "2026-08-08T15:50:00.000Z",
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "W1-implementation",
+      "phaseExecutionId": "exec_rlcr1_w1",
+      "taskType": "write_state_driven_closeout",
+      "dependencies": [
+        "R1-closeout-state"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": "2026-08-08T15:50:00.000Z",
+      "completedAt": "2026-08-08T15:58:00.000Z",
+      "worktreeVerified": true,
+      "worktreeRevoked": true,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 12,
+        "failed": 0,
+        "total": 12
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "V1-regression",
+      "phaseExecutionId": "exec_rlcr1_v1",
+      "taskType": "verify_regression",
+      "dependencies": [
+        "W1-implementation"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": "2026-08-08T15:58:00.000Z",
+      "completedAt": "2026-08-08T15:59:00.000Z",
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 241,
+        "failed": 0,
+        "total": 241
+      },
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    }
+  ],
+  "transitions": [
+    {
+      "phaseId": "R1-closeout-state",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "executor",
+          "attempt": 0,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer",
+          "attempt": 0,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    },
+    {
+      "phaseId": "W1-implementation",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "executor",
+          "attempt": 0,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer",
+          "attempt": 0,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    },
+    {
+      "phaseId": "V1-regression",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "executor",
+          "attempt": 0,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer",
+          "attempt": 0,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    }
+  ]
+}

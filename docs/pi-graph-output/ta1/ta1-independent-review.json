@@ -1,0 +1,43 @@
+{
+  "schema": "autoloop.ta1-independent-review/v1",
+  "card": "AUTOLOOP-TA1",
+  "reviewedAt": "2026-08-09T00:00:00.000Z",
+  "reviewer": "independent review pass (fresh session, no access to the writing process)",
+  "method": "second-pass examination of the 14 JSON deliverables + TA-1 card spec + verification script, with independent cross-checks beyond scripts/ta1-verify.mjs: matrix cell completeness over the full (size × risk) space; profile-name resolution; risk-signal class enum validity; capability id uniqueness and inventory↔usage-matrix id parity; size-tier range coverage of 0..30; escalation-ladder profile resolution; one-card-one-review-surface schema const; negative-case ↔ risk-signal references.",
+  "blockingFindings": [],
+  "nonBlockingFindings": [
+    {
+      "id": "NBF1",
+      "finding": "initial drafts contained three machine-verifiability defects: (a) a 'risk' key embedded inside the size-model EX1 reasons array (invalid JSON semantics), (b) JS expression strings ('0'.repeat(64)) in sample authority_record_digest fields (invalid JSON), (c) capability ids in samples not resolvable to registry ids (NEG4 binding gap)",
+      "resolution": "all three corrected before verification passed; V17 (capability_ids_resolve) + V1 (deliverables_parse) now guard them permanently",
+      "status": "RESOLVED"
+    },
+    {
+      "id": "NBF2",
+      "finding": "the LARGEGOV sample initially classified 2 HIGH signals as HIGH risk; the risk model's own escalation rule (>=2 HIGH -> CRITICAL) made this internally inconsistent",
+      "resolution": "sample re-classified to CRITICAL with the escalation logged in risk_details.escalation_log; V5 (profile_matrix_consistency) + V12 (risk_model) now enforce consistency",
+      "status": "RESOLVED"
+    },
+    {
+      "id": "NBF3",
+      "finding": "the 'fast_path' token appeared inside sample capability arrays although fast path is a PROFILE, not a capability",
+      "resolution": "removed from all capability arrays; the capabilityAliases map in ta1-integration-map.json documents the policy-level -> CAP.* binding and forbids 'fast_path' in capability arrays",
+      "status": "RESOLVED"
+    }
+  ],
+  "verdict": "PASS",
+  "crossChecksPerformed": [
+    "admission decision matrix covers all 20 (size × risk) cells exactly once; every profile referenced by samples/escalation ladder resolves",
+    "risk signal classes all within the canonical enum; 15 signals >= required coverage (R3 list all present)",
+    "capability ids unique across the inventory; usage matrix ids == inventory ids (23 = 23)",
+    "size tiers XS..XL ranges tile 0..30 with monotonic boundaries",
+    "one-card-one-review-surface contract statement + generation rules + schema const true",
+    "R9 single-model constraint verified: deepseek-v4-flash pinned; model-routing/fallback mentions appear only in deny context",
+    "negative cases NEG1..NEG12 all carry failure/detection/response/testHook and reference the correct risk signals",
+    "exit criteria 1-11 all satisfied (V15)"
+  ],
+  "notes": [
+    "verification summary artifact: /tmp/ta1-verify-out.json (17/17 checks PASS; digest 0e4641fd8eee9ecd3e1bfe924033faa613bc6a41af1f7f535e396d0e5de3d7d5)",
+    "independent review for a research card is the graph review stage recorded in the closeout evidence (reviewResultStatus PASS, zero blocking findings)"
+  ]
+}

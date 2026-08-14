@@ -30,7 +30,7 @@ import {
   validateRunIdentity, collectRepositoryFingerprint, publishCheckpoint, readCheckpoint, checkpointExists,
   buildInputFingerprint, buildConfigurationFingerprint, buildDagFingerprint, buildIrSha256,
   AUTOLOOP_CHECKPOINT_FORMAT_VERSION, deriveChainId, deriveCheckpointId,
-  classifyResumeCapability,
+  classifyResumeCapability, classifyPostHeadEvent,
 } from "./checkpoint-bridge.mjs";
 import { runExecutionOrchestrator } from "./execution-orchestrator.mjs";
 import { runProductionPipeline } from "./production-pipeline.mjs";
@@ -467,7 +467,7 @@ class DurableRun {
         onExecutorOutput: async ({ phaseId, attempt, diagnostic }) => {
           // C4Q: bounded non-authoritative executor output diagnostic.
           try {
-            self.store.writePhaseArtifact(phaseId, "executor-output.json", diagnostic ?? {});
+            self.store.writePhaseArtifact(phaseId, `executor-output-${attempt ?? 0}.json`, diagnostic ?? {});
           } catch (e) {
             if (e instanceof EvidenceHoldError) throw new DurableHoldError("DURABLE_EVIDENCE_SECRET_RISK", e.message);
             throw e;
@@ -478,7 +478,7 @@ class DurableRun {
           try {
             // C4Q: the persisted artifact is the harness-owned implementation
             // evidence（AutoLoop-assembled; executor text is non-authoritative）.
-            self.store.writePhaseArtifact(phaseId, "implementation-evidence.json", evidence ?? {});
+            self.store.writePhaseArtifact(phaseId, `implementation-evidence-${attempt ?? 0}.json`, evidence ?? {});
           } catch (e) {
             if (e instanceof EvidenceHoldError) throw new DurableHoldError("DURABLE_EVIDENCE_SECRET_RISK", e.message);
             throw e;
@@ -495,7 +495,7 @@ class DurableRun {
         onReviewerCompleted: async ({ phaseId, attempt, verdict, verdictObject }) => {
           self.state.activeLifecycleStage = "reviewer_completed";
           try {
-            self.store.writePhaseArtifact(phaseId, "reviewer-verdict.json", verdictObject ?? { verdict });
+            self.store.writePhaseArtifact(phaseId, `reviewer-verdict-${attempt ?? 0}.json`, verdictObject ?? { verdict });
           } catch (e) {
             if (e instanceof EvidenceHoldError) throw new DurableHoldError("DURABLE_EVIDENCE_SECRET_RISK", e.message);
             throw e;
@@ -517,8 +517,8 @@ class DurableRun {
         onSystemDeltaReady: async ({ phaseId, attempt, delta }) => {
           self.state.activeLifecycleStage = "system_delta_ready";
           try {
-            self.store.writePhaseArtifact(phaseId, "reviewer-system-delta.json", delta.persistable_json);
-            self.store.writePhaseRawArtifact(phaseId, "reviewer-system-delta.patch", delta.patch.text);
+            self.store.writePhaseArtifact(phaseId, `reviewer-system-delta-${attempt ?? 0}.json`, delta.persistable_json);
+            self.store.writePhaseRawArtifact(phaseId, `reviewer-system-delta-${attempt ?? 0}.patch`, delta.patch.text);
           } catch (e) {
             try {
               self.store.appendEvent({
@@ -949,11 +949,15 @@ export async function resumeAutoLoop({
     };
   }
 
-  // Post-head event whitelist（runs that proceed toward resume only）.
+  // Post-head event semantics（DE-2 F1）: each event beyond the checkpoint
+  // head is CLASSIFIED, never blindly allowed. replay-safe / resume-safe
+  // proceed（the checkpoint is the durable truth; intermediate markers fold
+  // into resumed state）; invalid / unknown events still fail closed.
   try {
     for (let s = snapshot.journal_head_sequence + 1; s <= journal.count; s++) {
       const { event } = store.readEvent(s);
-      if (!POST_HEAD_ALLOWED_EVENTS.has(event.event_type)) {
+      const cls = classifyPostHeadEvent(event.event_type);
+      if (cls === "invalid") {
         throw new DurableHoldError("RESUME_FINGERPRINT_MISMATCH", `unexpected journal event ${event.event_type} beyond checkpoint head`);
       }
     }
@@ -1144,6 +1148,11 @@ export async function resumeAutoLoop({
   run.state.phaseAttempts = { ...(snapshot.phase_attempts || {}) };
   run.state.phaseResultHashes = { ...(snapshot.phase_result_hashes || {}) };
   run.state.completedPhaseIds = [...(snapshot.completed_phase_ids || [])];
+  // DE-2 F2/F3 fix: seed the runner-status baseline from the persisted
+  // checkpoint so the FIRST resumed runner view does not treat every
+  // already-passed phase as newly terminal (the DE-1 resumed-orchestrator
+  // JOURNAL_OUT_OF_ORDER / false re-terminalization root cause).
+  run.state._lastRunnerStatuses = { ...snapshot.phase_states };
   run.resumeInitialState = initialState;
 
   const orchestratorHooks = run.buildOrchestratorHooks(ir);

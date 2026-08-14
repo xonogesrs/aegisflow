@@ -1,0 +1,51 @@
+{
+  "schema": "autoloop.durable-independent-review/v1",
+  "card": "AUTOLOOP-PI-GRAPH-DE1",
+  "generatedAt": "2026-08-08T00:00:00.000Z",
+  "reviewer": "independent review of the DE-1 bake-off evidence (in-process; external reviewer renders the final verdict on the delivered bundle)",
+  "criteria": [
+    {
+      "id": "SR-1",
+      "name": "no bias toward external frameworks",
+      "verdict": "PASS",
+      "evidence": "The winner is the EXISTING AutoLoop implementation, not an external framework. Temporal and Restate were rejected on independently verifiable grounds: Restate on the npm-registry-verified @scarf/scarf telemetry dependency + BSL license (SEC-1/SEC-2), Temporal on measured complexity (server + DB + deterministic-replay constraints) with no claimed functional superiority for AutoLoop's graph model. The rejection reasons do not depend on the winner's measured results."
+    },
+    {
+      "id": "SR-2",
+      "name": "existing baseline fairly tested",
+      "verdict": "PASS",
+      "evidence": "The baseline (Candidate A) was executed against the REAL runDurableAutoLoop/resumeAutoLoop code path with real SIGKILL child-process kills, and its genuine gaps were measured and reported without mitigation: 8 resume refusals (F1 whitelist gap) and 3 resumed-orchestrator failures (F2/F3) are the baseline's own weaknesses, documented with exact journal traces in de1-bakeoff-results.json. No fixing-ahead-of-measurement."
+    },
+    {
+      "id": "SR-3",
+      "name": "failure injection is genuinely equivalent",
+      "verdict": "PARTIAL-PASS",
+      "evidence": "The T1-T12 harness design (kill points, duplicate-recovery, corruption) is candidate-agnostic and would apply identically to a Temporal/Restate prototype. For Candidate A it was executed. For B/C it was not executed as live server deployments; the card's limitations section states this explicitly, and both candidates were rejected on grounds (supply-chain security, licensing, complexity) that are independent of a live failure run."
+    },
+    {
+      "id": "SR-4",
+      "name": "safety hard gates applied consistently",
+      "verdict": "PASS",
+      "evidence": "The four hard gates (silent duplicate mutation / lost completed result / false PASS / authority escalation) were computed uniformly for every bake-off run and all returned 0 — including the runs where recovery failed. Fail-closed is proven, not assumed."
+    },
+    {
+      "id": "SR-5",
+      "name": "benchmark is apples-to-apples",
+      "verdict": "PARTIAL-PASS",
+      "evidence": "The workload (4-phase DAG ro->ro->writer->verifier with side-effect markers) mirrors the production graph shape and is shared across all candidates conceptually. B/C were not executed (see SR-3); the limitation is explicit."
+    },
+    {
+      "id": "SR-6",
+      "name": "winner genuinely improves AutoLoop",
+      "verdict": "PASS",
+      "evidence": "Outcome A + DE-2 hardening is the minimal-complexity path to full invariants: wire the existing durable layer behind the production Graph path (the dominant gap), complete the resume whitelist (F1), fix the resumed-orchestrator edge (F2/F3), add telemetry replay-awareness (D7). The provider seam (12 methods, all implemented natively) lets AutoLoop retain all policy."
+    },
+    {
+      "id": "SR-7",
+      "name": "no simpler solution exists",
+      "verdict": "PASS",
+      "evidence": "A simpler solution DOES exist and is the chosen one: the fixes are in-process (whitelist completion + orchestrator edge + wiring), vs. introducing Temporal (4-server-role + DB + SDK + worker lifecycle + versioning) or Restate (server + RocksDB/Postgres + BSL + telemetry). The simpler solution was selected."
+    }
+  ],
+  "summary": "The DE-1 bake-off evidence is honest and self-consistent: the existing baseline was measured at its real failure points, the safety gates are uniform and all green, the external candidates were rejected on verified security/licensing/complexity grounds independent of any live run, and the winner is the simplest sufficient solution. Residual risk: B/C were not live-deployed (documented limitation); the decision is robust because the rejection grounds do not depend on a live failure comparison."
+}

@@ -1,0 +1,37 @@
+{
+  "schema": "autoloop.high-risk-escalation/v1",
+  "card": "AUTOLOOP-TA1",
+  "generatedAt": "2026-08-09T00:00:00.000Z",
+  "objective": "Automatically upgrade the lifecycle for large or high-risk tasks. Escalation is triggered BY the admission decision (deterministic), never by the runtime guessing. Escalation is MONOTONIC — once elevated, only verifiable counter-evidence (controller-approved for CRITICAL) may lower it, and never below the original tier.",
+  "escalationLadder": [
+    { "from": "FAST_PATH", "to": "STANDARD", "triggers": ["size M", "or any MEDIUM signal", "or under_classified with ambiguity >= 1"] },
+    { "from": "STANDARD", "to": "MEDIUM", "triggers": ["risk MEDIUM", "or any HIGH signal"] },
+    { "from": "MEDIUM", "to": "HIGH", "triggers": ["risk HIGH", "or >=2 MEDIUM signals", "or unverifiable destructive potential"] },
+    { "from": "HIGH", "to": "CRITICAL", "triggers": ["risk CRITICAL", "or >=2 HIGH signals", "or any unverifiable CRITICAL-class signal"] }
+  ],
+  "escalationMeasures": {
+    "decomposition_requirement": "HIGH/CRITICAL and L/XL require mandatory decomposition with explicit phase boundaries; CRITICAL additionally requires controller pre-approval of the decomposition plan",
+    "research_gate": "research_first_required: a read-only discovery phase (or memory retrieval) must complete BEFORE any mutation; its output feeds a bounded refinement of size/risk (never during execution)",
+    "parallel_readonly_workers": "L/XL may fan out parallel read-only discovery nodes; writers remain strictly serialized by the single-writer lease",
+    "writer_serialization": "exactly one writer at a time; lease fail-closed",
+    "isolated_execution": "colima_required + isolated_worktree_required for every writer",
+    "durable_execution": "durable_execution_required + checkpoint_resume_required; admission result frozen into the checkpoint fingerprint (anti-drift)",
+    "checkpointing": "checkpoints at every safe boundary; resume reconstructs ready set; interrupted writer -> RECOVERY_REQUIRED (never replayed)",
+    "independent_review": "independent_review_required for every writer phase; strict-reviewer routing for HIGH/CRITICAL (existing isStrictReviewRisk)",
+    "bounded_repair": "repair_budget bounded (HIGH/CRITICAL = 1; L/XL = 2; never above effective_repair_cap)",
+    "evidence_requirements": "evidence_level persistent; harness-owned evidence; secret scan strict",
+    "external_review": "external_review_required at closeout; single authoritative review bundle (one-card-one-review-surface)",
+    "controller_intervention_points": [
+      "before execution begins (CRITICAL: human/controller gate)",
+      "before any external effect (network write / publish / commit / push / merge / release / seal)",
+      "before memory write-back (denied by default; explicit admission only)",
+      "at closeout (external review delivery)"
+    ]
+  },
+  "specialRules": {
+    "smallHighRisk": "XS/S + HIGH/CRITICAL uses the FULL high/critical profile — size does NOT lower risk (R3 separation)",
+    "selfModification": "any task modifying admission/scheduler/authority/governance code is CRITICAL-class (RS.SELF_MODIFICATION) and requires explicit admission authorization; the admission runtime itself may not be modified by the task it admits (NEG11)",
+    "escalationRecording": "every escalation and its trigger signals are recorded in the admission result (explainable; telemetry-measurable)",
+    "overkillGuard": "escalation adds WEIGHT only when triggered; a large LOW-risk task gets decomposition+durable but NOT strict review or external review (avoid reporting-driven overkill — Exit Criterion 10)"
+  }
+}

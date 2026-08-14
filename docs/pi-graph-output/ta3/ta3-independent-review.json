@@ -1,0 +1,63 @@
+{
+  "schema": "autoloop.ta3-independent-review/v1",
+  "card": "AUTOLOOP-TA3",
+  "generation": "implementation",
+  "reviewedAt": "2026-08-09T05:56:03.837Z",
+  "total": 10,
+  "passed": 10,
+  "failed": 0,
+  "ok": true,
+  "checks": [
+    {
+      "id": "IR-1.verification_ok",
+      "ok": true,
+      "detail": "ta3-verify 21/21"
+    },
+    {
+      "id": "IR-2.sample_admissions_and_envelopes_deterministic",
+      "ok": true,
+      "detail": "3 samples; ids + envelopeIds re-derivable"
+    },
+    {
+      "id": "IR-3.contract_and_inventory",
+      "ok": true,
+      "detail": "6 enforced + 6 deferred (disclosed)"
+    },
+    {
+      "id": "IR-4.neg_suite_green",
+      "ok": true,
+      "detail": "test:budget 44/44"
+    },
+    {
+      "id": "IR-5.non_bypassability",
+      "ok": true,
+      "detail": "honoring runner -> PASS; bypass runner -> HOLD (BUDGET_RECONCILIATION_DIVERGED)"
+    },
+    {
+      "id": "IR-6.crash_resume_cumulative",
+      "ok": true,
+      "detail": "pre-crash 1 node + in-flight upper-bound -> resumed 2 nodes, 60100ms (no reset)"
+    },
+    {
+      "id": "IR-7.production_seams",
+      "ok": true,
+      "detail": "colima pre-dispatch gate; admission-gate enforcement; durable ledger persist all present"
+    },
+    {
+      "id": "IR-8.scope_guard",
+      "ok": true,
+      "detail": "every touched path is TA-3 authorized or card-start pre-existing"
+    },
+    {
+      "id": "IR-9.r9_single_model",
+      "ok": true,
+      "detail": "deepseek-v4-flash only (R9)"
+    },
+    {
+      "id": "IR-10.regression_cross_check",
+      "ok": true,
+      "detail": "915 tests across 9 suites, all green"
+    }
+  ],
+  "digest": "834ac126a925861cb52e760edfc0b43dabcd51bb27c7d8a675f3f4b029f43ead"
+}

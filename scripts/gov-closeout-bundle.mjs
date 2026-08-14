@@ -1,0 +1,278 @@
+#!/usr/bin/env node
+// scripts/gov-closeout-bundle.mjs
+//
+// Official CLI for the RB-1 card-closeout review bundle gate.
+//
+//   --generate <source.json> --repo <path> --out <dir> [--timeout-ms 30000] [--file <name>]
+//       Generates the 25-section review bundle from a STRUCTURED source file
+//       (autoloop.review-bundle.source/v1), recomputes repo facts from git
+//       (authoritative — never trusts source repo claims), atomically writes
+//       the .txt bundle, and runs the independent validator. Prints the
+//       final closeout verdict + bundle identity/sha256. Exit 0 iff PASS.
+//
+//   --validate <bundle.txt> --context <ctx.json> [--authorized-dir <dir>]
+//       Validates an EXISTING bundle against a context file:
+//       { taskId?, cardTitle?, repository?, branch?, head?, treeSha?,
+//         graphRunId?, reviewResultIdentity?, evidenceManifestDigest? }
+//       Exit 0 iff ok.
+//
+//   --record-delivery-attempt <bundle.txt> --out <dir> [--card <id>] [--method <m>]
+//       [--attempted-at <ISO>]
+//       RB-1G: validates the bundle and records a NON-AUTHORITATIVE delivery
+//       attempt（DELIVERY_ATTEMPTED — the sender can never confirm receipt）.
+//       RECEIVED is proven solely by the external reviewer's verdict. Writes
+//       external-review-delivery-<identity8>.json in <dir>. Exit 0 iff
+//       recorded.
+//
+//   --apply-verdict <delivery-record.json> --verdict PASS|REPAIR|HOLD
+//       --reviewer <identity> [--reviewed-at <ISO>] [--agent <identity>] [--findings-digest <sha256>]
+//       RB-1G: the verdict IS the receipt acknowledgment. Requires a verdict
+//       bound to the CURRENT bundle identity/sha256, a real reviewer identity
+//       and a reviewed-at timestamp; then updates externalReviewStatus and
+//       prints whether external review is complete. Exit 0 iff applied.
+//
+//   --state-driven-closeout <closeout-state.json> [--graph-evidence <evidence.json>]
+//       [--repo <path>] [--out <dir>] [--surface <dir>]
+//       AUTOLOOP_REPORT_LIFECYCLE_REPAIR_1: the state-driven mandatory
+//       closeout entry — reads the persisted closeout-state record
+//       (requiresReview + identity + scope), materializes the contract
+//       (fail-closed CLOSEOUT_METADATA_INCOMPLETE when incomplete), loads the
+//       graph result from the evidence snapshot when not supplied, drives
+//       runStateDrivenCloseout, and records the disposition back into the
+//       state. No card-specific closeout script required.
+//
+// Local-only, deterministic, no network. Never commits/pushes/seals.
+
+import { existsSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  runCloseoutGate,
+  runStateDrivenCloseout,
+  validateReviewBundle,
+  collectRepoFacts,
+  REVIEW_BUNDLE_SOURCE_SCHEMA,
+  buildExternalReviewState,
+  recordDeliveryAttempt,
+  applyExternalReviewVerdict,
+  externalReviewComplete,
+  cardExternalReviewStatus,
+  writeExternalReviewDeliveryRecord,
+  readExternalReviewDeliveryRecord,
+  supersedesFromBundleText,
+} from "../src/governance/review-bundle.mjs";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+
+function arg(name, fallback) {
+  const i = process.argv.indexOf(name);
+  return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
+}
+
+const mode = process.argv.includes("--generate") ? "generate" : process.argv.includes("--validate") ? "validate" : process.argv.includes("--record-delivery-attempt") ? "record-delivery-attempt" : process.argv.includes("--apply-verdict") ? "apply-verdict" : process.argv.includes("--state-driven-closeout") ? "state-driven-closeout" : null;
+if (!mode) {
+  console.error("usage: node scripts/gov-closeout-bundle.mjs --generate <source.json> --repo <path> --out <dir> [--timeout-ms 30000] [--file <name>]");
+  console.error("       node scripts/gov-closeout-bundle.mjs --validate <bundle.txt> --context <ctx.json> [--authorized-dir <dir>]");
+  console.error("       node scripts/gov-closeout-bundle.mjs --record-delivery-attempt <bundle.txt> --out <dir> [--card <id>] [--method <m>] [--attempted-at <ISO>]");
+  console.error("       node scripts/gov-closeout-bundle.mjs --apply-verdict <delivery-record.json> --verdict PASS|REPAIR|HOLD --reviewer <identity> [--reviewed-at <ISO>] [--agent <identity>] [--findings-digest <sha256>]");
+  console.error("       node scripts/gov-closeout-bundle.mjs --state-driven-closeout <closeout-state.json> [--graph-evidence <evidence.json>] [--repo <path>] [--out <dir>] [--surface <dir>]");
+  process.exit(2);
+}
+
+if (mode === "generate") {
+  const sourcePath = arg("--generate", null);
+  const repoPath = arg("--repo", "/Volumes/NVM2T/Development/autoloop");
+  const outDir = arg("--out", `${process.env.HOME}/Desktop/AutoLoop-Review`);
+  const timeoutMs = Number(arg("--timeout-ms", "30000"));
+  const fileName = arg("--file", null);
+
+  let source;
+  try {
+    source = JSON.parse(readFileSync(sourcePath, "utf8"));
+  } catch (e) {
+    console.error(`cannot read/parse --generate ${sourcePath}: ${e.message}`);
+    process.exit(2);
+  }
+  if (source.schema !== REVIEW_BUNDLE_SOURCE_SCHEMA) {
+    console.error(`source schema mismatch: ${source.schema} (expected ${REVIEW_BUNDLE_SOURCE_SCHEMA})`);
+    process.exit(2);
+  }
+
+  const facts = collectRepoFacts(repoPath);
+  const result = await runCloseoutGate({ source, repoPath, outDir, timeoutMs, fileName, repoFacts: facts });
+  console.log(`final=${result.final} holdCode=${result.holdCode ?? "null"}`);
+  if (result.reason) console.log(`reason: ${result.reason}`);
+  if (result.bundlePath) console.log(`bundle: ${result.bundlePath}`);
+  if (result.bundle) {
+    console.log(`reviewBundleIdentity: ${result.bundle.identity}`);
+    console.log(`reviewBundleSha256: ${result.bundle.sha256}`);
+    console.log(`evidenceManifestDigest: ${result.bundle.evidenceManifestDigest}`);
+  }
+  console.log(`repo: ${facts.repository ?? "(no remote)"} branch=${facts.branch} head=${facts.head} tree=${facts.treeSha} dirty=${facts.dirtyPaths.length}`);
+  process.exit(result.final === "PASS" ? 0 : 1);
+}
+
+// validate mode
+if (mode === "validate") {
+  const bundlePath = arg("--validate", null);
+  const ctxPath = arg("--context", null);
+  const authorizedDir = arg("--authorized-dir", null);
+  let ctx = {};
+  if (ctxPath) {
+    try {
+      ctx = JSON.parse(readFileSync(ctxPath, "utf8"));
+    } catch (e) {
+      console.error(`cannot read/parse --context ${ctxPath}: ${e.message}`);
+      process.exit(2);
+    }
+  }
+  const v = validateReviewBundle(bundlePath, { authorizedDir, expected: ctx });
+  console.log(`valid=${v.ok} holdCode=${v.holdCode ?? "null"}`);
+  for (const e of v.errors ?? []) console.log(`  error: ${e}`);
+  process.exit(v.ok ? 0 : 1);
+}
+
+// record-delivery-attempt mode（RB-1G）: NON-AUTHORITATIVE sender-side record.
+// The execution side can never confirm receipt — the external reviewer's
+// verdict is the sole receipt acknowledgment. This only records that the
+// sender provided the artifact（method + timestamp）.
+if (mode === "record-delivery-attempt") {
+  const bp = arg("--record-delivery-attempt", null);
+  const out = arg("--out", null);
+  const card = arg("--card", null);
+  const method = arg("--method", "sender-provided");
+  const attemptedAt = arg("--attempted-at", new Date().toISOString());
+  if (!bp || !out) {
+    console.error("usage: node scripts/gov-closeout-bundle.mjs --record-delivery-attempt <bundle.txt> --out <dir> [--card <id>] [--method <m>] [--attempted-at <ISO>]");
+    process.exit(2);
+  }
+  const check = validateReviewBundle(bp, { authorizedDir: out });
+  if (!check.ok) {
+    console.error(`attempt_blocked valid=false holdCode=${check.holdCode ?? "null"}`);
+    for (const e of check.errors ?? []) console.error(`  error: ${e}`);
+    process.exit(1);
+  }
+  const txt = readFileSync(bp, "utf8");
+  const identity = txt.match(/^REVIEW_BUNDLE_IDENTITY: ([0-9a-f]{64})$/m)?.[1] ?? null;
+  const shaLines = txt.split("\n");
+  const shaLine = [...shaLines].reverse().find((l) => l.startsWith("REVIEW_BUNDLE_SHA256:"));
+  const sha = shaLine ? shaLine.split(":")[1]?.trim() : null;
+  if (!identity || !sha) {
+    console.error("attempt_blocked: bundle identity/sha256 unreadable");
+    process.exit(1);
+  }
+  // RB-1G repair: a repair-generation bundle carries its SUPERSEDES_* binding
+  // in section 14 — the delivery record must carry the same binding so the
+  // evidence chain（supersedes -> superseded）never diverges between the
+  // artifact and its delivery record. Fail-closed on a partial binding.
+  const parsedSup = supersedesFromBundleText(txt);
+  if (parsedSup.error) {
+    console.error(`attempt_blocked: ${parsedSup.error}`);
+    process.exit(1);
+  }
+  const state = buildExternalReviewState({ bundle: { identity, sha256: sha }, bundlePath: bp, supersedes: parsedSup.supersedes });
+  const attempted = recordDeliveryAttempt(state, { method, attemptedAt });
+  const rec = writeExternalReviewDeliveryRecord({ outDir: out, state: attempted, cardId: card });
+  if (!rec.ok) {
+    console.error(`attempt_record_failed: ${rec.reason}`);
+    process.exit(1);
+  }
+  console.log(`delivery=attempted(non-authoritative) record=${rec.path}`);
+  console.log(`reviewBundleIdentity: ${identity}`);
+  console.log(`reviewBundleSha256: ${sha}`);
+  if (parsedSup.supersedes) {
+    console.log(`supersedes: ${parsedSup.supersedes.reviewBundleIdentity}`);
+    console.log(`supersedes sha256: ${parsedSup.supersedes.reviewBundleSha256}`);
+  }
+  console.log(`externalReviewStatus: ${attempted.externalReviewStatus} deliveryRequired=${attempted.reviewBundleDeliveryRequired} deliveryAttempted=${attempted.delivery.attempted}`);
+  console.log(`externalReviewComplete: ${externalReviewComplete(attempted)}`);
+  console.log("note: RECEIVED is proven solely by the external reviewer's verdict (--apply-verdict)");
+  process.exit(0);
+}
+
+// apply-verdict mode（RB-1G）: the external reviewer read the delivered bundle
+// and returns PASS / REPAIR / HOLD bound to the CURRENT bundle. The verdict
+// itself is the receipt acknowledgment（RECEIVED + REVIEWED proven in one
+// step）; no sender-side delivery flag participates. Rejects stale and
+// self-declared verdicts.
+if (mode === "apply-verdict") {
+  const recPath = arg("--apply-verdict", null);
+  const verdict = arg("--verdict", null);
+  const reviewer = arg("--reviewer", null);
+  const reviewedAt = arg("--reviewed-at", new Date().toISOString());
+  const agent = arg("--agent", null);
+  const findingsDigest = arg("--findings-digest", null);
+  if (!recPath || !verdict || !reviewer) {
+    console.error("usage: node scripts/gov-closeout-bundle.mjs --apply-verdict <delivery-record.json> --verdict PASS|REPAIR|HOLD --reviewer <identity> [--reviewed-at <ISO>] [--agent <identity>] [--findings-digest <sha256>]");
+    process.exit(2);
+  }
+  const rec = readExternalReviewDeliveryRecord(recPath);
+  if (!rec.ok) {
+    console.error(`verdict_blocked: ${rec.errors.join(";")}`);
+    process.exit(1);
+  }
+  const applied = applyExternalReviewVerdict(rec.state, {
+    verdict,
+    reviewerIdentity: reviewer,
+    reviewedAt,
+    bundleIdentity: rec.state.delivery?.reviewBundleIdentity ?? null,
+    bundleSha256: rec.state.delivery?.reviewBundleSha256 ?? null,
+    agentIdentity: agent,
+    findingsDigest: findingsDigest ?? undefined,
+  });
+  if (!applied.ok) {
+    console.error(`verdict_rejected: ${applied.errors.join(";")}`);
+    process.exit(1);
+  }
+  const written = writeExternalReviewDeliveryRecord({ outDir: dirname(recPath), state: applied.state, cardId: rec.cardId, fileName: rec.fileName });
+  if (!written.ok) {
+    console.error(`verdict_record_failed: ${written.reason}`);
+    process.exit(1);
+  }
+  const guard = cardExternalReviewStatus(applied.state);
+  console.log(`verdict=${applied.state.externalReviewStatus} reviewer=${reviewer} reviewedAt=${reviewedAt}`);
+  console.log(`externalReviewStatus: ${applied.state.externalReviewStatus}`);
+  console.log(`externalReviewComplete: ${guard.complete}`);
+  if (guard.holdCode) console.log(`holdCode: ${guard.holdCode}`);
+  process.exit(guard.complete ? 0 : 1);
+}
+
+// state-driven-closeout mode（AUTOLOOP_REPORT_LIFECYCLE_REPAIR_1）: the
+// generic, script-free production closeout entry. Reads the persisted
+// closeout-state record + (optionally) a graph-closeout evidence snapshot,
+// materializes the mandatory closeout contract（fail-closed when incomplete）
+// and drives runStateDrivenCloseout → runMandatoryGraphCloseout →
+// runCloseoutGate → Current/ delivery. Exit 0 iff final PASS.
+if (mode === "state-driven-closeout") {
+  const statePath = arg("--state-driven-closeout", null);
+  const evidencePath = arg("--graph-evidence", null);
+  const repo = arg("--repo", "/Volumes/NVM2T/Development/autoloop");
+  const outDir = arg("--out", null);
+  const surfaceDir = arg("--surface", null);
+  const timeoutMs = Number(arg("--timeout-ms", "30000"));
+  if (!statePath || !existsSync(statePath)) {
+    console.error(`state_path_missing: ${statePath ?? "(none)"}`);
+    process.exit(2);
+  }
+  const r = await runStateDrivenCloseout({
+    statePath,
+    graphResultPath: evidencePath ?? null,
+    repoPath: repo,
+    cwd: repo,
+    outDir: outDir ?? undefined,
+    timeoutMs,
+    surfaceDir: surfaceDir ?? null,
+  });
+  console.log(`applied=${r.applied} final=${r.final ?? "null"} holdCode=${r.holdCode ?? "null"}`);
+  if (r.alreadyApplied) console.log("idempotent: already-applied PASS closeout（skipped）");
+  if (r.reason) console.log(`reason: ${r.reason}`);
+  if (r.bundlePath) console.log(`bundle: ${r.bundlePath}`);
+  if (r.bundle) {
+    console.log(`reviewBundleIdentity: ${r.bundle.identity ?? "null"}`);
+    console.log(`reviewBundleSha256: ${r.bundle.sha256 ?? "null"}`);
+  }
+  if (r.externalReview) {
+    console.log(`externalReviewStatus: ${r.externalReview.externalReviewStatus ?? "null"}`);
+  }
+  process.exit(r.final === "PASS" ? 0 : 1);
+}

@@ -29,6 +29,18 @@ import {
 import { classifyHold } from "./hold-taxonomy.mjs";
 import { normalize as normalizeReviewerVerdict, FAIL_CLOSED as REVIEWER_FAIL_CLOSED } from "./normalize-reviewer-json.mjs";
 
+// VCA-1 Phase 0C — the reviewer prompt (phase-response-contract.mjs
+// sectionAuthority) already declares "You have NO tools and NO mutation
+// authority... cannot inspect the repository yourself", but prior to this
+// change that was prompt text only: callAdapter below passed the SAME
+// taskCard.toolPolicy to both the executor and reviewer role, so a
+// permissive executor toolPolicy silently also reached the reviewer
+// invocation. The reviewer is a verification-only role by contract, so its
+// tool policy is hard-pinned here — independent of taskCard.toolPolicy —
+// closing a real HARD_TOOL_SURFACE gap between what the reviewer prompt
+// claims and what the adapter actually granted.
+const REVIEWER_TOOL_POLICY = Object.freeze({ mode: "no-tools" });
+
 // Single reviewer-verdict authority: normalize-reviewer-json.mjs. It already
 // enforces required fields, enum membership (including its own canonical
 // recommended_next_action set), and the PASS-suppression business rule
@@ -230,7 +242,7 @@ export async function runLifecycle({
         attempt,
         timeoutMs,
         environmentAllowlist: taskCard.environmentAllowlist,
-        toolPolicy: taskCard.toolPolicy,
+        toolPolicy: phase === "reviewer" ? REVIEWER_TOOL_POLICY : taskCard.toolPolicy,
         abortSignal,
         ...extra,
       }) };
