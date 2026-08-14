@@ -38,6 +38,8 @@
     "test:c4s": "node --test test/v2/test-system-delta.mjs",
     "test:governance": "node --test test/governance/*.mjs",
     "test:search-scope": "node --test test/admission/test-search-scope-governor.mjs",
+    "test:pi-command-admission": "node --test test/admission/test-pi-command-admission.mjs",
+    "test:rb-ssg": "node --test test/admission/test-search-scope-governor.mjs test/admission/test-pi-command-admission.mjs",
     "gov:effective": "node scripts/gov-effective-authority.mjs",
     "gov:closeout-bundle": "node scripts/gov-closeout-bundle.mjs",
     "gov:review-bundle": "node scripts/gov-review-bundle.mjs",

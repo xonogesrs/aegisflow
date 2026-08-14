@@ -675,9 +675,32 @@ function governSegment(parsed, ctx) {
 }
 
 /**
+ * Parse a `cd <dir>` builtin from a sequential shell segment so relative
+ * traversal roots resolve against the post-`cd` working directory.
+ *
+ * Bypass vector closed here (invariant B): `cd $HOME && grep -rl pattern .`
+ * must be governed against $HOME even when the session cwd is a bounded repo.
+ *
+ * @returns {string|null} the `cd` target (or "~" for a bare `cd`), or null
+ *   when the segment is not a trackable `cd` (including `cd -`).
+ */
+export function parseCdCommand(segment) {
+  const tokens = tokenize(String(segment ?? "").trim());
+  if (tokens.length === 0 || programBase(tokens[0]) !== "cd") return null;
+  let i = 1;
+  while (i < tokens.length && (tokens[i] === "-P" || tokens[i] === "-L" || tokens[i] === "--")) i++;
+  const target = tokens[i];
+  if (target === undefined) return "~";
+  if (target === "-") return null; // previous directory — untrackable
+  return target;
+}
+
+/**
  * The governor gate. Accepts a raw shell command string (possibly a
  * multi-segment script) and governs every recognized recursive-search
- * command within it.
+ * command within it. Sequential `cd` segments update the effective cwd used
+ * to resolve relative traversal roots; command substitutions inherit the
+ * cwd of their parent segment (they run in a subshell).
  *
  * @param {object} request
  * @param {string} request.command — raw shell command / script
@@ -699,19 +722,30 @@ export function governSearch(request = {}) {
     authorizedRoots = null,
     registry = null,
   } = request;
-  const ctx = { cwd, home, intent, declaration, authorizedRoots, registry };
+  const ctx = { home, intent, declaration, authorizedRoots, registry };
   const results = [];
   const seen = new Set();
-  const worklist = [String(command ?? "")];
+  const worklist = [{ text: String(command ?? ""), cwd }];
   while (worklist.length) {
-    const chunk = worklist.pop();
-    if (seen.has(chunk)) continue;
-    seen.add(chunk);
+    const item = worklist.pop();
+    const chunk = item.text;
+    const chunkCwd = item.cwd;
+    const seenKey = `${chunkCwd}\u0000${chunk}`;
+    if (seen.has(seenKey)) continue;
+    seen.add(seenKey);
     const segments = splitShellSegments(chunk);
+    let runningCwd = chunkCwd;
     for (const seg of segments) {
-      const parsed = parseSearchCommand(seg, ctx);
-      if (parsed.recognized) results.push(governSegment(parsed, ctx));
-      for (const sub of extractSubcommands(seg)) worklist.push(sub);
+      const cdTarget = parseCdCommand(seg);
+      if (cdTarget !== null) {
+        const next = normalizeSearchPath(cdTarget, { cwd: runningCwd, home });
+        if (next) runningCwd = next;
+        continue;
+      }
+      const segCtx = { ...ctx, cwd: runningCwd };
+      const parsed = parseSearchCommand(seg, segCtx);
+      if (parsed.recognized) results.push(governSegment(parsed, segCtx));
+      for (const sub of extractSubcommands(seg)) worklist.push({ text: sub, cwd: runningCwd });
     }
   }
   if (results.length === 0) {
