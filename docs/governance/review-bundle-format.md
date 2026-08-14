@@ -1,5 +1,12 @@
 # External Review Bundle 格式（Review-Unit 版）
 
+> **Canonical path（R-R3-RB1）**: 外部 review 的「唯一 reviewer-facing 檔」是
+> **25-section `autoloop.review-bundle/v1`**，由 `scripts/gov-closeout-bundle.mjs`
+> 產生（`--generate` / `--state-driven-closeout`）。見
+> `docs/governance/review-bundle-reconciliation.md`。
+> 本文件描述的 11-section `scripts/gov-review-bundle.mjs` 是 **review-unit
+> finalization** flow，是獨立的內部流程，不應與 external reviewer handoff 混為一談。
+
 > 固定規則：每次完成需要外部 review 的 review unit 後，Agent 產生完整、可獨立審查的純文字
 > bundle，Controller 直接上傳給外部 reviewer。**Draft PR 不再是首次外部 review 的必要前置條件。**
 

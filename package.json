@@ -38,6 +38,8 @@
     "test:c4s": "node --test test/v2/test-system-delta.mjs",
     "test:governance": "node --test test/governance/*.mjs",
     "gov:effective": "node scripts/gov-effective-authority.mjs",
+    "gov:closeout-bundle": "node scripts/gov-closeout-bundle.mjs",
+    "gov:review-bundle": "node scripts/gov-review-bundle.mjs",
     "test:de2r": "node --test --test-concurrency=1 test/test-durable-subagent-resume.mjs"
   },
   "dependencies": {
