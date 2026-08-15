@@ -50,6 +50,24 @@ report **HOLD / VERIFICATION_SCOPE_UNBOUNDED**. Do not widen the search root
 on your own initiative to find it. Ask, or say so, instead of scanning
 outward.
 
+## Search policy (post-RB-SSG4-FR4)
+
+Recursive search is a **normal, supported Agent capability** when bounded.
+
+ALLOWED: `rg pattern .` / `grep -R pattern src` / `find test ...` with a
+statically-concrete root inside an authorized scope (this repo, a known
+source/test dir, or a path a task explicitly names), plus the structured
+`grep` / `find` tools with an explicit eligible path.
+
+GOVERNED (not prohibited): forbidden or oversized roots (`/`, `~`, `$HOME`,
+`/Users`, broad collections), roots that are not statically concrete
+(`~user`, `$VAR`, `$(...)`, globs), and recursive search hidden behind
+unresolved execution structure — these are REJECT/RESTATE, not banned
+capability. Even eligible recursive searches remain subject to default
+timeout, output limits, and failed-strategy → REPLAN escalation.
+
+The rule is **scope + resources + retry**, never "avoid recursion".
+
 ## Reference
 
 `src/governance/verification-scope-guard.mjs` in this repo implements this

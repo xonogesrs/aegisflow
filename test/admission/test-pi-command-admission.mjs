@@ -68,16 +68,18 @@ for (const [label, command] of [
 }
 
 // ── Command substitution / backtick / pipeline vectors ───────────────────
+// FR4 — a recursive search hidden behind command substitution / backtick is
+// REJECT/RESTATE (UNRESOLVED_EXECUTION_STRUCTURE), never reconstructed.
 test("command substitution $(find . ...) from a HOME cwd is REJECTED", () => {
   const d = governPiCommand({ command: "echo $(find . -name foo)", cwd: HOME, home: HOME });
   assert.equal(d.spawnAllowed, false);
-  assert.equal(d.holdCode, SEARCH_HOLDS.UNBOUNDED_HOME_TRAVERSAL);
+  assert.equal(d.holdCode, SEARCH_HOLDS.UNRESOLVED_EXECUTION_STRUCTURE);
 });
 
 test("backtick substitution `find .` from a HOME cwd is REJECTED", () => {
   const d = governPiCommand({ command: "FILES=`find . -name foo`", cwd: HOME, home: HOME });
   assert.equal(d.spawnAllowed, false);
-  assert.equal(d.holdCode, SEARCH_HOLDS.UNBOUNDED_HOME_TRAVERSAL);
+  assert.equal(d.holdCode, SEARCH_HOLDS.UNRESOLVED_EXECUTION_STRUCTURE);
 });
 
 test("pipeline grep -rl pattern . | head from a HOME cwd is REJECTED (| head is not a boundary)", () => {

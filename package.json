@@ -41,6 +41,7 @@
     "test:search-scope": "node --test test/admission/test-search-scope-governor.mjs",
     "test:pi-command-admission": "node --test test/admission/test-pi-command-admission.mjs",
     "test:rb-ssg": "node --test test/admission/test-search-scope-governor.mjs test/admission/test-pi-command-admission.mjs",
+    "test:rb-ssg4": "node --test test/admission/test-rb-ssg4-bounded-rewrite.mjs test/admission/test-rb-ssg4-fr4-foundation.mjs test/admission/test-rb-ssg-vendor-integrity.mjs",
     "gov:effective": "node scripts/gov-effective-authority.mjs",
     "gov:closeout-bundle": "node scripts/gov-closeout-bundle.mjs",
     "gov:review-bundle": "node scripts/gov-review-bundle.mjs",

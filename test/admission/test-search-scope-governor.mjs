@@ -8,7 +8,8 @@
 //
 //   1. `find /Users/<user> -name foo`            -> REJECT UNBOUNDED_HOME_TRAVERSAL
 //   2. `find /Users/<user> -name foo | head`     -> still REJECT (| head is not a boundary)
-//   3. HOME-wide failed `find foo`, then `find bar` -> REJECT REPEATED_FAILED_SEARCH_STRATEGY
+//   3. HOME-wide failed `find foo`, then `find bar` -> REPLAN_REQUIRED;
+//      a third equivalent attempt -> SEARCH_STRATEGY_FAILED (mechanical block)
 //   4. failed HOME-wide `find`, then recursive `rg`/`grep` -> still recognized as the same failed strategy
 //   5. narrow known repo subtree with exclusions -> ADMIT
 //   6. `git grep` / tracked-file lookup          -> ADMIT
@@ -24,6 +25,7 @@ import {
   strategyFingerprint,
   assertAuthorizedPathsBounded,
   SEARCH_HOLDS,
+  SEARCH_CLASSIFICATIONS,
   ROOT_KINDS,
   DEFAULT_EXCLUSIONS,
 } from "../../src/admission/search-scope-governor.mjs";
@@ -49,30 +51,40 @@ test("find over HOME piped to head is STILL rejected (| head is not a boundary)"
 });
 
 // ── 3: repeated HOME-wide find with a different filename ────────────────
-test("HOME-wide failed find foo then HOME-wide find bar => REPEATED_FAILED_SEARCH_STRATEGY", () => {
+test("HOME-wide failed find foo then HOME-wide find bar => REPLAN_REQUIRED then SEARCH_STRATEGY_FAILED", () => {
   const registry = createFailedStrategyRegistry();
   const first = governSearch({ command: `find ${HOME} -name foo`, home: HOME, cwd: CWD, registry });
   assert.equal(first.holdCode, SEARCH_HOLDS.UNBOUNDED_HOME_TRAVERSAL);
+  assert.equal(first.classification, SEARCH_CLASSIFICATIONS.NON_REWRITABLE_UNSAFE);
   assert.equal(registry.size, 1);
 
   const second = governSearch({ command: `find ${HOME} -name bar`, home: HOME, cwd: CWD, registry });
   assert.equal(second.admit, false);
-  assert.equal(second.holdCode, SEARCH_HOLDS.REPEATED_FAILED_SEARCH_STRATEGY);
+  assert.equal(second.holdCode, SEARCH_HOLDS.REPLAN_REQUIRED);
+  assert.equal(second.classification, SEARCH_CLASSIFICATIONS.SEARCH_STRATEGY_FAILED);
+  assert.equal(second.replanRequired, true);
+
+  const third = governSearch({ command: `find ${HOME} -name baz`, home: HOME, cwd: CWD, registry });
+  assert.equal(third.admit, false);
+  assert.equal(third.holdCode, SEARCH_HOLDS.SEARCH_STRATEGY_FAILED);
+  assert.equal(third.classification, SEARCH_CLASSIFICATIONS.SEARCH_STRATEGY_FAILED);
 });
 
 // ── 4: tool switch (find → rg → grep) must NOT reset a failed strategy ──
-test("failed HOME-wide find then HOME-wide recursive rg => same failed strategy", () => {
+test("failed HOME-wide find then HOME-wide recursive rg => REPLAN_REQUIRED", () => {
   const registry = createFailedStrategyRegistry();
   governSearch({ command: `find ${HOME} -name foo`, home: HOME, cwd: CWD, registry });
   const d = governSearch({ command: `rg foo ${HOME}`, home: HOME, cwd: CWD, registry });
-  assert.equal(d.holdCode, SEARCH_HOLDS.REPEATED_FAILED_SEARCH_STRATEGY);
+  assert.equal(d.holdCode, SEARCH_HOLDS.REPLAN_REQUIRED);
+  assert.equal(d.classification, SEARCH_CLASSIFICATIONS.SEARCH_STRATEGY_FAILED);
 });
 
-test("failed HOME-wide find then HOME-wide recursive grep => same failed strategy", () => {
+test("failed HOME-wide find then HOME-wide recursive grep => REPLAN_REQUIRED", () => {
   const registry = createFailedStrategyRegistry();
   governSearch({ command: `find ${HOME} -name foo`, home: HOME, cwd: CWD, registry });
   const d = governSearch({ command: `grep -rls foo ${HOME}`, home: HOME, cwd: CWD, registry });
-  assert.equal(d.holdCode, SEARCH_HOLDS.REPEATED_FAILED_SEARCH_STRATEGY);
+  assert.equal(d.holdCode, SEARCH_HOLDS.REPLAN_REQUIRED);
+  assert.equal(d.classification, SEARCH_CLASSIFICATIONS.SEARCH_STRATEGY_FAILED);
 });
 
 test("rg with no path from a HOME cwd is an unbounded HOME traversal", () => {
@@ -272,7 +284,7 @@ test("failed-strategy registry has a reset lifecycle (no indefinite poisoning)",
   assert.equal(registry.size, 1);
   assert.equal(
     governSearch({ command: `find ${HOME} -name b`, home: HOME, cwd: CWD, registry }).holdCode,
-    SEARCH_HOLDS.REPEATED_FAILED_SEARCH_STRATEGY,
+    SEARCH_HOLDS.REPLAN_REQUIRED,
   );
   registry.reset();
   assert.equal(registry.size, 0);

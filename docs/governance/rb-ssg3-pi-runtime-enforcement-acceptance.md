@@ -1,5 +1,10 @@
 # RB-SSG3 — Pi Runtime Enforcement Acceptance + Deployment Convergence
 
+> **SUPERSEDED by RB-SSG4-RC1 + RB-SSG4-FR4.** Historical record. The
+> authoritative post-FR4 deployment-convergence chain is
+> `scripts/deploy-rb-ssg-governor.sh` + `test-rb-ssg-vendor-integrity.mjs`
+> (now covering the installed `~/.pi` copy, not only repo↔repo).
+
 Status: **RB_SSG3_PI_RUNTIME_SEARCH_ENFORCEMENT_AND_DEPLOYMENT_CONVERGED** (RB-SSG3 changes uncommitted; review boundary).
 
 ## Closeout truth

@@ -1,5 +1,12 @@
 # RB-SSG2 — Pi Command-Execution Admission Coverage (Root Cause + Repair)
 
+> **SUPERSEDED by RB-SSG4-RC1 + RB-SSG4-FR4.** Historical record of the
+> pre-FR4 default-deny governor. Authoritative post-FR4 policy is Bounded
+> Search Execution Governance (recursive search allowed when bounded; scope +
+> resources + retry are governed). See
+> `docs/governance/rb-ssg4-rc1-search-governance-objective-and-enforcement-boundary-reconciliation.md`
+> and `docs/governance/rb-ssg4-fr4-bounded-search-execution-foundation.md`.
+
 Status: **RB_SSG2_ROOT_CAUSE_AND_PI_COMMAND_ADMISSION_COVERAGE_REPAIRED**
 
 Prior RB-SSG record: `PASS_WITH_EXECUTION_COVERAGE_GAP → SUPERSEDED_BY_RB-SSG2`.
