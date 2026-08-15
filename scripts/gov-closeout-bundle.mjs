@@ -60,7 +60,10 @@ import {
   writeExternalReviewDeliveryRecord,
   readExternalReviewDeliveryRecord,
   supersedesFromBundleText,
+  assertFinalCardCloseout,
+  deriveAuthoritativeCloseoutStage,
 } from "../src/governance/review-bundle.mjs";
+import { readCloseoutState } from "../src/governance/closeout-state.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -69,13 +72,14 @@ function arg(name, fallback) {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 }
 
-const mode = process.argv.includes("--generate") ? "generate" : process.argv.includes("--validate") ? "validate" : process.argv.includes("--record-delivery-attempt") ? "record-delivery-attempt" : process.argv.includes("--apply-verdict") ? "apply-verdict" : process.argv.includes("--state-driven-closeout") ? "state-driven-closeout" : null;
+const mode = process.argv.includes("--generate") ? "generate" : process.argv.includes("--validate") ? "validate" : process.argv.includes("--record-delivery-attempt") ? "record-delivery-attempt" : process.argv.includes("--apply-verdict") ? "apply-verdict" : process.argv.includes("--state-driven-closeout") ? "state-driven-closeout" : process.argv.includes("--final-closeout") ? "final-closeout" : null;
 if (!mode) {
   console.error("usage: node scripts/gov-closeout-bundle.mjs --generate <source.json> --repo <path> --out <dir> [--timeout-ms 30000] [--file <name>]");
   console.error("       node scripts/gov-closeout-bundle.mjs --validate <bundle.txt> --context <ctx.json> [--authorized-dir <dir>]");
   console.error("       node scripts/gov-closeout-bundle.mjs --record-delivery-attempt <bundle.txt> --out <dir> [--card <id>] [--method <m>] [--attempted-at <ISO>]");
   console.error("       node scripts/gov-closeout-bundle.mjs --apply-verdict <delivery-record.json> --verdict PASS|REPAIR|HOLD --reviewer <identity> [--reviewed-at <ISO>] [--agent <identity>] [--findings-digest <sha256>]");
   console.error("       node scripts/gov-closeout-bundle.mjs --state-driven-closeout <closeout-state.json> [--graph-evidence <evidence.json>] [--repo <path>] [--out <dir>] [--surface <dir>]");
+  console.error("       node scripts/gov-closeout-bundle.mjs --final-closeout <closeout-state.json> [--repo <path>] [--out <dir>] [--surface <dir>] [--agent <identity>]");
   process.exit(2);
 }
 
@@ -235,6 +239,43 @@ if (mode === "apply-verdict") {
   console.log(`externalReviewComplete: ${guard.complete}`);
   if (guard.holdCode) console.log(`holdCode: ${guard.holdCode}`);
   process.exit(guard.complete ? 0 : 1);
+}
+
+// final-closeout mode（RB2R1）: the PRODUCTION final-closeout / commit / seal
+// eligibility gate. Consumes the AUTHORITATIVE external-review record（never
+// caller-supplied verdict JSON）and returns CLOSEOUT_ELIGIBLE / REVIEW_ACCEPTED
+// only when the full final-authority predicate is true. Exit 0 iff ok.
+if (mode === "final-closeout") {
+  const statePath = arg("--final-closeout", null);
+  const repo = arg("--repo", null);
+  const outDir = arg("--out", null);
+  const surfaceDir = arg("--surface", null);
+  const agent = arg("--agent", null);
+  if (!statePath || !existsSync(statePath)) {
+    console.error(`state_path_missing: ${statePath ?? "(none)"}`);
+    process.exit(2);
+  }
+  const st = readCloseoutState(statePath);
+  if (!st.ok) {
+    console.error(`closeout_state_unreadable: ${st.errors.join(";")}`);
+    process.exit(1);
+  }
+  const closeout = st.state.closeout ?? null;
+  const cardId = st.state.task?.cardId ?? null;
+  const dir = outDir ?? st.state.outDir ?? null;
+  const authority = deriveAuthoritativeCloseoutStage({
+    closeout,
+    outDir: dir,
+    cardId,
+    repoPath: repo ?? null,
+    surfaceDir: surfaceDir ?? null,
+    agentIdentity: agent ?? st.state.agentIdentity ?? null,
+  });
+  console.log(`stage=${authority.stage} ok=${authority.ok} holdCode=${authority.holdCode ?? "null"}`);
+  if (authority.reason) console.log(`reason: ${authority.reason}`);
+  if (authority.bundle) console.log(`bundle: ${authority.bundle.path} identity=${authority.bundle.identity} sha256=${authority.bundle.sha256}`);
+  if (authority.review?.reviewerIdentity) console.log(`reviewerIdentity: ${authority.review.reviewerIdentity}`);
+  process.exit(authority.ok ? 0 : 1);
 }
 
 // state-driven-closeout mode（AUTOLOOP_REPORT_LIFECYCLE_REPAIR_1）: the

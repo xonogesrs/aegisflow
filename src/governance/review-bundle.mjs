@@ -37,6 +37,7 @@ import {
   CLOSEOUT_HOLDS,
   CLOSEOUT_STATE_SCHEMA,
   closeoutStatePath,
+  deriveCloseoutStage,
   loadGraphResultFromEvidence,
   materializeCloseoutContract,
   readCloseoutState,
@@ -3199,6 +3200,265 @@ export async function runMandatoryGraphCloseout({
 export { sha256Text };
 
 // ---------------------------------------------------------------------------
+// RB2 — MANDATORY REVIEW-BUNDLE CLOSEOUT ENFORCEMENT CONVERGENCE.
+// ---------------------------------------------------------------------------
+//
+// CP-2 exposed a mechanical bypass: an implementation path could report a
+// PASS-style closeout while no canonical durable review bundle existed. The
+// seam was the closeout-state idempotency path trusting a caller-controlled
+// `closeout.final` field. These functions close that seam:
+//   verifyAppliedCloseoutBundle — re-derive the durable invariant（a real
+//     canonical bundle must exist, validate, match the recorded identity/sha
+//     and, when a repoPath is supplied, still bind the current HEAD/tree）
+//   assertFinalCardCloseout   — the FINAL card closeout bar（invariant #2）:
+//     independent review must be ACCEPTED（verdict PASS bound to the bundle）
+//     before the card may be treated as closed/closeout-eligible.
+
+/**
+ * Verify that a recorded APPLIED PASS disposition is backed by a real,
+ * durable canonical bundle. Fail-closed: a caller-controlled closeout.final
+ * field（or a stale/superseded/mismatched bundle）cannot mint an
+ * implementation closeout PASS.
+ *
+ * @returns {{ ok: true, path, identity, sha256 } | { ok: false, holdCode,
+ *           reason }}
+ */
+export function verifyAppliedCloseoutBundle({ outDir = null, closeout = null, cardId = null, repoPath = null } = {}) {
+  if (!outDir) {
+    return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.MISSING, reason: "REVIEW_BUNDLE_MISSING:closeout_out_dir_absent" };
+  }
+  if (!closeout || typeof closeout !== "object" || Array.isArray(closeout)) {
+    return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.MISSING, reason: "REVIEW_BUNDLE_MISSING:closeout_disposition_absent" };
+  }
+  const identity = closeout.bundleIdentity ?? null;
+  if (typeof identity !== "string" || !/^[0-9a-f]{64}$/.test(identity)) {
+    return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.MISSING, reason: "REVIEW_BUNDLE_MISSING:recorded_bundle_identity_absent_or_malformed" };
+  }
+  // RB2R1 (BLOCKER 2): the recorded canonical bundle SHA is a MANDATORY
+  // authority binding for a review-required closeout. Missing/malformed SHA
+  // is HOLD — a reconstructed/inferred SHA must never silently substitute
+  // for missing persisted authority.
+  const recordedSha = closeout.bundleSha256 ?? null;
+  if (typeof recordedSha !== "string" || !/^[0-9a-f]{64}$/.test(recordedSha)) {
+    return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.MISSING, reason: "REVIEW_BUNDLE_MISSING:recorded_bundle_sha256_absent_or_malformed" };
+  }
+  const bundles = scanAuthoritativeBundles(outDir, { cardId });
+  const match = bundles.find((b) => b.identity === identity);
+  if (!match) {
+    return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.MISSING, reason: "REVIEW_BUNDLE_MISSING:no_authoritative_bundle_matches_recorded_identity" };
+  }
+  const validation = validateReviewBundle(match.path, { authorizedDir: outDir, expected: { taskId: cardId ?? undefined } });
+  if (!validation.ok) {
+    return { ok: false, holdCode: validation.holdCode ?? REVIEW_BUNDLE_HOLDS.INVALID, reason: `${validation.holdCode ?? "REVIEW_BUNDLE_INVALID"}:${validation.errors.join(";").slice(0, 400)}` };
+  }
+  const sha = bundleContentSha256(match.path);
+  if (sha !== recordedSha) {
+    return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: "REVIEW_BUNDLE_IDENTITY_MISMATCH:bundle_sha256_mismatch_with_recorded_disposition" };
+  }
+  // RB2R1 (BLOCKER 3): live repository binding FAILS CLOSED. When a repoPath
+  // is supplied（current HEAD/tree/implementation binding required）, any
+  // inability to establish live repository truth is itself a HOLD — never a
+  // catch-and-ignore of an authority/provenance check. Optional diagnostics
+  // may degrade gracefully; authoritative binding checks may not.
+  if (repoPath) {
+    let facts;
+    try {
+      facts = collectRepoFacts(repoPath);
+    } catch (e) {
+      return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:live_repository_unavailable:${String(e?.message ?? e).slice(0, 200)}` };
+    }
+    if (!facts?.head || !facts?.treeSha) {
+      return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: "REVIEW_BUNDLE_IDENTITY_MISMATCH:live_repository_head_or_tree_unavailable" };
+    }
+    const text = readFileSync(match.path, "utf8");
+    const boundHead = text.match(/^HEAD:\s*(.+)$/m)?.[1]?.trim() ?? null;
+    const boundTree = text.match(/^TREE_SHA:\s*(.+)$/m)?.[1]?.trim() ?? null;
+    if (!boundHead || !boundTree) {
+      return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: "REVIEW_BUNDLE_IDENTITY_MISMATCH:bundle_head_or_tree_binding_missing" };
+    }
+    if (boundHead !== facts.head) {
+      return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:stale_implementation_head:${boundHead.slice(0, 12)} != ${facts.head.slice(0, 12)}` };
+    }
+    if (boundTree !== facts.treeSha) {
+      return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:stale_implementation_tree:${boundTree.slice(0, 12)} != ${facts.treeSha.slice(0, 12)}` };
+    }
+    // RB2R1 (WORKING-TREE MUTATION BINDING): HEAD/tree equality is NOT enough.
+    // The bundle records the repo's FINAL_DIRTY_DIGEST（tracked + staged +
+    // untracked working-tree state）at generation time; the current working
+    // tree must still match it. A tracked/staged/untracked mutation after
+    // bundle/review therefore FAILS CLOSED even when HEAD has not moved.
+    const boundDirty = text.match(/^FINAL_DIRTY_DIGEST:\s*(.+)$/m)?.[1]?.trim() ?? null;
+    if (boundDirty && facts.finalDirtyDigest && boundDirty !== facts.finalDirtyDigest) {
+      return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:working_tree_mutated:${boundDirty.slice(0, 24)} != ${facts.finalDirtyDigest.slice(0, 24)}` };
+    }
+  }
+  return { ok: true, path: match.path, identity: match.identity, sha256: sha };
+}
+
+/**
+ * RB2R2 — resolve the AUTHORITATIVE external-review record for a card's
+ * canonical bundle. The authority record is the persisted
+ * autoloop.external-review-delivery/v2 record on the FIXED review surface
+ * （Current/delivery.json）— the canonical reviewer-facing durable surface.
+ * There is NO fallback source and NO caller-supplied record parameter:
+ *   - a missing / unreadable / malformed surface record is FAIL-CLOSED;
+ *   - a card-mismatched / bundle-mismatched surface record is FAIL-CLOSED;
+ *   - outDir external-review-delivery-*.json files are SENDER-SIDE evidence
+ *     only and are NEVER authority（canonical surface only）.
+ */
+export function resolveAuthoritativeExternalReviewRecord({ cardId = null, bundleIdentity = null, surfaceDir = null } = {}) {
+  const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
+  const deliveryPath = join(dir, "delivery.json");
+  if (!existsSync(deliveryPath)) {
+    return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.NOT_COMPLETE, reason: "EXTERNAL_REVIEW_NOT_COMPLETE:surface_delivery_record_missing", record: null };
+  }
+  const rec = readExternalReviewDeliveryRecord(deliveryPath);
+  if (!rec.ok) {
+    return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.NOT_COMPLETE, reason: `EXTERNAL_REVIEW_NOT_COMPLETE:surface_delivery_record_invalid:${rec.errors.join(";")}`, record: null };
+  }
+  if (cardId && rec.cardId && rec.cardId !== cardId) {
+    return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.STALE_BUNDLE, reason: `EXTERNAL_REVIEW_STALE_BUNDLE:surface_card_mismatch:${rec.cardId}!=${cardId}`, record: null };
+  }
+  if (bundleIdentity && rec.state?.delivery?.reviewBundleIdentity && rec.state.delivery.reviewBundleIdentity !== bundleIdentity) {
+    return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.STALE_BUNDLE, reason: "EXTERNAL_REVIEW_STALE_BUNDLE:surface_delivery_identity_mismatch", record: null };
+  }
+  return { ok: true, record: rec, source: "surface" };
+}
+
+/**
+ * RB2R2 invariant #2 — FINAL card closeout requires an ACCEPTED independent
+ * review verdict bound to the canonical bundle, read from the AUTHORITATIVE
+ * external-review record on the canonical review surface. The record is
+ * loaded HERE from disk — there is NO caller-supplied externalReviewRecord
+ * parameter（RB2R2 REMOVE CALLER AUTHORITY）. Persisted
+ * `externalReviewStatus` / `verdict` fields on a caller-controlled closeout
+ * object are evidence only and cannot mint review acceptance.
+ *
+ * Returns ok:true ONLY when ALL of:
+ *   - the canonical bundle still exists + validates + recorded identity AND
+ *     recorded sha256 are both present and match（verifyAppliedCloseoutBundle）
+ *   - the authoritative record's externalReviewStatus is PASS
+ *   - the record's verdict is PASS, bound to the EXACT bundle identity + sha
+ *   - reviewer identity is present, is not `agent:` self, and is not the
+ *     implementer（independent reviewer != implementer）
+ *   - reviewedAt is a real timestamp
+ *   - the record's own delivery binding matches the bundle
+ * Anything else（PENDING / REPAIR / HOLD / missing record / self-review /
+ * unbound PASS）is NOT final-closeout-eligible and FAILS CLOSED.
+ */
+export function assertFinalCardCloseout({
+  closeout = null,
+  outDir = null,
+  cardId = null,
+  repoPath = null,
+  surfaceDir = null,
+  agentIdentity = null,
+  implementerIdentity = null,
+} = {}) {
+  const bundleCheck = verifyAppliedCloseoutBundle({ outDir, closeout, cardId, repoPath });
+  if (!bundleCheck.ok) {
+    return { ok: false, stage: "IMPLEMENTATION_COMPLETE", holdCode: bundleCheck.holdCode, reason: bundleCheck.reason };
+  }
+
+  // RB2R2 — REMOVE CALLER AUTHORITY. The final gate loads the authoritative
+  // record itself from the canonical review surface. There is NO
+  // externalReviewRecord parameter: caller-supplied review-shaped data can
+  // never substitute for the durable delivery record.
+  const resolved = resolveAuthoritativeExternalReviewRecord({
+    cardId,
+    bundleIdentity: bundleCheck.identity,
+    surfaceDir,
+  });
+  if (!resolved.ok) {
+    return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: resolved.holdCode, reason: resolved.reason };
+  }
+  const record = resolved.record;
+  const recordSource = resolved.source;
+
+  const state = record?.state ?? null;
+  const delivery = state?.delivery ?? null;
+  const verdict = state?.verdict ?? null;
+  const implementer = implementerIdentity ?? agentIdentity ?? closeout?.agentIdentity ?? null;
+
+  if (state?.externalReviewStatus !== "PASS") {
+    return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: EXTERNAL_REVIEW_HOLDS.NOT_COMPLETE, reason: "EXTERNAL_REVIEW_NOT_COMPLETE:authoritative_review_record_not_pass" };
+  }
+  if (!verdict || verdict.verdict !== "PASS") {
+    return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: EXTERNAL_REVIEW_HOLDS.INVALID_VERDICT, reason: "EXTERNAL_REVIEW_INVALID_VERDICT:final closeout requires a bound PASS verdict" };
+  }
+  const reviewer = verdict.reviewerIdentity ?? null;
+  if (!reviewer || typeof reviewer !== "string" || reviewer.length === 0) {
+    return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: EXTERNAL_REVIEW_HOLDS.INVALID_VERDICT, reason: "EXTERNAL_REVIEW_INVALID_VERDICT:reviewer_identity_required" };
+  }
+  if (/^agent:/i.test(reviewer)) {
+    return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: EXTERNAL_REVIEW_HOLDS.SELF_DECLARED, reason: "EXTERNAL_REVIEW_SELF_DECLARED:reviewer_is_agent_self" };
+  }
+  if (implementer && reviewer === implementer) {
+    return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: EXTERNAL_REVIEW_HOLDS.SELF_DECLARED, reason: `EXTERNAL_REVIEW_SELF_DECLARED:reviewer_equals_implementer:${reviewer}` };
+  }
+  const reviewedAt = verdict.reviewedAt ?? null;
+  if (!reviewedAt || Number.isNaN(Date.parse(reviewedAt))) {
+    return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: EXTERNAL_REVIEW_HOLDS.INVALID_VERDICT, reason: "EXTERNAL_REVIEW_INVALID_VERDICT:reviewed_at_required" };
+  }
+  if (verdict.bundleIdentity !== bundleCheck.identity || verdict.bundleSha256 !== bundleCheck.sha256) {
+    return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: EXTERNAL_REVIEW_HOLDS.STALE_BUNDLE, reason: "EXTERNAL_REVIEW_STALE_BUNDLE:verdict bound to a different bundle identity/sha" };
+  }
+  if (delivery?.reviewBundleIdentity !== bundleCheck.identity || delivery?.reviewBundleSha256 !== bundleCheck.sha256) {
+    return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: EXTERNAL_REVIEW_HOLDS.STALE_BUNDLE, reason: "EXTERNAL_REVIEW_STALE_BUNDLE:delivery record bound to a different bundle identity/sha" };
+  }
+  return { ok: true, stage: "REVIEW_ACCEPTED", bundlePath: bundleCheck.path, reviewerIdentity: reviewer, reviewedAt, source: recordSource };
+}
+
+/**
+ * RB2R2 — the AUTHORITATIVE closeout stage derivation（I/O-backed）. This is
+ * the ONLY place that may return REVIEW_ACCEPTED / CLOSEOUT_ELIGIBLE /
+ * CLOSED, because it verifies the underlying facts:
+ *   bundle exists + validates + recorded identity/sha match
+ *   → the canonical surface delivery record is an accepted independent PASS
+ *     bound to the exact bundle（loaded from disk — no caller record）
+ *   → (repoPath supplied) current implementation still matches reviewed bytes
+ *   → CLOSED only when an actual authoritative closeout/commit/seal operation
+ *     is recorded（closeoutRecorded）.
+ * Persisted `stage` / `externalReviewStatus` fields are consulted for
+ * contradiction reconciliation DOWNWARD only — never to advance state.
+ */
+export function deriveAuthoritativeCloseoutStage({
+  closeout = null,
+  outDir = null,
+  cardId = null,
+  repoPath = null,
+  surfaceDir = null,
+  agentIdentity = null,
+  implementerIdentity = null,
+  closeoutRecorded = false,
+} = {}) {
+  const bundleCheck = verifyAppliedCloseoutBundle({ outDir, closeout, cardId, repoPath });
+  if (!bundleCheck.ok) {
+    return { ok: false, stage: "IMPLEMENTATION_COMPLETE", holdCode: bundleCheck.holdCode, reason: bundleCheck.reason, bundle: null, review: null };
+  }
+  // RB2R2 — no caller-supplied review record is forwarded into authority
+  // evaluation. assertFinalCardCloseout re-loads the canonical surface
+  // record itself; here we only re-resolve that same record to label the
+  // descriptive failure stage（never to advance state）.
+  const finalCheck = assertFinalCardCloseout({
+    closeout, outDir, cardId, repoPath, surfaceDir, agentIdentity, implementerIdentity,
+  });
+  if (!finalCheck.ok) {
+    const resolved = resolveAuthoritativeExternalReviewRecord({ cardId, bundleIdentity: bundleCheck.identity, surfaceDir });
+    const status = resolved.ok ? (resolved.record?.state?.externalReviewStatus ?? null) : null;
+    let stage = "REVIEW_BUNDLE_READY";
+    if (status === "REPAIR" || status === "HOLD") stage = "REVIEW_HOLD";
+    else if (status === "PASS") stage = "INDEPENDENT_REVIEW_PENDING";
+    return { ok: false, stage, holdCode: finalCheck.holdCode, reason: finalCheck.reason, bundle: bundleCheck, review: resolved.ok ? (resolved.record?.state ?? null) : null };
+  }
+  const stage = repoPath ? "CLOSEOUT_ELIGIBLE" : "REVIEW_ACCEPTED";
+  if (closeoutRecorded && repoPath) {
+    return { ok: true, stage: "CLOSED", holdCode: null, reason: null, bundle: bundleCheck, review: finalCheck, source: finalCheck.source };
+  }
+  return { ok: true, stage, holdCode: null, reason: null, bundle: bundleCheck, review: finalCheck, source: finalCheck.source };
+}
+
+// ---------------------------------------------------------------------------
 // AUTOLOOP_REPORT_LIFECYCLE_REPAIR_1 — state-driven mandatory closeout
 // trigger（FM-1 lifecycle trigger）.
 // ---------------------------------------------------------------------------
@@ -3257,17 +3517,69 @@ export async function runStateDrivenCloseout({
     return { applied: false, final: null, holdCode: null, reason: "closeout_not_required", statePath };
   }
 
-  // Idempotent: an already-applied PASS closeout is never re-run.
+  // Idempotent: an already-applied PASS closeout is never re-run, BUT the
+  // durable invariant is re-verified（RB2 Finding: a caller-controlled
+  // closeout.final field must not mint PASS without a canonical bundle on
+  // disk）.
   if (state.closeout?.status === "APPLIED" && state.closeout?.final === "PASS") {
+    const dir = outDir ?? state.outDir ?? null;
+    const bundleCheck = verifyAppliedCloseoutBundle({
+      outDir: dir,
+      closeout: state.closeout,
+      cardId: state.task?.cardId ?? null,
+      repoPath: repoPath ?? null,
+    });
+    if (!bundleCheck.ok) {
+      return {
+        applied: true,
+        final: "HOLD",
+        holdCode: bundleCheck.holdCode,
+        reason: bundleCheck.reason,
+        bundlePath: null,
+        bundle: null,
+        externalReview: state.closeout?.externalReviewStatus ? { externalReviewStatus: state.closeout.externalReviewStatus } : null,
+        stage: "IMPLEMENTATION_COMPLETE",
+        statePath,
+      };
+    }
+    // RB2R1 (BLOCKER 5): `final: PASS` has ONE meaning — FINAL AUTHORITATIVE
+    // CLOSEOUT PASS. An idempotent re-entry while review is still pending
+    // must return a NON-final state, never final PASS. `alreadyApplied`
+    // records that the bundle closeout ran; it does NOT imply review
+    // acceptance. Only when the full final-authority predicate
+    //（assertFinalCardCloseout）is true may a re-entry return final PASS.
+    const finalGate = assertFinalCardCloseout({
+      closeout: state.closeout,
+      outDir: dir,
+      cardId: state.task?.cardId ?? null,
+      repoPath: repoPath ?? null,
+      surfaceDir: surfaceDir ?? null,
+      agentIdentity: agentIdentity ?? state.agentIdentity ?? null,
+    });
+    if (!finalGate.ok) {
+      return {
+        applied: true,
+        alreadyApplied: true,
+        final: "AWAITING_EXTERNAL_REVIEW",
+        holdCode: finalGate.holdCode ?? EXTERNAL_REVIEW_HOLDS.NOT_COMPLETE,
+        reason: finalGate.reason,
+        bundlePath: bundleCheck.path,
+        bundle: { identity: bundleCheck.identity, sha256: bundleCheck.sha256 },
+        externalReview: state.closeout?.externalReviewStatus ? { externalReviewStatus: state.closeout.externalReviewStatus } : null,
+        stage: finalGate.stage,
+        statePath,
+      };
+    }
     return {
       applied: true,
       alreadyApplied: true,
       final: "PASS",
       holdCode: null,
       reason: null,
-      bundlePath: null,
-      bundle: state.closeout?.bundleIdentity ? { identity: state.closeout.bundleIdentity, sha256: state.closeout.bundleSha256 ?? null } : null,
+      bundlePath: finalGate.bundlePath ?? bundleCheck.path,
+      bundle: { identity: bundleCheck.identity, sha256: bundleCheck.sha256 },
       externalReview: state.closeout?.externalReviewStatus ? { externalReviewStatus: state.closeout.externalReviewStatus } : null,
+      stage: finalGate.stage,
       statePath,
     };
   }
@@ -3327,9 +3639,11 @@ export async function runStateDrivenCloseout({
     closeout: {
       status: "APPLIED",
       final: r.final ?? null,
+      stage: r.final === "PASS" ? "REVIEW_BUNDLE_READY" : "IMPLEMENTATION_COMPLETE",
       bundleIdentity: r.bundle?.identity ?? null,
       bundleSha256: r.bundle?.sha256 ?? null,
       externalReviewStatus: r.externalReview?.externalReviewStatus ?? null,
+      verdict: r.externalReview?.verdict ?? null,
       appliedAt: new Date().toISOString(),
       blockedReason: r.final !== "PASS" ? (r.reason ?? null) : null,
     },

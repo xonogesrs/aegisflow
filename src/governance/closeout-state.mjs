@@ -35,6 +35,92 @@ export const CLOSEOUT_HOLDS = Object.freeze({
   GRAPH_RESULT_ABSENT: "CLOSEOUT_GRAPH_RESULT_ABSENT",
 });
 
+// ── RB2R1 — closeout stage machine（descriptive vs authoritative）──────────
+//
+// A persisted closeout record is DESCRIPTIVE CACHED STATE ONLY. No
+// caller-controlled persisted field（`stage` / `externalReviewStatus` /
+// `final`）may mint REVIEW_ACCEPTED / CLOSEOUT_ELIGIBLE / CLOSED authority.
+// Those stages are earned only through VERIFIED underlying facts:
+//   IMPLEMENTATION_COMPLETE  — graph work done; no valid canonical bundle
+//   REVIEW_BUNDLE_READY      — valid current canonical bundle exists
+//   INDEPENDENT_REVIEW_PENDING — bundle valid; no accepted authoritative
+//                              review record
+//   REVIEW_HOLD              — authoritative bound review verdict = HOLD/REPAIR
+//   REVIEW_ACCEPTED          — valid bundle + valid authoritative independent
+//                              PASS binding
+//   CLOSEOUT_ELIGIBLE        — REVIEW_ACCEPTED + current implementation still
+//                              matches the reviewed bytes
+//   CLOSED                   — only after an actual authoritative
+//                              closeout/commit/seal operation is recorded
+//
+// The AUTHORITATIVE derivation（which needs I/O: bundle validation + the
+// external-review authority record + live repo binding）lives in
+// review-bundle.mjs（deriveAuthoritativeCloseoutStage）. This module's
+// deriveCloseoutStage is PURE and therefore can only ever return the
+// DESCRIPTIVE lower half of the machine — it MUST NOT return
+// REVIEW_ACCEPTED / CLOSEOUT_ELIGIBLE / CLOSED.
+export const CLOSEOUT_STAGES = Object.freeze([
+  "IMPLEMENTATION_COMPLETE",
+  "REVIEW_BUNDLE_READY",
+  "INDEPENDENT_REVIEW_PENDING",
+  "REVIEW_HOLD",
+  "REVIEW_ACCEPTED",
+  "CLOSEOUT_ELIGIBLE",
+  "CLOSED",
+]);
+
+function hasRecordedBundleIdentity(closeout) {
+  return closeout
+    && typeof closeout.bundleIdentity === "string"
+    && /^[0-9a-f]{64}$/.test(closeout.bundleIdentity);
+}
+
+/**
+ * Derive the DESCRIPTIVE（provisional）closeout stage from a persisted
+ * closeout disposition. PURE（no I/O）: it does NOT prove bundle existence,
+ * does NOT verify a bound review verdict, and does NOT bind the live repo —
+ * those are the caller's job（see review-bundle.mjs verifyAppliedCloseoutBundle
+ * / assertFinalCardCloseout / deriveAuthoritativeCloseoutStage）.
+ *
+ * Hard rules（RB2R1）:
+ *   - a persisted `stage:"CLOSED"` / `CLOSEOUT_ELIGIBLE` / `REVIEW_ACCEPTED`
+ *     is NEVER echoed back as authority; it is demoted to the strongest
+ *     DESCRIPTIVE stage the record's own evidence supports（or null）.
+ *   - a persisted `externalReviewStatus:"PASS"` alone is a CLAIM, not
+ *     authority — it maps to INDEPENDENT_REVIEW_PENDING（an accepted
+ *     authoritative record has not been verified）. Contradictory persisted
+ *     state is reconciled DOWNWARD, never upward.
+ */
+export function deriveCloseoutStage(closeout) {
+  if (!closeout || typeof closeout !== "object" || Array.isArray(closeout)) return null;
+  const status = closeout.externalReviewStatus;
+  if (status === "REPAIR" || status === "HOLD") return "REVIEW_HOLD";
+  if (status === "PASS") {
+    // A persisted PASS is evidence of a claim only. Authority for
+    // REVIEW_ACCEPTED requires a verified bound review record.
+    return "INDEPENDENT_REVIEW_PENDING";
+  }
+  if (status === "AWAITING_EXTERNAL_REVIEW" || status === "AWAITING_BUNDLE_DELIVERY") {
+    return hasRecordedBundleIdentity(closeout) ? "REVIEW_BUNDLE_READY" : "IMPLEMENTATION_COMPLETE";
+  }
+  // No external-review status recorded → the cached `stage` is descriptive
+  // only. CLOSED / CLOSEOUT_ELIGIBLE / REVIEW_ACCEPTED are NEVER trusted from
+  // a persisted field（authority requires verified facts）.
+  if (closeout.stage && CLOSEOUT_STAGES.includes(closeout.stage)
+      && closeout.stage !== "REVIEW_ACCEPTED"
+      && closeout.stage !== "CLOSEOUT_ELIGIBLE"
+      && closeout.stage !== "CLOSED") {
+    return closeout.stage;
+  }
+  // A recorded bundle identity = bundle ready（independent review outstanding）.
+  if (hasRecordedBundleIdentity(closeout)) return "REVIEW_BUNDLE_READY";
+  // A PASS disposition WITHOUT a durable bundle identity is NOT a valid
+  // bundle-ready stage — demote it to IMPLEMENTATION_COMPLETE（the
+  // enforcement layer must then HOLD）.
+  if (closeout.final === "PASS") return "IMPLEMENTATION_COMPLETE";
+  return null;
+}
+
 /**
  * Required closeout-contract fields for a requiresReview card. Dot paths
  * into the state record. A requiresReview card missing any of these cannot

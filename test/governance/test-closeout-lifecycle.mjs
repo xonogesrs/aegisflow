@@ -284,7 +284,9 @@ test("T6. delivery failure then retry: same identity, no duplicate delivery, rec
   // re-running after PASS is a no-op（idempotent; never re-generates）
   const r3 = await drive(cardId, { surfaceDir: dir });
   assert.equal(r3.alreadyApplied, true, "applied PASS closeout is skipped");
-  assert.equal(r3.final, "PASS");
+  // RB2R1: review is still AWAITING_EXTERNAL_REVIEW, so the idempotent re-run
+  // must NOT mint final PASS — it returns a non-final review state.
+  assert.equal(r3.final, "AWAITING_EXTERNAL_REVIEW", "idempotent re-run never mints final PASS while review pending");
 });
 
 // ── T7: crash/restart boundary ────────────────────────────────────────────
