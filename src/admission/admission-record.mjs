@@ -20,6 +20,7 @@ import { createHash } from "node:crypto";
 import { validate as validateJsonSchema } from "../shared/json-schema-validator.mjs";
 import { capabilityRegistry, resolveCapabilityId } from "./registry.mjs";
 import { profileFor, RISK_TIERS, SIZE_TIERS } from "./classify.mjs";
+import { projectProfilePolicies, PROFILE_MATRIX } from "./policy-projection.mjs";
 import { normalizeRisk } from "../risk-normalization.mjs";
 
 export const ADMISSION_SCHEMA = "autoloop.task-admission/v1";
@@ -218,6 +219,25 @@ export function validateAdmission(record) {
   if (record.profile === "FAST_PATH") {
     if (!(record.size === "XS" || record.size === "S")) errors.push(`fast_path_size:${record.size}`);
     if (record.risk !== "LOW") errors.push(`fast_path_risk:${record.risk}`);
+  }
+
+  // Semantic policy consistency（CP-2R2 Finding 3）: the admission's
+  // isolation/durability policy must MATCH its profile projection. A
+  // rehashed FAST_PATH with durability_policy "durable" is internally
+  // inconsistent（direct execution has no durable layer）and must fail here,
+  // not merely pass shape/id validation.
+  if (typeof record.profile === "string" && Object.prototype.hasOwnProperty.call(PROFILE_MATRIX, record.profile)) {
+    try {
+      const expected = projectProfilePolicies(record.profile);
+      if (record.isolation_policy !== undefined && record.isolation_policy !== expected.isolation_policy) {
+        errors.push(`policy_inconsistent:isolation_policy:${record.profile} expected ${expected.isolation_policy} got ${record.isolation_policy}`);
+      }
+      if (record.durability_policy !== undefined && record.durability_policy !== expected.durability_policy) {
+        errors.push(`policy_inconsistent:durability_policy:${record.profile} expected ${expected.durability_policy} got ${record.durability_policy}`);
+      }
+    } catch (e) {
+      errors.push(`policy_projection_error:${String(e?.message ?? e).slice(0, 80)}`);
+    }
   }
 
   // admission_id determinism（when the record carries a frozen id）。

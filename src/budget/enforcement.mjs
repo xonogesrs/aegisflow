@@ -35,6 +35,7 @@ import {
   BUDGET_HOLD_CODES,
   DEFAULT_OP_WALL_CLOCK_CAP,
   ENFORCED_DIMENSIONS,
+  deepFreeze,
 } from "./contract.mjs";
 import { deriveBudgetEnvelope, assertEnvelopeUntampered } from "./envelope.mjs";
 import {
@@ -62,6 +63,57 @@ function canonical(value) {
     return v;
   };
   return JSON.stringify(sort(value));
+}
+
+/**
+ * Narrow an envelope by explicit per-task/per-child limits (MONOTONIC —
+ * never widen). Used for both the Controller global-budget allocation
+ * (top-level, CP-2R2 Finding 1) and child projections (B2). Fail-closed on
+ * unknown dimensions, invalid values, or any limit that exceeds the
+ * admission-derived envelope (or the parent's remaining budget when one is
+ * present). Returns a deep-frozen narrowed envelope with a re-derived,
+ * self-consistent envelopeId.
+ */
+function narrowEnvelopeByLimits(envelope, limits, parentEnforcement = null) {
+  if (!limits || typeof limits !== "object" || Array.isArray(limits)) {
+    return { ok: false, holdCode: BUDGET_HOLD_CODES.BUDGET_AUTHORITY_INVALID, reason: "BUDGET_AUTHORITY_INVALID: childLimits must be an object" };
+  }
+  const parentRemaining = parentEnforcement ? remainingBudget(parentEnforcement.envelope, parentEnforcement.ledger) : null;
+  const narrowed = {};
+  for (const [d, v] of Object.entries(limits)) {
+    if (!ENFORCED_DIMENSIONS.includes(d)) {
+      return { ok: false, holdCode: BUDGET_HOLD_CODES.BUDGET_AUTHORITY_INVALID, reason: `BUDGET_AUTHORITY_INVALID: unknown dimension ${d} in childLimits` };
+    }
+    if (v === null || v === undefined) continue; // dimension not constrained
+    if (!Number.isFinite(v) || v < 0) {
+      return { ok: false, holdCode: BUDGET_HOLD_CODES.BUDGET_AUTHORITY_INVALID, reason: `BUDGET_AUTHORITY_INVALID: invalid child limit ${d}=${v}` };
+    }
+    const envLimit = envelope.dimensions[d]?.limit;
+    if (envLimit !== null && envLimit !== undefined && v > envLimit) {
+      return { ok: false, holdCode: BUDGET_HOLD_CODES.BUDGET_CHILD_EXCEEDS_PARENT, reason: `BUDGET_CHILD_EXCEEDS_PARENT: ${d} child limit ${v} > envelope limit ${envLimit}` };
+    }
+    if (parentRemaining && parentRemaining[d] !== null && parentRemaining[d] !== undefined && v > parentRemaining[d]) {
+      return { ok: false, holdCode: BUDGET_HOLD_CODES.BUDGET_CHILD_EXCEEDS_PARENT, reason: `BUDGET_CHILD_EXCEEDS_PARENT: ${d} child limit ${v} > parent remaining ${parentRemaining[d]}` };
+    }
+    narrowed[d] = v;
+  }
+  const nextDimensions = Object.fromEntries(ENFORCED_DIMENSIONS.map((d) => [d, {
+    limit: narrowed[d] !== undefined ? narrowed[d] : envelope.dimensions[d]?.limit,
+    unit: envelope.dimensions[d]?.unit ?? null,
+  }]));
+  const nextEnvelope = {
+    ...envelope,
+    dimensions: nextDimensions,
+    envelopeId: sha256Hex(canonical({
+      admissionId: envelope.admissionId,
+      contractSchema: envelope.contractSchema,
+      dimensions: nextDimensions,
+      approachingRatio: envelope.approachingRatio,
+      closeoutAuthorized: envelope.closeoutAuthorized,
+      parentEnvelopeId: envelope.parentEnvelopeId,
+    })),
+  };
+  return { ok: true, envelope: deepFreeze(nextEnvelope) };
 }
 
 /**
@@ -93,9 +145,23 @@ export function createBudgetEnforcement({ admission, checkpointState = null, par
     envelopeResult = deriveBudgetEnvelope(admission, parentMeta);
   }
   if (!envelopeResult.ok) return envelopeResult;
-  const envelope = envelopeResult.envelope;
+  let envelope = envelopeResult.envelope;
+
+  // CP-2R2 Finding 1: a per-task/per-child allocation（childLimits）narrows
+  // the envelope MONOTONICALLY at the execution sink. This applies whether or
+  // not a parent enforcement is present — a top-level Controller global
+  // allocation must become the EFFECTIVE limit the ledger consumes, never the
+  // original full envelope. Never widen.
+  if (childLimits !== null && childLimits !== undefined) {
+    const narrowed = narrowEnvelopeByLimits(envelope, childLimits, parentEnforcement);
+    if (!narrowed.ok) return narrowed;
+    envelope = narrowed.envelope;
+  }
 
   // Child envelopes must NOT exceed the parent's remaining budget（B2）.
+  //（When childLimits were provided this is also checked inside
+  // narrowEnvelopeByLimits; this block covers a child envelope declared via
+  // its own admission extensions without explicit childLimits — NEG7.）
   if (parentEnforcement) {
     const parentRemaining = remainingBudget(parentEnforcement.envelope, parentEnforcement.ledger);
     for (const d of ENFORCED_DIMENSIONS) {

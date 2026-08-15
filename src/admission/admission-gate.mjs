@@ -29,12 +29,50 @@
 import { validateAdmission, assertAdmissionFrozen, deriveAdmissionId } from "./admission-record.mjs";
 import { createBudgetEnforcement } from "../budget/enforcement.mjs";
 import { attachBudgetResult } from "../budget/graph-wiring.mjs";
+import { digestOf } from "../canonical-digest.mjs";
 
 export const PRODUCTION_GATE_HOLDS = Object.freeze({
   ADMISSION_REQUIRED: "ADMISSION_REQUIRED",
   ADMISSION_INVALID: "ADMISSION_INVALID",
   ADMISSION_DRIFT: "ADMISSION_DRIFT",
+  ALLOCATION_BINDING_MISMATCH: "ALLOCATION_BINDING_MISMATCH",
 });
+
+/**
+ * Validate a per-task allocation BOUND to the admission at the execution
+ * sink（CP-2R2 Finding 1）: the allocation must carry the exact taskId /
+ * admissionId it was produced for and a re-derivable integrity digest. This
+ * rejects reuse of another task's allocation and substituted/reconstructed
+ * allocations BEFORE any runner is invoked. Dimension narrowing（≤ envelope）
+ * is enforced by createBudgetEnforcement.
+ */
+function validateExecutionAllocation(admission, allocation) {
+  if (allocation === null || allocation === undefined) return { ok: true, dimensions: null };
+  if (typeof allocation !== "object" || Array.isArray(allocation)) {
+    return { ok: false, holdCode: PRODUCTION_GATE_HOLDS.ALLOCATION_BINDING_MISMATCH, reason: "ALLOCATION_BINDING_MISMATCH: allocation must be an object" };
+  }
+  const { taskId, admissionId, dimensions, allocationId } = allocation;
+  if (typeof taskId !== "string" || taskId.length === 0) {
+    return { ok: false, holdCode: PRODUCTION_GATE_HOLDS.ALLOCATION_BINDING_MISMATCH, reason: "ALLOCATION_BINDING_MISMATCH: allocation.taskId missing" };
+  }
+  if (typeof admissionId !== "string" || admissionId.length === 0) {
+    return { ok: false, holdCode: PRODUCTION_GATE_HOLDS.ALLOCATION_BINDING_MISMATCH, reason: "ALLOCATION_BINDING_MISMATCH: allocation.admissionId missing" };
+  }
+  if (admissionId !== admission.admission_id) {
+    return { ok: false, holdCode: PRODUCTION_GATE_HOLDS.ALLOCATION_BINDING_MISMATCH, reason: `ALLOCATION_BINDING_MISMATCH: allocation.admissionId ${String(admissionId).slice(0, 12)} != admission.admission_id ${String(admission.admission_id).slice(0, 12)} (another task's allocation)` };
+  }
+  if (!dimensions || typeof dimensions !== "object" || Array.isArray(dimensions)) {
+    return { ok: false, holdCode: PRODUCTION_GATE_HOLDS.ALLOCATION_BINDING_MISMATCH, reason: "ALLOCATION_BINDING_MISMATCH: allocation.dimensions must be an object" };
+  }
+  if (typeof allocationId !== "string" || allocationId.length === 0) {
+    return { ok: false, holdCode: PRODUCTION_GATE_HOLDS.ALLOCATION_BINDING_MISMATCH, reason: "ALLOCATION_BINDING_MISMATCH: allocation.allocationId missing" };
+  }
+  const expected = digestOf({ taskId, admissionId, dimensions });
+  if (expected !== allocationId) {
+    return { ok: false, holdCode: PRODUCTION_GATE_HOLDS.ALLOCATION_BINDING_MISMATCH, reason: "ALLOCATION_BINDING_MISMATCH: allocation integrity digest mismatch (substituted/reconstructed allocation)" };
+  }
+  return { ok: true, dimensions };
+}
 
 /**
  * Fail-closed gate: is this a valid FROZEN admission?
@@ -112,7 +150,10 @@ export function assertProductionAdmission(admission) {
  *   overrides `graph`
  * @param {object} [opts.budget] — { checkpointState? (durable ledger state
  *   from a previous run of the SAME admission — cumulative resume),
- *   parentEnforcement? (child/sub-graph monotonic restriction B2) }
+ *   parentEnforcement? (child/sub-graph monotonic restriction B2),
+ *   childLimits? (explicit monotonic narrowing), allocation? (authoritative
+ *   per-task allocation { taskId, admissionId, dimensions, allocationId }
+ *   bound by the global allocator — CP-2R2 Finding 1) }
  * @param {...object} opts — forwarded to the runner（ir, parent, cwd, …）
  * @returns {Promise<object>} runner result, or the HOLD when the gate fails
  *   BEFORE the runner is invoked（nodeResults: [] — no execution started）.
@@ -159,6 +200,22 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
     };
   }
 
+  // ── CP-2R2 Finding 1: bind the authoritative per-task allocation ───────
+  // The allocation produced by the global allocator MUST become the effective
+  // execution limit. Validate its admission binding + integrity digest BEFORE
+  // any budget enforcement / runner dispatch.
+  const allocation = validateExecutionAllocation(admission, budget?.allocation ?? null);
+  if (!allocation.ok) {
+    return {
+      final: "HOLD",
+      holdCode: allocation.holdCode,
+      reason: allocation.reason,
+      nodeResults: [],
+      transitions: [],
+      closeout: { applied: false },
+    };
+  }
+
   // ── TA-3: derive the budget authority from the FROZEN admission ────────
   // Fail-closed BEFORE dispatch: an admission whose budget contract is
   // invalid / declares an unsupported meter（NEG8/NEG9）or whose durable
@@ -168,7 +225,7 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
     admission,
     checkpointState: budget?.checkpointState ?? null,
     parentEnforcement: budget?.parentEnforcement ?? null,
-    childLimits: budget?.childLimits ?? null,
+    childLimits: allocation.dimensions ?? budget?.childLimits ?? null,
   });
   if (!enforcementResult.ok) {
     return {

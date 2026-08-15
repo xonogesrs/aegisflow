@@ -20,6 +20,29 @@ import { resolveCapabilityId, capabilityRegistry, resolveCapability } from "./re
 
 export const PROJECTION_SCHEMA = "autoloop.policy-projection/v1";
 
+// Executor runtime vocabulary. The runtime is ADMISSION-DERIVED from the
+// isolation/durability policy — never optimizer/caller-selected (CP-1 §3;
+// CP-2R2 Finding 5). Admission owns this mapping; the Control Plane consumes
+// it, it does not mint a second copy.
+export const EXECUTOR_RUNTIMES = Object.freeze(["direct", "colima", "subagent", "durable"]);
+
+/**
+ * Derive the executor runtime STRICTLY from the frozen admission's
+ * isolation/durability policy (CP-1: runtime is admission-derived, not
+ * optimizer-selected). Unknown/contradictory policies → null (fail closed),
+ * never a permissive fallback.
+ */
+export function deriveExecutorRuntime(admission) {
+  if (!admission || typeof admission !== "object" || Array.isArray(admission)) return null;
+  const durability = admission.durability_policy;
+  const isolation = admission.isolation_policy;
+  if (durability === "durable" || durability === "durable_resume") return "durable";
+  if (isolation === "colima") return "colima";
+  if (isolation === "worktree") return "subagent";
+  if (admission.profile === "FAST_PATH") return "direct";
+  return null;
+}
+
 /**
  * TA-1 admission decision matrix（ta1-admission-decision-matrix.json）:
  * profile → 18 decision fields. Embedded snapshot; scripts/ta2-verify.mjs
