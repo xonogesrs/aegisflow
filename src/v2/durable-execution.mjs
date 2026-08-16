@@ -587,7 +587,15 @@ function artifactInventory(execDir) {
 
 // ── Durable run ─────────────────────────────────────────────────────────
 
-export async function runDurableAutoLoop({
+export async function runDurableAutoLoop(_opts = {}) {
+  // ── R-09 (AUTH1): UNCONDITIONALLY fail-closed dead-end. The durable STACK_A
+  // engine is runDurableAutoLoopInternal below, reachable ONLY via
+  // src/v2/stack-a-internal.mjs. Production execution MUST go through
+  // runAdmittedGraph (src/admission/admission-gate.mjs).
+  throw new DurableHoldError("NON_PRODUCTION_ENTRYPOINT", "runDurableAutoLoop is not a production entrypoint; production execution must use runAdmittedGraph (src/admission/admission-gate.mjs)");
+}
+
+export async function runDurableAutoLoopInternal({
   source, parent, manifest, cwd,
   decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory,
   maxRepairAttempts, timeoutMs, signal, hooks = {}, persistence,
@@ -867,7 +875,15 @@ function findJournalEventByHead(store, headSequence, headSha256) {
  * original source / parent / manifest / IR are read from the frozen durable
  * artifacts. Every fingerprint mismatch fails closed.
  */
-export async function resumeAutoLoop({
+export async function resumeAutoLoop(_opts = {}) {
+  // ── R-09 (AUTH1): UNCONDITIONALLY fail-closed dead-end. The resume engine
+  // is resumeAutoLoopInternal below, reachable ONLY via
+  // src/v2/stack-a-internal.mjs. Production resume authority flows through
+  // runAdmittedGraph / the durable graph path, not this legacy entrypoint.
+  throw new DurableHoldError("NON_PRODUCTION_ENTRYPOINT", "resumeAutoLoop is not a production entrypoint; production execution must use runAdmittedGraph (src/admission/admission-gate.mjs)");
+}
+
+export async function resumeAutoLoopInternal({
   persistenceRoot,
   executionId,
   decompositionAdapter,

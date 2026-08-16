@@ -1,6 +1,14 @@
 // src/autoloop.mjs
 //
-// C2 — AutoLoop unified library entrypoint (production-oriented).
+// C2 — AutoLoop unified library entrypoint (INTERNAL / TEST-ONLY — STACK_A).
+//
+// NOT the production entrypoint. Production execution MUST go through
+// runAdmittedGraph (src/admission/admission-gate.mjs), which enforces
+// admission + allocation + budget authority. The production-facing
+// runAutoLoop / runDurableAutoLoop / resumeAutoLoop are UNCONDITIONALLY
+// fail-closed dead-ends（NON_PRODUCTION_ENTRYPOINT）; the legacy STACK_A
+// engine is reachable only via the *Internal harness surface in
+// src/v2/stack-a-internal.mjs.
 //
 // Single fail-closed flow:
 //   parent task + manifest
@@ -28,10 +36,10 @@
 import { runProductionPipeline } from "./v2/production-pipeline.mjs";
 import { runExecutionOrchestrator } from "./v2/execution-orchestrator.mjs";
 import { mintExecutionId } from "./c2d/execution-id.mjs";
-import { runDurableAutoLoop, resumeAutoLoop } from "./v2/durable-execution.mjs";
+import { runDurableAutoLoopInternal, resumeAutoLoop, resumeAutoLoopInternal } from "./v2/durable-execution.mjs";
 import { AUTOLOOP_STATE_RESTART_REQUIRED as CHECKPOINT_STATE_RESTART_REQUIRED } from "./v2/checkpoint-bridge.mjs";
 
-export { resumeAutoLoop };
+export { resumeAutoLoop, resumeAutoLoopInternal };
 
 // C4I: canonical state for a pre-decomposition / incomplete-decomposition
 // interruption（not resumable; a new execution is required）.
@@ -48,6 +56,7 @@ export const AUTOLOOP_HOLD = Object.freeze({
   PERSISTENCE_MODE_REQUIRED: "PERSISTENCE_MODE_REQUIRED",
   INVALID_PERSISTENCE_MODE: "INVALID_PERSISTENCE_MODE",
   PERSISTENCE_CONFIG_INVALID: "PERSISTENCE_CONFIG_INVALID",
+  NON_PRODUCTION_ENTRYPOINT: "NON_PRODUCTION_ENTRYPOINT",
 });
 
 function hold(reason, executionId) {
@@ -65,7 +74,20 @@ function hold(reason, executionId) {
 }
 
 /**
- * Run AutoLoop end-to-end (decomposition → DAG execution) in memory.
+ * R-09 (AUTH1) — production-facing dead-end. runAutoLoop is UNCONDITIONALLY
+ * fail-closed: NO caller-provided boolean / string / context can unlock
+ * execution. The legacy STACK_A engine is runAutoLoopInternal below, reachable
+ * ONLY via src/v2/stack-a-internal.mjs（the internal/test harness surface）.
+ * Production execution MUST go through runAdmittedGraph
+ *（src/admission/admission-gate.mjs）.
+ */
+export async function runAutoLoop(_opts = {}) {
+  return hold(AUTOLOOP_HOLD.NON_PRODUCTION_ENTRYPOINT, mintExecutionId());
+}
+
+/**
+ * Internal/test-harness STACK_A engine（legacy v2 pipeline）— NOT a production
+ * surface. Run AutoLoop end-to-end (decomposition → DAG execution) in memory.
  *
  * @param {object} opts
  * @param {object} opts.source — { goal?, requirements: [{requirement_id, text}], authority }
@@ -88,7 +110,7 @@ function hold(reason, executionId) {
  *   decomposition, phaseResults, scheduler, transitions, diagnostics
  * }>}
  */
-export async function runAutoLoop({
+export async function runAutoLoopInternal({
   source,
   parent,
   manifest,
@@ -116,7 +138,7 @@ export async function runAutoLoop({
         typeof persistence.executionId !== "string" || persistence.executionId.length === 0) {
       return hold(AUTOLOOP_HOLD.PERSISTENCE_CONFIG_INVALID, executionId);
     }
-    return runDurableAutoLoop({
+    return runDurableAutoLoopInternal({
       source, parent, manifest, cwd,
       decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory,
       maxRepairAttempts, timeoutMs, signal, hooks,

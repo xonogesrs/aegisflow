@@ -25,7 +25,7 @@ import {
   collectRepositoryFingerprint, validateRunIdentity,
   AUTOLOOP_CHECKPOINT_FORMAT_VERSION, AUTOLOOP_STATE_RESUMABLE, AUTOLOOP_STATE_RESTART_REQUIRED,
 } from "../../src/v2/checkpoint-bridge.mjs";
-import { resumeAutoLoop } from "../../src/v2/durable-execution.mjs";
+import { resumeAutoLoopInternal } from "../../src/v2/stack-a-internal.mjs";
 import { runtimeIdentity, computeSourceHashes } from "../../src/v2/durable-execution.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -172,7 +172,7 @@ test("C4I-3 missing decomposition-ir.json is not RESUMABLE", async () => {
     // And resumeAutoLoop must refuse precisely, with zero calls.
     rmSync(join(cp.execDir, "artifacts", "decomposition-ir.json"), { force: true });
     const { counts, decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory } = countingAdapters();
-    const r = await resumeAutoLoop({ persistenceRoot: root, executionId, decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory, hooks: { toolPolicy: TOOL_POLICY } });
+    const r = await resumeAutoLoopInternal({ persistenceRoot: root, executionId, decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory, hooks: { toolPolicy: TOOL_POLICY } });
     assert.equal(r.final, "HOLD");
     assert.equal(r.reason, "PRE_DECOMPOSITION_RESTART_REQUIRED");
     assert.equal(counts.decomposition, 0);
@@ -232,7 +232,7 @@ test("C4I-6/7/8/9 pre-decomposition resume returns precise result with 0 provide
   try {
     await preDecompositionCheckpoint({ repo, root, executionId, journalEvents: ["RUN_CREATED", "INPUT_FROZEN", "DECOMPOSITION_STARTED"] });
     const { counts, decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory } = countingAdapters();
-    const r = await resumeAutoLoop({
+    const r = await resumeAutoLoopInternal({
       persistenceRoot: root, executionId,
       decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory,
       hooks: { toolPolicy: TOOL_POLICY },
@@ -347,7 +347,7 @@ test("C4I-15 unknown format major still rejects", async () => {
     await preDecompositionCheckpoint({ repo, root, executionId, snapshotOverrides: { autoloop_format_version: "9.0.0" } });
     const { counts, decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory } = countingAdapters();
     await assert.rejects(
-      () => resumeAutoLoop({ persistenceRoot: root, executionId, decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory, hooks: { toolPolicy: TOOL_POLICY } }),
+      () => resumeAutoLoopInternal({ persistenceRoot: root, executionId, decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory, hooks: { toolPolicy: TOOL_POLICY } }),
       (e) => e && e.code === "RESUME_FINGERPRINT_MISMATCH",
     );
     assert.equal(counts.decomposition, 0);
@@ -375,7 +375,7 @@ test("C4I-16 journal/checkpoint mismatch still rejects", async () => {
     writeFileSync(join(cp.execDir, "CURRENT.json.sha256"), createHash("sha256").update(bytes).digest("hex") + "\n");
     const { counts, decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory } = countingAdapters();
     await assert.rejects(
-      () => resumeAutoLoop({ persistenceRoot: root, executionId, decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory, hooks: { toolPolicy: TOOL_POLICY } }),
+      () => resumeAutoLoopInternal({ persistenceRoot: root, executionId, decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory, hooks: { toolPolicy: TOOL_POLICY } }),
       (e) => e && (e.code === "RESUME_FINGERPRINT_MISMATCH" || e.code === "JOURNAL_INTEGRITY_FAILURE"),
     );
     assert.equal(counts.decomposition, 0);
@@ -425,7 +425,7 @@ test("C4I-17 the C4B five-event interrupted state is classified restart-required
     assert.equal(cp.snapshot.c2d_control_state, AUTOLOOP_STATE_RESTART_REQUIRED);
 
     const { counts, decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory } = countingAdapters();
-    const r = await resumeAutoLoop({
+    const r = await resumeAutoLoopInternal({
       persistenceRoot: root, executionId,
       decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory,
       hooks: { toolPolicy: TOOL_POLICY },
@@ -491,7 +491,7 @@ test("C4I-19 rejected pre-decomposition resume adds no second provider call", as
   try {
     await preDecompositionCheckpoint({ repo, root, executionId, journalEvents: ["RUN_CREATED", "INPUT_FROZEN", "DECOMPOSITION_STARTED"] });
     const { counts, decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory } = countingAdapters();
-    await resumeAutoLoop({ persistenceRoot: root, executionId, decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory, hooks: { toolPolicy: TOOL_POLICY } });
+    await resumeAutoLoopInternal({ persistenceRoot: root, executionId, decompositionAdapter, executorAdapterFactory, reviewerAdapterFactory, hooks: { toolPolicy: TOOL_POLICY } });
     assert.equal(counts.decomposition, 0);
     assert.equal(counts.executor + counts.reviewer, 0);
   } finally {

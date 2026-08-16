@@ -32,7 +32,7 @@ import { runExecutionOrchestrator } from "../../src/v2/execution-orchestrator.mj
 import { buildPhaseTaskCard, deriveScopePatterns, phaseExecutionId } from "../../src/v2/phase-task-card.mjs";
 import { captureScopeSnapshot } from "../../src/c2d/mutation-scope.mjs";
 import { createScriptedAdapter } from "../../src/adapter/scripted-adapter.mjs";
-import { runDurableAutoLoop } from "../../src/v2/durable-execution.mjs";
+import { runDurableAutoLoopInternal } from "../../src/v2/stack-a-internal.mjs";
 import { RunEvidenceStore, canonicalJson, sha256Text } from "../../src/evidence/run-evidence-store.mjs";
 import {
   buildHarnessOwnedEvidence, buildExecutorOutputDiagnostic, collectGitBaseline,
@@ -342,7 +342,7 @@ test("C4Q-11 orchestrator: reviewer receives full bundle → PASS", async () => 
 
 test("C4Q-12 synthetic secret, oversize, missing facts all fail closed", () => {
   const cwd = gitFixture();
-  const SYNTH = "sk-abcdefghijklmnopqrstuvwxyz123456";
+  const SYNTH = "synthetic-secret-sentinel-0123456789abcdef";
   try {
     const card = writerCard({ cwd });
     // secret: the verification command carries a secret pattern → evidence scan catches it
@@ -393,7 +393,7 @@ test("C4Q-13 durable run: executor output diagnostic saved bounded; evidence har
       { requirement_id: "R6", text: "Do not commit, push, create remotes, install packages, or access files outside the isolated repository." },
       { requirement_id: "R7", text: "Return canonical bounded execution evidence for executor and reviewer." },
     ];
-    const result = await runDurableAutoLoop({
+    const result = await runDurableAutoLoopInternal({
       source: {
         goal: "Repair the isolated fixture repository so add(a, b) performs arithmetic addition and the existing test suite passes.",
         requirements: MANIFEST,

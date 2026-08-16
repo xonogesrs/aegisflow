@@ -44,6 +44,18 @@ export function deriveExecutorRuntime(admission) {
 }
 
 /**
+ * R-10 (AUTH1) — the single authoritative retrieval-authority predicate.
+ *
+ * Retrieval is authorized IFF the admitted policy projection explicitly
+ * declares `memory_policy.retrieval_allowed === true`. Provider availability
+ * is NEVER authority: missing / false / malformed (non-boolean) authority
+ * fails closed (no retrieval).
+ */
+export function isRetrievalAuthorized(admission) {
+  return admission?.memory_policy?.retrieval_allowed === true;
+}
+
+/**
  * TA-1 admission decision matrix（ta1-admission-decision-matrix.json）:
  * profile → 18 decision fields. Embedded snapshot; scripts/ta2-verify.mjs
  * re-checks parity against the docs artifact.

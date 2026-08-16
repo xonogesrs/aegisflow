@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "autoloop.review-job/v1",
+  "lineageId": "autoloop-auth1",
+  "jobId": "autoloop-auth1.g0001",
+  "generation": 1,
+  "candidateIdentity": {
+    "changedTreeIdentity": "bd289d6778746ae7af184c5f5f1f2ece03bf260352cfbec2d774ff05c5d523dd",
+    "patchSha256": "fee3aa969b9f3cfda82e5346cab9bb9fd47376019b7dbd58253d0f386362d8b9",
+    "currentHead": "7cde0ba0fdd9f66db0dfbe82bb5945fc9bb9ca60",
+    "baseHead": "7cde0ba0fdd9f66db0dfbe82bb5945fc9bb9ca60",
+    "repository": "xonogesrs/autoloop",
+    "branch": "governance/auth1-production-retrieval-authority"
+  },
+  "specId": "autoloop-auth1",
+  "specDigest": "7e17e5a909740db5fa234378f419120b7e019ed6bc6453f2408e3ae52c8381dd",
+  "reviewRound": 1,
+  "repairRound": 0,
+  "state": "ACCEPTED",
+  "stateVersion": 8,
+  "requiredArtifacts": [
+    {
+      "role": "findings",
+      "required": true,
+      "writeMode": "exclusive-create"
+    },
+    {
+      "role": "verdict",
+      "required": true,
+      "writeMode": "exclusive-create"
+    }
+  ],
+  "repoIdentity": "xonogesrs/autoloop",
+  "worktreeIdentity": "/Volumes/NVM2T/Development/autoloop",
+  "findingsDigest": "8a138cc0befab17b60c14bda9de4592406425c3883bfe82eb08d62615b541982",
+  "verdictDigest": "5515075d55a449acf89bf988db2550051500c3891a2fbf915c2bb83c2d2391d3",
+  "acceptedAt": "2026-08-16T07:03:15.278Z",
+  "acceptanceAuthority": "controller"
+}

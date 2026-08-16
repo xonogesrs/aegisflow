@@ -31,7 +31,7 @@ import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 
 import { runLifecycle } from "../../src/lifecycle-runner.mjs";
-import { runAutoLoop } from "../../src/autoloop.mjs";
+import { runAutoLoopInternal } from "../../src/v2/stack-a-internal.mjs";
 import { buildPhaseTaskCard, deriveScopePatterns, phaseExecutionId } from "../../src/v2/phase-task-card.mjs";
 import { captureScopeSnapshot, enforceScopeGate } from "../../src/c2d/mutation-scope.mjs";
 import { createScriptedAdapter } from "../../src/adapter/scripted-adapter.mjs";
@@ -443,7 +443,7 @@ test("C4S-5 patch SHA is consistent across artifact / manifest / evidence / bund
   const executionId = mintExecutionId();
   const captured = [];
   try {
-    const result = await runAutoLoop({
+    const result = await runAutoLoopInternal({
       source: { goal: "g", requirements: [{ requirement_id: "R2", text: "fix fibonacci" }], authority: { allowed_paths: ["src/", "test/"], mutation_allowed: true, commit_allowed: false } },
       parent: { scope: { allowed_paths: ["src/", "test/"], forbidden_paths: [] } },
       manifest: [{ requirement_id: "R2", text: "fix fibonacci" }],
@@ -625,7 +625,7 @@ test("C4S-8 binary delta fails closed；no partial success bundle", async () => 
 // ── C4S-9 — secret fail-closed ───────────────────────────────────────────
 
 test("C4S-9 credential pattern blocks the delta；no durable artifact；no echo", async () => {
-  const SYNTH = "sk-abcdefghijklmnopqrstuvwxyz123456";
+  const SYNTH = "synthetic-secret-sentinel-0123456789abcdef";
   const dir = fibonacciFixture();
   try {
     const card = writerCard({ cwd: dir });
@@ -712,7 +712,7 @@ test("C4S-11 patch/metadata persistence failure is journaled and HOLDS", async (
   const root2 = mkdtempSync(join(tmpdir(), "c4s-durable-ctrl-"));
   const executionId = mintExecutionId();
   try {
-    const result = await runAutoLoop({
+    const result = await runAutoLoopInternal({
       source: { goal: "g", requirements: [{ requirement_id: "R2", text: "x" }], authority: { allowed_paths: ["src/", "test/"], mutation_allowed: true, commit_allowed: false } },
       parent: { scope: { allowed_paths: ["src/", "test/"], forbidden_paths: [] } },
       manifest: [{ requirement_id: "R2", text: "x" }],

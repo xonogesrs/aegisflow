@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "autoloop.review-verdict/v1",
+  "jobId": "autoloop-auth1.g0001",
+  "lineageId": "autoloop-auth1",
+  "generation": 1,
+  "candidateIdentity": {
+    "changedTreeIdentity": "bd289d6778746ae7af184c5f5f1f2ece03bf260352cfbec2d774ff05c5d523dd",
+    "patchSha256": "fee3aa969b9f3cfda82e5346cab9bb9fd47376019b7dbd58253d0f386362d8b9",
+    "currentHead": "7cde0ba0fdd9f66db0dfbe82bb5945fc9bb9ca60",
+    "baseHead": "7cde0ba0fdd9f66db0dfbe82bb5945fc9bb9ca60",
+    "repository": "xonogesrs/autoloop",
+    "branch": "governance/auth1-production-retrieval-authority"
+  },
+  "specIdentity": {
+    "specId": "autoloop-auth1",
+    "specDigest": "7e17e5a909740db5fa234378f419120b7e019ed6bc6453f2408e3ae52c8381dd"
+  },
+  "findingsDigest": "8a138cc0befab17b60c14bda9de4592406425c3883bfe82eb08d62615b541982",
+  "reviewerIdentity": "controller",
+  "verdict": "PASS",
+  "summary": "AUTH1-TA1 independent review: R-09/R-10 contract invariants verified against the frozen candidate (changedTreeIdentity=bd289d67..., specDigest=7e17e5a9...). No BLOCKER/MAJOR findings.",
+  "recommendedNextAction": "Accept and proceed to scoped commit + push/PR after TA1 PASS.",
+  "createdAt": "2026-08-16T07:02:31.879Z"
+}

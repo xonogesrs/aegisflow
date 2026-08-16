@@ -11,8 +11,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 
-import { runAutoLoop, resumeAutoLoop } from "../../src/autoloop.mjs";
-import { runDurableAutoLoop } from "../../src/v2/durable-execution.mjs";
+import { runAutoLoopInternal, resumeAutoLoopInternal, runDurableAutoLoopInternal } from "../../src/v2/stack-a-internal.mjs";
 import { RunEvidenceStore, canonicalJson, sha256Text } from "../../src/evidence/run-evidence-store.mjs";
 import { readRunManifest, manifestPath, manifestShaPath } from "../../src/evidence/run-manifest.mjs";
 import {
@@ -126,7 +125,7 @@ async function runDurableComplete({ ir = twoPhaseIr(), factories = passingFactor
   const repo = gitFixture();
   const root = mkdtempSync(join(tmpdir(), "c3-dur-root-"));
   const executionId = mintExecutionId();
-  const result = await runDurableAutoLoop({
+  const result = await runDurableAutoLoopInternal({
     source: SOURCE, parent: PARENT, manifest: MANIFEST_REQ, cwd: repo,
     decompositionAdapter: adapterFor(ir),
     ...factories,
@@ -175,7 +174,7 @@ async function interruptedCheckpoint({
 }
 
 async function resumeWith({ root, executionId, factories = passingFactories(), hooks = {} }) {
-  return resumeAutoLoop({
+  return resumeAutoLoopInternal({
     persistenceRoot: root, executionId,
     decompositionAdapter: adapterFor(twoPhaseIr()),
     ...factories,
@@ -190,7 +189,7 @@ test("12: configuration change rejects resume", async () => {
   try {
     assert.equal(result.final, "PASS");
     await assert.rejects(
-      resumeAutoLoop({
+      resumeAutoLoopInternal({
         persistenceRoot: root, executionId,
         decompositionAdapter: adapterFor(twoPhaseIr()),
         ...passingFactories(),
@@ -355,7 +354,7 @@ test("33: evidence write failure stops the run (no next phase)", async () => {
   // → phase failed → HOLD before p_impl.
   const factories = {
     executorAdapterFactory: () => createScriptedAdapter([
-      { expect: { phase: "executor", attempt: 0 }, result: completed("sk-abcdefghijklmnopqrstuvwxyz123456 evidence output", "x") },
+      { expect: { phase: "executor", attempt: 0 }, result: completed("synthetic-secret-sentinel-0123456789abcdef evidence output", "x") },
     ]),
     reviewerAdapterFactory: () => createScriptedAdapter([{ expect: { phase: "reviewer", attempt: 0 }, result: completed(verdictJson(), "x") }]),
   };
@@ -486,7 +485,7 @@ test("19: completed phases are never re-run on resume", async () => {
       phaseResultHashes: { p_analysis: "a".repeat(64) },
     });
     let executorCalls = [];
-    const r = await resumeAutoLoop({
+    const r = await resumeAutoLoopInternal({
       persistenceRoot: root, executionId,
       decompositionAdapter: adapterFor(twoPhaseIr()),
       executorAdapterFactory: () => {
@@ -618,7 +617,7 @@ test("40: durable complete offline run is re-verifiable", async () => {
 test("39: ephemeral mode creates no filesystem evidence", async () => {
   const repo = gitFixture();
   try {
-    const r = await runAutoLoop({
+    const r = await runAutoLoopInternal({
       source: SOURCE, parent: PARENT, manifest: MANIFEST_REQ, cwd: repo,
       decompositionAdapter: adapterFor(twoPhaseIr()),
       ...passingFactories(), maxRepairAttempts: 0, timeoutMs: 1000,

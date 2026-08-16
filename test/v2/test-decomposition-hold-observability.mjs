@@ -24,7 +24,7 @@ import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 
-import { runAutoLoop } from "../../src/autoloop.mjs";
+import { runAutoLoopInternal } from "../../src/v2/stack-a-internal.mjs";
 import { validateSemantic } from "../../src/v2/semantic-consistency.mjs";
 import { buildExecutorCanonicalExample, buildReviewerCanonicalExample } from "../../src/v2/phase-response-contract.mjs";
 import { createScriptedAdapter } from "../../src/adapter/scripted-adapter.mjs";
@@ -190,7 +190,7 @@ async function runDurable({ ir, secret = false }) {
   const root = mkdtempSync(join(tmpdir(), "c4f-evidence-"));
   const executionId = freshExecutionId();
   const factories = scriptedFactories();
-  const result = await runAutoLoop({
+  const result = await runAutoLoopInternal({
     source: SOURCE,
     parent: PARENT,
     manifest: MANIFEST,
@@ -349,7 +349,7 @@ test("C4F-6 transport-stage hold persists bounded diagnostics with null IR", asy
   const executionId = freshExecutionId();
   const factories = scriptedFactories();
   try {
-    const result = await runAutoLoop({
+    const result = await runAutoLoopInternal({
       source: SOURCE,
       parent: PARENT,
       manifest: MANIFEST,

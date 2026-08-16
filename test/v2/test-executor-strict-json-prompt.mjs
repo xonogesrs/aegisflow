@@ -27,7 +27,7 @@ import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 
-import { runAutoLoop } from "../../src/autoloop.mjs";
+import { runAutoLoopInternal } from "../../src/v2/stack-a-internal.mjs";
 import {
   buildPhaseExecutionPrompt,
   buildExecutorCanonicalExample,
@@ -158,7 +158,7 @@ async function runDurable({ executorStdout, reviewerVerdict }) {
   const executionId = freshExecutionId();
   const executorEvidence = buildExecutorCanonicalExample();
   const reviewerDefault = buildReviewerCanonicalExample({ expectedReviewerModel: "deepseek-v4-flash" });
-  const result = await runAutoLoop({
+  const result = await runAutoLoopInternal({
     source: SOURCE,
     parent: PARENT,
     manifest: MANIFEST,

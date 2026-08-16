@@ -1,0 +1,91 @@
+{
+  "schema": "autoloop.lifecycle-authorization/v2",
+  "card_id": "autoloop-auth1",
+  "run_id": "autoloop-auth1-r1",
+  "issued_at": "2026-08-16T00:00:00.000Z",
+  "authorized_by": "controller",
+  "repository": "xonogesrs/autoloop",
+  "worktree": "/Volumes/NVM2T/Development/autoloop",
+  "branch": "governance/auth1-production-retrieval-authority",
+  "base": "a06124c8d919757c1a6371daaae89ab14546c9ef",
+  "base_head": "a06124c8d919757c1a6371daaae89ab14546c9ef",
+  "authorized_paths": [
+    "src/admission/policy-projection.mjs",
+    "src/autoloop.mjs",
+    "src/runtime/colima-graph-runner.mjs",
+    "src/v2/durable-execution.mjs",
+    "src/v2/stack-a-internal.mjs",
+    "test/admission/test-retrieval-authority.mjs",
+    "test/memory/test-graph-context.mjs",
+    "test/test-autoloop-entrypoint.mjs",
+    "test/v2/test-decomposition-hold-observability.mjs",
+    "test/v2/test-durable-execution.mjs",
+    "test/v2/test-executor-evidence-observability.mjs",
+    "test/v2/test-executor-strict-json-prompt.mjs",
+    "test/v2/test-harness-owned-evidence.mjs",
+    "test/v2/test-pre-decomposition-interruption.mjs",
+    "test/v2/test-system-delta.mjs",
+    "docs/pi-graph-output/auth1/autoloop-auth1-card-spec.md",
+    "docs/pi-graph-output/auth1/autoloop-auth1-authority.json",
+    "docs/pi-graph-output/autoloop-auth1/review-job.json",
+    "docs/pi-graph-output/autoloop-auth1/review-findings.g0001.json",
+    "docs/pi-graph-output/autoloop-auth1/review-verdict.g0001.json"
+  ],
+  "bundle_path": "docs/pi-graph-output/auth1/autoloop-auth1-bundle.txt",
+  "spec_path": "docs/pi-graph-output/auth1/autoloop-auth1-card-spec.md",
+  "lifecycle_authorization": {
+    "decomposition": {
+      "allowed": false,
+      "max_depth": 0,
+      "max_total_nodes": 0
+    },
+    "independent_review": {
+      "allowed": true,
+      "require_fresh_session": true,
+      "require_same_artifact_digest": true
+    },
+    "bounded_repair": {
+      "allowed": false,
+      "max_rounds": 0,
+      "scope_expansion": false
+    },
+    "checkpoint_commit": {
+      "allowed": true,
+      "require_local_gates_pass": true,
+      "require_clean_index_before_stage": true,
+      "require_expected_paths_only": true
+    },
+    "feature_branch_push": {
+      "allowed": true,
+      "branch_pattern": "governance/auth1-*",
+      "force_push": false,
+      "require_remote_ancestor_check": true
+    },
+    "draft_pr": {
+      "allowed": true,
+      "base_branch": "main",
+      "draft_only": true,
+      "create_if_missing": false,
+      "update_if_present": false
+    },
+    "external_review": {
+      "required": false,
+      "require_bundle": false,
+      "bundle_path": "docs/pi-graph-output/auth1/autoloop-auth1-bundle.txt"
+    },
+    "review_unit": {
+      "allowed": true,
+      "repository_count": 1,
+      "worktree_count": 1,
+      "parent_card_count": 1,
+      "architecture_goal_count": 1,
+      "maximum_internal_milestones": 1,
+      "maximum_changed_paths": 64,
+      "maximum_patch_lines": 20000,
+      "maximum_repair_rounds": 0
+    },
+    "merge_main": { "allowed": false },
+    "release": { "allowed": false },
+    "seal": { "allowed": false }
+  }
+}

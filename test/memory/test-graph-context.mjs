@@ -26,6 +26,9 @@ import {
 } from "../../src/memory/index.mjs";
 import { runColimaGraph } from "../../src/runtime/colima-graph-runner.mjs";
 import { codeRecord, REPO, TREE } from "./helpers-cbm3.mjs";
+import { classify, scanRiskSignals } from "../../src/admission/classify.mjs";
+import { buildAdmissionRecord } from "../../src/admission/policy-projection.mjs";
+import { freezeAdmission } from "../../src/admission/admission-record.mjs";
 
 const ROOTS = [];
 function freshRoot() {
@@ -38,6 +41,27 @@ function store(root) {
   return new LocalMemoryStore({ stateRoot: root, log: silent });
 }
 const REPO_PATH = "/Volumes/NVM2T/Development/autoloop";
+
+// R-10 (AUTH1): build a schema-valid admission with an explicit retrieval
+// authority so the graph-time memory gate can be exercised offline.
+const ADMISSION_EVIDENCE = {
+  affected_files: { score: 1, reasons: ["single file"] },
+  affected_subsystems: { score: 0, reasons: ["docs only"] },
+  dependency_depth: { score: 0, reasons: ["no deps"] },
+  ambiguity: { score: 0, reasons: ["exact"] },
+  expected_execution_steps: { score: 0, reasons: ["one edit"] },
+  verification_burden: { score: 0, reasons: ["none"] },
+  external_dependencies: { score: 0, reasons: ["none"] },
+  concurrency_potential: { score: 0, reasons: ["none"] },
+  statefulness: { score: 0, reasons: ["stateless"] },
+  rollback_complexity: { score: 0, reasons: ["revert one file"] },
+};
+function validAdmissionWithRetrieval(allowed) {
+  const c = classify({ dimensionScores: ADMISSION_EVIDENCE, riskSignals: scanRiskSignals("fix one typo in README") });
+  const rec = buildAdmissionRecord({ taskId: "TEST-GRAPH-CTX", classification: c, mutationScope: ["docs/"] });
+  rec.memory_policy = { retrieval_allowed: allowed, writeback_allowed: false };
+  return freezeAdmission(rec);
+}
 
 before(() => {});
 after(() => { for (const r of ROOTS) rmSync(r, { recursive: true, force: true }); });
@@ -122,6 +146,7 @@ test("G5. runColimaGraph with INVALID memory → HOLD / MEMORY_STORE_INVALID (fa
     repoPath: REPO_PATH,
     scratchRoot: join(freshRoot(), "scratch"),
     timeoutMs: 5000,
+    admission: validAdmissionWithRetrieval(true),
     memory,
   });
   assert.equal(r.final, "HOLD");

@@ -25,6 +25,7 @@ import { join } from "node:path";
 import { mkdirSync } from "node:fs";
 import { runExecutionOrchestrator } from "../v2/execution-orchestrator.mjs";
 import { validateAdmission } from "../admission/admission-record.mjs";
+import { isRetrievalAuthorized } from "../admission/policy-projection.mjs";
 import { attachBudgetResult } from "../budget/graph-wiring.mjs";
 import { phaseExecutionId } from "../v2/phase-task-card.mjs";
 import { captureChangedPaths } from "../shared/git-diff-utils.mjs";
@@ -212,7 +213,11 @@ export async function runColimaGraph({
   // missing store yields EMPTY_MEMORY and the graph continues.
   const startedAt = new Date().toISOString();
   let memoryContext = null;
-  if (memory && typeof memory?.provider?.retrieveGraphMemory === "function") {
+  // ── R-10 (AUTH1): retrieval authority comes ONLY from the admitted policy
+  // projection（admission.memory_policy.retrieval_allowed === true）. Provider
+  // availability alone is never authority; missing / false / malformed
+  // authority fails closed（no retrieval）.
+  if (isRetrievalAuthorized(admission) && memory && typeof memory?.provider?.retrieveGraphMemory === "function") {
     const mr = await memory.provider.retrieveGraphMemory({
       repoPath,
       cwd,

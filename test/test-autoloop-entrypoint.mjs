@@ -13,6 +13,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { runAutoLoop } from "../src/autoloop.mjs";
+import { runAutoLoopInternal } from "../src/v2/stack-a-internal.mjs";
 import { createScriptedAdapter } from "../src/adapter/scripted-adapter.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -133,11 +134,32 @@ function defaultFactories() {
   };
 }
 
-test("E1: valid decomposition → all phases through lifecycle → final PASS", async () => {
+// ── R-09 (AUTH1): runAutoLoop is an UNCONDITIONALLY fail-closed dead-end —
+// NO caller input (boolean/string/context) can unlock execution.
+test("R-09: runAutoLoop (production-facing dead-end) → HOLD NON_PRODUCTION_ENTRYPOINT", async () => {
   const cwd = gitFixture();
   try {
     const factories = defaultFactories();
     const r = await runAutoLoop({
+      source: sourceFor(), parent: VALID_PARENT, manifest: VALID_MANIFEST, cwd,
+      decompositionAdapter: adapterFor(VALID_IR),
+      ...factories, hooks: HARNESS_HOOKS,
+      maxRepairAttempts: 0, timeoutMs: 1000,
+      persistence: EPHEMERAL,
+    });
+    assert.equal(r.final, "HOLD");
+    assert.equal(r.stage, "input");
+    assert.equal(r.reason, "NON_PRODUCTION_ENTRYPOINT");
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("E1: valid decomposition → all phases through lifecycle → final PASS", async () => {
+  const cwd = gitFixture();
+  try {
+    const factories = defaultFactories();
+    const r = await runAutoLoopInternal({
       source: sourceFor(), parent: VALID_PARENT, manifest: VALID_MANIFEST, cwd,
       decompositionAdapter: adapterFor(VALID_IR),
       ...factories, hooks: HARNESS_HOOKS,
@@ -172,7 +194,7 @@ test("E2: NOT_BENEFICIAL → zero lifecycle calls, final NOT_BENEFICIAL", async 
       decomposition_evidence: ["test"],
     };
     const factories = defaultFactories();
-    const r = await runAutoLoop({
+    const r = await runAutoLoopInternal({
       source: sourceFor(), parent: VALID_PARENT, manifest: VALID_MANIFEST, cwd,
       decompositionAdapter: adapterFor(ir),
       ...factories, hooks: HARNESS_HOOKS,
@@ -199,7 +221,7 @@ test("E3: DECOMPOSITION_BLOCKED → HOLD, zero lifecycle calls", async () => {
       decomposition_evidence: ["test"],
     };
     const factories = defaultFactories();
-    const r = await runAutoLoop({
+    const r = await runAutoLoopInternal({
       source: sourceFor(), parent: VALID_PARENT, manifest: VALID_MANIFEST, cwd,
       decompositionAdapter: adapterFor(ir),
       ...factories, hooks: HARNESS_HOOKS,
@@ -219,7 +241,7 @@ test("E4: schema failure → HOLD, zero lifecycle calls", async () => {
   const cwd = gitFixture();
   try {
     const factories = defaultFactories();
-    const r = await runAutoLoop({
+    const r = await runAutoLoopInternal({
       source: sourceFor(), parent: VALID_PARENT, manifest: VALID_MANIFEST, cwd,
       decompositionAdapter: adapterFor({ verdict: "DECOMPOSED" }),
       ...factories, hooks: HARNESS_HOOKS,
@@ -241,7 +263,7 @@ test("E5: semantic failure → HOLD, zero lifecycle calls", async () => {
     const ir = clone(VALID_IR);
     ir.phases[1].covers = []; // R2 uncovered
     const factories = defaultFactories();
-    const r = await runAutoLoop({
+    const r = await runAutoLoopInternal({
       source: sourceFor(), parent: VALID_PARENT, manifest: VALID_MANIFEST, cwd,
       decompositionAdapter: adapterFor(ir),
       ...factories, hooks: HARNESS_HOOKS,
@@ -260,7 +282,7 @@ test("E5: semantic failure → HOLD, zero lifecycle calls", async () => {
 test("E6: missing executor adapter factory → HOLD MISSING_EXECUTOR_ADAPTER_FACTORY", async () => {
   const cwd = gitFixture();
   try {
-    const r = await runAutoLoop({
+    const r = await runAutoLoopInternal({
       source: sourceFor(), parent: VALID_PARENT, manifest: VALID_MANIFEST, cwd,
       decompositionAdapter: adapterFor(VALID_IR),
       executorAdapterFactory: undefined,
@@ -280,7 +302,7 @@ test("E6: missing executor adapter factory → HOLD MISSING_EXECUTOR_ADAPTER_FAC
 test("E7: missing reviewer adapter factory → HOLD MISSING_REVIEWER_ADAPTER_FACTORY", async () => {
   const cwd = gitFixture();
   try {
-    const r = await runAutoLoop({
+    const r = await runAutoLoopInternal({
       source: sourceFor(), parent: VALID_PARENT, manifest: VALID_MANIFEST, cwd,
       decompositionAdapter: adapterFor(VALID_IR),
       executorAdapterFactory: () => createScriptedAdapter([]),
@@ -299,7 +321,7 @@ test("E7: missing reviewer adapter factory → HOLD MISSING_REVIEWER_ADAPTER_FAC
 test("E8: invalid repair budget (2) → HOLD INVALID_REPAIR_BUDGET", async () => {
   const cwd = gitFixture();
   try {
-    const r = await runAutoLoop({
+    const r = await runAutoLoopInternal({
       source: sourceFor(), parent: VALID_PARENT, manifest: VALID_MANIFEST, cwd,
       decompositionAdapter: adapterFor(VALID_IR),
       ...defaultFactories(), maxRepairAttempts: 2, timeoutMs: 1000,
@@ -316,7 +338,7 @@ test("E9: missing / non-positive timeout → HOLD INVALID_TIMEOUT", async () => 
   const cwd = gitFixture();
   try {
     for (const timeoutMs of [undefined, 0, -1]) {
-      const r = await runAutoLoop({
+      const r = await runAutoLoopInternal({
         source: sourceFor(), parent: VALID_PARENT, manifest: VALID_MANIFEST, cwd,
         decompositionAdapter: adapterFor(VALID_IR),
         ...defaultFactories(), maxRepairAttempts: 0, timeoutMs,
@@ -333,9 +355,9 @@ test("E9: missing / non-positive timeout → HOLD INVALID_TIMEOUT", async () => 
 test("E10: result contract — no secrets, no env, no raw reasoning in the result", async () => {
   const cwd = gitFixture();
   try {
-    const SECRET = "sk-abcdefghijklmnopqrstuvwxyz123456";
+    const SECRET = "synthetic-secret-sentinel-0123456789abcdef";
     const evidenceWithSecret = { ...FIXTURE_EVIDENCE, executor_verdict: `done with key ${SECRET}` };
-    const r = await runAutoLoop({
+    const r = await runAutoLoopInternal({
       source: sourceFor(), parent: VALID_PARENT, manifest: VALID_MANIFEST, cwd,
       decompositionAdapter: adapterFor(VALID_IR),
       executorAdapterFactory: () => createScriptedAdapter([{ expect: { phase: "executor", attempt: 0 }, result: (req) => completed(JSON.stringify({ ...evidenceWithSecret, contract_id: req.taskCard?.executionId }), "x") }]),
@@ -363,7 +385,7 @@ test("E10: result contract — no secrets, no env, no raw reasoning in the resul
 test("E11: missing decomposition adapter → HOLD MISSING_DECOMPOSITION_ADAPTER", async () => {
   const cwd = gitFixture();
   try {
-    const r = await runAutoLoop({
+    const r = await runAutoLoopInternal({
       source: sourceFor(), parent: VALID_PARENT, manifest: VALID_MANIFEST, cwd,
       decompositionAdapter: null,
       executorAdapterFactory: () => createScriptedAdapter([]),
@@ -382,7 +404,7 @@ test("E11: missing decomposition adapter → HOLD MISSING_DECOMPOSITION_ADAPTER"
 test("E12: missing persistence mode → HOLD PERSISTENCE_MODE_REQUIRED", async () => {
   const cwd = gitFixture();
   try {
-    const r = await runAutoLoop({
+    const r = await runAutoLoopInternal({
       source: sourceFor(), parent: VALID_PARENT, manifest: VALID_MANIFEST, cwd,
       decompositionAdapter: adapterFor(VALID_IR),
       ...defaultFactories(), maxRepairAttempts: 0, timeoutMs: 1000,
@@ -398,7 +420,7 @@ test("E12: missing persistence mode → HOLD PERSISTENCE_MODE_REQUIRED", async (
 test("E13: invalid persistence mode → HOLD INVALID_PERSISTENCE_MODE", async () => {
   const cwd = gitFixture();
   try {
-    const r = await runAutoLoop({
+    const r = await runAutoLoopInternal({
       source: sourceFor(), parent: VALID_PARENT, manifest: VALID_MANIFEST, cwd,
       decompositionAdapter: adapterFor(VALID_IR),
       ...defaultFactories(), hooks: HARNESS_HOOKS,

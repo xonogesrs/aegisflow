@@ -27,7 +27,7 @@ import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 
-import { runAutoLoop } from "../../src/autoloop.mjs";
+import { runAutoLoopInternal } from "../../src/v2/stack-a-internal.mjs";
 import { buildExecutorCanonicalExample, buildReviewerCanonicalExample } from "../../src/v2/phase-response-contract.mjs";
 import { createScriptedAdapter } from "../../src/adapter/scripted-adapter.mjs";
 import { EXECUTOR_DIAGNOSTICS_LIMITS, buildExecutorEvidenceDiagnostics } from "../../src/lifecycle-runner.mjs";
@@ -179,7 +179,7 @@ async function runDurable({ executorStdout, executorStderr = "", executorMetadat
     stderr: "",
     metadata: {},
   };
-  const result = await runAutoLoop({
+  const result = await runAutoLoopInternal({
     source: SOURCE,
     parent: PARENT,
     manifest: MANIFEST,
