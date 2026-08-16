@@ -1,0 +1,26 @@
+{
+  "schema": "autoloop.external-review-delivery/v2",
+  "cardId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
+  "fileName": "delivery.json",
+  "reviewBundleGenerated": true,
+  "reviewBundleValidated": true,
+  "reviewBundleDeliveryRequired": true,
+  "externalReviewStatus": "AWAITING_EXTERNAL_REVIEW",
+  "externalReviewStatusReason": null,
+  "delivery": {
+    "required": true,
+    "attempted": true,
+    "method": "external-review-surface",
+    "attemptedAt": "2026-08-16T14:17:22.789Z",
+    "bundlePath": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/card-closeout-bundle-reseal-r1.txt",
+    "reviewBundleIdentity": "9703d4589f84ad7953f042844770db4d86787f1cca2e90138a4ac679bdc6a97a",
+    "reviewBundleSha256": "d92162cf1ebbd5824dac48d3e071c392b5a3fe04d8efbb538502352306d15622"
+  },
+  "verdict": null,
+  "supersedes": {
+    "reviewBundleIdentity": "feb69523e7e0fe4f93726364488ad2c4d16727d47664f3247449b54b3e121d2d",
+    "reviewBundleSha256": "ae2f31b8f44f3d0d3f72478fe8d472772be61ac4e94081bb2f0b7c81fb411081",
+    "bundlePath": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/card-closeout-bundle-20260816-feb69523.txt",
+    "verdict": null
+  }
+}

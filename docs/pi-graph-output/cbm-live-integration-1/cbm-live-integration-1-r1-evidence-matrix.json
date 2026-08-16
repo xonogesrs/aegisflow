@@ -1,0 +1,260 @@
+{
+  "schema": "autoloop.cbm-live-integration.r1-acceptance-matrix/v1",
+  "cardId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
+  "candidate": {
+    "baseCommit": "d36d016771570b71e28cb93fa2f23f654b873856",
+    "candidateCommit": "251d9ae4b4559f7c824d4a6043f860c0e8e2aed8",
+    "candidateTree": "8bc33e4980f43c67fe1b4ba2d505fbae1dfd580b",
+    "closeoutCommit": "48b479d0ec1f7842f49ef1c7439bb58cb42cdfd0"
+  },
+  "mutationSet": [
+    {
+      "path": "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-card-spec.md",
+      "status": "A"
+    },
+    {
+      "path": "package.json",
+      "status": "M"
+    },
+    {
+      "path": "scripts/autoloop-memory-query.mjs",
+      "status": "A"
+    },
+    {
+      "path": "src/admission/admission-gate.mjs",
+      "status": "M"
+    },
+    {
+      "path": "test/admission/test-admission-memory-provider.mjs",
+      "status": "A"
+    },
+    {
+      "path": "test/memory/test-cbm-live-query-cli.mjs",
+      "status": "A"
+    }
+  ],
+  "suiteRun": {
+    "suites": 17,
+    "tests": 196,
+    "passed": 196,
+    "failed": 0,
+    "output": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt",
+    "durationMs": null
+  },
+  "probes": {
+    "a3a10": {
+      "admissionRetrievalAuthorized": true,
+      "providerInjected": "AVAILABLE",
+      "memoryContextState": "AVAILABLE"
+    },
+    "a2": {
+      "schema": "autoloop.memory-query/v1",
+      "state": "AVAILABLE",
+      "repositoryIdentity": "29dcbefd7d49",
+      "freshness": {
+        "indexed": true,
+        "currentTree": "c6eefb9fcd8ecaec38ec9133ebd0f37f402113e2",
+        "currentCommit": "48b479d0ec1f7842f49ef1c7439bb58cb42cdfd0",
+        "indexedTrees": [
+          "8bc33e4980f43c67fe1b4ba2d505fbae1dfd580b"
+        ],
+        "stale": true
+      },
+      "excludedRepository": 2
+    },
+    "a8a9": {
+      "state": "AVAILABLE",
+      "selected": 1,
+      "recordTrees": [
+        "8bc33e4980f4"
+      ],
+      "freshness": {
+        "indexed": true,
+        "currentTree": "c6eefb9fcd8ecaec38ec9133ebd0f37f402113e2",
+        "currentCommit": "48b479d0ec1f7842f49ef1c7439bb58cb42cdfd0",
+        "indexedTrees": [
+          "8bc33e4980f43c67fe1b4ba2d505fbae1dfd580b"
+        ],
+        "stale": true
+      }
+    },
+    "a6": {
+      "otherRepositoryIdentity": "a8d935367cac",
+      "selected": 0,
+      "excludedRepository": 6,
+      "totalCandidates": 8,
+      "ownIdentityRecordsAtRawFloor": 2
+    },
+    "a12": {
+      "journalUnchanged": true,
+      "sqliteUnchanged": true,
+      "queries": [
+        {
+          "state": "AVAILABLE",
+          "selected": 1
+        },
+        {
+          "state": "AVAILABLE",
+          "selected": 1
+        },
+        {
+          "state": "AVAILABLE",
+          "selected": 1
+        },
+        {
+          "state": "AVAILABLE",
+          "selected": 1
+        }
+      ]
+    },
+    "a13": {
+      "parity1": {
+        "ok": true,
+        "digest": "e267fdc161dd"
+      },
+      "parity2": {
+        "ok": true,
+        "digest": "e267fdc161dd"
+      },
+      "parityStable": true,
+      "records": 8
+    },
+    "a15": {
+      "corruptState": "INVALID",
+      "corruptReason": "MEMORY_STORE_INVALID:JOURNAL_CHAIN_INVALID: journal invalid: JOURNAL_CHAIN_INVALID: line 9 is not valid JSON (corrupted middle line)",
+      "corruptExit": 2,
+      "emptyState": "EMPTY_MEMORY",
+      "emptyExit": 0
+    }
+  },
+  "items": [
+    {
+      "a": "A1",
+      "requirement": "Existing LocalMemoryStore regression green (test:memory-contract + test:memory-retrieval)",
+      "probe": "17-suite formal run (serial, --test-concurrency=1)",
+      "command": "node --test --test-concurrency=1 <17 suites>",
+      "result": "196 tests, 196 pass, 0 fail",
+      "evidence": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt"
+    },
+    {
+      "a": "A2",
+      "requirement": "CLI returns valid autoloop.memory-query/v1 data",
+      "probe": "CLI --json on /tmp/autoloop",
+      "command": "node scripts/autoloop-memory-query.mjs --repo /tmp/autoloop --terms 'memory provider' --json",
+      "result": "AVAILABLE schema=autoloop.memory-query/v1",
+      "evidence": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json"
+    },
+    {
+      "a": "A3",
+      "requirement": "Production admitted execution receives provider automatically",
+      "probe": "isRetrievalAuthorized(real HIGH admission) + createGraphMemoryProvider retrieval",
+      "command": "policy-projection.isRetrievalAuthorized + graph-context.createGraphMemoryProvider",
+      "result": "authorized=true retrieval=AVAILABLE",
+      "evidence": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json"
+    },
+    {
+      "a": "A4",
+      "requirement": "retrieval_allowed=false -> denied/fail-closed",
+      "probe": "test-admission-memory-provider A4 (FAST_PATH) + direct isRetrievalAuthorized probe",
+      "command": "node --test test/admission/test-admission-memory-provider.mjs",
+      "result": "FAST_PATH retrieval_allowed=false -> isRetrievalAuthorized false; test PASS",
+      "evidence": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt"
+    },
+    {
+      "a": "A5",
+      "requirement": "retrieval_allowed=true -> retrieval succeeds",
+      "probe": "test-admission-memory-provider A5 (real repository-bound retrieval)",
+      "command": "node --test test/admission/test-admission-memory-provider.mjs",
+      "result": "provider auto-constructed; repository-bound records retrieved; test PASS",
+      "evidence": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt"
+    },
+    {
+      "a": "A6",
+      "requirement": "wrong repository identity -> EMPTY/zero, no leakage",
+      "probe": "CLI from /Volumes/NVM2T/Development/autoloop identity",
+      "command": "node scripts/autoloop-memory-query.mjs --repo /Volumes/NVM2T/Development/autoloop --json",
+      "result": "identity a8d935367cac selected=0 excludedRepository=6 totalCandidates=8; own records at RAW floor=2",
+      "evidence": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json"
+    },
+    {
+      "a": "A7",
+      "requirement": "missing exact identity -> governed population/bootstrap",
+      "probe": "CBM-4 runGraphWriteback under the exact execution identity (original dogfood)",
+      "command": "runGraphWriteback (graph.mjs) with REVIEWED trust + canonical evidence",
+      "result": "WRITEBACK_ACCEPTED 6 (1 EXECUTION + 5 CODE), tree-bound 8bc33e49; + test-cbm-live-query-cli A7",
+      "evidence": "docs/pi-graph-output/cbm-live-integration-1/dogfood-evidence.json"
+    },
+    {
+      "a": "A8",
+      "requirement": "stale index detected",
+      "probe": "freshness at HEAD 48b479d vs indexed tree 8bc33e49",
+      "command": "CLI freshness block",
+      "result": "indexed=true stale=true indexedTrees=[\"8bc33e4980f43c67fe1b4ba2d505fbae1dfd580b\"]",
+      "evidence": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json"
+    },
+    {
+      "a": "A9",
+      "requirement": "refreshed state queryable with provenance",
+      "probe": "INCLUDE_STALE surfaces tree-bound records; indexedTrees provenance",
+      "command": "CLI --validity INCLUDE_STALE",
+      "result": "selected=1 trees=[\"8bc33e4980f4\"]; currentTree=c6eefb9fcd8ecaec38ec9133ebd0f37f402113e2",
+      "evidence": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json"
+    },
+    {
+      "a": "A10",
+      "requirement": "real OMP/main executor can query CBM",
+      "probe": "provider retrieval (AVAILABLE) + CLI query by the executor process",
+      "command": "retrieveGraphMemory + CLI --json",
+      "result": "memoryContext=AVAILABLE; CLI AVAILABLE",
+      "evidence": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json"
+    },
+    {
+      "a": "A11",
+      "requirement": "real read-only sub-agent queries CBM on demand",
+      "probe": "read-only OMP scout executes the CLI (independent agent)",
+      "command": "task scout: node scripts/autoloop-memory-query.mjs ...",
+      "result": "see cbm-r1-subagent-query.json (scout report)",
+      "evidence": "docs/pi-graph-output/cbm-live-integration-1/cbm-r1-subagent-query.json"
+    },
+    {
+      "a": "A12",
+      "requirement": "parallel RO query non-mutation",
+      "probe": "4 concurrent CLI queries; journal + sqlite sha before/after",
+      "command": "4x CLI --json (concurrent) + shasum",
+      "result": "journalUnchanged=true sqliteUnchanged=true",
+      "evidence": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json"
+    },
+    {
+      "a": "A13",
+      "requirement": "persisted reopen/restart",
+      "probe": "open/close/reopen with journal parity verification",
+      "command": "LocalMemoryStore.open/verifyJournalParity/close x2",
+      "result": "parityStable=true records=8",
+      "evidence": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json"
+    },
+    {
+      "a": "A14",
+      "requirement": "journal/SQLite parity/rebuild invariants green",
+      "probe": "test-local-store + test-rebuild-determinism in formal run",
+      "command": "node --test test/memory/test-local-store.mjs test/memory/test-rebuild-determinism.mjs",
+      "result": "PASS (included in 196/196)",
+      "evidence": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt"
+    },
+    {
+      "a": "A15",
+      "requirement": "corrupted/mismatched memory fail-closed",
+      "probe": "tampered journal in temp state root -> INVALID exit 2; empty root -> EMPTY_MEMORY exit 0",
+      "command": "CLI --state-root <temp>",
+      "result": "corrupt=INVALID (MEMORY_STORE_INVALID:JOURNAL_CHAIN_INVALID: journal invalid: JOURNAL_CHAIN_INVALID: line 9 is not valid JSON (corrupted middle line)) exit=2; empty=EMPTY_MEMORY exit=0",
+      "evidence": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json"
+    },
+    {
+      "a": "A16",
+      "requirement": "architecture benchmark answers match direct-source truth",
+      "probe": "CBM structural queries vs established chain facts (cbm-chain-recon.md) + live probes",
+      "command": "CLI queries + source verification",
+      "result": "11 queries, 0 incorrect/stale",
+      "evidence": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-benchmark.json"
+    }
+  ]
+}

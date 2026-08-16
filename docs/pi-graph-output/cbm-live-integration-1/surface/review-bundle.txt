@@ -1,0 +1,362 @@
+================================================================================
+AUTOLOOP REVIEW BUNDLE (CLOSEOUT)
+================================================================================
+REVIEW_BUNDLE_SCHEMA: autoloop.review-bundle/v1
+REVIEW_BUNDLE_IDENTITY: 9703d4589f84ad7953f042844770db4d86787f1cca2e90138a4ac679bdc6a97a
+CARD_ID: AUTOLOOP-CBM-LIVE-INTEGRATION-1
+CARD_TITLE: CBM Live Integration: Harness Query Surface + Production Provider Wiring
+CARD_TYPE: implementation
+GENERATED_AT: 2026-08-16T14:17:22.771Z
+
+================================================================================
+1. Review Request
+================================================================================
+CARD_ID: AUTOLOOP-CBM-LIVE-INTEGRATION-1
+CARD_TITLE: CBM Live Integration: Harness Query Surface + Production Provider Wiring
+CARD_TYPE: implementation
+GRAPH_RUN_ID: cbm-live-integration-1
+NODE_ID: SA-V1
+PHASE_EXECUTION_ID: 
+STAGE_IDS: NOT_APPLICABLE
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+REQUESTED_REVIEW_VERDICT: PASS / REPAIR / HOLD
+This bundle is the single complete text artifact submitted for external review of card AUTOLOOP-CBM-LIVE-INTEGRATION-1.
+
+================================================================================
+1.5. Admission Decision
+================================================================================
+ADMISSION_SCHEMA: autoloop.task-admission/v1
+ADMISSION_TASK_ID: AUTOLOOP-CBM-LIVE-INTEGRATION-1-TASK
+ADMISSION_ID: 82cab55fac12bf0be48032f9e8bd618906af26e2e70cd7cfe70bdbf9f0fc403c
+ADMISSION_SIZE: M
+ADMISSION_RISK: HIGH
+ADMISSION_PROFILE: HIGH
+ADMISSION_REPAIR_BUDGET: 1
+ADMISSION_EVIDENCE_POLICY: persistent
+ADMISSION_EXTERNAL_REVIEW_REQUIRED: true
+ADMISSION_CAPABILITIES_REQUIRED: CAP.CHECKPOINT_RESUME, CAP.COLIMA_ISOLATION, CAP.DURABLE_EXECUTION, CAP.EXTERNAL_REVIEW_DELIVERY, CAP.INDEPENDENT_REVIEW, CAP.READONLY_SUBAGENT, CAP.REVIEW_BUNDLE, CAP.TASK_DECOMPOSITION, CAP.WORKTREE_ISOLATION, CAP.WRITER_SUBAGENT
+ADMISSION_CAPABILITIES_ALLOWED: CAP.MEMORY_RETRIEVAL
+ADMISSION_CAPABILITIES_DENIED: CAP.BOUNDED_REPAIR, CAP.C2D_ATOMIC_STATE, CAP.CLOSEOUT_STATE, CAP.DIRECT_EXECUTION, CAP.EVIDENCE_GENERATION, CAP.GRAPH_SCHEDULER, CAP.LIFECYCLE_GOVERNANCE, CAP.MEMORY_WRITEBACK, CAP.PI_TRANSPORT, CAP.RISK_NORMALIZATION, CAP.SECRET_SECURITY, CAP.SINGLE_WRITER_LEASE, CAP.TELEMETRY
+ADMISSION_REASONS:
+  - size=M (score 10)
+  - risk=HIGH (1 triggered signals)
+  - profile=HIGH
+
+
+================================================================================
+2. Executive Status
+================================================================================
+EXECUTIVE_STATUS: PASS
+EXECUTION_PASS: true
+VERIFIER_PASS: true
+INDEPENDENT_REVIEW_PASS: true
+REVIEW_BUNDLE_READY: true
+REVIEW_BUNDLE_DELIVERY_REQUIRED: true
+EXTERNAL_REVIEW_STATUS: AWAITING_EXTERNAL_REVIEW
+SUMMARY: 1 node(s) in cbm-live-integration-1; graph final PASS; closeout gate pending
+
+
+================================================================================
+3. Task Identity
+================================================================================
+CARD_ID: AUTOLOOP-CBM-LIVE-INTEGRATION-1
+CARD_TITLE: CBM Live Integration: Harness Query Surface + Production Provider Wiring
+CARD_TYPE: implementation
+GRAPH_RUN_ID: cbm-live-integration-1
+NODE_ID: SA-V1
+PHASE_EXECUTION_ID: NOT_APPLICABLE
+STAGE_IDS: NOT_APPLICABLE
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+
+
+================================================================================
+4. Repository and Worktree Identity
+================================================================================
+REPOSITORY: git@github.com:xonogesrs/autoloop.git
+BRANCH: governance/decomp-opt1-design-freeze
+HEAD: 48b479d0ec1f7842f49ef1c7439bb58cb42cdfd0
+TREE_SHA: c6eefb9fcd8ecaec38ec9133ebd0f37f402113e2
+WORKTREE_PATH: /private/tmp/autoloop
+BASELINE_DIRTY_DIGEST: clean
+FINAL_DIRTY_DIGEST: dirty:60589de0d383ecbc89064e6b1a9e78bf8211b8e80e604fef5fafb95e6b1379ad
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+5. Objective
+================================================================================
+Evidence reseal (R1): supersede review bundle feb69523 with complete provenance + A1-A16 evidence for card AUTOLOOP-CBM-LIVE-INTEGRATION-1. Parent card identity preserved; Current/ untouched; verdict stays null.
+
+================================================================================
+6. Authorized Scope
+================================================================================
+  - scripts/autoloop-memory-query.mjs
+  - src/admission/admission-gate.mjs
+  - test/memory/test-cbm-live-query-cli.mjs
+  - test/admission/test-admission-memory-provider.mjs
+  - package.json
+  - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-card-spec.md
+  - docs/pi-graph-output/cbm-live-integration-1/
+AUTHORIZED_PATHS: scripts/autoloop-memory-query.mjs, src/admission/admission-gate.mjs, test/memory/test-cbm-live-query-cli.mjs, test/admission/test-admission-memory-provider.mjs, package.json, docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-card-spec.md, docs/pi-graph-output/cbm-live-integration-1/
+
+
+================================================================================
+7. Explicitly Unauthorized Scope
+================================================================================
+  (none)
+UNAUTHORIZED_PATHS: NOT_APPLICABLE
+
+
+================================================================================
+8. Architecture and Design Decisions
+================================================================================
+  - ROOT-CAUSE (R4): CARD_IMPLEMENTATION_FILES rendered (none) because the FM-3 delta-v1 closeout inventory derives the current-card delta from TWO working-tree `git status --porcelain` snapshots (card-start baseline vs closeout) — it never diffs the baseline HEAD commit. The card-start baseline was captured at 2026-08-16T13:45:45Z at HEAD 251d9ae — i.e. AFTER the implementation commit 251d9ae (21:44:26 +0800) — so the 6 committed implementation files were clean at baseline and invisible to CURRENT_CARD_DELTA_PATHS. Generic gap: any card whose candidate is committed before the formal lifecycle run loses its implementation files from the bundle (no test asserts committed-changes attribution in the closeout path; change-inventory.mjs buildChangeInventory DOES diff base..HEAD but feeds only the review-job candidateIdentity, never the bundle).
+  - PROVENANCE (R1-R3): base d36d016 (21:19:48 +0800) -> candidate 251d9ae (21:44:26 +0800, tree 8bc33e49) -> closeout evidence 48b479d (21:58:42 +0800). Candidate mutation set (git diff d36d016..251d9ae, 6 files, +672 lines) equals the card-spec authorized set exactly. The review-job candidateIdentity already recorded baseHead d36d016 / currentHead 251d9ae / changedTreeIdentity ccf6ed16 / patchSha256 7feb7877 — the bundle renderer simply never consumed it.
+  - EVIDENCE (R5): the complete A1-A16 evidence existed (dogfood-evidence.json chain, suite runs, writeback population, CLI proofs) but was not ingested: the bundle's evidence inventory (section 17/18) carries only the graph-closeout snapshot, and negative/regression sections defaulted to (none) — the original runner's result carried only a summary string. This reseal attaches the full machine-readable matrix, suite output, probe results and benchmark as hashed evidence files (sections 17/18) plus negative cases (15) and regression classification (16).
+  - RESEAL GENERATION: surface-reseal (GENERATION_TYPE) — evidence/governance-metadata correction only; touches NO implementation path; REPAIR_BUDGET_USED stays 0; REPAIR_LINEAGE_SURFACE_RESEALS 0 -> 1; supersedes bundle feb69523 (identity + sha preserved, artifact retained, never overwritten).
+  - DELIVERY: Current/ (the canonical external-review surface) is preserved untouched per card requirement (its occupant feb69523 remains AWAITING_EXTERNAL_REVIEW / verdict null; the governed deliverer fail-closes on an unresolved occupant by design). This reseal's trio publishes to the card's own governed surface dir docs/pi-graph-output/cbm-live-integration-1/surface/ (revart-lc1-b2 precedent), with delivery.json recording externalReviewStatus AWAITING_EXTERNAL_REVIEW, verdict null, supersedes=feb69523.
+
+================================================================================
+9. Files Added / Modified / Deleted
+================================================================================
+CARD_IMPLEMENTATION_FILES:
+  (none)
+GRAPH_CLOSEOUT_OUTPUTS:
+    - docs/pi-graph-output/cbm-live-integration-1/closeout-state.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm-live-integration-1/card-closeout-bundle-reseal-r1.txt
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-evidence-matrix.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-benchmark.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-r1-subagent-query.json
+    - docs/pi-graph-output/cbm-live-integration-1/surface/review-bundle.txt
+    - docs/pi-graph-output/cbm-live-integration-1/surface/delivery.json
+    - docs/pi-graph-output/cbm-live-integration-1/surface/evidence.json
+PRE_EXISTING_DIRTY_FILES:
+  (none)
+CARD_INVENTORY_MODEL: delta-v1
+ATTRIBUTION_MODEL: content-v1
+BASELINE_HEAD: 48b479d0ec1f7842f49ef1c7439bb58cb42cdfd0
+BASELINE_DIRTY_DIGEST: clean
+BASELINE_CONTENT_DIGEST: 44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a
+BASELINE_DIRTY_PATHS:
+  (none)
+CURRENT_CARD_DELTA_PATHS:
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-benchmark.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-evidence-matrix.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-r1-subagent-query.json
+    - docs/pi-graph-output/cbm-live-integration-1/closeout-state.json
+DELTA_ATTRIBUTION:
+    - MODIFIED docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json
+    - ADDED docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-benchmark.json
+    - ADDED docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-evidence-matrix.json
+    - ADDED docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json
+    - ADDED docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt
+    - ADDED docs/pi-graph-output/cbm-live-integration-1/cbm-r1-subagent-query.json
+    - MODIFIED docs/pi-graph-output/cbm-live-integration-1/closeout-state.json
+ADDED:
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-benchmark.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-evidence-matrix.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-r1-subagent-query.json
+MODIFIED:
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm-live-integration-1/closeout-state.json
+DELETED:
+  (none)
+
+================================================================================
+10. Diff Summary
+================================================================================
+Graph cbm-live-integration-1: 1 node(s) all PASS; 5 added / 2 modified / 0 deleted (worktree outputs)
+
+================================================================================
+11. Execution Results
+================================================================================
+NODES_EXECUTED:
+    - test/memory/test-cbm-live-query-cli.mjs
+    - test/admission/test-admission-memory-provider.mjs
+    - test/memory/test-canonical.mjs
+    - test/memory/test-jsonl.mjs
+    - test/memory/test-record-schema.mjs
+    - test/memory/test-security.mjs
+    - test/memory/test-sqlite.mjs
+    - test/memory/test-trust-validity.mjs
+    - test/memory/test-query-schema.mjs
+    - test/memory/test-local-store.mjs
+    - test/memory/test-retrieval.mjs
+    - test/memory/test-snapshot.mjs
+    - test/memory/test-rebuild-determinism.mjs
+    - test/memory/test-retrieval-security.mjs
+    - test/memory/test-graph-context.mjs
+    - test/admission/test-admission-gate.mjs
+    - test/governance/test-review-lifecycle.mjs
+    - graph node SA-V1:verifier
+NODES_PASSED: 1
+NODES_FAILED: 0
+NODES_TOTAL: 1
+EMBEDDED_TESTS_TOTAL: 196
+EMBEDDED_TESTS_PASSED: 196
+EMBEDDED_TESTS_FAILED: 0
+EXECUTION_PASS: true
+
+
+================================================================================
+12. Verification Results
+================================================================================
+VERIFIER_PASS: true
+VERIFIER_RESULT: PASS
+VERIFIER_SUMMARY: scheduler verdict PASS; join: SA-V1:PASS
+
+
+================================================================================
+13. Independent Review Results
+================================================================================
+REVIEW_PASS: true
+REVIEW_RESULT: PASS
+REVIEW_RESULT_IDENTITY: 5b35157f1534c43904ff537a2e4093244d0c61b219ce53e732753ed6588f8ec9
+BLOCKING_FINDINGS: []
+REVIEW_SUMMARY: formal verification: 196 tests green; mutation set == spec; provider wired (memory state AVAILABLE)
+
+
+================================================================================
+14. Repair Attempts
+================================================================================
+  NOT_APPLICABLE (no repair attempts)
+REPAIR_BUDGET_MAX: 1
+REPAIR_BUDGET_USED: 0
+GENERATION_TYPE: surface-reseal
+REPAIR_LINEAGE_REPAIR_ITERATIONS: 0
+REPAIR_LINEAGE_SURFACE_RESEALS: 1
+RESEAL_TOUCHED_PATHS:
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-benchmark.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-evidence-matrix.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-r1-subagent-query.json
+    - docs/pi-graph-output/cbm-live-integration-1/closeout-state.json
+SUPERSEDES_BUNDLE_IDENTITY: feb69523e7e0fe4f93726364488ad2c4d16727d47664f3247449b54b3e121d2d
+SUPERSEDES_BUNDLE_SHA256: ae2f31b8f44f3d0d3f72478fe8d472772be61ac4e94081bb2f0b7c81fb411081
+SUPERSEDES_BUNDLE_PATH: /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/card-closeout-bundle-20260816-feb69523.txt
+SUPERSEDES_BUNDLE_VERDICT: NOT_APPLICABLE
+
+
+================================================================================
+15. Negative and Fail-Closed Cases
+================================================================================
+  - A4 deny: FAST_PATH admission (memory_retrieval_allowed=false) -> no provider; isRetrievalAuthorized false (test-admission-memory-provider A4 PASS).
+  - A6 isolation: query from foreign repository identity (a8d93536) -> excludedRepository=6, zero cross-identity records; own records only visible under own identity (RAW floor, 2 EXECUTION).
+  - A15 corruption: tampered journal -> state INVALID, MEMORY_STORE_INVALID:JOURNAL_CHAIN_INVALID (line 9 not valid JSON), CLI exit 2.
+  - A15 empty: missing store -> EMPTY_MEMORY (valid explicit answer), CLI exit 0 — never silently empty.
+  - A12 non-mutation: 4 concurrent RO CLI queries -> journal.jsonl + memory.db byte-identical (sha256 unchanged).
+  - A8 stale-at-HEAD: records bound to tree 8bc33e49 are excluded at retrieval (selected 0, tree-baseline validity) while current tree c6eefb9f; INCLUDE_STALE surfaces them with provenance — never labeled current.
+  - B-1 environment: OMP scout node_repl sandbox cannot create SQLite WAL sidecars (CANTOPEN) — store verified healthy from normal processes (journal parity true).
+
+================================================================================
+16. Regression Results
+================================================================================
+  - suite=CARD-TARGETED: test/memory/test-cbm-live-query-cli.mjs (A2/A6/A7/A8/A9/A15) tests=5 pass=5 fail=0
+  - suite=CARD-TARGETED: test/admission/test-admission-memory-provider.mjs (A3/A4/A5) tests=3 pass=3 fail=0
+  - suite=PRE-EXISTING: memory contract/retrieval suites (canonical 11, jsonl 12, record-schema 13, security 10, sqlite 14, trust-validity 20, query-schema 11, local-store 18, retrieval 24, snapshot 6, rebuild-determinism 5, retrieval-security 14, graph-context 7) tests=165 pass=165 fail=0
+  - suite=PRE-EXISTING: test/admission/test-admission-gate.mjs tests=10 pass=10 fail=0
+  - suite=PRE-EXISTING: test/governance/test-review-lifecycle.mjs tests=13 pass=13 fail=0
+REGRESSION_OVERALL: 196/196 pass (0 fail) across the 17-suite formal run (serial, --test-concurrency=1). Zero failures -> no INTRODUCED/PRE-EXISTING/ENVIRONMENT_BOUND/UNRELATED classification required; every suite green. CARD-TARGETED suites: 8 tests (A2/A6/A7/A8/A9/A15 x5 + A3/A4/A5 x3). PRE-EXISTING regression: 188 tests (memory 165, admission-gate 10, review-lifecycle 13). Baseline comparison: the same 17 suites passed in the original formal run (bundle claim '196 tests green') — independently re-run here at reseal time; identical outcome.
+
+
+================================================================================
+17. Evidence Inventory
+================================================================================
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-evidence-matrix.json
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-benchmark.json
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/dogfood-evidence.json
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/card-closeout-bundle-20260816-feb69523.txt
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-r1-subagent-query.json
+EVIDENCE_MANIFEST_DIGEST: 4ec6b52d55aff420267a1e9bc10d0355bf0cccca969d324571f499428dede965
+
+
+================================================================================
+18. Evidence Hashes
+================================================================================
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json
+      sha256=2a4a941de5e803b6b076cc73eab1082c5e234a03c0242f490a42a3f3e3cc81d3
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-evidence-matrix.json
+      sha256=90e6e4811f3f0be47275044935193e0368d648ea7423bb21af39c2230d2f550e
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt
+      sha256=cefe087778e9ad27c36674ef3091af23b954e11adc4a40ff1d28d4c11b7032cb
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json
+      sha256=4c63a4a6d9c7b582bf2caa758ef1b0a4b1155f5be155bf83030ba3a5530289a1
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-benchmark.json
+      sha256=e66a7105146e3bf0d66c60acec65485a1874b4b7d389ececa3efe245c27913e2
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/dogfood-evidence.json
+      sha256=8c8a814660858689ef2db7a6addef977e2b7766744d9d52e1354be85b450c757
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/card-closeout-bundle-20260816-feb69523.txt
+      sha256=fff4c93497b802a191d97346d44c60c5f7adc15baccc8788cf182ba6a589f198
+  - /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-r1-subagent-query.json
+      sha256=905a2bac3ef83c350bd3aa6582dea8893c9cbf44a3ea8896dfd0dfe7de0ce188
+
+================================================================================
+19. Security and Secret Scan
+================================================================================
+SECRET_SCAN_RESULT: clean
+SECRET_SCAN_NOTES: NOT_APPLICABLE
+SECRET_DETECTED: false
+INGESTION_ALLOWLIST: structured graph node results, review-agent results, lifecycle transitions, closeout evidence snapshot
+INGESTION_DENYLIST: secrets/credentials/private keys/logs/db contents/user data, unvalidated free-text stdout
+
+================================================================================
+20. Repository Integrity
+================================================================================
+HEAD: 48b479d0ec1f7842f49ef1c7439bb58cb42cdfd0
+TREE_SHA: c6eefb9fcd8ecaec38ec9133ebd0f37f402113e2
+WORKTREE_CLEAN: false
+DIRTY_PATHS: docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json, docs/pi-graph-output/cbm-live-integration-1/closeout-state.json, docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-benchmark.json, docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-evidence-matrix.json, docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json, docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt, docs/pi-graph-output/cbm-live-integration-1/cbm-r1-subagent-query.json
+UNTRACKED_FILES: docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-benchmark.json, docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-evidence-matrix.json, docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json, docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt, docs/pi-graph-output/cbm-live-integration-1/cbm-r1-subagent-query.json
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+21. Known Risks and Limitations
+================================================================================
+  - GENERIC_REVIEW_PROVENANCE_MODEL_GAP: the FM-3 delta-v1 closeout inventory cannot attribute already-committed candidate work (working-tree snapshot model only). Affects ANY card that commits before its formal lifecycle run — not card-specific. Documented here; fix belongs to a dedicated Review Lifecycle provenance card (out of scope for this reseal).
+  - The reseal's own FM-3 delta covers only this reseal's outputs (baseline captured clean at 48b479d); the implementation files remain invisible to section 9 by the same generic gap — the complete mutation provenance is carried in this bundle's evidence files (matrix + probes).
+  - A11 sub-agent proof subject to the OMP sandbox WAL limitation (B-1); the CLI surface itself is the production query path.
+  - Store freshness: at reseal time the index covers tree 8bc33e49; current tree c6eefb9f (48b479d) is stale-bound by design until the governed writeback re-runs at the new tree (A8/A9 semantics, no watcher).
+
+================================================================================
+22. Rollback Procedure
+================================================================================
+The superseded bundle feb69523 is retained byte-identical (never overwritten); retire the reseal bundle to .superseded/ or re-run the reseal gate with a corrected contract. Current/ is untouched by this reseal.
+
+================================================================================
+23. Open Questions
+================================================================================
+  (none)
+
+================================================================================
+24. Recommended Next Step
+================================================================================
+External reviewer: review this superseding bundle (SUPERSEDES -> feb69523). Evidence chain: /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-evidence-matrix.json (A1-A16 matrix), /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt (suite output), /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json (live probes), /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-benchmark.json (benchmark), docs/pi-graph-output/cbm-live-integration-1/surface/ (delivery trio). On PASS: proceed to the CBM live-integration external verdict; then Parent->Child repetition-governance design.
+
+================================================================================
+25. External Reviewer Verdict Template
+================================================================================
+VERDICT: PASS / REPAIR / HOLD
+REVIEWER_IDENTITY: <reviewer>
+REVIEWED_AT: <date>
+FINDINGS_DIGEST: <sha256>
+NEXT_ACTION_IF_PASS: <next card>
+NEXT_ACTION_IF_REPAIR: <bounded repair within budget>
+NEXT_ACTION_IF_HOLD: <stop downstream>
+
+
+=== END OF REVIEW BUNDLE ===
+REVIEW_BUNDLE_SHA256: d92162cf1ebbd5824dac48d3e071c392b5a3fe04d8efbb538502352306d15622

@@ -6,8 +6,8 @@
     "cardType": "implementation"
   },
   "requiresReview": true,
-  "reviewRequiredAt": "2026-08-16T13:45:45.125Z",
-  "outDir": "/private/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1",
+  "reviewRequiredAt": "2026-08-16T14:17:22.717Z",
+  "outDir": "docs/pi-graph-output/cbm-live-integration-1",
   "authorizedScope": [
     "scripts/autoloop-memory-query.mjs",
     "src/admission/admission-gate.mjs",
@@ -17,56 +17,126 @@
     "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-card-spec.md",
     "docs/pi-graph-output/cbm-live-integration-1/"
   ],
+  "unauthorizedScope": [],
   "baseline": {
     "schema": "autoloop.card-inventory.baseline/v1",
     "cardId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
-    "capturedAt": "2026-08-16T13:45:45.100Z",
+    "capturedAt": "2026-08-16T14:17:15.713Z",
     "repository": "git@github.com:xonogesrs/autoloop.git",
     "branch": "governance/decomp-opt1-design-freeze",
-    "head": "251d9ae4b4559f7c824d4a6043f860c0e8e2aed8",
-    "treeSha": "8bc33e4980f43c67fe1b4ba2d505fbae1dfd580b",
+    "head": "48b479d0ec1f7842f49ef1c7439bb58cb42cdfd0",
+    "treeSha": "c6eefb9fcd8ecaec38ec9133ebd0f37f402113e2",
     "worktreePath": "/private/tmp/autoloop",
-    "dirtyPaths": [
-      "docs/pi-graph-output/cbm-live-integration-1/admission.json",
-      "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-authority.json"
-    ],
-    "untrackedFiles": [
-      "docs/pi-graph-output/cbm-live-integration-1/admission.json",
-      "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-authority.json"
-    ],
-    "canonicalLines": [
-      "?? docs/pi-graph-output/cbm-live-integration-1/admission.json",
-      "?? docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-authority.json"
-    ],
-    "dirtyDigest": "dirty:9ecadb443d51a9a504834d7ebd991798650bbf37cf9a9154360e692d36f6992a",
+    "dirtyPaths": [],
+    "untrackedFiles": [],
+    "canonicalLines": [],
+    "dirtyDigest": "clean",
     "attributionModel": "content-v1",
-    "pathShas": {
-      "docs/pi-graph-output/cbm-live-integration-1/admission.json": "adba13ad80be29ebd5960c8860dd08483d9a92b4a3c87c4f17ac42bb994407be",
-      "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-authority.json": "b97507b1200e282eabdadd6c3b3c9755b496317694ac8e190134701f94c7cab9"
-    },
-    "contentDigest": "203ee0e89c197a330918fa1153f7529428ba8998a613d8d0762f9c7d0d779dee"
+    "pathShas": {},
+    "contentDigest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
   },
   "reviewCloseout": {
     "schema": "autoloop.review-closeout/v1",
     "bindingDigest": "ba4354f4ffdf7676250f683c8b46986e13be32134704c5501d636448122dc0cc",
     "admissionId": "82cab55fac12bf0be48032f9e8bd618906af26e2e70cd7cfe70bdbf9f0fc403c"
   },
+  "repairBudgetMaxAttempts": 1,
   "cardFiles": {
     "closeoutOutputs": [
       "docs/pi-graph-output/cbm-live-integration-1/closeout-state.json",
       "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json",
-      "docs/pi-graph-output/cbm-live-integration-1/card-closeout-bundle-20260816-feb69523.txt"
-    ]
+      "docs/pi-graph-output/cbm-live-integration-1/card-closeout-bundle-reseal-r1.txt",
+      "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-evidence-matrix.json",
+      "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt",
+      "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json",
+      "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-benchmark.json",
+      "docs/pi-graph-output/cbm-live-integration-1/cbm-r1-subagent-query.json",
+      "docs/pi-graph-output/cbm-live-integration-1/surface/review-bundle.txt",
+      "docs/pi-graph-output/cbm-live-integration-1/surface/delivery.json",
+      "docs/pi-graph-output/cbm-live-integration-1/surface/evidence.json"
+    ],
+    "cardImplementation": [],
+    "preExistingDirty": []
   },
+  "supersedes": {
+    "reviewBundleIdentity": "feb69523e7e0fe4f93726364488ad2c4d16727d47664f3247449b54b3e121d2d",
+    "reviewBundleSha256": "ae2f31b8f44f3d0d3f72478fe8d472772be61ac4e94081bb2f0b7c81fb411081",
+    "bundlePath": "/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/card-closeout-bundle-20260816-feb69523.txt",
+    "verdict": null
+  },
+  "generationType": "surface-reseal",
+  "surfaceDir": "docs/pi-graph-output/cbm-live-integration-1/surface",
+  "agentIdentity": "controller",
+  "objective": "Evidence reseal (R1): supersede review bundle feb69523 with complete provenance + A1-A16 evidence for card AUTOLOOP-CBM-LIVE-INTEGRATION-1. Parent card identity preserved; Current/ untouched; verdict stays null.",
+  "designDecisions": [
+    "ROOT-CAUSE (R4): CARD_IMPLEMENTATION_FILES rendered (none) because the FM-3 delta-v1 closeout inventory derives the current-card delta from TWO working-tree `git status --porcelain` snapshots (card-start baseline vs closeout) — it never diffs the baseline HEAD commit. The card-start baseline was captured at 2026-08-16T13:45:45Z at HEAD 251d9ae — i.e. AFTER the implementation commit 251d9ae (21:44:26 +0800) — so the 6 committed implementation files were clean at baseline and invisible to CURRENT_CARD_DELTA_PATHS. Generic gap: any card whose candidate is committed before the formal lifecycle run loses its implementation files from the bundle (no test asserts committed-changes attribution in the closeout path; change-inventory.mjs buildChangeInventory DOES diff base..HEAD but feeds only the review-job candidateIdentity, never the bundle).",
+    "PROVENANCE (R1-R3): base d36d016 (21:19:48 +0800) -> candidate 251d9ae (21:44:26 +0800, tree 8bc33e49) -> closeout evidence 48b479d (21:58:42 +0800). Candidate mutation set (git diff d36d016..251d9ae, 6 files, +672 lines) equals the card-spec authorized set exactly. The review-job candidateIdentity already recorded baseHead d36d016 / currentHead 251d9ae / changedTreeIdentity ccf6ed16 / patchSha256 7feb7877 — the bundle renderer simply never consumed it.",
+    "EVIDENCE (R5): the complete A1-A16 evidence existed (dogfood-evidence.json chain, suite runs, writeback population, CLI proofs) but was not ingested: the bundle's evidence inventory (section 17/18) carries only the graph-closeout snapshot, and negative/regression sections defaulted to (none) — the original runner's result carried only a summary string. This reseal attaches the full machine-readable matrix, suite output, probe results and benchmark as hashed evidence files (sections 17/18) plus negative cases (15) and regression classification (16).",
+    "RESEAL GENERATION: surface-reseal (GENERATION_TYPE) — evidence/governance-metadata correction only; touches NO implementation path; REPAIR_BUDGET_USED stays 0; REPAIR_LINEAGE_SURFACE_RESEALS 0 -> 1; supersedes bundle feb69523 (identity + sha preserved, artifact retained, never overwritten).",
+    "DELIVERY: Current/ (the canonical external-review surface) is preserved untouched per card requirement (its occupant feb69523 remains AWAITING_EXTERNAL_REVIEW / verdict null; the governed deliverer fail-closes on an unresolved occupant by design). This reseal's trio publishes to the card's own governed surface dir docs/pi-graph-output/cbm-live-integration-1/surface/ (revart-lc1-b2 precedent), with delivery.json recording externalReviewStatus AWAITING_EXTERNAL_REVIEW, verdict null, supersedes=feb69523."
+  ],
+  "negativeCases": [
+    "A4 deny: FAST_PATH admission (memory_retrieval_allowed=false) -> no provider; isRetrievalAuthorized false (test-admission-memory-provider A4 PASS).",
+    "A6 isolation: query from foreign repository identity (a8d93536) -> excludedRepository=6, zero cross-identity records; own records only visible under own identity (RAW floor, 2 EXECUTION).",
+    "A15 corruption: tampered journal -> state INVALID, MEMORY_STORE_INVALID:JOURNAL_CHAIN_INVALID (line 9 not valid JSON), CLI exit 2.",
+    "A15 empty: missing store -> EMPTY_MEMORY (valid explicit answer), CLI exit 0 — never silently empty.",
+    "A12 non-mutation: 4 concurrent RO CLI queries -> journal.jsonl + memory.db byte-identical (sha256 unchanged).",
+    "A8 stale-at-HEAD: records bound to tree 8bc33e49 are excluded at retrieval (selected 0, tree-baseline validity) while current tree c6eefb9f; INCLUDE_STALE surfaces them with provenance — never labeled current.",
+    "B-1 environment: OMP scout node_repl sandbox cannot create SQLite WAL sidecars (CANTOPEN) — store verified healthy from normal processes (journal parity true)."
+  ],
+  "regression": [
+    {
+      "suite": "CARD-TARGETED: test/memory/test-cbm-live-query-cli.mjs (A2/A6/A7/A8/A9/A15)",
+      "tests": 5,
+      "pass": 5,
+      "fail": 0
+    },
+    {
+      "suite": "CARD-TARGETED: test/admission/test-admission-memory-provider.mjs (A3/A4/A5)",
+      "tests": 3,
+      "pass": 3,
+      "fail": 0
+    },
+    {
+      "suite": "PRE-EXISTING: memory contract/retrieval suites (canonical 11, jsonl 12, record-schema 13, security 10, sqlite 14, trust-validity 20, query-schema 11, local-store 18, retrieval 24, snapshot 6, rebuild-determinism 5, retrieval-security 14, graph-context 7)",
+      "tests": 165,
+      "pass": 165,
+      "fail": 0
+    },
+    {
+      "suite": "PRE-EXISTING: test/admission/test-admission-gate.mjs",
+      "tests": 10,
+      "pass": 10,
+      "fail": 0
+    },
+    {
+      "suite": "PRE-EXISTING: test/governance/test-review-lifecycle.mjs",
+      "tests": 13,
+      "pass": 13,
+      "fail": 0
+    }
+  ],
+  "regressionSummary": "196/196 pass (0 fail) across the 17-suite formal run (serial, --test-concurrency=1). Zero failures -> no INTRODUCED/PRE-EXISTING/ENVIRONMENT_BOUND/UNRELATED classification required; every suite green. CARD-TARGETED suites: 8 tests (A2/A6/A7/A8/A9/A15 x5 + A3/A4/A5 x3). PRE-EXISTING regression: 188 tests (memory 165, admission-gate 10, review-lifecycle 13). Baseline comparison: the same 17 suites passed in the original formal run (bundle claim '196 tests green') — independently re-run here at reseal time; identical outcome.",
+  "risks": [
+    "GENERIC_REVIEW_PROVENANCE_MODEL_GAP: the FM-3 delta-v1 closeout inventory cannot attribute already-committed candidate work (working-tree snapshot model only). Affects ANY card that commits before its formal lifecycle run — not card-specific. Documented here; fix belongs to a dedicated Review Lifecycle provenance card (out of scope for this reseal).",
+    "The reseal's own FM-3 delta covers only this reseal's outputs (baseline captured clean at 48b479d); the implementation files remain invisible to section 9 by the same generic gap — the complete mutation provenance is carried in this bundle's evidence files (matrix + probes)."
+  ],
+  "limitations": [
+    "A11 sub-agent proof subject to the OMP sandbox WAL limitation (B-1); the CLI surface itself is the production query path.",
+    "Store freshness: at reseal time the index covers tree 8bc33e49; current tree c6eefb9f (48b479d) is stale-bound by design until the governed writeback re-runs at the new tree (A8/A9 semantics, no watcher)."
+  ],
+  "rollbackProcedure": "The superseded bundle feb69523 is retained byte-identical (never overwritten); retire the reseal bundle to .superseded/ or re-run the reseal gate with a corrected contract. Current/ is untouched by this reseal.",
+  "openQuestions": [],
+  "recommendedNextStep": "External reviewer: review this superseding bundle (SUPERSEDES -> feb69523). Evidence chain: /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-evidence-matrix.json (A1-A16 matrix), /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-suite-output.txt (suite output), /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-probes.json (live probes), /tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-r1-benchmark.json (benchmark), docs/pi-graph-output/cbm-live-integration-1/surface/ (delivery trio). On PASS: proceed to the CBM live-integration external verdict; then Parent->Child repetition-governance design.",
   "closeout": {
     "status": "APPLIED",
     "final": "PASS",
     "stage": "REVIEW_BUNDLE_READY",
-    "bundleIdentity": "feb69523e7e0fe4f93726364488ad2c4d16727d47664f3247449b54b3e121d2d",
-    "bundleSha256": "ae2f31b8f44f3d0d3f72478fe8d472772be61ac4e94081bb2f0b7c81fb411081",
+    "bundleIdentity": "9703d4589f84ad7953f042844770db4d86787f1cca2e90138a4ac679bdc6a97a",
+    "bundleSha256": "d92162cf1ebbd5824dac48d3e071c392b5a3fe04d8efbb538502352306d15622",
     "externalReviewStatus": "AWAITING_EXTERNAL_REVIEW",
     "verdict": null,
-    "appliedAt": "2026-08-16T13:46:39.250Z",
+    "appliedAt": "2026-08-16T14:17:22.790Z",
     "blockedReason": null
   }
 }

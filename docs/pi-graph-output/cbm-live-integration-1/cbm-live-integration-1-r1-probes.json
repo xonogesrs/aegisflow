@@ -1,0 +1,86 @@
+{
+  "a3a10": {
+    "admissionRetrievalAuthorized": true,
+    "providerInjected": "AVAILABLE",
+    "memoryContextState": "AVAILABLE"
+  },
+  "a2": {
+    "schema": "autoloop.memory-query/v1",
+    "state": "AVAILABLE",
+    "repositoryIdentity": "29dcbefd7d49",
+    "freshness": {
+      "indexed": true,
+      "currentTree": "c6eefb9fcd8ecaec38ec9133ebd0f37f402113e2",
+      "currentCommit": "48b479d0ec1f7842f49ef1c7439bb58cb42cdfd0",
+      "indexedTrees": [
+        "8bc33e4980f43c67fe1b4ba2d505fbae1dfd580b"
+      ],
+      "stale": true
+    },
+    "excludedRepository": 2
+  },
+  "a8a9": {
+    "state": "AVAILABLE",
+    "selected": 1,
+    "recordTrees": [
+      "8bc33e4980f4"
+    ],
+    "freshness": {
+      "indexed": true,
+      "currentTree": "c6eefb9fcd8ecaec38ec9133ebd0f37f402113e2",
+      "currentCommit": "48b479d0ec1f7842f49ef1c7439bb58cb42cdfd0",
+      "indexedTrees": [
+        "8bc33e4980f43c67fe1b4ba2d505fbae1dfd580b"
+      ],
+      "stale": true
+    }
+  },
+  "a6": {
+    "otherRepositoryIdentity": "a8d935367cac",
+    "selected": 0,
+    "excludedRepository": 6,
+    "totalCandidates": 8,
+    "ownIdentityRecordsAtRawFloor": 2
+  },
+  "a12": {
+    "journalUnchanged": true,
+    "sqliteUnchanged": true,
+    "queries": [
+      {
+        "state": "AVAILABLE",
+        "selected": 1
+      },
+      {
+        "state": "AVAILABLE",
+        "selected": 1
+      },
+      {
+        "state": "AVAILABLE",
+        "selected": 1
+      },
+      {
+        "state": "AVAILABLE",
+        "selected": 1
+      }
+    ]
+  },
+  "a13": {
+    "parity1": {
+      "ok": true,
+      "digest": "e267fdc161dd"
+    },
+    "parity2": {
+      "ok": true,
+      "digest": "e267fdc161dd"
+    },
+    "parityStable": true,
+    "records": 8
+  },
+  "a15": {
+    "corruptState": "INVALID",
+    "corruptReason": "MEMORY_STORE_INVALID:JOURNAL_CHAIN_INVALID: journal invalid: JOURNAL_CHAIN_INVALID: line 9 is not valid JSON (corrupted middle line)",
+    "corruptExit": 2,
+    "emptyState": "EMPTY_MEMORY",
+    "emptyExit": 0
+  }
+}

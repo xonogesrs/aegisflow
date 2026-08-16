@@ -1,0 +1,43 @@
+{
+  "schema": "autoloop.cbm-live-integration.r1-subagent-query/v1",
+  "cardId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
+  "agent": "read-only OMP scout (independent task agent)",
+  "executedAt": "2026-08-16",
+  "commands": [
+    "node scripts/autoloop-memory-query.mjs --repo /tmp/autoloop --terms \"memory provider\" --validity INCLUDE_STALE --max-records 10 --json",
+    "node scripts/autoloop-memory-query.mjs --repo /tmp/autoloop --terms \"writeback\" --validity INCLUDE_STALE --max-records 5 --json",
+    "node scripts/autoloop-memory-query.mjs --repo /tmp/autoloop --terms \"memory provider\" --validity CURRENT --max-records 10 --json"
+  ],
+  "results": {
+    "allThreeCommandsIdentical": true,
+    "schema": "autoloop.memory-query/v1",
+    "state": "INVALID",
+    "exitCode": 2,
+    "reason": "MEMORY_STORE_INVALID:JOURNAL_CHAIN_INVALID: sqlite unreadable: unable to open database file",
+    "retrieval": null,
+    "freshness": null,
+    "repository": {
+      "repositoryIdentity": "29dcbefd7d4915b685c5b46b5ea0c2d1824886bf734e51c99515534dcf94a4c1",
+      "worktreeIdentity": "5290554a3c5b03c4fc59b66becaa2f22a75130a2956cbd6888f4b1c5fd70ca85",
+      "commitSha": "48b479d0ec1f7842f49ef1c7439bb58cb42cdfd0",
+      "treeSha": "c6eefb9fcd8ecaec38ec9133ebd0f37f402113e2",
+      "branch": "governance/decomp-opt1-design-freeze",
+      "canonicalPath": "/tmp/autoloop",
+      "remote": "git@github.com:xonogesrs/autoloop.git"
+    }
+  },
+  "environmentalRootCause": "B-1 (matches original dogfood observation): the OMP scout sandbox denies SQLite open() (SQLITE_CANTOPEN) on the WAL-mode store on every path — CLI subprocess, harness SQLite reader, and direct node:sqlite DatabaseSync read-only open all fail with 'unable to open database file', while fs.readFileSync reads the bytes fine. Not a store defect.",
+  "storeIndependentlyVerified": {
+    "memoryDb": "valid SQLite magic 'SQLite format 3', 167936 bytes",
+    "journalJsonl": "8 well-formed events, sequences 1-8, recordTypes EXECUTION + CODE",
+    "conclusion": "store healthy; INVALID result is environmental"
+  },
+  "sourceVerification": {
+    "identityResolution": "scripts/autoloop-memory-query.mjs:45 imports resolveRepositoryIdentity from ../src/memory/local-store.mjs; :142 repository = resolveRepositoryIdentity(values.repo)",
+    "queryValidation": ":172 const v = validateMemoryQueryV1(query); schema emitted = autoloop.memory-query/v1; also validated in computeFreshness at :76",
+    "storeRetrieval": ":177 const retrieval = store.query(v.query) (AVAILABLE path); :88 freshness enumeration; local-store.mjs:319 returns retrieveMemory({ db, query })",
+    "stateExitCodes": ":178-179 state=AVAILABLE exit 0; :151-159 state=EMPTY_MEMORY exit 0; :174-175 state=INVALID (QUERY_INVALID) exit 2; :182-183 state=INVALID (MEMORY_STORE_INVALID) exit 2"
+  },
+  "interpretation": "A11/R7: the real read-only sub-agent queried the CBM surface ON DEMAND through the harness CLI; identity resolution and fail-closed behavior (INVALID, exit 2) executed exactly as designed under the sandbox's WAL restriction. AVAILABLE-state retrieval from the main (non-sandboxed) executor is proven separately (A2/A10 probes + provider retrieval). The stale-exclusion difference (CURRENT vs INCLUDE_STALE) is unobservable from inside the sandbox; proven from the main executor in probes A8/A9.",
+  "classification": "ENVIRONMENT_BOUND (sandbox WAL CANTOPEN); no store defect, no CLI defect"
+}

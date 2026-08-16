@@ -1,0 +1,31 @@
+{
+  "schema": "autoloop.cbm-live-integration.r1-benchmark/v1",
+  "queriesIssued": 11,
+  "filesSurfaced": [
+    "src/admission/admission-gate.mjs",
+    "scripts/autoloop-memory-query.mjs",
+    "test/memory/test-cbm-live-query-cli.mjs",
+    "test/admission/test-admission-memory-provider.mjs",
+    "package.json"
+  ],
+  "incorrectOrStaleResults": 0,
+  "grepsAvoided": [
+    "path/symbol queries replaced grep for the card's own changed files"
+  ],
+  "sourceReadsStillRequired": [
+    "review-lifecycle ownership/ACCEPTED mint/out_dir resolution — no records for non-changed modules"
+  ],
+  "liveProbes": [
+    "a3a10",
+    "a2",
+    "a8a9",
+    "a6",
+    "a12",
+    "a13",
+    "a15"
+  ],
+  "observations": [
+    "B-1: OMP scout sandbox (node_repl kernel, restricted filesystem) cannot create WAL sidecars -> SQLite CANTOPEN from inside that sandbox; store healthy from normal processes (parity true).",
+    "B-3: lifecycle-module facts (ensureCurrentReviewJob owner, ACCEPTED mint, out_dir resolution) are NOT in memory — CBM returned honest empty; source reads still required."
+  ]
+}
