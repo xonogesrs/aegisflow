@@ -33,6 +33,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSy
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { scanForSecrets, sha256Text } from "../evidence/run-evidence-store.mjs";
+import { publishHumanReport } from "./human-report.mjs";
 import { readReviewJob, findingsPath, verdictPath, updateReviewJob } from "./review-job.mjs";
 import {
   QUEUE_HOLDS,
@@ -758,6 +759,40 @@ function touchLatest(entry, surfaceDir) {
 }
 
 /**
+ * REVIEW-LATEST-HUMAN-HANDOFF-1 — publish the human-facing latest report for
+ * a delivered formal review bundle（F1）: Latest Human Report = the new
+ * bundle whether it landed CURRENT or QUEUED. This is INDEPENDENT of review
+ * scheduling: a publication failure never fails the delivery（best-effort;
+ * the error surfaces on the delivery result as humanReportError）. The human
+ * dir derives from the resolved surface dir, so env-isolated surfaces（tests
+ * / CI）automatically isolate the human surface too.
+ */
+function publishHumanForBundle({ dir, bundlePath, state, source, generation, jobId }) {
+  try {
+    const cardId = source?.task?.cardId ?? bundleCardIdentity(bundlePath).cardId ?? null;
+    if (!cardId) return "human_report_skipped:card_id_unknown";
+    const raw = readFileSync(bundlePath, "utf8");
+    const generatedAt = raw.match(/^GENERATED_AT:\s*(.+)$/m)?.[1]?.trim() ?? null;
+    const pub = publishHumanReport({
+      cardId,
+      generation: generation ?? null,
+      jobId: jobId ?? null,
+      reportType: "formal-review-bundle",
+      reportIdentity: state?.delivery?.reviewBundleIdentity ?? null,
+      sourceReportSha256: state?.delivery?.reviewBundleSha256 ?? null,
+      sourcePath: bundlePath,
+      requiresExternalReview: true,
+      currentReviewState: state?.externalReviewStatus ?? null,
+      createdAt: generatedAt ?? undefined,
+      surfaceDir: dir,
+    });
+    return pub.ok ? null : `human_report_failed:${pub.reason}`;
+  } catch (e) {
+    return `human_report_error:${String(e?.message ?? e).slice(0, 150)}`;
+  }
+}
+
+/**
  * Deliver the current valid bundle to the fixed external-review surface
  *（Current/）: review-bundle.txt + delivery.json + evidence.json.
  *
@@ -856,6 +891,7 @@ export function deliverToExternalReviewSurface({ bundlePath, state, source = {},
           attempted: true, method: "external-review-surface", attemptedAt: new Date().toISOString(), surfaceDir: dir,
           files: ["review-bundle.txt", "delivery.json"], entryId: cardId,
           latestError: latestErr, queueWrite: wq.ok,
+          humanReportError: publishHumanForBundle({ dir, bundlePath, state, source, generation, jobId }),
           queuedConflict: up.code === "conflict" ? true : undefined,
         };
       }
@@ -882,7 +918,7 @@ export function deliverToExternalReviewSurface({ bundlePath, state, source = {},
         } else if (up.code !== "idempotent") {
           writeReviewQueue(up.queue, { surfaceDir: qSurface });
         }
-        return { attempted: true, method: "external-review-surface", idempotent: true, attemptedAt: new Date().toISOString(), surfaceDir: dir, files: ["review-bundle.txt", "delivery.json"] };
+        return { attempted: true, method: "external-review-surface", idempotent: true, attemptedAt: new Date().toISOString(), surfaceDir: dir, files: ["review-bundle.txt", "delivery.json"], humanReportError: publishHumanForBundle({ dir, bundlePath, state, source, generation, jobId }) };
       }
       const resolved = occRec.ok
         && occRec.state?.verdict
@@ -936,6 +972,7 @@ export function deliverToExternalReviewSurface({ bundlePath, state, source = {},
         return {
           attempted: true, method: "external-review-surface", resealed: true, attemptedAt: new Date().toISOString(),
           surfaceDir: dir, entryId: cardId, latestError: latestErr, queueWrite: wq.ok,
+          humanReportError: publishHumanForBundle({ dir, bundlePath, state, source, generation, jobId }),
         };
       }
       if (cardId === occCard) {
@@ -974,6 +1011,7 @@ export function deliverToExternalReviewSurface({ bundlePath, state, source = {},
         attempted: true, queued: true, method: "external-review-queue", attemptedAt: new Date().toISOString(),
         surfaceDir: dir, entryId: up.entry.cardId, order: up.entry.order,
         latestError: latestErr, queueWrite: wq.ok, staleCard: stale || undefined,
+        humanReportError: publishHumanForBundle({ dir, bundlePath, state, source, generation, jobId }),
       };
     }
   } catch (e) {

@@ -75,6 +75,12 @@ import {
   reviewQueueStatus,
   reviewQueueDir,
 } from "../src/governance/review-queue.mjs";
+import {
+  publishHumanReport,
+  readHumanReport,
+  humanReportStatus,
+  humanReportDir,
+} from "../src/governance/human-report.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -90,7 +96,9 @@ const mode = process.argv.includes("--status") ? "status"
         : process.argv.includes("--queue") ? "queue"
           : process.argv.includes("--latest") ? "latest"
             : process.argv.includes("--promote") ? "promote"
-              : process.argv.includes("--reconcile") ? "reconcile" : null;
+              : process.argv.includes("--reconcile") ? "reconcile"
+                : process.argv.includes("--human-latest") ? "human-latest"
+                  : process.argv.includes("--human-publish") ? "human-publish" : null;
 
 if (!mode) {
   console.error("usage: node scripts/gov-external-review-surface.mjs --status");
@@ -101,10 +109,75 @@ if (!mode) {
   console.error("       node scripts/gov-external-review-surface.mjs --latest");
   console.error("       node scripts/gov-external-review-surface.mjs --promote");
   console.error("       node scripts/gov-external-review-surface.mjs --reconcile");
+  console.error("       node scripts/gov-external-review-surface.mjs --human-latest");
+  console.error("       node scripts/gov-external-review-surface.mjs --human-publish <report.txt> --card <id> [--report-type operator-closeout|formal-review-bundle] [--identity <hex>] [--job <id>] [--requires-external-review true|false] [--current-review-state <s>] [--created-at <ISO>] [--published-at <ISO>] [--force]");
   process.exit(2);
 }
 
 const SURFACE = externalReviewSurfaceDir();
+
+if (mode === "human-latest") {
+  const st = humanReportStatus({ surfaceDir: SURFACE });
+  if (!st.ok) {
+    console.error(`human_latest_missing: ${st.reason}`);
+    process.exit(1);
+  }
+  console.log(`dir: ${st.dir}`);
+  console.log(`cardId: ${st.report.cardId}`);
+  console.log(`reportType: ${st.report.reportType}`);
+  console.log(`reportIdentity: ${st.report.reportIdentity}`);
+  console.log(`sha256: ${st.report.sha256}`);
+  console.log(`sourcePath: ${st.report.sourcePath}`);
+  console.log(`requiresExternalReview: ${st.report.requiresExternalReview}`);
+  console.log(`currentReviewState: ${st.report.currentReviewState ?? "(none)"}`);
+  console.log(`createdAt: ${st.report.createdAt}`);
+  console.log(`publishedAt: ${st.report.publishedAt}`);
+  console.log(`report: ${st.textPath}`);
+  process.exit(0);
+}
+
+if (mode === "human-publish") {
+  const rp = arg("--human-publish", null);
+  const card = arg("--card", null);
+  const reportType = arg("--report-type", "operator-closeout");
+  const identity = arg("--identity", null);
+  const job = arg("--job", null);
+  const requiresExt = arg("--requires-external-review", "false") === "true";
+  const curStateRaw = arg("--current-review-state", null);
+  const curState = curStateRaw === "null" || curStateRaw === "" ? null : curStateRaw;
+  const createdAt = arg("--created-at", null);
+  const publishedAt = arg("--published-at", new Date().toISOString());
+  const force = process.argv.includes("--force");
+  if (!rp || !existsSync(rp) || !card) {
+    console.error("usage: node scripts/gov-external-review-surface.mjs --human-publish <report.txt> --card <id> [--report-type operator-closeout|formal-review-bundle] [--identity <hex>] [--job <id>] [--requires-external-review true|false] [--current-review-state <s>] [--created-at <ISO>] [--published-at <ISO>] [--force]");
+    process.exit(2);
+  }
+  const r = publishHumanReport({
+    cardId: card,
+    jobId: job ?? null,
+    reportType,
+    reportIdentity: identity ?? null,
+    sourcePath: rp,
+    requiresExternalReview: requiresExt,
+    currentReviewState: curState ?? null,
+    createdAt: createdAt ?? null,
+    publishedAt,
+    surfaceDir: SURFACE,
+    force,
+  });
+  if (!r.ok) {
+    console.error(`human_publish_failed: ${r.reason}`);
+    process.exit(1);
+  }
+  console.log(`published=${r.published ? "true" : "false"}${r.alreadyCurrent ? " (already current)" : ""}`);
+  console.log(`cardId: ${r.report.cardId}`);
+  console.log(`reportType: ${r.report.reportType}`);
+  console.log(`reportIdentity: ${r.report.reportIdentity}`);
+  console.log(`sha256: ${r.report.sha256}`);
+  console.log(`publishedAt: ${r.report.publishedAt}`);
+  console.log(`dir: ${humanReportDir(SURFACE)}`);
+  process.exit(0);
+}
 
 if (mode === "queue") {
   const st = reviewQueueStatus(SURFACE);

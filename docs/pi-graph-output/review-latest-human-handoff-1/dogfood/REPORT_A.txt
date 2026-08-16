@@ -1,0 +1,25 @@
+================================================================================
+REPORT_A — OPERATOR CLOSEOUT（EXTERNAL_REVIEW_REQUIRED = NO）
+================================================================================
+REPORT_ID: REPORT_A
+REPORT_TYPE: operator-closeout
+CARD_ID: REPORT_A
+GENERATED_AT: 2026-08-16T22:45:00.000Z
+
+EXECUTION COMPLETED:
+  task: bounded operator/closeout task REPORT_A
+  suites executed:
+    - test/governance/test-human-report-handoff.mjs (12 tests)
+    - test/governance/test-review-queue-handoff.mjs  (19 tests)
+  result: 31/31 PASS, 0 FAIL
+  outcome: AUTO-EXECUTION-COMPLETE
+
+PURPOSE:
+  Live dogfood step G2 of REVIEW-LATEST-HUMAN-HANDOFF-1:
+  prove a completed operator/closeout task updates the human-facing
+  Latest report to A — NOT the stale Current bundle 413ab9ac.
+
+THIS IS THE REPORT THE USER SHOULD SEE FOR THE MOST RECENTLY COMPLETED WORK.
+================================================================================
+END OF REPORT_A
+================================================================================

@@ -50,13 +50,20 @@ Three mechanically distinct questions, three distinct authoritative surfaces
 - **"What is the NEWEST formal review generated?"** → the Latest pointer:
   `~/Desktop/AutoLoop-Review/Queue/latest.json`（`--latest`）— navigation
   ONLY, never verdict authority.
+- **"What did AutoLoop just complete / what should I read as the latest
+  report?"** → the Latest Human Report:
+  `~/Desktop/AutoLoop-Review/LatestHuman/latest-report.txt` +
+  `latest-report.json`（`--human-latest`）— the newest completed work report
+  （formal review bundle OR operator closeout）. LATEST != CURRENT: Current
+  may hold an unresolved review while the human report already reflects newer
+  completed work. Never use `Current/` as a generic "latest report" lookup.
 
 Promotion: when the Current occupant reaches a terminal verdict and is
 rotated, the oldest eligible pending review auto-promotes to Current
 （`rotateExternalReviewSurface`; recovery entry `--promote` / `--reconcile`）.
 The harness `~/Desktop/AutoLoop-Review/Latest/review.txt` remains the
 execution-review domain（Domain A）— do not conflate it with the review-queue
-Latest pointer.
+Latest pointer or the Latest Human Report.
 
 ## Verification scope (hard rule)
 

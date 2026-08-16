@@ -1,0 +1,122 @@
+{
+  "schema": "autoloop.latest-human-handoff-evidence/v1",
+  "cardId": "REVIEW-LATEST-HUMAN-HANDOFF-1",
+  "executedAt": "2026-08-16T22:56:00.000Z",
+  "verdict": "PASS",
+  "verdictCode": "LATEST_HUMAN_REVIEW_HANDOFF_DECOUPLED_FROM_CURRENT_AND_VERIFIED",
+  "rootCause": {
+    "problem": "User receives the same stale review bundle (REVIEW-AUTO-GENERATION-AND-DELIVERY-1 / 413ab9ac / GENERATED_AT 2026-08-16T16:38:25.140Z / AWAITING_EXTERNAL_REVIEW) after every new completed work item.",
+    "componentSelectingFile": "The controller/harness-facing delivery/attachment step uses currentReviewDelivery() / scripts/gov-external-review-surface.mjs --export-for-card (RLD2 repair), which dereferences Current/delivery.json + Current/review-bundle.txt as the authoritative 'current review bundle'. AGENTS.md AUTHORITATIVE_SOURCE_FIRST also points state questions at Current/.",
+    "conflatesCurrentWithLatest": "YES — the ONLY identity-verified export seam returns the Current occupant regardless of how old it is. There is no other human-facing 'latest report' artifact.",
+    "operatorCloseoutHasNoPublication": "YES — runStateDrivenCloseout returns { applied:false, final:null, reason:'closeout_not_required' } when requiresReview !== true; operator closeout evidence lands only in docs/pi-graph-output/ (internal evidence store), never on a human-facing surface.",
+    "queueLatestIsNavigationOnly": "YES — writeLatestPointer/readLatestPointer store metadata (cardId, identity, sha, path) with NO report bytes; only touchLatest on formal delivery; AGENTS.md + docs/governance/autoloop-revart-lc1-review-queue-handoff.md explicitly call it navigation-only, never verdict authority, never a report channel.",
+    "transitionThatShouldUpdateLatest": "closeout completion — runCloseoutGate produces a validated bundle (formal: CURRENT or QUEUED) OR an operator/lifecycle closeout completes with a closeout.txt. Neither published to a human surface before this card."
+  },
+  "cbm": {
+    "CBM_QUERY_COUNT": 1,
+    "CBM_HIT_COUNT": 0,
+    "CBM_MISS_COUNT": 1,
+    "CBM_FACTS_REUSED": 0,
+    "BOUNDED_FALLBACK_COUNT": 12,
+    "query": "latest review human handoff review bundle delivery",
+    "retrieval": "AVAILABLE, 0 selected records; 8 candidates excluded at repository scope (store indexed under a different repo identity / canonical path than /private/tmp/autoloop worktree)",
+    "writeback": "CBM_HUMAN_REPORT_WRITEBACK_GAP — full gated writeback pipeline (candidate -> trust -> evidence -> gate) is a large integration; reference metadata is durably stored in LatestHuman/latest-report.json (cardId, reportIdentity, sha256, sourcePath, lifecycle state). Opened for a separate card; not expanded here."
+  },
+  "contract": {
+    "surface": "~/Desktop/AutoLoop-Review/LatestHuman/",
+    "files": ["latest-report.json", "latest-report.txt"],
+    "schema": "autoloop.human-report-latest/v1",
+    "pointerFields": ["cardId", "generation", "jobId", "reportType", "reportIdentity", "sha256", "sourcePath", "sourceReportSha256", "requiresExternalReview", "currentReviewState", "createdAt", "publishedAt"],
+    "invariant": "LATEST != CURRENT — Current may stay A unresolved while B, C complete; Latest Human Report = C",
+    "forbidden": ["findings duplicated into multiple state JSONs", "Latest minting ACCEPTED/verdict", "Latest becoming review authority"]
+  },
+  "publicationRule": {
+    "formalReview": "runCloseoutGate -> deliverToExternalReviewSurface -> publishHumanReport (auto, on CURRENT and QUEUED placement)",
+    "operatorCloseout": "scripts/gov-external-review-surface.mjs --human-publish <report.txt> --card <id>",
+    "independence": "human publication is best-effort on the delivery seam (humanReportError surfaced, delivery never fails); corrupt pointer fails closed; --force is operator repair only"
+  },
+  "telemetry": {
+    "STALE_REVIEW_REDELIVERY_COUNT": 1,
+    "STALE_REVIEW_REDELIVERY_EVIDENCE": "same 413ab9ac bundle re-delivered at 22:31/22:38 and again on this session's precheck",
+    "LATEST_CURRENT_CONFLATION_FOUND": "YES",
+    "DUPLICATE_REVIEW_PRESENTATION_AVOIDED": true,
+    "HUMAN_HANDOFF_SOURCE": "~/Desktop/AutoLoop-Review/LatestHuman/latest-report.txt",
+    "workflowSubtractionCandidate": "Do not use Current as generic 'latest report' lookup."
+  },
+  "liveDogfood": {
+    "G1_baseline": { "humanSurface": "ABSENT (HUMAN_REPORT_ABSENT)", "current": "REVIEW-AUTO-GENERATION-AND-DELIVERY-1 413ab9ac AWAITING_EXTERNAL_REVIEW" },
+    "G2_REPORT_A": {
+      "task": "operator/closeout task REPORT_A (31/31 tests: human-report-handoff 12 + review-queue-handoff 19)",
+      "latestCardId": "REPORT_A",
+      "latestIdentity": "2eda2865373a749b08bbf8174ad16aeb0e526a149ac1bed451d916a18f7ef9fe",
+      "latestSha": "2eda2865373a749b08bbf8174ad16aeb0e526a149ac1bed451d916a18f7ef9fe",
+      "publishedAt": "2026-08-16T22:54:15.474Z"
+    },
+    "G3_REPORT_B": {
+      "task": "formal review bundle REPORT_B generated via production gate (scripts/gov-closeout-bundle.mjs --generate)",
+      "latestCardId": "REPORT_B",
+      "latestIdentity": "45db461518fcf44f61c8d44b5e9bff6cb5fafcb2375912a07f7bd10834d784c9",
+      "latestSha": "5f5e5eefc7f5a56afd3e00c249ec32d02016bfd2897827fecc31f4eecbe898cd",
+      "queued": true, "queueOrder": 4, "enqueuedAt": "2026-08-16T22:54:40.430Z",
+      "currentUnchanged": true
+    },
+    "G4_REPORT_C": {
+      "task": "operator closeout REPORT_C, EXTERNAL_REVIEW_REQUIRED=NO (full governance regression 465/470, 5 pre-existing env failures verified on stashed baseline)",
+      "latestCardId": "REPORT_C",
+      "latestIdentity": "9f7e8a145921fbcae3ef9af6622adff485c20476a445316fc10bb0def7af527d",
+      "latestSha": "9f7e8a145921fbcae3ef9af6622adff485c20476a445316fc10bb0def7af527d",
+      "publishedAt": "2026-08-16T22:55:47.912Z"
+    },
+    "H_identityProof": {
+      "IDENTITY_A_B_DISTINCT": true, "IDENTITY_B_C_DISTINCT": true,
+      "SHA_A_B_DISTINCT": true, "SHA_B_C_DISTINCT": true,
+      "PUBLISHED_AT_INCREASING": "22:54:15.474Z < 22:54:40.430Z < 22:55:47.912Z"
+    },
+    "J_userFacingRetrieval": {
+      "path": "~/Desktop/AutoLoop-Review/LatestHuman/latest-report.txt",
+      "content": "REPORT_C — OPERATOR CLOSEOUT (EXTERNAL_REVIEW_REQUIRED = NO)",
+      "shasumMatchesPointer": true,
+      "notStale413ab9ac": true
+    }
+  },
+  "invariants": {
+    "unresolvedCurrentNotOverwritten": "PASS — Current still REVIEW-AUTO-GENERATION-AND-DELIVERY-1 413ab9ac AWAITING after A/B/C",
+    "queueSingleWriter": "PASS — queue.json written only by review-queue machinery; REPORT_B enqueued via production delivery",
+    "currentQueueOrderingUnchanged": "PASS — orders 1-3 untouched; B added at order 4",
+    "archiveImmutable": "PASS — no archive writes by this card",
+    "bundleImmutable": "PASS — bundle bytes never copied into LatestHuman (only referenced via sourcePath; latest-report.txt holds the report artifact copy)",
+    "acceptReviewJobSoleAcceptedMint": "PASS — untouched",
+    "finalCloseoutAuthorityUnchanged": "PASS — runCloseoutGate semantics unchanged; human publication is additive",
+    "queueLatestRemainsNavigationOnly": "PASS — Queue/latest.json untouched by human-report module"
+  },
+  "tests": {
+    "suite": "test/governance/test-human-report-handoff.mjs",
+    "tests": 12, "pass": 12, "fail": 0,
+    "acceptanceCoverage": {
+      "1_formalUpdatesLatest": "N1",
+      "2_queuedUpdatesLatest": "N2",
+      "3_currentUnchanged": "N3",
+      "4_operatorUpdatesLatest": "N4",
+      "5_staleReplayBlocked": "N5",
+      "6_duplicateIdempotent": "N6",
+      "7_crashSafety": "N7a-d",
+      "8_currentQueueRegression": "N8",
+      "9_realABC": "N9/N10",
+      "10_userRetrievalC": "N9/N10"
+    },
+    "governanceRegression": "test/governance/*.mjs 470 tests: 464-465 pass, 5-6 fail — identical pre-existing env failures on stashed baseline (git-status-parsing live repo, vca1 scope-guard, verification-scope-guard x2, verification-timing wall-clock); no new failures from this change"
+  },
+  "automaticity": {
+    "MANUAL_ENQUEUE_USED": "NO",
+    "MANUAL_QUEUE_EDIT_USED": "NO",
+    "MANUAL_CURRENT_EDIT_USED": "NO",
+    "MANUAL_PROMOTE_USED": "NO"
+  },
+  "commit": "YES (scoped)", "push": "NO", "seal": "NO",
+  "sourceMutation": {
+    "added": ["src/governance/human-report.mjs", "test/governance/test-human-report-handoff.mjs"],
+    "modified": ["src/governance/review-bundle.mjs", "scripts/gov-external-review-surface.mjs"],
+    "docs": ["AGENTS.md review-routing section updated to add LatestHuman routing question"]
+  },
+  "outOfScope": ["Queue redesign", "Current semantics redesign", "Parent->Child", "broad CBM refactor", "review authority changes"]
+}

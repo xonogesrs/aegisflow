@@ -1,0 +1,66 @@
+{
+  "schema": "autoloop.review-bundle.source/v1",
+  "task": {
+    "cardId": "REPORT_B",
+    "cardTitle": "Report B — formal review dogfood (human-report seam)",
+    "cardType": "integration"
+  },
+  "graph": {
+    "graphRunId": "rag-hrh-B",
+    "nodeId": "N1",
+    "phaseExecutionId": "N1:1",
+    "stageIds": [],
+    "agentExecutionIds": []
+  },
+  "objective": "REVIEW-LATEST-HUMAN-HANDOFF-1 dogfood step G3: a formal review bundle whose delivery lands QUEUED behind the unresolved Current occupant, while LatestHuman updates to B.",
+  "executiveStatus": "PASS",
+  "executiveSummary": "Formal review bundle B generated via production gate; 31/31 governance tests pass (human-report-handoff 12 + review-queue-handoff 19).",
+  "authorizedScope": [
+    "src/governance/human-report.mjs",
+    "src/governance/review-bundle.mjs",
+    "scripts/gov-external-review-surface.mjs",
+    "test/governance/test-human-report-handoff.mjs"
+  ],
+  "unauthorizedScope": [],
+  "designDecisions": [
+    "LatestHuman != Current: human-facing latest report published independently of review scheduling",
+    "formal bundle delivery (CURRENT or QUEUED) auto-publishes LatestHuman",
+    "operator closeout publishes LatestHuman via --human-publish"
+  ],
+  "files": { "added": [], "modified": [], "deleted": [], "preExistingDirty": [] },
+  "inventory": null,
+  "diffSummary": "human-report seam",
+  "execution": {
+    "nodesExecuted": ["N1"],
+    "testsExecuted": ["test-human-report-handoff.mjs", "test-review-queue-handoff.mjs"],
+    "nodeResults": { "passed": 31, "failed": 0, "total": 31 },
+    "pass": true
+  },
+  "verifier": { "pass": true, "result": "PASS", "summary": "31/31" },
+  "review": {
+    "pass": true,
+    "result": "PASS",
+    "reviewResultIdentity": "hrh-B-indep",
+    "blockingFindings": [],
+    "summary": "no blocking findings"
+  },
+  "repairAttempts": [],
+  "repairBudget": { "maxAttempts": 1, "used": 0 },
+  "repairLineage": { "generationType": "implementation", "repairIterations": 0, "surfaceReseals": 0, "resealTouchedPaths": [] },
+  "externalReview": { "deliveryRequired": true, "status": "AWAITING_EXTERNAL_REVIEW", "supersedes": null },
+  "negativeCases": [],
+  "regression": [
+    { "suite": "test/governance/test-human-report-handoff.mjs", "tests": 12, "pass": 12, "fail": 0 },
+    { "suite": "test/governance/test-review-queue-handoff.mjs", "tests": 19, "pass": 19, "fail": 0 }
+  ],
+  "regressionSummary": "31/31 pass; full governance suite regression in closeout evidence",
+  "evidence": [
+    { "path": "/private/tmp/autoloop/docs/pi-graph-output/review-latest-human-handoff-1/dogfood/REPORT_B-evidence-run.txt", "sha256": "3660ac62852172e81a24f0571d659994c8accdae6d1ec808d0570fc5cf85f223" }
+  ],
+  "security": { "secretScanResult": "clean" },
+  "risks": [],
+  "limitations": [],
+  "rollbackProcedure": "human-report publication is independent; remove LatestHuman/ artifacts to reset",
+  "openQuestions": [],
+  "recommendedNextStep": "external review of bundle B; then rotate"
+}

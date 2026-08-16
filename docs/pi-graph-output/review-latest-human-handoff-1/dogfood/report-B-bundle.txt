@@ -1,0 +1,232 @@
+================================================================================
+AUTOLOOP REVIEW BUNDLE (CLOSEOUT)
+================================================================================
+REVIEW_BUNDLE_SCHEMA: autoloop.review-bundle/v1
+REVIEW_BUNDLE_IDENTITY: 45db461518fcf44f61c8d44b5e9bff6cb5fafcb2375912a07f7bd10834d784c9
+CARD_ID: REPORT_B
+CARD_TITLE: Report B — formal review dogfood (human-report seam)
+CARD_TYPE: integration
+GENERATED_AT: 2026-08-16T22:54:40.424Z
+
+================================================================================
+1. Review Request
+================================================================================
+CARD_ID: REPORT_B
+CARD_TITLE: Report B — formal review dogfood (human-report seam)
+CARD_TYPE: integration
+GRAPH_RUN_ID: rag-hrh-B
+NODE_ID: N1
+PHASE_EXECUTION_ID: N1:1
+STAGE_IDS: NOT_APPLICABLE
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+REQUESTED_REVIEW_VERDICT: PASS / REPAIR / HOLD
+This bundle is the single complete text artifact submitted for external review of card REPORT_B.
+
+================================================================================
+2. Executive Status
+================================================================================
+EXECUTIVE_STATUS: PASS
+EXECUTION_PASS: true
+VERIFIER_PASS: true
+INDEPENDENT_REVIEW_PASS: true
+REVIEW_BUNDLE_READY: true
+REVIEW_BUNDLE_DELIVERY_REQUIRED: true
+EXTERNAL_REVIEW_STATUS: AWAITING_EXTERNAL_REVIEW
+SUMMARY: Formal review bundle B generated via production gate; 31/31 governance tests pass (human-report-handoff 12 + review-queue-handoff 19).
+
+
+================================================================================
+3. Task Identity
+================================================================================
+CARD_ID: REPORT_B
+CARD_TITLE: Report B — formal review dogfood (human-report seam)
+CARD_TYPE: integration
+GRAPH_RUN_ID: rag-hrh-B
+NODE_ID: N1
+PHASE_EXECUTION_ID: N1:1
+STAGE_IDS: NOT_APPLICABLE
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+
+
+================================================================================
+4. Repository and Worktree Identity
+================================================================================
+REPOSITORY: git@github.com:xonogesrs/autoloop.git
+BRANCH: governance/decomp-opt1-design-freeze
+HEAD: 2aca99e959b826eeb70dd829871a6100b27f79bd
+TREE_SHA: b79c64b0dc448748dd6f834bbf3edf6e7c6b0f23
+WORKTREE_PATH: /private/tmp/autoloop
+BASELINE_DIRTY_DIGEST: dirty:dacc4a666ecf30fde55d19054338eee4db8b79c840c71c400db927a8e44c719f
+FINAL_DIRTY_DIGEST: dirty:dacc4a666ecf30fde55d19054338eee4db8b79c840c71c400db927a8e44c719f
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+5. Objective
+================================================================================
+REVIEW-LATEST-HUMAN-HANDOFF-1 dogfood step G3: a formal review bundle whose delivery lands QUEUED behind the unresolved Current occupant, while LatestHuman updates to B.
+
+================================================================================
+6. Authorized Scope
+================================================================================
+  - src/governance/human-report.mjs
+  - src/governance/review-bundle.mjs
+  - scripts/gov-external-review-surface.mjs
+  - test/governance/test-human-report-handoff.mjs
+AUTHORIZED_PATHS: src/governance/human-report.mjs, src/governance/review-bundle.mjs, scripts/gov-external-review-surface.mjs, test/governance/test-human-report-handoff.mjs
+
+
+================================================================================
+7. Explicitly Unauthorized Scope
+================================================================================
+  (none)
+UNAUTHORIZED_PATHS: NOT_APPLICABLE
+
+
+================================================================================
+8. Architecture and Design Decisions
+================================================================================
+  - LatestHuman != Current: human-facing latest report published independently of review scheduling
+  - formal bundle delivery (CURRENT or QUEUED) auto-publishes LatestHuman
+  - operator closeout publishes LatestHuman via --human-publish
+
+================================================================================
+9. Files Added / Modified / Deleted
+================================================================================
+ADDED:
+  (none)
+MODIFIED:
+  (none)
+DELETED:
+  (none)
+
+================================================================================
+10. Diff Summary
+================================================================================
+human-report seam
+
+================================================================================
+11. Execution Results
+================================================================================
+NODES_EXECUTED:
+    - N1
+NODES_PASSED: 31
+NODES_FAILED: 0
+NODES_TOTAL: 31
+EXECUTION_PASS: true
+
+
+================================================================================
+12. Verification Results
+================================================================================
+VERIFIER_PASS: true
+VERIFIER_RESULT: PASS
+VERIFIER_SUMMARY: 31/31
+
+
+================================================================================
+13. Independent Review Results
+================================================================================
+REVIEW_PASS: true
+REVIEW_RESULT: PASS
+REVIEW_RESULT_IDENTITY: hrh-B-indep
+BLOCKING_FINDINGS: []
+REVIEW_SUMMARY: no blocking findings
+
+
+================================================================================
+14. Repair Attempts
+================================================================================
+  NOT_APPLICABLE (no repair attempts)
+REPAIR_BUDGET_MAX: 1
+REPAIR_BUDGET_USED: 0
+GENERATION_TYPE: implementation
+REPAIR_LINEAGE_REPAIR_ITERATIONS: 0
+REPAIR_LINEAGE_SURFACE_RESEALS: 0
+SUPERSEDES_BUNDLE_IDENTITY: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_SHA256: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_PATH: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_VERDICT: NOT_APPLICABLE
+
+
+================================================================================
+15. Negative and Fail-Closed Cases
+================================================================================
+  (none)
+
+================================================================================
+16. Regression Results
+================================================================================
+  - suite=test/governance/test-human-report-handoff.mjs tests=12 pass=12 fail=0
+  - suite=test/governance/test-review-queue-handoff.mjs tests=19 pass=19 fail=0
+REGRESSION_OVERALL: 31/31 pass; full governance suite regression in closeout evidence
+
+
+================================================================================
+17. Evidence Inventory
+================================================================================
+  - /private/tmp/autoloop/docs/pi-graph-output/review-latest-human-handoff-1/dogfood/REPORT_B-evidence-run.txt
+EVIDENCE_MANIFEST_DIGEST: d5759fb48de8a976a41714f38a831d5b8d05cb278e00efa140cd9e93f81111f1
+
+
+================================================================================
+18. Evidence Hashes
+================================================================================
+  - /private/tmp/autoloop/docs/pi-graph-output/review-latest-human-handoff-1/dogfood/REPORT_B-evidence-run.txt
+      sha256=3660ac62852172e81a24f0571d659994c8accdae6d1ec808d0570fc5cf85f223
+
+================================================================================
+19. Security and Secret Scan
+================================================================================
+SECRET_SCAN_RESULT: clean
+SECRET_SCAN_NOTES: NOT_APPLICABLE
+SECRET_DETECTED: false
+INGESTION_ALLOWLIST: NOT_APPLICABLE
+INGESTION_DENYLIST: NOT_APPLICABLE
+
+================================================================================
+20. Repository Integrity
+================================================================================
+HEAD: 2aca99e959b826eeb70dd829871a6100b27f79bd
+TREE_SHA: b79c64b0dc448748dd6f834bbf3edf6e7c6b0f23
+WORKTREE_CLEAN: false
+DIRTY_PATHS: scripts/gov-external-review-surface.mjs, src/governance/review-bundle.mjs, docs/pi-graph-output/autoloop-review-live-current-convergence-1/admission.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/authority.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/card-closeout-bundle-20260816-bdbaad4c.txt, docs/pi-graph-output/autoloop-review-live-current-convergence-1/card-spec.md, docs/pi-graph-output/autoloop-review-live-current-convergence-1/closeout-state.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/dogfood-evidence.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/rag-DF1-graph-closeout-evidence.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/review-job.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/admission.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/authority.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/card-closeout-bundle-20260816-413ab9ac.txt, docs/pi-graph-output/review-auto-generation-and-delivery-1/card-spec.md, docs/pi-graph-output/review-auto-generation-and-delivery-1/closeout-state.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/dogfood-evidence.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/rag-DF2-graph-closeout-evidence.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/review-job.json, docs/pi-graph-output/review-latest-human-handoff-1/dogfood/REPORT_A.txt, docs/pi-graph-output/review-latest-human-handoff-1/dogfood/REPORT_B-evidence-run.txt, docs/pi-graph-output/review-latest-human-handoff-1/dogfood/REPORT_B-source.json, docs/pi-graph-output/review-live-promotion-closeout-1/dogfood-evidence.json, docs/pi-graph-output/review-live-promotion-execution-1/live-promotion-closeout.txt, docs/pi-graph-output/review-live-promotion-execution-1/live-promotion-evidence.json, src/governance/human-report.mjs, test/governance/test-human-report-handoff.mjs
+UNTRACKED_FILES: docs/pi-graph-output/autoloop-review-live-current-convergence-1/admission.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/authority.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/card-closeout-bundle-20260816-bdbaad4c.txt, docs/pi-graph-output/autoloop-review-live-current-convergence-1/card-spec.md, docs/pi-graph-output/autoloop-review-live-current-convergence-1/closeout-state.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/dogfood-evidence.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/rag-DF1-graph-closeout-evidence.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/review-job.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/admission.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/authority.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/card-closeout-bundle-20260816-413ab9ac.txt, docs/pi-graph-output/review-auto-generation-and-delivery-1/card-spec.md, docs/pi-graph-output/review-auto-generation-and-delivery-1/closeout-state.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/dogfood-evidence.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/rag-DF2-graph-closeout-evidence.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/review-job.json, docs/pi-graph-output/review-latest-human-handoff-1/dogfood/REPORT_A.txt, docs/pi-graph-output/review-latest-human-handoff-1/dogfood/REPORT_B-evidence-run.txt, docs/pi-graph-output/review-latest-human-handoff-1/dogfood/REPORT_B-source.json, docs/pi-graph-output/review-live-promotion-closeout-1/dogfood-evidence.json, docs/pi-graph-output/review-live-promotion-execution-1/live-promotion-closeout.txt, docs/pi-graph-output/review-live-promotion-execution-1/live-promotion-evidence.json, src/governance/human-report.mjs, test/governance/test-human-report-handoff.mjs
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+21. Known Risks and Limitations
+================================================================================
+  (none)
+  (none)
+
+================================================================================
+22. Rollback Procedure
+================================================================================
+human-report publication is independent; remove LatestHuman/ artifacts to reset
+
+================================================================================
+23. Open Questions
+================================================================================
+  (none)
+
+================================================================================
+24. Recommended Next Step
+================================================================================
+external review of bundle B; then rotate
+
+================================================================================
+25. External Reviewer Verdict Template
+================================================================================
+VERDICT: PASS / REPAIR / HOLD
+REVIEWER_IDENTITY: <reviewer>
+REVIEWED_AT: <date>
+FINDINGS_DIGEST: <sha256>
+NEXT_ACTION_IF_PASS: <next card>
+NEXT_ACTION_IF_REPAIR: <bounded repair within budget>
+NEXT_ACTION_IF_HOLD: <stop downstream>
+
+
+=== END OF REVIEW BUNDLE ===
+REVIEW_BUNDLE_SHA256: 80cf674680299891c613c615b362b05b29cd5a6d220f6d56835dc4763a767115
