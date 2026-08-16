@@ -50,17 +50,24 @@ function isBinaryContent(buf) {
  * @param {object} [env.fs] — injectable fs for tests
  * @returns inventory object
  */
-export function buildChangeInventory({ git, cwd, baseBranch = "main", fs = {} }) {
+export function buildChangeInventory({ git, cwd, baseBranch = "main", fs = {}, candidateDomain = null }) {
   const lstat = fs.lstat ?? lstatSync;
   const stat = fs.stat ?? statSync;
   const readFile = fs.readFile ?? readFileSync;
   const readlink = fs.readlink ?? readlinkSync;
   const exists = fs.exists ?? existsSync;
 
+  // H2 (Freeze-R2): authority-owned candidate-domain policy. No policy
+  // injected → every path is a candidate (byte-identical pre-R2 behavior).
+  // `candidateDomain` is the classifier returning "INCLUDE"|"EXCLUDE".
+  const isCandidate = typeof candidateDomain === "function"
+    ? (p) => candidateDomain(p) !== "EXCLUDE"
+    : () => true;
+
   const committedLines = git(["diff", "--name-status", "--no-renames", `${baseBranch}...HEAD`]).split("\n").filter(Boolean);
   const dirtyLines = git(["diff", "--name-status", "--no-renames", "HEAD"]).split("\n").filter(Boolean); // tracked, staged+unstaged vs HEAD
-  const stagedPaths = git(["diff", "--cached", "--name-only"]).split("\n").filter(Boolean);
-  const untracked = git(["ls-files", "--others", "--exclude-standard"]).split("\n").filter(Boolean);
+  const stagedPaths = git(["diff", "--cached", "--name-only"]).split("\n").filter(Boolean).filter(isCandidate);
+  const untracked = git(["ls-files", "--others", "--exclude-standard"]).split("\n").filter(Boolean).filter(isCandidate);
   const head = git(["rev-parse", "HEAD"]).trim();
   const baseHead = git(["rev-parse", baseBranch]).trim();
   const branch = git(["branch", "--show-current"]).trim();
@@ -105,6 +112,9 @@ export function buildChangeInventory({ git, cwd, baseBranch = "main", fs = {} })
   const seen = new Set();
   const entries = new Map();
   const record = ({ status, path }) => {
+    // H2 (Freeze-R2): single-point exclusion — generated governance/evidence
+    // classes never enter the candidate inventory (committed+dirty+untracked).
+    if (!isCandidate(path)) return;
     seen.add(path);
     entries.set(path, { path, status });
   };
@@ -189,8 +199,12 @@ export function buildChangeInventory({ git, cwd, baseBranch = "main", fs = {} })
   }
   const patchText = parts.join("\n\n");
 
+  // C1A (Freeze-R2): semantic candidate identity — drop Git transport `status`.
+  // Same bytes + path + mode + symlink + binary → same identity regardless of
+  // untracked/staged/committed transport state. Deletion stays detectable via
+  // contentSha256="MISSING".
   const changedTreeIdentity = digestOfPayload(
-    final.map((e) => `${e.status}\t${e.path}\t${e.contentSha256}\t${e.mode}\t${e.symlink ? 1 : 0}\t${e.binary ? 1 : 0}`).join("\n"),
+    final.map((e) => `${e.path}\t${e.contentSha256}\t${e.mode}\t${e.symlink ? 1 : 0}\t${e.binary ? 1 : 0}`).join("\n"),
   );
   const patchSha256 = digestOfPayload(
     final.map((e) => `=== FILE ${e.path} ===\n${e.contentSha256 === "MISSING" ? "" : e.contentSha256}`).join("\n"),
@@ -207,11 +221,11 @@ export function buildChangeInventory({ git, cwd, baseBranch = "main", fs = {} })
     renames,
     untracked,
     stagedPaths,
-    committedPaths: committedLines.map((l) => l.split("\t").pop()).filter(Boolean),
-    dirtyPaths: dirtyLines.map((l) => l.split("\t").pop()).filter(Boolean),
-    committedCount: committedLines.length,
+    committedPaths: committedLines.map((l) => l.split("\t").pop()).filter(Boolean).filter(isCandidate),
+    dirtyPaths: dirtyLines.map((l) => l.split("\t").pop()).filter(Boolean).filter(isCandidate),
+    committedCount: committedLines.map((l) => l.split("\t").pop()).filter(isCandidate).length,
     stagedCount: stagedPaths.length,
-    dirtyCount: dirtyLines.length,
+    dirtyCount: dirtyLines.map((l) => l.split("\t").pop()).filter(isCandidate).length,
     untrackedCount: untracked.length,
     patchText,
     patchLines: patchText.split("\n").length,

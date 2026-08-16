@@ -101,7 +101,7 @@ const IDENTITY_FIELDS = Object.freeze({
 // Top-level binding fields on the authorization record (not the block).
 export const TOP_LEVEL_BINDINGS = Object.freeze([
   "repository", "worktree", "branch", "base", "base_head",
-  "authorized_paths", "bundle_path",
+  "authorized_paths", "bundle_path", "spec_path",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -134,6 +134,7 @@ export function defaultDenyTopLevel() {
     base_head: "",
     authorized_paths: [],
     bundle_path: "",
+    spec_path: "",
   };
 }
 
@@ -504,6 +505,7 @@ export function effectiveAuthority(parent, child, runtime) {
     base_head: intersectIdentity(Tp.base_head, Tc.base_head, Tr.base_head, "base_head"),
     authorized_paths: intersectPaths(Tc.authorized_paths, Tp.authorized_paths, Tr.authorized_paths, "authorized_paths"),
     bundle_path: intersectIdentity(Tp.bundle_path, Tc.bundle_path, Tr.bundle_path, "bundle_path"),
+    spec_path: intersectIdentity(Tp.spec_path, Tc.spec_path, Tr.spec_path, "spec_path"),
   };
 
   return { ...out, ...top };

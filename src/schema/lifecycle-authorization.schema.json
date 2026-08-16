@@ -26,6 +26,7 @@
       "items": { "type": "string", "minLength": 1, "maxLength": 512 }
     },
     "bundle_path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "spec_path": { "type": "string", "minLength": 1, "maxLength": 512 },
     "lifecycle_authorization": {
       "type": "object",
       "additionalProperties": false,
