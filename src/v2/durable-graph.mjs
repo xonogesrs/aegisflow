@@ -30,11 +30,12 @@ import { execFileSync } from "node:child_process";
 import { RunEvidenceStore, canonicalJson, sha256Text, EvidenceHoldError, assertValidEvidenceRoot } from "../evidence/run-evidence-store.mjs";
 import { finalizeRunManifest, buildRunManifest, MANIFEST_FORMAT_VERSION } from "../evidence/run-manifest.mjs";
 import {
-  validateRunIdentity, collectRepositoryFingerprint, publishCheckpoint, readCheckpoint, checkpointExists,
+  validateRunIdentity, collectRepositoryFingerprint, collectRepositoryTree, publishCheckpoint, readCheckpoint, checkpointExists,
   buildInputFingerprint, buildConfigurationFingerprint, buildDagFingerprint, buildIrSha256,
   AUTOLOOP_CHECKPOINT_FORMAT_VERSION, deriveChainId, deriveCheckpointId,
   classifyResumeCapability, classifyPostHeadEvent,
 } from "./checkpoint-bridge.mjs";
+import { buildDecompositionManifest, DECOMPOSITION_MANIFEST_FORMAT } from "./decomposition-manifest.mjs";
 import { runColimaGraph } from "../runtime/colima-graph-runner.mjs";
 import { cleanupStale } from "../runtime/colima-runtime.mjs";
 import {
@@ -146,6 +147,7 @@ export class DurableGraphRun {
     this.configurationFingerprint = null;
     this.irSha = null;
     this.dagSha = null;
+    this.decompositionManifestId = null;
     this.finalVerdict = null;
     this.finalReason = null;
     this.manifestSha = null;
@@ -290,6 +292,9 @@ export class DurableGraphRun {
           recovery_attempt: this.recovery?.executionAttempt ?? 1,
           permitted_dirty_digest: this.state.permittedDirtyDigest ?? null,
         },
+        // I1: decomposition manifest digest（resume verifies recomputed ==
+        // artifact == checkpoint）.
+        ...(this.decompositionManifestId ? { decomposition_manifest_sha256: this.decompositionManifestId } : {}),
       },
     });
     this.state.expectedRevision = pub.revision;
@@ -720,6 +725,38 @@ export async function runDurableGraph(opts = {}) {
   try { await hooks.onDurableEvent?.({ event_type: "DAG_ACCEPTED", phase_id: null, pre_checkpoint: true }); } catch { /* harness seam only */ }
   await run.checkpoint({});
 
+  // ── I1: Decomposition Manifest — produced exactly once per decomposition
+  // revision, after DAG_ACCEPTED, through the existing evidence path
+  // (secret-scan + size bound + journal + checkpoint). Fail-closed on any
+  // missing binding or build failure. CPU + one tree observation only. ──
+  const manifestResult = buildDecompositionManifest({
+    parentExecutionId: run.executionId,
+    chainId: run.chainId,
+    inputFingerprint: run.inputFingerprint,
+    configurationFingerprint: run.configurationFingerprint,
+    ir,
+    irSha: run.irSha,
+    dagSha: run.dagSha,
+    repositoryIdentity: {
+      repository_root_identity: run.repoFingerprint.repository_root_identity,
+      expected_head: run.repoFingerprint.expected_head,
+      tree: collectRepositoryTree(cwd),
+    },
+    sourceHashes: computeSourceHashes(),
+    promptBuilderVersion: "graph-input-ir",
+  });
+  if (!manifestResult.ok) {
+    return terminateGraphRun(run, "HOLD", `DECOMPOSITION_MANIFEST_INVALID:${manifestResult.code}`);
+  }
+  store.writeArtifact("decomposition-manifest.json", manifestResult.manifest);
+  run.decompositionManifestId = manifestResult.manifest_id;
+  store.appendEvent({
+    event_type: "DECOMPOSITION_MANIFEST_WRITTEN",
+    stage: "decomposition",
+    payload: { format_version: DECOMPOSITION_MANIFEST_FORMAT, manifest_sha256: manifestResult.manifest_id, bytes: manifestResult.bytes },
+  });
+  await run.checkpoint({});
+
   // Create owned scratch only after durable graph identity/checkpoint exists.
   // A pre-checkpoint crash cannot leave a recursively-deletable child.
   const ownedScratchRoot = prepareOwnedScratchRoot({ scratchRoot, executionId: run.executionId, repoPath, authorityToken: requestedScratchAuthorityToken });
@@ -934,6 +971,7 @@ export async function resumeDurableGraph({
 
   // ── Validation（any failure => HOLD / RESUME_FINGERPRINT_MISMATCH）──
   let expectedFp = null;
+  let verifiedManifestId = null;
   let irPhaseIds = new Set();
   let frozen = null;
   try {
@@ -1046,6 +1084,80 @@ export async function resumeDurableGraph({
           throw new DurableGraphHoldError("RESUME_FINGERPRINT_MISMATCH", `phase_states missing phase: ${id}`);
         }
       }
+    }
+
+    // 10. I1 decomposition manifest binding（recomputed == artifact ==
+    // checkpoint, three-way; fail-closed on any mismatch / malformed /
+    // stale binding）. Inputs are re-derived from the SAME frozen durable
+    // artifacts the initial build used. A missing artifact with a pinned
+    // checkpoint id fails closed; a missing artifact WITHOUT a pinned id is
+    // the DAG_ACCEPTED→manifest sub-window crash → reconstruct and persist.
+    const manifestArtifactPath = join(execDir, "artifacts", "decomposition-manifest.json");
+    const manifestArtifactExists = existsSync(manifestArtifactPath);
+    const checkpointManifestId = typeof snapshot.decomposition_manifest_sha256 === "string"
+      ? snapshot.decomposition_manifest_sha256 : null;
+    const manifestBuildInputs = () => ({
+      parentExecutionId: identity.executionId,
+      chainId: identity.chainId,
+      inputFingerprint: snapshot.input_fingerprint,
+      configurationFingerprint: snapshot.configuration_fingerprint,
+      ir,
+      irSha: buildIrSha256(ir),
+      dagSha: buildDagFingerprint(ir),
+      repositoryIdentity: {
+        repository_root_identity: expectedFp.repository_root_identity,
+        expected_head: expectedFp.expected_head,
+        tree: collectRepositoryTree(repoRoot),
+      },
+      sourceHashes: computeSourceHashes(),
+      promptBuilderVersion: "graph-input-ir",
+    });
+    if (manifestArtifactExists || checkpointManifestId) {
+      if (!manifestArtifactExists) {
+        throw new DurableGraphHoldError("RESUME_FINGERPRINT_MISMATCH", "decomposition manifest artifact missing but checkpoint pins a manifest id");
+      }
+      const frozenManifest = (() => {
+        try {
+          return JSON.parse(readFileSync(manifestArtifactPath, "utf8"));
+        } catch {
+          throw new DurableGraphHoldError("RESUME_FINGERPRINT_MISMATCH", "decomposition manifest artifact malformed (unparseable)");
+        }
+      })();
+      if (typeof frozenManifest?.manifest_id !== "string" || frozenManifest.manifest_id.length === 0) {
+        throw new DurableGraphHoldError("RESUME_FINGERPRINT_MISMATCH", "decomposition manifest artifact malformed: missing manifest_id");
+      }
+      // Artifact self-consistency: the stored payload must hash to its own
+      // declared manifest_id (catches any tampered binding field even when
+      // the declared digest itself was left untouched).
+      const payloadOnly = { ...frozenManifest };
+      delete payloadOnly.manifest_id;
+      delete payloadOnly.content_sha256;
+      if (sha256Text(canonicalJson(payloadOnly)) !== frozenManifest.manifest_id) {
+        throw new DurableGraphHoldError("RESUME_FINGERPRINT_MISMATCH", "decomposition manifest artifact self-inconsistent (payload digest != manifest_id)");
+      }
+      const recomputed = buildDecompositionManifest(manifestBuildInputs());
+      if (!recomputed.ok) {
+        throw new DurableGraphHoldError("RESUME_FINGERPRINT_MISMATCH", `decomposition manifest cannot be re-derived: ${recomputed.code}`);
+      }
+      if (recomputed.manifest_id !== frozenManifest.manifest_id) {
+        throw new DurableGraphHoldError("RESUME_FINGERPRINT_MISMATCH", "decomposition manifest digest mismatch (recomputed != artifact)");
+      }
+      if (checkpointManifestId && checkpointManifestId !== frozenManifest.manifest_id) {
+        throw new DurableGraphHoldError("RESUME_FINGERPRINT_MISMATCH", "decomposition manifest digest mismatch (artifact != checkpoint)");
+      }
+      verifiedManifestId = frozenManifest.manifest_id;
+    } else {
+      const rebuilt = buildDecompositionManifest(manifestBuildInputs());
+      if (!rebuilt.ok) {
+        throw new DurableGraphHoldError("RESUME_FINGERPRINT_MISMATCH", `decomposition manifest cannot be reconstructed: ${rebuilt.code}`);
+      }
+      store.writeArtifact("decomposition-manifest.json", rebuilt.manifest);
+      store.appendEvent({
+        event_type: "DECOMPOSITION_MANIFEST_WRITTEN",
+        stage: "resume",
+        payload: { format_version: DECOMPOSITION_MANIFEST_FORMAT, manifest_sha256: rebuilt.manifest_id, bytes: rebuilt.bytes, reconstructed: true },
+      });
+      verifiedManifestId = rebuilt.manifest_id;
     }
     store.appendEvent({ event_type: "RESUME_VALIDATED", stage: "resume", payload: { checkpoint_digest: checkpointDigest } });
   } catch (e) {
@@ -1176,6 +1288,9 @@ export async function resumeDurableGraph({
   run.configurationFingerprint = snapshot.configuration_fingerprint;
   run.irSha = reconstructedIr ? buildIrSha256(ir) : snapshot.decomposition_ir_sha256;
   run.dagSha = reconstructedIr ? buildDagFingerprint(ir) : snapshot.dag_sha256;
+  // I1: carry the verified/reconstructed manifest id so the next checkpoint
+  // pins it（full three-way binding on subsequent resume）.
+  run.decompositionManifestId = typeof verifiedManifestId === "string" ? verifiedManifestId : null;
   run.createdAt = snapshot.created_at;
   run.state.expectedRevision = snapshot.revision;
   // Seed from the RECOVERED initialState（completed-result recovery / requeue
