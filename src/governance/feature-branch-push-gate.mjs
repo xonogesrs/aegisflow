@@ -84,8 +84,13 @@ export function evaluatePushGate({
     if (!current || typeof current.currentHead !== "string") {
       violations.push("commit_matches_reviewed_head: current head unknown");
     } else {
-      if (result.current_head !== current.currentHead) {
-        violations.push(`commit_matches_reviewed_head: HEAD ${current.currentHead} drifted from reviewed ${result.current_head}`);
+      // REVIEW-PROVENANCE-MODEL-V2 (§3): the reviewed object is the frozen
+      // candidate commit; live HEAD may legitimately advance with
+      // governance/evidence commits. frozenCandidateHead (from the
+      // review-job) is authoritative when supplied.
+      const reviewedHead = current.frozenCandidateHead ?? current.currentHead;
+      if (result.current_head !== reviewedHead) {
+        violations.push(`commit_matches_reviewed_head: HEAD ${reviewedHead} drifted from reviewed ${result.current_head}`);
       }
       const identityViolations = verifyExternalReviewResult({ result, current });
       violations.push(...identityViolations.map((v) => `external_review_result_verified: ${v}`));

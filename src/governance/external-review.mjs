@@ -236,7 +236,11 @@ export function verifyExternalReviewResult({ result, current }) {
   if (typeof result.authorization_source !== "string" || result.authorization_source.length === 0) {
     violations.push("result.authorization_source missing (Controller authorization required)");
   }
-  if (result.current_head !== current.currentHead) violations.push(`result.current_head ${result.current_head} != ${current.currentHead}`);
+  // REVIEW-PROVENANCE-MODEL-V2 (§3): the reviewed object is the CANDIDATE.
+  // When the caller supplies the frozen candidate commit (frozenCandidateHead
+  // from the review-job), the result must bind THAT — never an arbitrary live
+  // HEAD advanced by governance/evidence commits.
+  if (result.current_head !== (current.frozenCandidateHead ?? current.currentHead)) violations.push(`result.current_head ${result.current_head} != ${current.frozenCandidateHead ?? current.currentHead}`);
   if (result.base_head !== current.baseHead) violations.push(`result.base_head ${result.base_head} != ${current.baseHead}`);
   if (result.repository !== current.repository) violations.push(`result.repository ${result.repository} != ${current.repository}`);
   if (result.branch !== current.branch) violations.push(`result.branch ${result.branch} != ${current.branch}`);

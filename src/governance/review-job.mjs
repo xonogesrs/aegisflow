@@ -31,7 +31,7 @@ import {
   writeJsonAtomicReplaceUnderLock,
   assertNotSymlink,
 } from "../c2d/fs-atomic.mjs";
-import { candidateDrift, specDrift } from "./review-job-context.mjs";
+import { candidateIntegrityDrift, candidateDrift, specDrift } from "./review-job-context.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -488,8 +488,12 @@ export function acceptReviewJob({
   }
 
   // RC2 freeze §6/§8 — full recompute + field comparison at acceptance.
+  // Model v2 (§1.3/§3): candidate integrity is CONTENT-based
+  // (changedTreeIdentity/patchSha256/baseHead/repository/branch). currentHead
+  // is a recorded frozen fact — governance/evidence commits may advance live
+  // HEAD after the candidate freeze without redefining the candidate.
   if (recomputed) {
-    const drift = candidateDrift(job.candidateIdentity, recomputed.candidateIdentity);
+    const drift = candidateIntegrityDrift(job.candidateIdentity, recomputed.candidateIdentity);
     if (drift.length > 0) {
       return { ok: false, code: "REVIEW_CANDIDATE_DRIFT", drift, job, path: current.path };
     }

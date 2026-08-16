@@ -216,7 +216,10 @@ test("successor runs the full lifecycle to a fresh ACCEPTED bound to the new con
       admission: REQ, cardId: "CARD", candidateIdentity: OLD_CANDIDATE, specDigest: OLD_SPEC, opts: { root },
     });
     assert.equal(holdOld.ok, false);
-    assert.match(holdOld.reason, /candidate drift/);
+    // Model v2 (§3): candidate integrity is content-based — an OLD context
+    // differing only in currentHead (recorded position fact) is caught by
+    // the spec/position binding as drift, not candidate-content drift.
+    assert.match(holdOld.reason, /drift/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

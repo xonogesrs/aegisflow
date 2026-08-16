@@ -39,10 +39,11 @@ import {
   closeoutStateForBinding,
   verifyCloseoutStateAgainstBinding,
   deriveCloseoutStage,
+  canonicalOutDir,
 } from "./closeout-state.mjs";
 import { captureBaselineInventory, runStateDrivenCloseout } from "./review-bundle.mjs";
 import { readReviewJob, createReviewJob, jobIdFor } from "./review-job.mjs";
-import { deriveReviewJobContext, candidateDrift, specDrift } from "./review-job-context.mjs";
+import { deriveReviewJobContext, candidateDrift, candidateIntegrityDrift, specDrift } from "./review-job-context.mjs";
 
 export const REVIEW_LIFECYCLE_HOLDS = Object.freeze({
   BINDING_MISSING: "REVIEW_CLOSEOUT_BINDING_MISSING",
@@ -185,6 +186,7 @@ export async function prepareReviewLifecycle({ admission, binding } = {}) {
       bindingDigest: digest,
       admissionId: admission?.admission_id ?? null,
       resolvedOutDir: outDir,
+      repoRoot,
     });
     if (!chk.ok) {
       return holdResult(REVIEW_LIFECYCLE_HOLDS.BINDING_DRIFT,
@@ -333,7 +335,10 @@ export function resolveReviewJobRoot({ binding, repoRoot, state = null } = {}) {
   const resolvedOutDir = resolve(repoRoot, binding?.out_dir ?? "");
   const root = dirname(resolvedOutDir);
   if (state && typeof state === "object") {
-    if (state.outDir !== resolvedOutDir) {
+    // Model v2 (§2): representation-agnostic comparison — legacy absolute and
+    // canonical relative persistence both verify against the binding-resolved
+    // path; drift means the paths genuinely differ.
+    if (canonicalOutDir(state.outDir, repoRoot) !== canonicalOutDir(resolvedOutDir, repoRoot)) {
       return holdResult(REVIEW_LIFECYCLE_HOLDS.ROOT_BINDING_DRIFT,
         `REVIEW_JOB_ROOT_BINDING_DRIFT: persisted state.outDir ${state.outDir} != binding-resolved ${resolvedOutDir} (no relocation)`);
     }
@@ -347,7 +352,9 @@ export function buildLifecycleIdentity({ admission, binding, resolvedOutDir, bas
     admissionId: admission?.admission_id ?? null,
     bindingDigest: binding ? reviewCloseoutBindingDigest(binding) : null,
     sourceAuthorityDigest: binding?.source_authority_digest ?? null,
-    outDir: resolvedOutDir,
+    // Model v2 (§2): persist the canonical repo-relative form; the absolute
+    // resolved path is operational only.
+    outDir: canonicalOutDir(binding?.out_dir ?? resolvedOutDir),
     baselineContentDigest,
   };
 }
@@ -452,7 +459,12 @@ export async function ensureCurrentReviewJob({ admission, binding, statePath, re
       return holdResult(REVIEW_LIFECYCLE_HOLDS.JOB_BINDING_DRIFT,
         `REVIEW_JOB_BINDING_DRIFT: job lifecycle identity drift [${drift.join(",")}]`);
     }
-    // N11 — the job must still describe the live candidate.
+    // N11 — the job must still describe the live candidate. Creation/resume
+    // semantics (model v2 §3 table): at ensureCurrentReviewJob time the live
+    // HEAD IS the candidate (no governance commits yet) — the full-field
+    // comparison also catches a tampered currentHead field that content-only
+    // checks cannot see. Acceptance and final closeout use content-based
+    // integrity instead (governance commits may legitimately advance HEAD).
     const cDrift = candidateDrift(job.candidateIdentity, ctx.candidateIdentity);
     const sDrift = specDrift(job.specDigest, ctx.specIdentity.specDigest);
     if (cDrift.length > 0 || sDrift) {
@@ -513,7 +525,10 @@ export function validateJobLifecycleIdentityForIngest({ job, record, state, repo
   } else {
     drift.push("state.reviewCloseout");
   }
-  if (state?.outDir && id.outDir !== state.outDir) drift.push("outDir");
+  // Model v2 (§2): outDir comparison is representation-agnostic — legacy
+  // absolute job values and canonical relative state values resolve to the
+  // same path and verify.
+  if (state?.outDir && canonicalOutDir(id.outDir, repoRoot) !== canonicalOutDir(state.outDir, repoRoot)) drift.push("outDir");
   if (state?.baseline?.contentDigest && id.baselineContentDigest !== state.baseline.contentDigest) drift.push("baselineContentDigest");
   return { ok: drift.length === 0, drift };
 }

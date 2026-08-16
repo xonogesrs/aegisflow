@@ -50,7 +50,7 @@ function isBinaryContent(buf) {
  * @param {object} [env.fs] — injectable fs for tests
  * @returns inventory object
  */
-export function buildChangeInventory({ git, cwd, baseBranch = "main", fs = {}, candidateDomain = null }) {
+export function buildChangeInventory({ git, cwd, baseBranch = "main", fs = {}, candidateDomain = null, headRef = "HEAD", includeDirty = true }) {
   const lstat = fs.lstat ?? lstatSync;
   const stat = fs.stat ?? statSync;
   const readFile = fs.readFile ?? readFileSync;
@@ -64,11 +64,16 @@ export function buildChangeInventory({ git, cwd, baseBranch = "main", fs = {}, c
     ? (p) => candidateDomain(p) !== "EXCLUDE"
     : () => true;
 
-  const committedLines = git(["diff", "--name-status", "--no-renames", `${baseBranch}...HEAD`]).split("\n").filter(Boolean);
-  const dirtyLines = git(["diff", "--name-status", "--no-renames", "HEAD"]).split("\n").filter(Boolean); // tracked, staged+unstaged vs HEAD
-  const stagedPaths = git(["diff", "--cached", "--name-only"]).split("\n").filter(Boolean).filter(isCandidate);
-  const untracked = git(["ls-files", "--others", "--exclude-standard"]).split("\n").filter(Boolean).filter(isCandidate);
-  const head = git(["rev-parse", "HEAD"]).trim();
+  // REVIEW-PROVENANCE-MODEL-V2 (§1.3/§9): the committed range may be a
+  // FROZEN head (headRef = the candidate commit) instead of live HEAD — the
+  // frozen-range identity recompute must be immune to unrelated live work.
+  // includeDirty=false restricts the inventory to the committed range only
+  // (no working-tree/staged/untracked reads) for that recompute.
+  const committedLines = git(["diff", "--name-status", "--no-renames", `${baseBranch}...${headRef}`]).split("\n").filter(Boolean);
+  const dirtyLines = includeDirty ? git(["diff", "--name-status", "--no-renames", "HEAD"]).split("\n").filter(Boolean) : []; // tracked, staged+unstaged vs HEAD
+  const stagedPaths = includeDirty ? git(["diff", "--cached", "--name-only"]).split("\n").filter(Boolean).filter(isCandidate) : [];
+  const untracked = includeDirty ? git(["ls-files", "--others", "--exclude-standard"]).split("\n").filter(Boolean).filter(isCandidate) : [];
+  const head = git(["rev-parse", headRef]).trim();
   const baseHead = git(["rev-parse", baseBranch]).trim();
   const branch = git(["branch", "--show-current"]).trim();
 
@@ -84,7 +89,7 @@ export function buildChangeInventory({ git, cwd, baseBranch = "main", fs = {}, c
       }
     }
   };
-  collectRenames(git(["diff", "-M", "--name-status", `${baseBranch}...HEAD`]).split("\n").filter(Boolean), "committed");
+  collectRenames(git(["diff", "-M", "--name-status", `${baseBranch}...${headRef}`]).split("\n").filter(Boolean), "committed");
   collectRenames(git(["diff", "-M", "--name-status", "HEAD"]).split("\n").filter(Boolean), "dirty");
 
   // index modes for tracked files (100644 / 100755)
@@ -179,8 +184,8 @@ export function buildChangeInventory({ git, cwd, baseBranch = "main", fs = {}, c
 
   // Human-readable patch text: committed + staged + unstaged + untracked.
   const parts = [];
-  const committedPatch = git(["diff", `${baseBranch}...HEAD`]).trim();
-  if (committedPatch) parts.push(`--- COMMITTED DIFF (${baseBranch}...HEAD) ---\n${committedPatch}`);
+  const committedPatch = git(["diff", `${baseBranch}...${headRef}`]).trim();
+  if (committedPatch) parts.push(`--- COMMITTED DIFF (${baseBranch}...${headRef}) ---\n${committedPatch}`);
   const stagedPatch = git(["diff", "--cached"]).trim();
   if (stagedPatch) parts.push(`--- STAGED DIFF (HEAD...index) ---\n${stagedPatch}`);
   const unstagedPatch = git(["diff"]).trim();

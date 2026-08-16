@@ -34,6 +34,8 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { scanForSecrets, sha256Text } from "../evidence/run-evidence-store.mjs";
 import { readReviewJob, findingsPath, verdictPath, updateReviewJob } from "./review-job.mjs";
+import { buildChangeInventory } from "./change-inventory.mjs";
+import { candidateDomain } from "./candidate-domain-policy.mjs";
 import {
   CLOSEOUT_HOLDS,
   CLOSEOUT_STATE_SCHEMA,
@@ -1131,7 +1133,7 @@ export function statusRecordPaths(rec) {
   return rec?.path ? [rec.path] : [];
 }
 
-export function collectRepoFacts(repoPath, { baseline = null } = {}) {
+export function collectRepoFacts(repoPath, { baseline = null, candidateRange = null } = {}) {
   const head = git(repoPath, ["rev-parse", "HEAD"]);
   const tree = git(repoPath, ["rev-parse", "HEAD^{tree}"]);
   const branch = git(repoPath, ["branch", "--show-current"]);
@@ -1190,6 +1192,51 @@ export function collectRepoFacts(repoPath, { baseline = null } = {}) {
     baselinePathShas: baseline && typeof baseline === "object" ? baseline.pathShas : null,
     finalPathShas: pathShas,
   });
+  // REVIEW-PROVENANCE-MODEL-V2 (§9): committed-before-baseline attribution.
+  // When the frozen candidate range (authority-bound baseHead → candidateHead,
+  // from the review-job) is supplied, the implementation delta is derived from
+  // the change inventory over that range (committed + dirty + untracked,
+  // candidate-domain filtered) — a clean worktree with a committed candidate
+  // still attributes the full implementation set.
+  let implementationDelta = null;
+  let implementationPaths = [];
+  if (candidateRange && typeof candidateRange === "object" && candidateRange.baseHead) {
+    const runGit = (args) => {
+      const r = git(repoPath, args);
+      if (!r.ok) throw new Error(`git ${args.join(" ")} failed: ${r.stderr}`);
+      return r.stdout;
+    };
+    const inv = buildChangeInventory({
+      git: runGit,
+      cwd: repoPath,
+      baseBranch: candidateRange.baseHead,
+      candidateDomain,
+    });
+    implementationPaths = inv.changedPaths;
+    // Classification from RAW git statuses (committed + tracked-dirty +
+    // untracked, candidate-domain filtered): committed additions surface as
+    // ADDED, not MODIFIED (the inventory netStatus treats only untracked as
+    // ADDED — transport semantics, not delta semantics).
+    const isCandidatePath = (p) => candidateDomain(p) !== "EXCLUDE";
+    const byStatus = { added: [], modified: [], deleted: [] };
+    const addTo = (list, p) => { if (isCandidatePath(p) && !list.includes(p)) list.push(p); };
+    const addLine = (line) => {
+      const [st, ...rest] = line.split("\t");
+      if (st.startsWith("R")) {
+        if (rest.length >= 2) { addTo(byStatus.deleted, rest[0]); addTo(byStatus.added, rest[1]); }
+        return;
+      }
+      if (st.startsWith("A")) addTo(byStatus.added, rest[rest.length - 1]);
+      else if (st.startsWith("D")) addTo(byStatus.deleted, rest[rest.length - 1]);
+      else addTo(byStatus.modified, rest[rest.length - 1]);
+    };
+    for (const l of runGit(["diff", "--name-status", "--no-renames", `${candidateRange.baseHead}...HEAD`]).split("\n").filter(Boolean)) addLine(l);
+    for (const l of runGit(["diff", "--name-status", "--no-renames", "HEAD"]).split("\n").filter(Boolean)) addLine(l);
+    for (const u of runGit(["ls-files", "--others", "--exclude-standard"]).split("\n").filter(Boolean)) {
+      addTo(byStatus.added, u);
+    }
+    implementationDelta = byStatus;
+  }
   return {
     repository: remote.ok ? remote.stdout : null,
     branch: branch.ok ? branch.stdout : "",
@@ -1214,7 +1261,28 @@ export function collectRepoFacts(repoPath, { baseline = null } = {}) {
     canonicalLines,
     worktreeClean: canonicalLines.length === 0,
     remote: remote.ok ? remote.stdout : null,
+    implementationDelta,
+    implementationPaths,
   };
+}
+
+/**
+ * REVIEW-PROVENANCE-MODEL-V2 (§9) — resolve the frozen candidate range
+ * (baseHead → candidateHead) from the card's review-job at the outDir root.
+ * Returns null when no governed job exists (legacy cards keep porcelain-only
+ * attribution).
+ */
+export function resolveCandidateRange({ outDir = null, cardId = null } = {}) {
+  if (!cardId || !outDir) return null;
+  try {
+    const job = readReviewJob(cardId, { root: dirname(resolve(outDir)) });
+    if (!job.ok || !job.job?.candidateIdentity?.currentHead) return null;
+    const ci = job.job.candidateIdentity;
+    if (!ci.baseHead) return null;
+    return { baseHead: ci.baseHead, candidateHead: ci.currentHead };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -2281,10 +2349,14 @@ export function validateReviewBundle(bundlePath, {
       if (sec9Digest && sec4Digest && sec9Digest !== sec4Digest) {
         fail(REVIEW_BUNDLE_HOLDS.INVENTORY_INCONSISTENT, "inventory_baseline_digest_mismatch");
       }
+      // REVIEW-PROVENANCE-MODEL-V2 (§1.4/§7): BASELINE_HEAD is the card-start
+      // snapshot FACT — governance/evidence commits may legitimately advance
+      // the generation HEAD after the baseline capture (committed-before-
+      // baseline candidates, post-baseline evidence commits). Equality with
+      // the bundle HEAD is NOT an invariant; well-formedness is.
       const baselineHead = sec9.match(/^BASELINE_HEAD:\s*(.+)$/m)?.[1]?.trim() ?? null;
-      const currentHead = line("HEAD");
-      if (baselineHead && currentHead && baselineHead !== currentHead) {
-        fail(REVIEW_BUNDLE_HOLDS.INVENTORY_INCONSISTENT, "inventory_baseline_head_mismatch");
+      if (baselineHead && !/^[0-9a-f]{40}$/.test(baselineHead)) {
+        fail(REVIEW_BUNDLE_HOLDS.INVENTORY_INCONSISTENT, "inventory_baseline_head_malformed");
       }
       const cleanSplit = (v) => String(v ?? "").split(",").map((s) => s.trim()).filter((p) => p && p !== "NOT_APPLICABLE" && p !== "[]");
       const inv = validateCardInventoryConsistency({
@@ -2371,7 +2443,16 @@ export async function runCloseoutGate({
   //    stays outside the current-card delta）.
   let facts;
   try {
-    facts = repoFacts ?? (repoPath ? collectRepoFacts(repoPath, { baseline: source?.inventory?.baseline ?? null }) : null);
+    // REVIEW-PROVENANCE-MODEL-V2 (§9): the gate re-derives with the SAME
+    // candidate range (from the persisted closeout-state cardId at outDir)
+    // so committed-before-baseline attribution renders identically.
+    let rangeCardId = null;
+    try {
+      const st = readCloseoutState(closeoutStatePath(outDir));
+      if (st.ok) rangeCardId = st.state?.task?.cardId ?? null;
+    } catch { /* no state — legacy card */ }
+    const candidateRange = resolveCandidateRange({ outDir, cardId: rangeCardId });
+    facts = repoFacts ?? (repoPath ? collectRepoFacts(repoPath, { baseline: source?.inventory?.baseline ?? null, candidateRange }) : null);
     if (!facts) return { final: "HOLD", holdCode: REVIEW_BUNDLE_HOLDS.GENERATION_FAILED, reason: "REVIEW_BUNDLE_GENERATION_FAILED:repo_facts_unavailable" };
   } catch (e) {
     return { final: "HOLD", holdCode: REVIEW_BUNDLE_HOLDS.GENERATION_FAILED, reason: `REVIEW_BUNDLE_GENERATION_FAILED:${String(e?.message ?? e).slice(0, 300)}` };
@@ -2814,16 +2895,25 @@ export function buildGraphCloseoutSource({ graphResult, closeout, repoPath = nul
     }
     let repoFactsForInventory = null;
     try {
-      repoFactsForInventory = collectRepoFacts(repoPath ?? cwd ?? ".", { baseline: closeout.baseline });
+      const candidateRange = resolveCandidateRange({ outDir: resolve(cwd ?? repoPath ?? ".", closeout.outDir ?? "."), cardId: closeout.cardId ?? null });
+      repoFactsForInventory = collectRepoFacts(repoPath ?? cwd ?? ".", { baseline: closeout.baseline, candidateRange });
     } catch { /* leave null — the gate re-derives authoritative facts */ }
     if (repoFactsForInventory) {
       const baselineDirtyPaths = [...new Set(closeout.baseline.dirtyPaths.filter((p) => typeof p === "string" && p.length > 0))];
-      // TA-2（V2）: single machine delta truth — ADDED/MODIFIED/DELETED and
-      // the Diff Summary all derive from classifyDeltaFromFacts(repoFacts).
-      const cls = classifyDeltaFromFacts(repoFactsForInventory);
+      // REVIEW-PROVENANCE-MODEL-V2 (§9): when the frozen candidate range is
+      // available, the implementation delta (committed-before-baseline
+      // attribution included) is the SINGLE delta truth; otherwise the
+      // porcelain delta (final − baseline) is used.
+      const implDelta = repoFactsForInventory.implementationDelta;
+      const cls = implDelta ?? classifyDeltaFromFacts(repoFactsForInventory);
+      const deltaPaths = implDelta
+        ? repoFactsForInventory.implementationPaths
+        : repoFactsForInventory.deltaPaths;
       // TA-2R（content-v1）: per-delta-path attribution kinds with the
       // card-start -> closeout content shas（machine proof for pre-existing
-      // dirty files the card modified — finding 2 / NEG17）.
+      // dirty files the card modified — finding 2 / NEG17）. Committed
+      // implementation files are not pre-existing dirty — membership is the
+      // proof, no content proof required.
       const clsSet = {
         added: new Set(cls.added),
         modified: new Set(cls.modified),
@@ -2831,7 +2921,7 @@ export function buildGraphCloseoutSource({ graphResult, closeout, repoPath = nul
       };
       const baselineShas = closeout.baseline.pathShas && typeof closeout.baseline.pathShas === "object" ? closeout.baseline.pathShas : {};
       const finalShas = repoFactsForInventory.pathShas ?? {};
-      const deltaKinds = repoFactsForInventory.deltaPaths.map((p) => {
+      const deltaKinds = deltaPaths.map((p) => {
         if (clsSet.deleted.has(p)) {
           return { path: p, kind: "DELETED", baselineSha: baselineShas[p] ?? null, finalSha: null };
         }
@@ -2842,7 +2932,7 @@ export function buildGraphCloseoutSource({ graphResult, closeout, repoPath = nul
       });
       inventory = {
         model: CARD_INVENTORY_MODEL,
-        attribution: closeout.inventoryAttribution ?? closeout.baseline.attributionModel ?? "membership-v1",
+        attribution: implDelta ? "candidate-range-v1" : (closeout.inventoryAttribution ?? closeout.baseline.attributionModel ?? "membership-v1"),
         baseline: {
           head: closeout.baseline.head ?? null,
           treeSha: closeout.baseline.treeSha ?? null,
@@ -2855,7 +2945,7 @@ export function buildGraphCloseoutSource({ graphResult, closeout, repoPath = nul
           // on unattributable paths. Only the digest renders in the bundle.
           pathShas: closeout.baseline.pathShas ?? null,
         },
-        deltaPaths: repoFactsForInventory.deltaPaths,
+        deltaPaths,
         deltaKinds,
         unattributable: repoFactsForInventory.unattributable ?? [],
       };
@@ -2865,6 +2955,9 @@ export function buildGraphCloseoutSource({ graphResult, closeout, repoPath = nul
       files.added = cls.added;
       files.modified = cls.modified;
       files.deleted = cls.deleted;
+      if (implDelta) {
+        files.cardImplementation = repoFactsForInventory.implementationPaths;
+      }
     }
   }
 
@@ -3101,7 +3194,7 @@ export async function runMandatoryGraphCloseout({
   if (!baselineGate.ok) {
     return { applied: true, final: "HOLD", holdCode: baselineGate.holdCode ?? "CARD_START_BASELINE_MISSING", reason: baselineGate.reason };
   }
-  const dir = outDir ?? closeout.outDir;
+  const dir = outDir ? resolve(outDir) : (cwd || repoPath ? resolve(cwd ?? repoPath, closeout.outDir) : closeout.outDir);
   if (!dir) {
     return { applied: true, final: "HOLD", holdCode: REVIEW_BUNDLE_HOLDS.MISSING, reason: "REVIEW_BUNDLE_MISSING:closeout_out_dir_absent" };
   }
@@ -3277,20 +3370,70 @@ export function verifyAppliedCloseoutBundle({ outDir = null, closeout = null, ca
     if (!boundHead || !boundTree) {
       return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: "REVIEW_BUNDLE_IDENTITY_MISMATCH:bundle_head_or_tree_binding_missing" };
     }
-    if (boundHead !== facts.head) {
-      return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:stale_implementation_head:${boundHead.slice(0, 12)} != ${facts.head.slice(0, 12)}` };
-    }
-    if (boundTree !== facts.treeSha) {
-      return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:stale_implementation_tree:${boundTree.slice(0, 12)} != ${facts.treeSha.slice(0, 12)}` };
-    }
-    // RB2R1 (WORKING-TREE MUTATION BINDING): HEAD/tree equality is NOT enough.
-    // The bundle records the repo's FINAL_DIRTY_DIGEST（tracked + staged +
-    // untracked working-tree state）at generation time; the current working
-    // tree must still match it. A tracked/staged/untracked mutation after
-    // bundle/review therefore FAILS CLOSED even when HEAD has not moved.
-    const boundDirty = text.match(/^FINAL_DIRTY_DIGEST:\s*(.+)$/m)?.[1]?.trim() ?? null;
-    if (boundDirty && facts.finalDirtyDigest && boundDirty !== facts.finalDirtyDigest) {
-      return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:working_tree_mutated:${boundDirty.slice(0, 24)} != ${facts.finalDirtyDigest.slice(0, 24)}` };
+    // REVIEW-PROVENANCE-MODEL-V2 (§6): the bundle's HEAD/TREE_SHA lines are
+    // the GOVERNANCE generation HEAD at bundle time — recorded facts, never
+    // live-HEAD equality demands. Candidate integrity is verified against the
+    // frozen review-job (when one exists at the outDir root):
+    //   1. the frozen candidate commit is an ancestor of live HEAD;
+    //   2. recomputed changedTreeIdentity/patchSha256 over the authority
+    //      range (candidate.baseHead .. live HEAD, candidate-domain filtered)
+    //      equal the job's bound values — the reviewed candidate bytes are
+    //      intact despite governance/evidence commits;
+    //   3. no implementation-path working-tree mutation (candidate-domain
+    //      filtered dirty set empty) — governance/evidence dirty state is
+    //      not authority-bearing.
+    // Legacy cards without a review-job keep the historical HEAD/TREE_SHA
+    // equality + whole-tree dirty-digest binding.
+    const jobRead = cardId ? readReviewJob(cardId, { root: dirname(resolve(outDir)) }) : { ok: false };
+    if (jobRead.ok && jobRead.job?.candidateIdentity?.currentHead) {
+      const job = jobRead.job;
+      const candidate = job.candidateIdentity;
+      const ancestor = git(repoPath, ["merge-base", "--is-ancestor", candidate.currentHead, facts.head]);
+      if (!ancestor.ok) {
+        return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:candidate_unreachable:${candidate.currentHead.slice(0, 12)} is not an ancestor of live HEAD` };
+      }
+      let frozen;
+      try {
+        const runGit = (args) => {
+          const r = git(repoPath, args);
+          if (!r.ok) throw new Error(`git ${args.join(" ")} failed: ${r.stderr}`);
+          return r.stdout;
+        };
+        // Model v2 (§1.3/§6): the candidate identity recomputes over the
+        // FROZEN range (baseHead..candidateHead) — immune to unrelated live
+        // work and governance commits. Live immutability is verified path-
+        // precisely: each reviewed candidate path must be byte-identical to
+        // the candidate commit in the current worktree/index.
+        frozen = buildChangeInventory({
+          git: runGit,
+          cwd: repoPath,
+          baseBranch: candidate.baseHead,
+          headRef: candidate.currentHead,
+          includeDirty: false,
+          candidateDomain,
+        });
+      } catch (e) {
+        return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:candidate_integrity_unavailable:${String(e?.message ?? e).slice(0, 200)}` };
+      }
+      if (frozen.changedTreeIdentity !== candidate.changedTreeIdentity || frozen.patchSha256 !== candidate.patchSha256) {
+        return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:candidate_content_drift:recomputed ${frozen.changedTreeIdentity.slice(0, 12)}/${frozen.patchSha256.slice(0, 12)} != bound ${candidate.changedTreeIdentity.slice(0, 12)}/${candidate.patchSha256.slice(0, 12)}` };
+      }
+      const mutated = frozen.changedPaths.filter((p) => !git(repoPath, ["diff", "--quiet", candidate.currentHead, "--", p]).ok);
+      if (mutated.length > 0) {
+        return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:implementation_working_tree_mutated:${mutated.slice(0, 5).join(",")}` };
+      }
+    } else {
+      // Legacy (no frozen review-job): historical live-binding semantics.
+      if (boundHead !== facts.head) {
+        return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:stale_implementation_head:${boundHead.slice(0, 12)} != ${facts.head.slice(0, 12)}` };
+      }
+      if (boundTree !== facts.treeSha) {
+        return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:stale_implementation_tree:${boundTree.slice(0, 12)} != ${facts.treeSha.slice(0, 12)}` };
+      }
+      const boundDirty = text.match(/^FINAL_DIRTY_DIGEST:\s*(.+)$/m)?.[1]?.trim() ?? null;
+      if (boundDirty && facts.finalDirtyDigest && boundDirty !== facts.finalDirtyDigest) {
+        return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:working_tree_mutated:${boundDirty.slice(0, 24)} != ${facts.finalDirtyDigest.slice(0, 24)}` };
+      }
     }
   }
   return { ok: true, path: match.path, identity: match.identity, sha256: sha };
@@ -3407,7 +3550,7 @@ export function assertFinalCardCloseout({
   if (delivery?.reviewBundleIdentity !== bundleCheck.identity || delivery?.reviewBundleSha256 !== bundleCheck.sha256) {
     return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: EXTERNAL_REVIEW_HOLDS.STALE_BUNDLE, reason: "EXTERNAL_REVIEW_STALE_BUNDLE:delivery record bound to a different bundle identity/sha" };
   }
-  return { ok: true, stage: "REVIEW_ACCEPTED", bundlePath: bundleCheck.path, reviewerIdentity: reviewer, reviewedAt, source: recordSource };
+  return { ok: true, stage: "REVIEW_ACCEPTED", bundlePath: bundleCheck.path, reviewerIdentity: reviewer, reviewedAt, source: recordSource, record: state };
 }
 
 /**
@@ -3523,7 +3666,9 @@ export async function runStateDrivenCloseout({
   // closeout.final field must not mint PASS without a canonical bundle on
   // disk）.
   if (state.closeout?.status === "APPLIED" && state.closeout?.final === "PASS") {
-    const dir = outDir ?? state.outDir ?? null;
+    // Model v2 (§2): canonical relative outDir resolves against the
+    // authoritative worktree; absolute passes through.
+    const dir = outDir ? resolve(outDir) : (state.outDir ? resolve(cwd ?? repoPath ?? ".", state.outDir) : null);
     const bundleCheck = verifyAppliedCloseoutBundle({
       outDir: dir,
       closeout: state.closeout,
@@ -3571,6 +3716,39 @@ export async function runStateDrivenCloseout({
         statePath,
       };
     }
+    // REVIEW-PROVENANCE-MODEL-V2 (§8): the descriptive closeout block is
+    // reconciled from the AUTHORITATIVE surface record on final PASS — the
+    // single sanctioned write point. The gate itself never consumes the
+    // descriptive block as authority.
+    const reconciled = {
+      ...state,
+      closeout: {
+        status: "APPLIED",
+        final: "PASS",
+        stage: "REVIEW_ACCEPTED",
+        bundleIdentity: bundleCheck.identity,
+        bundleSha256: bundleCheck.sha256,
+        externalReviewStatus: finalGate.record?.externalReviewStatus ?? "PASS",
+        verdict: finalGate.record?.verdict?.verdict ?? "PASS",
+        appliedAt: new Date().toISOString(),
+        blockedReason: null,
+      },
+    };
+    const wrote = writeCloseoutState({ path: statePath, state: reconciled });
+    if (!wrote.ok) {
+      return {
+        applied: true,
+        alreadyApplied: true,
+        final: "HOLD",
+        holdCode: CLOSEOUT_HOLDS.STATE_WRITE_FAILED,
+        reason: `CLOSEOUT_STATE_WRITE_FAILED:${wrote.reason}`,
+        bundlePath: finalGate.bundlePath ?? bundleCheck.path,
+        bundle: { identity: bundleCheck.identity, sha256: bundleCheck.sha256 },
+        externalReview: { externalReviewStatus: finalGate.record?.externalReviewStatus ?? "PASS" },
+        stage: finalGate.stage,
+        statePath,
+      };
+    }
     return {
       applied: true,
       alreadyApplied: true,
@@ -3579,7 +3757,7 @@ export async function runStateDrivenCloseout({
       reason: null,
       bundlePath: finalGate.bundlePath ?? bundleCheck.path,
       bundle: { identity: bundleCheck.identity, sha256: bundleCheck.sha256 },
-      externalReview: state.closeout?.externalReviewStatus ? { externalReviewStatus: state.closeout.externalReviewStatus } : null,
+      externalReview: { externalReviewStatus: finalGate.record?.externalReviewStatus ?? "PASS" },
       stage: finalGate.stage,
       statePath,
     };
@@ -3598,7 +3776,9 @@ export async function runStateDrivenCloseout({
   }
   const contract = {
     ...materialized.contract,
-    outDir: outDir ?? materialized.contract.outDir,
+    // Model v2 (§2): canonical relative outDir resolves against the
+    // authoritative worktree; absolute passes through.
+    outDir: outDir ? resolve(outDir) : resolve(cwd ?? repoPath ?? ".", materialized.contract.outDir),
     surfaceDir: surfaceDir ?? materialized.contract.surfaceDir ?? null,
     agentIdentity: agentIdentity ?? materialized.contract.agentIdentity ?? null,
     fileName,

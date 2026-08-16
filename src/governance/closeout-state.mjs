@@ -23,7 +23,7 @@
 // the runner wiring without cycles.
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { scanForSecrets, sha256Text } from "../evidence/run-evidence-store.mjs";
 
 export const CLOSEOUT_STATE_SCHEMA = "autoloop.closeout-state/v1";
@@ -33,6 +33,7 @@ export const CLOSEOUT_HOLDS = Object.freeze({
   METADATA_INCOMPLETE: "CLOSEOUT_METADATA_INCOMPLETE",
   EVIDENCE_UNREADABLE: "CLOSEOUT_EVIDENCE_UNREADABLE",
   GRAPH_RESULT_ABSENT: "CLOSEOUT_GRAPH_RESULT_ABSENT",
+  STATE_WRITE_FAILED: "CLOSEOUT_STATE_WRITE_FAILED",
 });
 
 // ── RB2R1 — closeout stage machine（descriptive vs authoritative）──────────
@@ -181,6 +182,31 @@ export function writeCloseoutState({ path, state }) {
 /**
  * Read + validate a persisted closeout-state record（fail-closed）.
  */
+/**
+ * Canonical out_dir representation (review-provenance-model-v2 §2): the
+ * repo-relative normalized form (forward slashes, no leading `/`, no `..`).
+ * Absolute values are converted to relative when resolvable against repoRoot;
+ * otherwise the value is returned normalized as-is (comparison then fails
+ * naturally on genuinely different paths). Used for BOTH persistence and
+ * comparison — the absolute resolved path is operational, never an identity
+ * owner.
+ */
+export function canonicalOutDir(value, repoRoot = null) {
+  if (value === null || value === undefined || value === "") return value;
+  const norm = String(value).replace(/\\/g, "/");
+  if (isAbsolute(norm)) {
+    const root = repoRoot ? String(repoRoot).replace(/\\/g, "/") : null;
+    const within = root !== null && (norm === root || norm.startsWith(root.replace(/\/$/, "") + "/"));
+    if (within) {
+      const rel = relative(repoRoot, norm).replace(/\\/g, "/");
+      return rel.length > 0 ? rel : ".";
+    }
+    return norm;
+  }
+  const cleaned = norm.replace(/^\.\//, "").replace(/\/+/g, "/");
+  return cleaned.replace(/\/$/, "");
+}
+
 export function readCloseoutState(path) {
   if (!path || !existsSync(path)) {
     return { ok: false, errors: ["closeout_state_missing"], state: null, path };
@@ -223,7 +249,12 @@ export function closeoutStateForBinding({
     },
     requiresReview: true,
     reviewRequiredAt,
-    outDir: resolvedOutDir,
+    // Model v2 (§2): persist the canonical repo-relative form. The binding's
+    // out_dir is the authority-owned relative locator; the absolute resolved
+    // path stays operational only.
+    outDir: (typeof binding?.out_dir === "string" && binding.out_dir.length > 0)
+      ? canonicalOutDir(binding.out_dir)
+      : canonicalOutDir(resolvedOutDir),
     authorizedScope: Array.isArray(binding?.authorized_scope) ? binding.authorized_scope.slice() : [],
     baseline: baseline ?? null,
     reviewCloseout: {
@@ -246,6 +277,7 @@ export function verifyCloseoutStateAgainstBinding(state, {
   bindingDigest,
   admissionId,
   resolvedOutDir,
+  repoRoot = null,
 } = {}) {
   const drift = [];
   if (!state || typeof state !== "object" || Array.isArray(state)) {
@@ -257,7 +289,9 @@ export function verifyCloseoutStateAgainstBinding(state, {
   if (state.task?.cardId !== binding?.card_id) drift.push("cardId");
   if (state.task?.cardTitle !== binding?.card_title) drift.push("cardTitle");
   if (state.task?.cardType !== binding?.card_type) drift.push("cardType");
-  if (state.outDir !== resolvedOutDir) drift.push("outDir");
+  // Model v2 (§2): representation-agnostic comparison — both sides normalize
+  // to the canonical repo-relative form (or absolute when unresolvable).
+  if (canonicalOutDir(state.outDir, repoRoot) !== canonicalOutDir(resolvedOutDir, repoRoot)) drift.push("outDir");
   if (!state.reviewCloseout || typeof state.reviewCloseout !== "object") {
     drift.push("reviewCloseout");
   } else {

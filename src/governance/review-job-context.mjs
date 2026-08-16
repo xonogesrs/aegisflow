@@ -133,6 +133,26 @@ export function candidateDrift(expected, actual) {
   return CANDIDATE_FIELDS.filter((f) => (expected?.[f] ?? "") !== (actual?.[f] ?? ""));
 }
 
+/**
+ * Candidate CONTENT integrity fields (review-provenance-model-v2 §1.3):
+ * the fields that prove the reviewed candidate bytes are intact. `currentHead`
+ * is deliberately EXCLUDED — it is a recorded frozen fact (the candidate
+ * commit), and governance/evidence commits may legitimately advance live HEAD
+ * after the candidate freeze without redefining the candidate.
+ */
+export const CANDIDATE_INTEGRITY_FIELDS = Object.freeze([
+  "changedTreeIdentity", "patchSha256", "baseHead", "repository", "branch",
+]);
+
+/**
+ * Content-based candidate integrity drift (model v2 §3): compares only the
+ * integrity fields. Governance-only HEAD advancement must never produce drift
+ * here. Empty array = candidate content intact.
+ */
+export function candidateIntegrityDrift(expected, actual) {
+  return CANDIDATE_INTEGRITY_FIELDS.filter((f) => (expected?.[f] ?? "") !== (actual?.[f] ?? ""));
+}
+
 /** Spec drift: true when the recomputed digest differs from the bound digest. */
 export function specDrift(expectedDigest, actualDigest) {
   return (expectedDigest ?? "") !== (actualDigest ?? "");

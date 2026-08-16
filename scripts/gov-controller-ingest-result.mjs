@@ -19,13 +19,15 @@ import { readFileSync, writeFileSync, mkdirSync, openSync, writeSync, closeSync,
 import { join, dirname, resolve, relative } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { parseArgs, git, loadRecord, assertLiveBindings, productionRemoteMatch } from "./shared/gov-args.mjs";
+import { parseArgs, git, gitOk, loadRecord, assertLiveBindings, productionRemoteMatch } from "./shared/gov-args.mjs";
 import { bundleDigestFromFile } from "../src/governance/review-context.mjs";
 import { sha256Text } from "../src/evidence/run-evidence-store.mjs";
 import { validateExternalReviewResult, externalReviewResultPath, RESULT_ARTIFACT_SCHEMA } from "../src/governance/external-review.mjs";
 import { readReviewHistory, deriveRoundContext } from "../src/governance/review-history.mjs";
-import { acceptReviewJob, reviewJobRoot, readReviewJob } from "../src/governance/review-job.mjs";
+import { acceptReviewJob, reviewJobRoot, readReviewJob, canonicalArtifactRelativePaths } from "../src/governance/review-job.mjs";
 import { deriveReviewJobContext } from "../src/governance/review-job-context.mjs";
+import { buildChangeInventory } from "../src/governance/change-inventory.mjs";
+import { candidateDomain } from "../src/governance/candidate-domain-policy.mjs";
 import { gitTopLevel, validateJobLifecycleIdentityForIngest } from "../src/governance/review-lifecycle.mjs";
 import { readCloseoutState, closeoutStatePath } from "../src/governance/closeout-state.mjs";
 import { GOV_HOLD } from "../src/governance/holds.mjs";
@@ -121,15 +123,59 @@ if (flags.acceptReviewJob) {
     assertLiveBindings({ record, cwd, inventory: ctx.inventory, baseBranch: base, cardId: rjCard, runId: record.run_id ?? "", flags });
     // Repository remote verification (D2).
     const repositoryVerified = productionRemoteMatch(ctx.repositoryRemote, repository);
-    // Staged-set normalization to canonical relative form.
+    // Model v2 (§1.3/§5): candidate integrity recomputes over the FROZEN
+    // range (baseHead..candidateHead) — immune to unrelated live work and
+    // governance commits — plus a precise candidate-path immutability check
+    // against the candidate commit. The frozen candidate commit must also
+    // remain reachable from live HEAD.
+    const jobAt = readReviewJob(rjCard, opts);
+    const frozenCandidate = jobAt.ok ? (jobAt.job.candidateIdentity?.currentHead ?? null) : null;
+    if (frozenCandidate && !gitOk(["merge-base", "--is-ancestor", frozenCandidate, "HEAD"], cwd)) {
+      console.error(GOV_HOLD.EXTERNAL_REVIEW_RESULT_INVALID);
+      console.error(`  - REVIEW_CANDIDATE_UNREACHABLE: frozen candidate commit ${frozenCandidate.slice(0, 12)} is not an ancestor of live HEAD`);
+      process.exit(1);
+    }
+    let frozenIdentity = null;
+    if (jobAt.ok && jobAt.job?.candidateIdentity?.baseHead) {
+      frozenIdentity = buildChangeInventory({
+        git: gitRunner, cwd,
+        baseBranch: jobAt.job.candidateIdentity.baseHead,
+        headRef: jobAt.job.candidateIdentity.currentHead,
+        includeDirty: false,
+        candidateDomain,
+      });
+      const candidatePaths = frozenIdentity.changedPaths;
+      const mutated = candidatePaths.filter((p) => !gitOk(["diff", "--quiet", jobAt.job.candidateIdentity.currentHead, "--", p], cwd));
+      if (mutated.length > 0) {
+        console.error(GOV_HOLD.EXTERNAL_REVIEW_RESULT_INVALID);
+        console.error(`  - REVIEW_CANDIDATE_PATH_MUTATED: reviewed candidate paths changed post-review: ${mutated.slice(0, 5).join(",")}`);
+        process.exit(1);
+      }
+    }
+    // Staged-set normalization to canonical relative form. Model v2 (§5):
+    // the sanctioned pre-acceptance representation is either (a) the three
+    // canonical review artifacts staged in the index (nothing else staged),
+    // or (b) the same artifacts committed at HEAD with a clean index
+    // (committed-before-acceptance is SUPPORTED — T12 option B). The exact
+    // bidirectionality is still enforced by acceptReviewJob.
     const artifactRelRoot = relative(cwd, reviewJobRoot(opts));
     const prefix = artifactRelRoot ? `${artifactRelRoot}/` : "";
-    const stagedSet = gitRunner(["diff", "--cached", "--name-only"])
+    const indexSet = gitRunner(["diff", "--cached", "--name-only"])
       .split("\n").filter(Boolean)
       .map((p) => (p.startsWith(prefix) ? p.slice(prefix.length) : p))
       .sort();
+    let stagedSet = indexSet;
+    if (indexSet.length === 0) {
+      const expected3 = jobAt.ok ? canonicalArtifactRelativePaths(rjCard, jobAt.job.generation) : [];
+      const committed = expected3.filter((p) => gitOk(["cat-file", "-e", `HEAD:${prefix}${p}`], cwd));
+      if (expected3.length > 0 && committed.length === expected3.length) {
+        stagedSet = expected3; // committed-canonical representation
+      }
+    }
     recomputed = {
-      candidateIdentity: ctx.candidateIdentity,
+      candidateIdentity: frozenIdentity
+        ? { ...ctx.candidateIdentity, changedTreeIdentity: frozenIdentity.changedTreeIdentity, patchSha256: frozenIdentity.patchSha256 }
+        : ctx.candidateIdentity,
       specIdentity: ctx.specIdentity,
       stagedSet,
       repositoryVerified,

@@ -22,19 +22,19 @@
 // Reuses IMPL1 capabilities only (readReviewJob / candidateDrift / specDrift /
 // deriveReviewJobContext); no new artifact format, no new identity owner.
 //
-// TERMINAL REVIEW ORDERING CONTRACT (AUTH1-TC1 R-TC1-01): the ACCEPTED review
-// job that satisfies this gate MUST be bound to the final local commit HEAD
-// (candidateIdentity.currentHead). A pre-commit working-tree acceptance
-// becomes stale the moment the candidate is committed (HEAD changes →
-// candidate drift → HOLD here). The live binding below is the mechanical
-// enforcement of that ordering: never weaken or remove currentHead from
-// candidateDrift. To re-bind after a commit, use the formal successor
-// generation (createSuccessorReviewJob, review-job.mjs) — never reuse a stale
-// ACCEPTED artifact.
+// TERMINAL REVIEW ORDERING CONTRACT (review-provenance-model-v2 §1.3/§3,
+// supersedes AUTH1-TC1 R-TC1-01): the ACCEPTED review job that satisfies
+// this gate MUST be bound to the frozen candidate identity. Candidate
+// integrity is CONTENT-based (changedTreeIdentity/patchSha256/baseHead/
+// repository/branch); the candidate commit is a recorded fact, and
+// governance/evidence commits may legitimately advance live HEAD after the
+// candidate freeze without making the accepted artifact stale. Live-HEAD
+// equality is never a candidate check (model v2 eliminates that impossible
+// invariant).
 
 import { resolve } from "node:path";
 import { readReviewJob, jobIdFor } from "./review-job.mjs";
-import { candidateDrift, specDrift, deriveReviewJobContext } from "./review-job-context.mjs";
+import { candidateIntegrityDrift, candidateDrift, specDrift, deriveReviewJobContext } from "./review-job-context.mjs";
 
 export const REVIEW_ARTIFACT_HOLD = "HOLD / REVIEW_ARTIFACT_REQUIRED_BUT_MISSING_OR_INVALID";
 
@@ -151,8 +151,10 @@ export function assertReviewArtifactEnforced({
     return { ok: false, holdCode: REVIEW_ARTIFACT_HOLD, reason: `REVIEW_ARTIFACT_REQUIRED_BUT_MISSING_OR_INVALID: review job superseded by ${job.supersededBy}` };
   }
 
-  // R1A: exact live candidate/spec binding (mandatory, not optional).
-  const drift = candidateDrift(job.candidateIdentity, candidateIdentity);
+  // R1A: exact candidate/spec binding (mandatory, not optional). Model v2:
+  // content-based candidate integrity — governance HEAD advancement after the
+  // candidate freeze must not invalidate the accepted artifact.
+  const drift = candidateIntegrityDrift(job.candidateIdentity, candidateIdentity);
   if (drift.length > 0) {
     return { ok: false, holdCode: REVIEW_ARTIFACT_HOLD, reason: `REVIEW_ARTIFACT_REQUIRED_BUT_MISSING_OR_INVALID: candidate drift [${drift.join(",")}]` };
   }

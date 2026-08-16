@@ -28,7 +28,7 @@ import {
   reviewCloseoutBindingDigest,
 } from "../../src/governance/lifecycle-authorization.mjs";
 import { CARD_TYPES } from "../../src/governance/review-bundle.mjs";
-import { readCloseoutState } from "../../src/governance/closeout-state.mjs";
+import { readCloseoutState, canonicalOutDir } from "../../src/governance/closeout-state.mjs";
 import {
   makeGitRepo,
   projectBinding,
@@ -108,7 +108,10 @@ test("E2E zero-human-prompt: admission -> bootstrap -> execution -> closeout-sta
   assert.equal(state.task.cardId, binding.card_id);
   assert.equal(state.task.cardTitle, binding.card_title);
   assert.equal(state.task.cardType, binding.card_type);
-  assert.equal(state.outDir, resolve(repoRoot, OUT_DIR_REL));
+  // Model v2 (§2): outDir persists in the canonical repo-relative form; the
+  // resolved absolute path is operational only.
+  assert.equal(state.outDir, OUT_DIR_REL);
+  assert.equal(canonicalOutDir(state.outDir, repoRoot), canonicalOutDir(resolve(repoRoot, OUT_DIR_REL), repoRoot));
   assert.deepEqual(state.authorizedScope, binding.authorized_scope);
   assert.ok(state.baseline?.schema === "autoloop.card-inventory.baseline/v1" && Array.isArray(state.baseline.dirtyPaths));
   assert.equal(state.reviewCloseout.schema, binding.schema);

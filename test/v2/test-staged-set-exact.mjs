@@ -123,22 +123,39 @@ test("acceptance rejects staged-set drift (stage then unstage)", () => {
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("acceptance rejects candidate drift", () => {
+test("acceptance: currentHead-only difference is NOT candidate drift (model v2); content mutation IS", () => {
   const root = tmpRoot();
   try {
+    // A CONTENT mutation (changedTreeIdentity) is real candidate drift → HOLD.
     persistedJob(root);
     stageExact(root);
     const drifted = candidate();
-    drifted.currentHead = sha("9", 40);
-    const recomputed = {
+    drifted.changedTreeIdentity = sha("9", 64);
+    const r2 = acceptReviewJob({ cardId: "CARD", trustedReviewerIdentity: "reviewer:ext", authorizationSource: "controller:op", recomputed: {
       candidateIdentity: drifted,
       specIdentity: { specId: "spec-1", specDigest: sha("e", 64) },
       stagedSet: CANON,
       repositoryVerified: true,
-    };
-    const r = acceptReviewJob({ cardId: "CARD", trustedReviewerIdentity: "reviewer:ext", authorizationSource: "controller:op", recomputed }, { root });
-    assert.equal(r.ok, false);
-    assert.equal(r.code, "REVIEW_CANDIDATE_DRIFT");
+    } }, { root });
+    assert.equal(r2.ok, false);
+    assert.equal(r2.code, "REVIEW_CANDIDATE_DRIFT");
+    // Model v2 (§1.3/§3): currentHead is a recorded frozen position fact —
+    // governance/evidence commits may advance live HEAD without redefining
+    // the candidate. Acceptance uses CONTENT integrity → ACCEPTED.
+    const root2 = tmpRoot();
+    try {
+      persistedJob(root2);
+      stageExact(root2);
+      const headOnly = candidate();
+      headOnly.currentHead = sha("9", 40);
+      const r = acceptReviewJob({ cardId: "CARD", trustedReviewerIdentity: "reviewer:ext", authorizationSource: "controller:op", recomputed: {
+        candidateIdentity: headOnly,
+        specIdentity: { specId: "spec-1", specDigest: sha("e", 64) },
+        stagedSet: CANON,
+        repositoryVerified: true,
+      } }, { root: root2 });
+      assert.equal(r.ok, true, r.code ?? r.drift?.join(","));
+    } finally { rmSync(root2, { recursive: true, force: true }); }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

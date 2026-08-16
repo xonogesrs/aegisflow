@@ -233,10 +233,18 @@ test("R1A-D. accepted review + both candidate and spec mutated → HOLD", () => 
   const root = freshRoot();
   try {
     writeJob(root, "CARD-A");
-    const mutated = { ...CANONICAL_CANDIDATE, currentHead: "9".repeat(40) };
-    const r = gateAt(root, { admission: REQ_INDEPENDENT, cardId: "CARD-A", candidateIdentity: mutated, specDigest: "1".repeat(64) });
+    // Model v2 (§3): candidate integrity is content-based. A currentHead-only
+    // difference (recorded position fact) is NOT candidate drift; the spec
+    // mutation is still drift → HOLD.
+    const headOnly = { ...CANONICAL_CANDIDATE, currentHead: "9".repeat(40) };
+    const r = gateAt(root, { admission: REQ_INDEPENDENT, cardId: "CARD-A", candidateIdentity: headOnly, specDigest: "1".repeat(64) });
     assert.equal(r.ok, false);
-    assert.match(r.reason, /candidate drift/);
+    assert.match(r.reason, /spec drift/);
+    // A CONTENT mutation (changedTreeIdentity) IS candidate drift → HOLD.
+    const contentMutated = { ...CANONICAL_CANDIDATE, changedTreeIdentity: "9".repeat(64) };
+    const r2 = gateAt(root, { admission: REQ_INDEPENDENT, cardId: "CARD-A", candidateIdentity: contentMutated, specDigest: CANONICAL_SPEC });
+    assert.equal(r2.ok, false);
+    assert.match(r2.reason, /candidate drift/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -266,6 +266,48 @@ export function validateLifecycleAuthorization(raw) {
 /**
  * Validate a full authorization record (top-level bindings + block).
  */
+/**
+ * REVIEW-PROVENANCE-MODEL-V2 (§1.1/Phase 2) — schema-valid authority
+ * issuance. Validates the record against its own schema BEFORE persisting,
+ * writes it, then recomputes authorityDigest from the PERSISTED bytes and
+ * verifies it reproduces the in-memory digest. Fail-closed: an issuance that
+ * cannot validate or whose persisted bytes do not reproduce the digest never
+ * returns ok. No downstream tool may be the first place schema invalidity or
+ * digest drift is discovered.
+ *
+ * @returns {{ok:true, path:string, digest:string, record:object}
+ *          | {ok:false, errors:string[], path?:string}}
+ */
+export function writeAuthorityRecordValidated({ path, record } = {}) {
+  if (!path || !record || typeof record !== "object" || Array.isArray(record)) {
+    return { ok: false, errors: ["authority_issuance:path_and_record_object_required"] };
+  }
+  const check = validateAuthorityRecord(record);
+  if (!check.valid) {
+    return { ok: false, errors: check.errors.slice(0, 8) };
+  }
+  const expectedDigest = authorityDigest(record);
+  try {
+    ensureDir0700(dirname(path));
+    writeJsonExclusiveCreate(path, record);
+  } catch (e) {
+    return { ok: false, errors: [`authority_issuance:write_failed:${String(e?.message ?? e).slice(0, 200)}`], path };
+  }
+  // Digest must be reproducible from the persisted bytes — never from the
+  // in-memory object alone.
+  let persisted;
+  try {
+    persisted = JSON.parse(readFileSync(path, "utf8"));
+  } catch (e) {
+    return { ok: false, errors: [`authority_issuance:readback_failed:${String(e?.message ?? e).slice(0, 200)}`], path };
+  }
+  const persistedDigest = authorityDigest(persisted);
+  if (persistedDigest !== expectedDigest) {
+    return { ok: false, errors: ["authority_issuance:persisted_digest_drift"], path };
+  }
+  return { ok: true, path, digest: persistedDigest, record: persisted };
+}
+
 export function validateAuthorityRecord(raw) {
   if (!isPlainObject(raw)) return { valid: false, errors: ["record:type"] };
   const errors = validateAgainstSchema(SCHEMA, raw, "record");

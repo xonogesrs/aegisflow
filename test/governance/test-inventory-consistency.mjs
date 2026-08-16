@@ -433,7 +433,9 @@ test("inventory (bundle): baseline digest cross-check — section 4 vs section 9
   assert.ok(v.errors.some((e) => e.includes("inventory_baseline_digest_mismatch")), JSON.stringify(v.errors));
 });
 
-test("inventory (bundle): baseline HEAD must match the bundle HEAD (no commits during the card)", () => {
+test("inventory (bundle): baseline HEAD is a recorded card-start FACT — divergence from the bundle HEAD is legitimate (model v2); malformed head fails", () => {
+  // Baseline captured at a different HEAD than the bundle generation HEAD is
+  // the NORMAL committed-before-baseline / post-baseline-evidence shape.
   const src = mkBundleSource({
     inventory: {
       model: CARD_INVENTORY_MODEL,
@@ -445,8 +447,20 @@ test("inventory (bundle): baseline HEAD must match the bundle HEAD (no commits d
   });
   const p = renderAndWrite(src);
   const v = validateReviewBundle(p, { authorizedDir: OUT });
-  assert.equal(v.ok, false);
-  assert.ok(v.errors.some((e) => e.includes("inventory_baseline_head_mismatch")), JSON.stringify(v.errors));
+  assert.equal(v.ok, true, JSON.stringify(v.errors));
+  // A MALFORMED baseline head (not 40-hex) still fails closed.
+  const bad = mkBundleSource({
+    inventory: {
+      model: CARD_INVENTORY_MODEL,
+      baseline: { head: "not-a-sha", treeSha: facts.treeSha, dirtyDigest: "clean", dirtyPaths: [] },
+      deltaPaths: [],
+    },
+    repoIntegrity: { head: facts.head, treeSha: facts.treeSha, worktreeClean: true, dirtyPaths: [], untrackedFiles: [], remote: facts.remote },
+    files: { added: [], modified: [], deleted: [] },
+  });
+  const v2 = validateReviewBundle(renderAndWrite(bad), { authorizedDir: OUT });
+  assert.equal(v2.ok, false);
+  assert.ok(v2.errors.some((e) => e.includes("inventory_baseline_head_malformed")), JSON.stringify(v2.errors));
 });
 
 test("R2 (bundle): structured AUTHORIZATION_EXCEPTIONS render and admit an out-of-scope path; absent exception fails", () => {
