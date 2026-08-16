@@ -34,6 +34,7 @@ export const DECOMPOSITION_MANIFEST_MAX_BYTES = 64 * 1024;
 
 export const DECOMPOSITION_MANIFEST_ERRORS = Object.freeze({
   MISSING_PARENT_IDENTITY: "DECOMPOSITION_MANIFEST_MISSING_PARENT_IDENTITY",
+  MISSING_PARENT_REVISION: "DECOMPOSITION_MANIFEST_MISSING_PARENT_REVISION",
   MISSING_FINGERPRINTS: "DECOMPOSITION_MANIFEST_MISSING_FINGERPRINTS",
   MISSING_IR: "DECOMPOSITION_MANIFEST_MISSING_IR",
   MISSING_IR_HASHES: "DECOMPOSITION_MANIFEST_MISSING_IR_HASHES",
@@ -64,6 +65,12 @@ export function buildPhaseTableDigests(ir) {
  * @param {object} opts
  * @param {string} opts.parentExecutionId — run execution id
  * @param {string} opts.chainId — run chain id
+ * @param {string} opts.parentRevision — parent task content revision (the
+ *   revision of the parent task the decomposition answers; distinct from the
+ *   input fingerprint, which binds the full frozen execution input). For the
+ *   STACK_A path: sha256(canonicalJson(source)) — the parent task definition
+ *   (goal/requirements/authority). For the production graph path (caller-
+ *   provided IR): sha256(canonicalJson(parent)).
  * @param {string} opts.inputFingerprint — frozen input fingerprint (source/parent/manifest)
  * @param {string} opts.configurationFingerprint — frozen configuration fingerprint
  * @param {object} opts.ir — validated decomposition IR (DECOMPOSED)
@@ -81,6 +88,7 @@ export function buildPhaseTableDigests(ir) {
 export function buildDecompositionManifest({
   parentExecutionId,
   chainId,
+  parentRevision,
   inputFingerprint,
   configurationFingerprint,
   ir,
@@ -93,6 +101,9 @@ export function buildDecompositionManifest({
   // ── Fail-closed presence gates (deterministic; no silent defaults) ──
   if (typeof parentExecutionId !== "string" || parentExecutionId.length === 0) {
     return { ok: false, code: DECOMPOSITION_MANIFEST_ERRORS.MISSING_PARENT_IDENTITY, reason: "parentExecutionId required" };
+  }
+  if (typeof parentRevision !== "string" || parentRevision.length === 0) {
+    return { ok: false, code: DECOMPOSITION_MANIFEST_ERRORS.MISSING_PARENT_REVISION, reason: "parentRevision required (distinct from input fingerprint)" };
   }
   if (typeof inputFingerprint !== "string" || inputFingerprint.length === 0 ||
       typeof configurationFingerprint !== "string" || configurationFingerprint.length === 0) {
@@ -127,6 +138,7 @@ export function buildDecompositionManifest({
     parent: {
       execution_id: parentExecutionId,
       chain_id: typeof chainId === "string" ? chainId : null,
+      revision: parentRevision,
     },
     input_fingerprint: inputFingerprint,
     configuration_fingerprint: configurationFingerprint,

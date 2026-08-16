@@ -64,13 +64,41 @@ I2 (child execution packet), I3 (identity dedup), I4 (verification layering), I5
 
 ```text
 VERDICT:
-<reviewer fills in: PASS / AUTOLOOP_DECOMP_OPT1_IMPL1_I1_DECOMPOSITION_MANIFEST_IMPLEMENTED_AND_VERIFIED
- or HOLD / <code> with findings>
+HOLD / AUTOLOOP_DECOMP_OPT1_IMPL1_I1_PARENT_BINDING_AND_CRASH_JOURNAL_GAPS
+(resolved by I1-R1 below; re-review targeted, no full I1 re-review)
 ```
 
 ```text
 FINDINGS:
-<reviewer fills in>
+1. parent identity/revision not truly bound in the manifest payload
+   (only execution_id/chain_id; input_fingerprint ≠ parent revision)
+2. crash ordering "artifact present / event absent / checkpoint absent"
+   was not recovered (journal would never carry the emission record)
+3. no passing integration proof for the production durable-graph path
+Other open points (graph-input-ir sentinel, reconstruction semantics,
+snapshotOverrides seam, tree fail-closed): ACCEPTED.
+```
+
+## 8. I1-R1 closure record (response to the HOLD)
+
+| Fix | Change | Proof |
+|---|---|---|
+| A. parent revision binding | builder gains `parentRevision` (distinct field; STACK_A = sha256(canonicalJson(source)), graph = sha256(canonicalJson(parent))); payload `parent.revision`; gate `MISSING_PARENT_REVISION`; all four call sites (run+resume × both paths) | T1 (present, 64-hex, ≠ input_fingerprint), T2 (parent-revision change → digest change) |
+| B. artifact-present/event-missing recovery | resume scans the journal for `DECOMPOSITION_MANIFEST_WRITTEN` after verification and appends it when absent (`recovered_journal_gap: true`, replay-safe; no duplicate event when present) — both durable paths | five crash orderings T-lock: (1) absent/absent/absent → reconstruct+event+pin; (2) present/absent/absent → verify+gap repaired; (3) present/present/absent → no duplicate; (4) present/present/pinned → three-way passes; (5) absent/pinned → HOLD |
+| C. production graph-path integration proof | two targeted tests running the REAL production path (`runDurableGraph` / `resumeDurableGraph`, scripted adapters, `preserveInstance`, colima running): manifest artifact + event + checkpoint pin on run; three-way verification passes on resume | T14/T15 pass |
+
+Also fixed while greening the suites (fixture-only, no production behavior change):
+- `test-durable-graph` DE-2 wiring resume used a DIFFERENT scratchRoot than the run (namespace drift is correct fail-closed behavior; the fixture now reuses the same namespace) — suite 11/11.
+- `test-durable-execution` test 33 sentinel never matched any `SECRET_PATTERNS` entry (github_token needs `gh[pousr]_` + 20+ chars) — sentinel now `ghp_0123…` — suite 23/23.
+
+Final suite state: `test-decomposition-manifest` 15/15 (T1–T8 + 5 orderings + 2 graph proofs), `test-durable-execution` 23/23, `test-durable-graph` 11/11, checkpoint-bridge + pre-decomposition-interruption + autoloop-entrypoint 50/50. Zero failures.
+
+## 9. Reviewer verdict (post-I1-R1)
+
+```text
+VERDICT:
+<reviewer fills in: PASS / AUTOLOOP_DECOMP_OPT1_IMPL1_I1_DECOMPOSITION_MANIFEST_IMPLEMENTED_AND_VERIFIED
+ or HOLD with findings>
 ```
 
 ```text

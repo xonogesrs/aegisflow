@@ -501,7 +501,9 @@ test("DE-2 production wiring: runSubagentGraph default durable -> checkpoints/jo
     assert.ok(existsSync(join(execDir, "artifacts", "decomposition-ir.json")), "frozen IR artifact written");
 
     // fresh-process resume of the completed run returns the terminal verdict
-    // from durable truth（no graph re-execution）.
+    // from durable truth（no graph re-execution）. Resume must reuse the SAME
+    // repoPath/scratchRoot namespace the run froze（namespace drift fails
+    // closed）.
     const resume = await resumeDurableGraph({
       persistenceRoot,
       executionId: durableId,
@@ -509,7 +511,7 @@ test("DE-2 production wiring: runSubagentGraph default durable -> checkpoints/jo
       manifest: [],
       cwd: repo,
       repoPath: repo,
-      scratchRoot: mkdtempSync(join(tmpdir(), "de2-wiring-resume-scratch-")),
+      scratchRoot,
       maxRepairAttempts: 1,
       timeoutMs: 60000,
       signal: undefined,

@@ -364,7 +364,7 @@ test("33: evidence write failure stops the run (no next phase)", async () => {
   // → phase failed → HOLD before p_impl.
   const factories = {
     executorAdapterFactory: () => createScriptedAdapter([
-      { expect: { phase: "executor", attempt: 0 }, result: completed("synthetic-secret-sentinel-0123456789abcdef evidence output", "x") },
+      { expect: { phase: "executor", attempt: 0 }, result: completed("ghp_0123456789abcdef0123456789abcdef evidence output", "x") },
     ]),
     reviewerAdapterFactory: () => createScriptedAdapter([{ expect: { phase: "reviewer", attempt: 0 }, result: completed(verdictJson(), "x") }]),
   };

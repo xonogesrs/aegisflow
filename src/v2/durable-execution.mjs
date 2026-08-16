@@ -755,6 +755,7 @@ async function runDurableInner({
   const manifestResult = buildDecompositionManifest({
     parentExecutionId: run.executionId,
     chainId: run.chainId,
+    parentRevision: sha256Text(canonicalJson(source)),
     inputFingerprint: run.inputFingerprint,
     configurationFingerprint: run.configurationFingerprint,
     ir: pipeline.ir,
@@ -1139,6 +1140,7 @@ export async function resumeAutoLoopInternal({
     const manifestBuildInputs = () => ({
       parentExecutionId: identity.executionId,
       chainId: identity.chainId,
+      parentRevision: sha256Text(canonicalJson(frozen.source)),
       inputFingerprint: inputFp,
       configurationFingerprint: snapshot.configuration_fingerprint,
       ir,
@@ -1202,6 +1204,27 @@ export async function resumeAutoLoopInternal({
         payload: { format_version: DECOMPOSITION_MANIFEST_FORMAT, manifest_sha256: rebuilt.manifest_id, bytes: rebuilt.bytes, reconstructed: true },
       });
       verifiedManifestId = rebuilt.manifest_id;
+    }
+
+    // I1-R1 (B): crash between the artifact write and the journal event
+    // leaves a valid artifact with NO DECOMPOSITION_MANIFEST_WRITTEN record
+    // and no checkpoint pin — resume must repair the journal so the emission
+    // record always exists alongside the artifact (evidence-path/journaled
+    // semantics; replay-safe marker, never a second artifact write).
+    let manifestEventExists = false;
+    try {
+      const jv = store.verifyJournal();
+      for (let s = 1; s <= jv.count; s++) {
+        const { event } = store.readEvent(s);
+        if (event?.event_type === "DECOMPOSITION_MANIFEST_WRITTEN") { manifestEventExists = true; break; }
+      }
+    } catch { /* verification failure propagates via RESUME_VALIDATED below */ }
+    if (!manifestEventExists) {
+      store.appendEvent({
+        event_type: "DECOMPOSITION_MANIFEST_WRITTEN",
+        stage: "resume",
+        payload: { format_version: DECOMPOSITION_MANIFEST_FORMAT, manifest_sha256: verifiedManifestId, recovered_journal_gap: true },
+      });
     }
 
     store.appendEvent({ event_type: "RESUME_VALIDATED", stage: "resume", payload: { checkpoint_digest: checkpointDigest } });

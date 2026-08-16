@@ -732,6 +732,7 @@ export async function runDurableGraph(opts = {}) {
   const manifestResult = buildDecompositionManifest({
     parentExecutionId: run.executionId,
     chainId: run.chainId,
+    parentRevision: sha256Text(canonicalJson(parent)),
     inputFingerprint: run.inputFingerprint,
     configurationFingerprint: run.configurationFingerprint,
     ir,
@@ -1099,6 +1100,7 @@ export async function resumeDurableGraph({
     const manifestBuildInputs = () => ({
       parentExecutionId: identity.executionId,
       chainId: identity.chainId,
+      parentRevision: sha256Text(canonicalJson(frozen?.parent ?? parent)),
       inputFingerprint: snapshot.input_fingerprint,
       configurationFingerprint: snapshot.configuration_fingerprint,
       ir,
@@ -1158,6 +1160,25 @@ export async function resumeDurableGraph({
         payload: { format_version: DECOMPOSITION_MANIFEST_FORMAT, manifest_sha256: rebuilt.manifest_id, bytes: rebuilt.bytes, reconstructed: true },
       });
       verifiedManifestId = rebuilt.manifest_id;
+    }
+
+    // I1-R1 (B): crash between the artifact write and the journal event —
+    // repair the journal so the emission record always exists alongside the
+    // artifact (replay-safe marker; never a second artifact write).
+    let manifestEventExists = false;
+    try {
+      const jv = store.verifyJournal();
+      for (let s = 1; s <= jv.count; s++) {
+        const { event } = store.readEvent(s);
+        if (event?.event_type === "DECOMPOSITION_MANIFEST_WRITTEN") { manifestEventExists = true; break; }
+      }
+    } catch { /* verification failure propagates below */ }
+    if (!manifestEventExists) {
+      store.appendEvent({
+        event_type: "DECOMPOSITION_MANIFEST_WRITTEN",
+        stage: "resume",
+        payload: { format_version: DECOMPOSITION_MANIFEST_FORMAT, manifest_sha256: verifiedManifestId, recovered_journal_gap: true },
+      });
     }
     store.appendEvent({ event_type: "RESUME_VALIDATED", stage: "resume", payload: { checkpoint_digest: checkpointDigest } });
   } catch (e) {
