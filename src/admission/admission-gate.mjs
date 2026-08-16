@@ -27,6 +27,7 @@
 // a compatibility surface only.
 
 import { validateAdmission, assertAdmissionFrozen, deriveAdmissionId } from "./admission-record.mjs";
+import { isRetrievalAuthorized } from "./policy-projection.mjs";
 import { createBudgetEnforcement } from "../budget/enforcement.mjs";
 import { attachBudgetResult } from "../budget/graph-wiring.mjs";
 import { digestOf } from "../canonical-digest.mjs";
@@ -295,6 +296,22 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
         lifecycle: { active: true, holdCode: prepared.holdCode },
       };
     }
+  }
+
+  // ── CBM-LIVE (AUTOLOOP-CBM-LIVE-INTEGRATION-1) — ONE provider
+  // construction/ownership path at the production entrypoint ──────────────
+  // An admission that authorizes retrieval (memory_policy.retrieval_allowed
+  // === true — an explicit capability, never a global default) gets the
+  // single read-only memory provider automatically; no caller-specific
+  // dogfood injection is required. An unauthorized admission gets NO
+  // provider, so the runner's isRetrievalAuthorized(admission) && memory
+  // gate fails closed (no retrieval). A caller-supplied provider is
+  // respected unchanged (the same interface). Provider availability is
+  // never authority: a missing/unusable store yields the governed
+  // EMPTY_MEMORY / MEMORY_STORE_INVALID semantics inside the provider.
+  if (!forward.memory && isRetrievalAuthorized(admission)) {
+    const { createGraphMemoryProvider } = await import("../memory/graph-context.mjs");
+    forward = { ...forward, memory: { provider: createGraphMemoryProvider({}) } };
   }
 
   // The frozen admission is forwarded UNCHANGED（the runner consumes it; it
