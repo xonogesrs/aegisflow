@@ -25,10 +25,20 @@ When you need to know AutoLoop state, read the structured authoritative
 source directly. Do not answer a state question by grepping the filesystem
 for a status string.
 
-- "Is a card AWAITING_EXTERNAL_REVIEW / what's its current review status?"
-  → read `src/governance/review-bundle.mjs`'s `currentSurfaceReviewStatus()`
-  (surface = `~/Desktop/AutoLoop-Review/Current/delivery.json`, or read that
-  file directly — it holds at most one card at a time).
+- "What's the latest formal execution's review?" (the FIXED human-facing
+  entrypoint for a just-finished execution) → read
+  `~/Desktop/AutoLoop-Review/Latest/review.txt` directly — the most recent
+  execution review; every previous one rotates into
+  `~/Desktop/AutoLoop-Review/Latest/archive/`. Structured answer:
+  `node scripts/gov-execution-review.mjs --status`. This is Domain A
+  (`LATEST_EXECUTION_REVIEW`, `src/governance/execution-review.mjs`).
+- "Is a card AWAITING_EXTERNAL_REVIEW / what's the external-review inbox
+  status?" (a DIFFERENT question — the unresolved external review awaiting a
+  verdict) → read `src/governance/review-bundle.mjs`'s
+  `currentSurfaceReviewStatus()` (surface =
+  `~/Desktop/AutoLoop-Review/Current/delivery.json`, or read that file
+  directly — it holds at most one card at a time). A pending inbox occupant
+  never blocks the Latest execution review, and vice versa.
 - "What's a card's closeout state / requiresReview / evidence?"
   → read `src/governance/closeout-state.mjs`'s `readCloseoutState()` against
   that card's own `outDir`.
