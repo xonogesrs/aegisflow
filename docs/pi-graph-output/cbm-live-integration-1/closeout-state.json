@@ -21,23 +21,35 @@
   "baseline": {
     "schema": "autoloop.card-inventory.baseline/v1",
     "cardId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
-    "capturedAt": "2026-08-16T14:17:15.713Z",
+    "capturedAt": "2026-08-16T13:45:45.100Z",
     "repository": "git@github.com:xonogesrs/autoloop.git",
     "branch": "governance/decomp-opt1-design-freeze",
-    "head": "48b479d0ec1f7842f49ef1c7439bb58cb42cdfd0",
-    "treeSha": "c6eefb9fcd8ecaec38ec9133ebd0f37f402113e2",
+    "head": "251d9ae4b4559f7c824d4a6043f860c0e8e2aed8",
+    "treeSha": "8bc33e4980f43c67fe1b4ba2d505fbae1dfd580b",
     "worktreePath": "/private/tmp/autoloop",
-    "dirtyPaths": [],
-    "untrackedFiles": [],
-    "canonicalLines": [],
-    "dirtyDigest": "clean",
+    "dirtyPaths": [
+      "docs/pi-graph-output/cbm-live-integration-1/admission.json",
+      "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-authority.json"
+    ],
+    "untrackedFiles": [
+      "docs/pi-graph-output/cbm-live-integration-1/admission.json",
+      "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-authority.json"
+    ],
+    "canonicalLines": [
+      "?? docs/pi-graph-output/cbm-live-integration-1/admission.json",
+      "?? docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-authority.json"
+    ],
+    "dirtyDigest": "dirty:9ecadb443d51a9a504834d7ebd991798650bbf37cf9a9154360e692d36f6992a",
     "attributionModel": "content-v1",
-    "pathShas": {},
-    "contentDigest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    "pathShas": {
+      "docs/pi-graph-output/cbm-live-integration-1/admission.json": "adba13ad80be29ebd5960c8860dd08483d9a92b4a3c87c4f17ac42bb994407be",
+      "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-authority.json": "b97507b1200e282eabdadd6c3b3c9755b496317694ac8e190134701f94c7cab9"
+    },
+    "contentDigest": "203ee0e89c197a330918fa1153f7529428ba8998a613d8d0762f9c7d0d779dee"
   },
   "reviewCloseout": {
     "schema": "autoloop.review-closeout/v1",
-    "bindingDigest": "ba4354f4ffdf7676250f683c8b46986e13be32134704c5501d636448122dc0cc",
+    "bindingDigest": "49a781fa98d29065213b097d4a80bf553b578858a08df87447e4084e20d1eee2",
     "admissionId": "82cab55fac12bf0be48032f9e8bd618906af26e2e70cd7cfe70bdbf9f0fc403c"
   },
   "repairBudgetMaxAttempts": 1,

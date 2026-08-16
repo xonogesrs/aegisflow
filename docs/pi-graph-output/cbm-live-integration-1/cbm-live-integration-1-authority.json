@@ -7,8 +7,8 @@
   "repository": "xonogesrs/autoloop",
   "worktree": "/private/tmp/autoloop",
   "branch": "governance/decomp-opt1-design-freeze",
-  "base": "d36d016",
-  "base_head": "d36d016",
+  "base": "d36d016771570b71e28cb93fa2f23f654b873856",
+  "base_head": "d36d016771570b71e28cb93fa2f23f654b873856",
   "authorized_paths": [
     "scripts/autoloop-memory-query.mjs",
     "src/admission/admission-gate.mjs",
@@ -49,13 +49,13 @@
     },
     "feature_branch_push": {
       "allowed": false,
-      "branch_pattern": "",
+      "branch_pattern": "governance/*",
       "force_push": false,
       "require_remote_ancestor_check": false
     },
     "draft_pr": {
       "allowed": false,
-      "base_branch": "",
+      "base_branch": "main",
       "draft_only": true,
       "create_if_missing": false,
       "update_if_present": false

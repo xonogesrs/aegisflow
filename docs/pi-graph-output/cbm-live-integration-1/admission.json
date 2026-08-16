@@ -165,7 +165,7 @@
     ]
   },
   "authority_binding": {
-    "authority_record_digest": "34d5f0b07e8ae3c3a0e5e18c5b17d9e357c5b954b0cb755b0a250c506a3e4f1c",
+    "authority_record_digest": "b51aef36447c37a05e58ed7b1a218ea8eeb10c0869a57d0260901830c7157533",
     "subset_of_lifecycle_authorization": true
   },
   "fail_closed": true,
@@ -207,7 +207,7 @@
         "docs/pi-graph-output/cbm-live-integration-1/"
       ],
       "bundle_path": "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-bundle.txt",
-      "source_authority_digest": "34d5f0b07e8ae3c3a0e5e18c5b17d9e357c5b954b0cb755b0a250c506a3e4f1c"
+      "source_authority_digest": "b51aef36447c37a05e58ed7b1a218ea8eeb10c0869a57d0260901830c7157533"
     }
   },
   "decision_time": "2026-08-16T13:45:45.095Z",

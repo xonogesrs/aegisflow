@@ -15,8 +15,8 @@
   "specDigest": "2c85ec1ac88fc10a66ef2186d7198e218048580ef7f8e92fa1e46d5cd24bbb37",
   "reviewRound": 1,
   "repairRound": 0,
-  "state": "STAGED",
-  "stateVersion": 7,
+  "state": "ACCEPTED",
+  "stateVersion": 9,
   "requiredArtifacts": [
     {
       "role": "findings",
@@ -33,11 +33,13 @@
   "worktreeIdentity": "/private/tmp/autoloop",
   "lifecycleIdentity": {
     "admissionId": "82cab55fac12bf0be48032f9e8bd618906af26e2e70cd7cfe70bdbf9f0fc403c",
-    "bindingDigest": "ba4354f4ffdf7676250f683c8b46986e13be32134704c5501d636448122dc0cc",
-    "sourceAuthorityDigest": "34d5f0b07e8ae3c3a0e5e18c5b17d9e357c5b954b0cb755b0a250c506a3e4f1c",
-    "outDir": "/private/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1",
+    "bindingDigest": "49a781fa98d29065213b097d4a80bf553b578858a08df87447e4084e20d1eee2",
+    "sourceAuthorityDigest": "b51aef36447c37a05e58ed7b1a218ea8eeb10c0869a57d0260901830c7157533",
+    "outDir": "docs/pi-graph-output/cbm-live-integration-1",
     "baselineContentDigest": "203ee0e89c197a330918fa1153f7529428ba8998a613d8d0762f9c7d0d779dee"
   },
   "findingsDigest": "130abd07aff0b2891a4ea89b9ce1ef5d2ba89cf415d1c8171153146c0d8470fc",
-  "verdictDigest": "3d952d137c082d31960aa60c9a6363f8e3cfa0310e67a038ee2d926f92ddd78e"
+  "verdictDigest": "3d952d137c082d31960aa60c9a6363f8e3cfa0310e67a038ee2d926f92ddd78e",
+  "acceptedAt": "2026-08-16T15:22:54.973Z",
+  "acceptanceAuthority": "controller-session:candidate-provenance-repair-1"
 }
