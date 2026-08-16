@@ -143,12 +143,12 @@
   "closeout": {
     "status": "APPLIED",
     "final": "PASS",
-    "stage": "REVIEW_BUNDLE_READY",
+    "stage": "REVIEW_ACCEPTED",
     "bundleIdentity": "9703d4589f84ad7953f042844770db4d86787f1cca2e90138a4ac679bdc6a97a",
     "bundleSha256": "d92162cf1ebbd5824dac48d3e071c392b5a3fe04d8efbb538502352306d15622",
-    "externalReviewStatus": "AWAITING_EXTERNAL_REVIEW",
-    "verdict": null,
-    "appliedAt": "2026-08-16T14:17:22.790Z",
+    "externalReviewStatus": "PASS",
+    "verdict": "PASS",
+    "appliedAt": "2026-08-16T15:23:30.146Z",
     "blockedReason": null
   }
 }
