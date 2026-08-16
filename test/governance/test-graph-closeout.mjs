@@ -414,6 +414,71 @@ test("3e. cumulative lineage: a SECOND repair-iteration after the budget is cons
   assert.ok(/repair_lineage_cumulative_exceeds_max|repair_budget_used_exceeds_max/.test(String(second.reason ?? "")), `over-budget hold reason (${second.reason})`);
 });
 
+// ── 3f/3g — Repair-budget authority immutability（HOLD AUTH1_..._DRIFT）──
+
+test("3f. successor generation CANNOT expand REPAIR_BUDGET_MAX（validator rejects MAX > predecessor MAX）", { timeout: 30000 }, async () => {
+  // predecessor: MAX=1 repair-iteration（real artifact, readable）
+  const a = await run(passGraph, {
+    closeout: { cardType: "repair", repairBudgetMaxAttempts: 1, supersedes: { reviewBundleIdentity: "ab".repeat(32), reviewBundleSha256: "cd".repeat(32), bundlePath: "/tmp/prev-impl3.txt", verdict: "REPAIR" } },
+  });
+  assert.equal(a.final, "PASS");
+  const aTxt = readFileSync(a.bundlePath, "utf8");
+  assert.ok(aTxt.includes("REPAIR_BUDGET_MAX: 1"), "predecessor MAX=1");
+
+  // Build a SUCCESSOR bundle that supersedes the REAL predecessor artifact
+  //（a.bundlePath — readable, so the lineage validator's max-immutability
+  // check runs）and declares MAX=2（the AUTH1 MAX 1→2→3 pattern）. The
+  // footer sha is recomputed for the tampered content so the check under
+  // test is the lineage one, not the sha integrity one.
+  const tampered = aTxt
+    .replace("REPAIR_BUDGET_MAX: 1\n", "REPAIR_BUDGET_MAX: 2\n")
+    .replace("SUPERSEDES_BUNDLE_IDENTITY: " + "ab".repeat(32), "SUPERSEDES_BUNDLE_IDENTITY: " + a.externalReview.delivery.reviewBundleIdentity)
+    .replace("SUPERSEDES_BUNDLE_SHA256: " + "cd".repeat(32), "SUPERSEDES_BUNDLE_SHA256: " + a.externalReview.delivery.reviewBundleSha256)
+    .replace("SUPERSEDES_BUNDLE_PATH: /tmp/prev-impl3.txt", `SUPERSEDES_BUNDLE_PATH: ${a.bundlePath}`);
+  // recompute footer sha（content above the sha line）
+  const linesArr = tampered.split("\n");
+  const shaIdx = [...linesArr].reverse().findIndex((l) => l.trim().startsWith("REVIEW_BUNDLE_SHA256:"));
+  const contentOnly = shaIdx >= 0 ? linesArr.slice(0, linesArr.length - 1 - shaIdx).join("\n") + "\n" : tampered;
+  const newSha = sha256Hex(contentOnly);
+  const expanded = tampered.replace(/REVIEW_BUNDLE_SHA256: [0-9a-f]{64}$/m, `REVIEW_BUNDLE_SHA256: ${newSha}`);
+  const ep = join(OUT, `expanded-max-${Date.now()}.txt`);
+  writeFileSync(ep, expanded, "utf8");
+  const v = validateReviewBundle(ep, { authorizedDir: OUT });
+  assert.equal(v.ok, false, "successor expanding MAX must not validate");
+  assert.ok(v.errors.some((e) => e.includes("repair_budget_max_expanded")), `max-expansion flagged (${v.errors.join(";")})`);
+  rmSync(ep, { force: true });
+});
+
+test("3g. generator inherits predecessor MAX（successor repairBudgetMaxAttempts cannot raise it）", { timeout: 30000 }, async () => {
+  // predecessor with MAX=2（a card legitimately authorized for 2 repairs）
+  const a = await run(passGraph, {
+    closeout: { cardId: "RB-1R-3G", cardType: "repair", repairBudgetMaxAttempts: 2, supersedes: { reviewBundleIdentity: "12".repeat(32), reviewBundleSha256: "34".repeat(32), bundlePath: "/tmp/prev-impl4.txt", verdict: "REPAIR" } },
+  });
+  assert.equal(a.final, "PASS");
+  const aTxt = readFileSync(a.bundlePath, "utf8");
+  assert.ok(aTxt.includes("REPAIR_BUDGET_MAX: 2"), "predecessor MAX=2");
+
+  // successor caller tries MAX=3 — generator must inherit 2, not 3
+  const b = await run(passGraph, {
+    closeout: {
+      cardId: "RB-1R-3G",
+      cardType: "repair",
+      repairBudgetMaxAttempts: 3, // caller tries to expand
+      supersedes: {
+        reviewBundleIdentity: a.externalReview.delivery.reviewBundleIdentity,
+        reviewBundleSha256: a.externalReview.delivery.reviewBundleSha256,
+        bundlePath: a.bundlePath,
+        verdict: "REPAIR",
+      },
+    },
+  });
+  assert.equal(b.final, "PASS", "successor with caller MAX=3 still passes generation（budget inherited down）");
+  const bTxt = readFileSync(b.bundlePath, "utf8");
+  assert.ok(bTxt.includes("REPAIR_BUDGET_MAX: 2"), `successor MAX inherited as 2, not caller 3 (${bTxt.match(/REPAIR_BUDGET_MAX: \d+/)?.[0]})`);
+  // and the lineage validator still accepts it（MAX 2 >= cumulative 2）
+  assert.equal(validateReviewBundle(b.bundlePath, { authorizedDir: OUT }).ok, true, "inherited-MAX successor validates");
+});
+
 test("4. generator crash -> HOLD REVIEW_BUNDLE_GENERATION_FAILED", { timeout: 30000 }, async () => {
   const r = await run(passGraph, { sourceBuilder: async () => { throw new Error("boom"); } });
   assert.equal(r.final, "HOLD");
