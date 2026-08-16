@@ -346,7 +346,7 @@ test("6. external REPAIR -> original bundle retained（never overwritten）", { 
 // ── 7. repair closeout -> superseding bundle ───────────────────────────────
 
 test("7. repair closeout -> superseding bundle（new identity/sha; explicit supersede; awaits re-review）", { timeout: 30000 }, async () => {
-  const r = await run(passGraph, { closeout: { cardId: "RB-1G-TEST-7" } });
+  const r = await run(passGraph, { closeout: { cardId: "RB-1G-TEST-7", repairBudgetMaxAttempts: 2 } });
   const oldIdentity = r.externalReview.delivery.reviewBundleIdentity;
   const oldSha = r.externalReview.delivery.reviewBundleSha256;
   const oldPath = r.bundlePath;
@@ -571,7 +571,7 @@ test("12. delivery record persistence roundtrip（record -> read -> verdict -> c
 // text; the record is derived from it）— the artifact and its delivery
 // record must never diverge on the evidence chain.
 test("13. repair-generation delivery record carries the SUPERSEDES binding（artifact and record never diverge）", { timeout: 30000 }, async () => {
-  const r = await run(passGraph, { closeout: { cardId: "RB-1G-TEST-13" } });
+  const r = await run(passGraph, { closeout: { cardId: "RB-1G-TEST-13", repairBudgetMaxAttempts: 2 } });
   const oldIdentity = r.externalReview.delivery.reviewBundleIdentity;
   const oldSha = r.externalReview.delivery.reviewBundleSha256;
   const applied = applyExternalReviewVerdict(r.externalReview, verdictInput(r.externalReview, { verdict: "REPAIR" }));

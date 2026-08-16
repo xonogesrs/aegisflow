@@ -633,6 +633,51 @@ test("[neg 11] custom PR body missing card/result binding is rejected", (t) => {
   assert.match(draft.stderr, /PR_NOT_BOUND_TO_PARENT_CARD/);
 });
 
+test("[neg 14] exhausted repair lineage cannot restart as a fresh card: same authority record with a different card_id is a live-binding violation（reauthorization requires a NEW authority record）", (t) => {
+  const { dir, git } = createTempRepo(t);
+  writeFileSync(join(dir, ".gitignore"), GITIGNORE);
+  git(["add", ".gitignore"]);
+  git(["commit", "-m", "gitignore"]);
+  const outDir = join(dir, "out");
+  const bundlePath = join(outDir, "READY_FOR_REVIEW.txt");
+  mkdirSync(outDir, { recursive: true });
+  mkdirSync(join(dir, "work"), { recursive: true });
+  const authorityPath = writeAuthorityRecord(dir, bundlePath);
+  // card A exhausted its repair budget: repair_round 3 > effective cap 2.
+  // Under the record's OWN card_id the exhaustion is enforced（cap binds）.
+  writeFileSync(join(dir, "work", "a.txt"), "a\n");
+  const ck = run("gov-commit-checkpoint.mjs", [
+    "--authority-file", authorityPath, "--cwd", dir, "--verification-passed", "true",
+    "--artifact-identity", "x", "--evidence-digest", "e".repeat(64), "--repair-converged", "true",
+    "--card-id", CARD_ID, "--run-id", RUN_ID, "--milestone-id", "m1", "--milestones", "1",
+    "--repair-rounds", "3", "--message", "ck", "--apply",
+  ], dir);
+  // repair 3 exceeds the cap 2 → the exhausted round is denied
+  assert.notEqual(ck.status, 0);
+  assert.match(ck.stderr, /REVIEW_UNIT_LIMIT_EXCEEDED|repair_cap_authority_conflict/);
+  // swapping the card_id on the SAME record is a live-binding violation:
+  // a fresh lineage under an exhausted authority record is denied（budget
+  // cannot be reset by lineage restart under the same authority）
+  const reused = run("gov-commit-checkpoint.mjs", [
+    "--authority-file", authorityPath, "--cwd", dir, "--verification-passed", "true",
+    "--artifact-identity", "x", "--evidence-digest", "e".repeat(64), "--repair-converged", "true",
+    "--card-id", "OTHER-CARD", "--run-id", RUN_ID, "--milestone-id", "m1", "--milestones", "1",
+    "--repair-rounds", "0", "--message", "ck2", "--apply",
+  ], dir);
+  assert.notEqual(reused.status, 0);
+  assert.match(reused.stderr, /LIVE_BINDING_MISMATCH|card_id/);
+  // prepare-round under the same record with repair round 0 but a different
+  // card id is likewise rejected by the controller entry（card_id derived
+  // from the record, never caller-chosen）
+  writeFileSync(join(outDir, "findings.txt"), "round findings");
+  const prepare = run("gov-controller-prepare-round.mjs", [
+    "--bundle-dir", outDir, "--card-id", "OTHER-CARD", "--findings-file", join(outDir, "findings.txt"),
+    "--review-round", "1", "--repair-round", "0", "--authority-file", authorityPath,
+  ], dir);
+  assert.notEqual(prepare.status, 0);
+  assert.match(prepare.stderr, /REVIEW_HISTORY_INVALID|LIVE_BINDING_MISMATCH|card_id/);
+});
+
 test("e2e: self-declared PASS flags are rejected by the CLIs", (t) => {
   const { dir } = createTempRepo(t);
   const outDir = join(dir, "out");

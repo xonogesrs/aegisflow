@@ -2152,6 +2152,17 @@ export function validateReviewBundle(bundlePath, {
         if (Number.isFinite(iterations) && iterations !== expected) {
           fail(REVIEW_BUNDLE_HOLDS.INVALID, `repair_lineage_iterations_inconsistent:${iterations}!=${expected}`);
         }
+        // Repair-budget authority immutability（HOLD AUTH1_PROMOTION_BLOCKED_
+        // BY_REPAIR_BUDGET_AUTHORITY_DRIFT）: REPAIR_BUDGET_MAX must NEVER
+        // expand across a successor generation. A successor's max must be <=
+        // the predecessor's max（when the predecessor records one）. This
+        // closes the loop where USED==MAX → MAX++ self-expansion — the
+        // bounded-repair loop keeps a real termination boundary. Expanding
+        // the budget requires a distinct explicit authority transition
+        //（reauthorization）, never a successor self-increase.
+        if (Number.isFinite(maxVal) && Number.isFinite(sup.budgetMax) && maxVal > sup.budgetMax) {
+          fail(REVIEW_BUNDLE_HOLDS.INVALID, `repair_budget_max_expanded:${maxVal}>${sup.budgetMax}`);
+        }
       } catch {
         fail(REVIEW_BUNDLE_HOLDS.INVALID, "repair_lineage_superseded_unparseable");
       }
@@ -3080,7 +3091,24 @@ export function buildGraphCloseoutSource({ graphResult, closeout, repoPath = nul
     },
     review,
     repairAttempts,
-    repairBudget: { maxAttempts: closeout?.repairBudgetMaxAttempts ?? 1, used: repairsUsed },
+    // Repair-budget authority（HOLD AUTH1_PROMOTION_BLOCKED_BY_REPAIR_BUDGET_
+    // AUTHORITY_DRIFT）: REPAIR_BUDGET_MAX must NEVER expand across a
+    // successor generation. A successor（supersedeChain present）inherits
+    // the predecessor's max（read from its §14 lineage）and IGNORES any
+    // caller-supplied repairBudgetMaxAttempts — the caller may not increase
+    // the budget, only match it. Only a FIRST generation（no predecessor）
+    // takes the caller-declared max. This makes MAX immutable across the
+    // authorized repair lineage; exhaustion must fail closed into
+    // HOLD/escalation（validator: repair_budget_used_exceeds_max /
+    // repair_lineage_cumulative_exceeds_max; review-unit gate:
+    // REVIEW_UNIT_LIMIT_EXCEEDED）. Extra budget requires a distinct explicit
+    // authority transition — never a successor self-increase.
+    repairBudget: {
+      maxAttempts: supersedeChain
+        ? Math.min(prevLineage.budgetMax ?? Infinity, closeout?.repairBudgetMaxAttempts ?? Infinity)
+        : (closeout?.repairBudgetMaxAttempts ?? 1),
+      used: repairsUsed,
+    },
     repairLineage: {
       generationType,
       repairIterations,
