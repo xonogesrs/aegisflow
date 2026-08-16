@@ -65,6 +65,13 @@ export const EXTERNAL_REVIEW_RESULT_SCHEMA = Object.freeze({
     branch: { type: "string", minLength: 1, maxLength: 128 },
     base_branch: { type: "string", minLength: 1, maxLength: 128 },
     bundle_path: { type: "string", minLength: 1, maxLength: 1024 },
+    // Flow 2 review-job bindings (IMPL1 §15) — optional; present when the
+    // acceptance record carries review-job identity. Verified against the
+    // recomputed values supplied by the acceptance entrypoint.
+    job_id: { type: "string", minLength: 1, maxLength: 256 },
+    generation: { type: "integer", minimum: 1 },
+    spec_id: { type: "string", minLength: 1 },
+    spec_digest: { type: "string", pattern: "^[0-9a-f]{64}$" },
   },
 });
 
@@ -240,6 +247,21 @@ export function verifyExternalReviewResult({ result, current }) {
   }
   if (/^agent:/i.test(result.reviewer_identity)) {
     violations.push("result.reviewer_identity looks self-declared — rejected");
+  }
+  // Flow 2 findings/job/generation/spec verification (IMPL1 §15).
+  // Enforced only when the caller supplies the recomputed expected values —
+  // never trusted from the result fields alone.
+  if (current.findingsDigest && result.findings_digest !== current.findingsDigest) {
+    violations.push("result.findings_digest does not match recomputed findings digest");
+  }
+  if (current.jobId && result.job_id !== current.jobId) {
+    violations.push(`result.job_id ${result.job_id} != ${current.jobId}`);
+  }
+  if (current.generation && result.generation !== current.generation) {
+    violations.push(`result.generation ${result.generation} != ${current.generation}`);
+  }
+  if (current.specDigest && result.spec_digest !== current.specDigest) {
+    violations.push(`result.spec_digest ${result.spec_digest} != ${current.specDigest}`);
   }
   return violations;
 }

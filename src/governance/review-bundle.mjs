@@ -33,6 +33,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSy
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { scanForSecrets, sha256Text } from "../evidence/run-evidence-store.mjs";
+import { readReviewJob, findingsPath, verdictPath, updateReviewJob } from "./review-job.mjs";
 import {
   CLOSEOUT_HOLDS,
   CLOSEOUT_STATE_SCHEMA,
@@ -3651,4 +3652,83 @@ export async function runStateDrivenCloseout({
   writeCloseoutState({ path: statePath, state: nextState });
 
   return { ...r, statePath };
+}
+
+// ── IMPL1 review-job delivery binding (Flow 2 downstream publication) ────
+//
+// Current/delivery.json remains the AUTHORITATIVE downstream publication
+// surface. These helpers bind an ACCEPTED review-job into that surface's
+// projection: only an ACCEPTED generation may publish, and every digest is
+// recomputed from persisted bytes — never trusted from bound fields alone.
+
+/**
+ * Build the downstream delivery projection for an ACCEPTED review-job.
+ * Rejects non-ACCEPTED (PERSISTED/STAGED/HOLD/SUPERSEDED), missing artifacts,
+ * and digest mismatches. Current/delivery.json does NOT mint acceptance.
+ */
+export function buildReviewJobDeliveryProjection({ cardId, root = null } = {}) {
+  const opts = root ? { root } : {};
+  const current = readReviewJob(cardId, opts);
+  if (!current.ok) return current;
+  const job = current.job;
+  if (job.state !== "ACCEPTED" && job.state !== "DOWNSTREAM_AUTHORIZED") {
+    return { ok: false, code: "REVIEW_JOB_NOT_ACCEPTED", state: job.state, job, path: current.path };
+  }
+  if (!job.findingsDigest || !job.verdictDigest) {
+    return { ok: false, code: "REVIEW_JOB_DIGESTS_UNBOUND", job, path: current.path };
+  }
+  let fbytes, vbytes;
+  try {
+    fbytes = readFileSync(findingsPath(cardId, job.generation, opts), "utf8");
+    vbytes = readFileSync(verdictPath(cardId, job.generation, opts), "utf8");
+  } catch {
+    return { ok: false, code: "REVIEW_ARTIFACT_MISSING", job, path: current.path };
+  }
+  if (sha256Text(fbytes) !== job.findingsDigest) {
+    return { ok: false, code: "REVIEW_FINDINGS_DIGEST_MISMATCH", job, path: current.path };
+  }
+  if (sha256Text(vbytes) !== job.verdictDigest) {
+    return { ok: false, code: "REVIEW_VERDICT_DIGEST_MISMATCH", job, path: current.path };
+  }
+  return {
+    ok: true,
+    delivery: {
+      schema: "autoloop.review-job-delivery/v1",
+      jobId: job.jobId,
+      generation: job.generation,
+      candidateIdentity: job.candidateIdentity,
+      specIdentity: { specId: job.specId, specDigest: job.specDigest },
+      findingsDigest: job.findingsDigest,
+      verdictDigest: job.verdictDigest,
+      acceptance: job.acceptedAt
+        ? { acceptedAt: job.acceptedAt, acceptanceAuthority: job.acceptanceAuthority ?? null }
+        : null,
+      supersedes: job.supersedes ?? null,
+      supersededBy: job.supersededBy ?? null,
+    },
+    job,
+    path: current.path,
+  };
+}
+
+/**
+ * Publish the accepted review-job downstream: verify ACCEPTED, recompute the
+ * full chain, and transition ACCEPTED → DOWNSTREAM_AUTHORIZED (idempotent).
+ * Downstream publication is NOT acceptance — only the acceptance authority
+ * mints ACCEPTED (STAGED → ACCEPTED). This only publishes an already-ACCEPTED
+ * generation and marks it authorized for downstream admission.
+ */
+export function deliverAcceptedReviewJob({ cardId, root = null } = {}) {
+  const proj = buildReviewJobDeliveryProjection({ cardId, root });
+  if (!proj.ok) return proj;
+  const job = proj.job;
+  if (job.state === "DOWNSTREAM_AUTHORIZED") {
+    return { ok: true, idempotent: true, delivery: proj.delivery, job, path: proj.path };
+  }
+  const updated = updateReviewJob(cardId, {
+    expectedStateVersion: job.stateVersion,
+    patch: { state: "DOWNSTREAM_AUTHORIZED" },
+  }, root ? { root } : {});
+  if (!updated.ok) return updated;
+  return { ok: true, delivery: proj.delivery, job: updated.job, path: proj.path };
 }

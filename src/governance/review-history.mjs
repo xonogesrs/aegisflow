@@ -39,6 +39,13 @@ export const REVIEW_HISTORY_SCHEMA_JSON = Object.freeze({
     // was prepared under (round 5 finding). Never a free input.
     effective_repair_cap: { type: "integer", minimum: 0 },
     remaining_budget: { type: "integer", minimum: 0 },
+    // Flow 2 lineage bindings (IMPL1 §18/§24) — optional continuity fields.
+    // review-history is a DERIVED_VIEW; these do not make it an acceptance
+    // authority, a delivery owner, or the review-job current pointer.
+    jobId: { type: "string", minLength: 1, maxLength: 256 },
+    generation: { type: "integer", minimum: 1 },
+    findingsDigest: { type: "string", pattern: "^[0-9a-f]{64}$" },
+    verdictDigest: { type: "string", pattern: "^[0-9a-f]{64}$" },
     updated_at: { type: "string", format: "date-time" },
   },
 });
@@ -85,6 +92,10 @@ export function deriveRoundContext(history) {
       prior_findings_text: "",
       effective_repair_cap: null,
       remaining_budget: 0,
+      jobId: null,
+      generation: null,
+      findingsDigest: null,
+      verdictDigest: null,
     };
   }
   return {
@@ -95,5 +106,9 @@ export function deriveRoundContext(history) {
     prior_findings_text: history.prior_findings_text,
     effective_repair_cap: history.effective_repair_cap,
     remaining_budget: history.remaining_budget,
+    jobId: history.jobId ?? null,
+    generation: history.generation ?? null,
+    findingsDigest: history.findingsDigest ?? null,
+    verdictDigest: history.verdictDigest ?? null,
   };
 }

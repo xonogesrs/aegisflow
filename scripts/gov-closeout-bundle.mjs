@@ -64,6 +64,9 @@ import {
   deriveAuthoritativeCloseoutStage,
 } from "../src/governance/review-bundle.mjs";
 import { readCloseoutState } from "../src/governance/closeout-state.mjs";
+import { readReviewJob, findingsPath, verdictPath } from "../src/governance/review-job.mjs";
+import { sha256Text } from "../src/evidence/run-evidence-store.mjs";
+import { readFileSync as _readFileSync } from "node:fs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -72,7 +75,7 @@ function arg(name, fallback) {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 }
 
-const mode = process.argv.includes("--generate") ? "generate" : process.argv.includes("--validate") ? "validate" : process.argv.includes("--record-delivery-attempt") ? "record-delivery-attempt" : process.argv.includes("--apply-verdict") ? "apply-verdict" : process.argv.includes("--state-driven-closeout") ? "state-driven-closeout" : process.argv.includes("--final-closeout") ? "final-closeout" : null;
+const mode = process.argv.includes("--enumerate-review-job") ? "enumerate-review-job" : process.argv.includes("--generate") ? "generate" : process.argv.includes("--validate") ? "validate" : process.argv.includes("--record-delivery-attempt") ? "record-delivery-attempt" : process.argv.includes("--apply-verdict") ? "apply-verdict" : process.argv.includes("--state-driven-closeout") ? "state-driven-closeout" : process.argv.includes("--final-closeout") ? "final-closeout" : null;
 if (!mode) {
   console.error("usage: node scripts/gov-closeout-bundle.mjs --generate <source.json> --repo <path> --out <dir> [--timeout-ms 30000] [--file <name>]");
   console.error("       node scripts/gov-closeout-bundle.mjs --validate <bundle.txt> --context <ctx.json> [--authorized-dir <dir>]");
@@ -83,6 +86,62 @@ if (!mode) {
   process.exit(2);
 }
 
+// enumerate-review-job mode（IMPL1）: the sole authoritative closeout bundle
+// generator enumerates the Flow 2 review-job evidence — identity, state,
+// candidate/spec bindings, findings/verdict canonical paths and RECOMPUTED
+// digests, supersession/currentness, acceptance record. Never trusts bound
+// digests alone; never trusts arbitrary reviewer-authored paths.
+if (mode === "enumerate-review-job") {
+  const cardId = arg("--enumerate-review-job", null);
+  const root = arg("--pi-graph-output", null);
+  if (!cardId) {
+    console.error("usage: node scripts/gov-closeout-bundle.mjs --enumerate-review-job <cardId> [--pi-graph-output <root>]");
+    process.exit(2);
+  }
+  const opts = root ? { root } : {};
+  const r = readReviewJob(cardId, opts);
+  if (!r.ok) {
+    console.error(`review_job_unavailable: ${r.code}`);
+    process.exit(1);
+  }
+  const job = r.job;
+  const out = {
+    cardId: job.lineageId,
+    jobId: job.jobId,
+    generation: job.generation,
+    state: job.state,
+    stateVersion: job.stateVersion,
+    candidateIdentity: job.candidateIdentity,
+    specId: job.specId,
+    specDigest: job.specDigest,
+    supersedes: job.supersedes ?? null,
+    supersededBy: job.supersededBy ?? null,
+  };
+  if (job.findingsDigest) {
+    const fp = findingsPath(cardId, job.generation, opts);
+    try {
+      const bytes = _readFileSync(fp, "utf8");
+      out.findingsPath = fp;
+      out.findingsDigest = job.findingsDigest;
+      out.findingsDigestMatch = job.findingsDigest === sha256Text(bytes);
+    } catch { out.findingsMissing = true; }
+  }
+  if (job.verdictDigest) {
+    const vp = verdictPath(cardId, job.generation, opts);
+    try {
+      const bytes = _readFileSync(vp, "utf8");
+      out.verdictPath = vp;
+      out.verdictDigest = job.verdictDigest;
+      out.verdictDigestMatch = job.verdictDigest === sha256Text(bytes);
+    } catch { out.verdictMissing = true; }
+  }
+  if (job.acceptedAt) out.acceptedAt = job.acceptedAt;
+  if (job.acceptanceAuthority) out.acceptanceAuthority = job.acceptanceAuthority;
+  console.log(JSON.stringify(out, null, 1));
+  process.exit(0);
+}
+
+// generate mode
 if (mode === "generate") {
   const sourcePath = arg("--generate", null);
   const repoPath = arg("--repo", "/Volumes/NVM2T/Development/autoloop");
