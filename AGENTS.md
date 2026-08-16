@@ -36,6 +36,28 @@ for a status string.
   equivalent module under `src/governance/`, `src/admission/`, or
   `src/budget/` — read the module, don't grep for its output.
 
+## Review routing (REVART-LC1 — pending queue + automatic handoff)
+
+Three mechanically distinct questions, three distinct authoritative surfaces
+（`scripts/gov-external-review-surface.mjs --status` prints all of them）:
+
+- **"What review needs action NOW?"** → `~/Desktop/AutoLoop-Review/Current/`
+  (`delivery.json` holds the single occupant awaiting a verdict; an
+  unresolved occupant is never overwritten).
+- **"What other reviews are waiting?"** → the pending queue:
+  `~/Desktop/AutoLoop-Review/Queue/queue.json`（`--queue`）— every additional
+  unresolved review, durable, FIFO-ordered.
+- **"What is the NEWEST formal review generated?"** → the Latest pointer:
+  `~/Desktop/AutoLoop-Review/Queue/latest.json`（`--latest`）— navigation
+  ONLY, never verdict authority.
+
+Promotion: when the Current occupant reaches a terminal verdict and is
+rotated, the oldest eligible pending review auto-promotes to Current
+（`rotateExternalReviewSurface`; recovery entry `--promote` / `--reconcile`）.
+The harness `~/Desktop/AutoLoop-Review/Latest/review.txt` remains the
+execution-review domain（Domain A）— do not conflate it with the review-queue
+Latest pointer.
+
 ## Verification scope (hard rule)
 
 Never construct or run a command whose search root is `/`, `~`, `$HOME`, or

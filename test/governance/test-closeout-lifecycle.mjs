@@ -234,24 +234,33 @@ test("T4. surface write failure -> top-level final !== PASS（no closeout comple
   assert.equal(externalReviewComplete(r.externalReview), false);
 });
 
-// ── T5: occupied surface → deterministic block, no overwrite ──────────────
+// ── T5: occupied surface → QUEUED（REVART-LC1）, no overwrite ─────────────
 
-test("T5. occupied Current/（unresolved card）-> no overwrite, no PASS, blocked", { timeout: 30000 }, async () => {
+test("T5. occupied Current/（unresolved card）-> second card QUEUED; first trio untouched", { timeout: 30000 }, async () => {
   const cardIdA = "LC-T5A";
   const cardIdB = "LC-T5B";
   const dir = surface("t5");
   const ra = await drive(cardIdA, { surfaceDir: dir });
   assert.equal(ra.final, "PASS");
   const firstSha = shaFile(join(dir, "review-bundle.txt"));
-  // card B tries to publish while A is un-rotated and unresolved
+  // card B delivers while A is un-rotated and unresolved: B must QUEUE —
+  // a legitimate queued review is a SUCCESS, not a surface_occupied failure
   const rb = await drive(cardIdB, { surfaceDir: dir });
-  assert.notEqual(rb.final, "PASS", `occupied -> non-PASS (got ${rb.final})`);
-  assert.equal(rb.final, "AWAITING_BUNDLE_DELIVERY");
-  assert.ok(rb.reason.includes("surface_occupied") || rb.externalReview.externalReviewStatusReason?.includes("surface_occupied"), "surface_occupied surfaced");
+  assert.equal(rb.final, "PASS", `queued delivery keeps the gate PASS (got ${rb.final})`);
+  assert.equal(rb.externalReview.externalReviewStatus, "AWAITING_EXTERNAL_REVIEW", "queued review is awaiting review");
+  assert.equal(rb.externalReview.delivery.method, "external-review-queue", "queued delivery method");
   // old artifact untouched
   assert.equal(shaFile(join(dir, "review-bundle.txt")), firstSha, "first card's bundle bytes unchanged");
   const rec = readExternalReviewDeliveryRecord(join(dir, "delivery.json"));
   assert.equal(rec.state.delivery.reviewBundleIdentity, ra.bundle.identity, "delivery record still card A");
+  // B is durably queued（exactly one entry, QUEUED state）
+  const { reviewQueueStatus } = await import("../../src/governance/review-queue.mjs");
+  const st = reviewQueueStatus(dir);
+  assert.equal(st.ok, true);
+  const entry = st.queue.entries.find((e) => e.cardId === cardIdB);
+  assert.ok(entry, "B queued entry exists");
+  assert.equal(entry.state, "QUEUED");
+  assert.equal(st.queue.entries.filter((e) => e.cardId === cardIdB).length, 1, "one entry only");
 });
 
 // ── T6: idempotent retry after fixing the surface ─────────────────────────

@@ -27,6 +27,7 @@ import {
   currentReviewDelivery,
   REVIEW_BUNDLE_SOURCE_SCHEMA,
 } from "../../src/governance/review-bundle.mjs";
+import { reviewQueueStatus } from "../../src/governance/review-queue.mjs";
 
 let seq = 0;
 function freshSurface() {
@@ -268,14 +269,21 @@ test("positive: publish is card-identity guarded (delivery_card_id_mismatch)", (
   } finally { rmSync(ctx.root, { recursive: true, force: true }); }
 });
 
-test("positive: occupied-by-different-card block is identity-explicit", () => {
+test("positive: occupied-by-different-card QUEUES（REVART-LC1）; never overwrites the occupant", () => {
   const ctx = freshSurface();
   try {
     const a = mintBundle("AUTOLOOP-TA2", "Task A", ctx.bundles);
     publish(ctx.surface, a);
     const b = mintBundle("AUTOLOOP-TA3", "Current Card", ctx.bundles);
     const r = deliverToExternalReviewSurface({ bundlePath: b.path, state: buildExternalReviewState({ bundle: { identity: b.identity, sha256: b.sha256 }, bundlePath: b.path, deliveryAttempted: true, deliveryMethod: "external-review-surface", attemptedAt: "2026-08-09T00:00:00.000Z" }), source: { task: { cardId: b.cardId } }, outDir: ctx.surface, surfaceDir: ctx.surface, currentCardId: "AUTOLOOP-TA3" });
-    assert.equal(r.attempted, false);
-    assert.ok(r.reason.includes("surface_occupied_by_different_card"), r.reason);
+    assert.equal(r.attempted, true, "different-card delivery is a SUCCESS（queued）");
+    assert.equal(r.queued, true, "queued behind the occupant（T2）");
+    // the occupant trio is untouched — the controller's current card is the
+    // surface occupant, NOT the queued bundle（identity guard held）
+    const rec = readExternalReviewDeliveryRecord(join(ctx.surface, "delivery.json"));
+    assert.equal(rec.cardId, "AUTOLOOP-TA2", "surface occupant unchanged");
+    const st = reviewQueueStatus(ctx.surface);
+    assert.equal(st.ok, true);
+    assert.equal(st.pending.some((e) => e.cardId === "AUTOLOOP-TA3"), true, "queued entry exists");
   } finally { rmSync(ctx.root, { recursive: true, force: true }); }
 });

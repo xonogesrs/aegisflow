@@ -29,6 +29,7 @@
     "test:review-bundle": "node --test test/governance/test-review-bundle.mjs",
     "test:external-review-delivery": "node --test test/governance/test-external-review-delivery.mjs",
     "test:graph-closeout": "node --test test/governance/test-graph-closeout.mjs test/governance/test-git-status-parsing.mjs",
+    "test:review-queue-handoff": "node --test test/governance/test-review-queue-handoff.mjs test/governance/test-review-queue-handoff-dogfood.mjs",
     "test:graph-closeout-e2e": "node --test test/test-graph-closeout-integration.mjs",
     "test:memory-contract": "node --test test/memory/test-canonical.mjs test/memory/test-jsonl.mjs test/memory/test-record-schema.mjs test/memory/test-security.mjs test/memory/test-sqlite.mjs test/memory/test-trust-validity.mjs",
     "test:memory-retrieval": "node --test test/memory/test-query-schema.mjs test/memory/test-local-store.mjs test/memory/test-retrieval.mjs test/memory/test-snapshot.mjs test/memory/test-rebuild-determinism.mjs test/memory/test-retrieval-security.mjs test/memory/test-graph-context.mjs",

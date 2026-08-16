@@ -303,24 +303,33 @@ test("7. concurrent delivery -> only ONE succeeds（surface_busy; never mutual o
   assert.ok(existsSync(join(dir, "review-bundle.txt")), "trio published after release");
 });
 
-// ── 8. occupied surface -> second delivery refused ─────────────────────────
+// ── 8. occupied surface -> second card QUEUED, first trio untouched ────────
 
-test("8. occupied surface -> second delivery refused（surface_occupied）; first trio untouched", { timeout: 30000 }, async () => {
+test("8. occupied surface -> second card QUEUED（REVART-LC1）; first trio untouched", { timeout: 30000 }, async () => {
   const r = await run(8);
   const dir = surface(8);
   const firstSha = shaFile(join(dir, "review-bundle.txt"));
   // a genuinely DIFFERENT card（different cardId -> different bundle identity）
-  // tries to publish while the first is un-rotated
+  // delivers while the first is un-rotated: it must QUEUE, never overwrite
   const r2 = await run(8, { closeout: { cardId: "RB-1H-TEST-8B", surfaceDir: dir } });
   assert.notEqual(r2.bundle.identity, r.externalReview.delivery.reviewBundleIdentity, "second card has a different identity");
   const { state } = stateFor(r2.bundlePath, "RB-1H-TEST-8B");
   const d = deliverToExternalReviewSurface({ bundlePath: r2.bundlePath, state, source: { task: { cardId: "RB-1H-TEST-8B" }, evidence: [] }, surfaceDir: dir });
-  assert.equal(d.attempted, false, "occupied surface refused");
-  assert.ok(d.reason.startsWith("surface_occupied"), `surface_occupied (${d.reason})`);
+  assert.equal(d.attempted, true, "occupied delivery is a SUCCESS（queued）");
+  assert.equal(d.queued, true, "queued behind the occupant（T2: legitimate queued review is not a failure）");
+  assert.equal(d.method, "external-review-queue", "queue delivery method");
   // the FIRST trio is untouched — reviewer still sees the original card
   assert.equal(shaFile(join(dir, "review-bundle.txt")), firstSha, "first bundle bytes unchanged");
   const rec = readExternalReviewDeliveryRecord(join(dir, "delivery.json"));
   assert.equal(rec.cardId, "RB-1H-TEST-8", "delivery.json still the first card");
+  // the second card is durably queued（Q state, one entry only）
+  const { reviewQueueStatus } = await import("../../src/governance/review-queue.mjs");
+  const st = reviewQueueStatus(dir);
+  assert.equal(st.ok, true);
+  const entry = st.queue.entries.find((e) => e.cardId === "RB-1H-TEST-8B");
+  assert.ok(entry, "queued entry exists");
+  assert.equal(entry.state, "QUEUED");
+  assert.equal(st.queue.entries.filter((e) => e.cardId === "RB-1H-TEST-8B").length, 1, "one entry only");
 });
 
 // ── 9. observer/crash: no mixed trio; stale staging cleaned ────────────────

@@ -34,6 +34,21 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { scanForSecrets, sha256Text } from "../evidence/run-evidence-store.mjs";
 import { readReviewJob, findingsPath, verdictPath, updateReviewJob } from "./review-job.mjs";
+import {
+  QUEUE_HOLDS,
+  reviewQueueDir,
+  readReviewQueue,
+  writeReviewQueue,
+  upsertQueueEntry,
+  oldestPending,
+  markCurrent,
+  markArchived,
+  markHold,
+  writeLatestPointer,
+  readLatestPointer,
+  reviewQueueStatus,
+  findEntry,
+} from "./review-queue.mjs";
 import { buildChangeInventory } from "./change-inventory.mjs";
 import { candidateDomain } from "./candidate-domain-policy.mjs";
 import {
@@ -685,9 +700,107 @@ export function releaseExternalReviewSurfaceLock({ lockPath, token } = {}) {
  *   4. any failure returns attempted:false — the caller（runCloseoutGate）
  *      keeps the card at AWAITING_BUNDLE_DELIVERY
  */
-export function deliverToExternalReviewSurface({ bundlePath, state, source = {}, outDir, surfaceDir = null, lock = null, currentCardId = null }) {
+/**
+ * Shared atomic trio publisher（used by direct delivery AND queue promotion）.
+ * Builds the trio in invisible staging（parent/.incoming-<token>）then exposes
+ * it with ONE directory-level rename. Caller MUST hold the surface lock.
+ */
+function publishTrioToSurface({ dir, parent, token, bundlePath, state, source, cardId }) {
+  const staging = join(parent, `.incoming-${token}`);
+  rmSync(staging, { recursive: true, force: true });
+  mkdirSync(staging, { recursive: true });
+  const attemptedAt = new Date().toISOString();
+  const recordState = state && typeof state === "object"
+    ? { ...state, delivery: { ...(state.delivery ?? {}), attempted: true, method: "external-review-surface", attemptedAt } }
+    : state;
+  const files = {
+    "review-bundle.txt": readFileSync(bundlePath, "utf8"),
+    "delivery.json": JSON.stringify(serializeExternalReviewState(recordState, { cardId: cardId ?? source.task?.cardId ?? null, fileName: "delivery.json" }), null, 2) + "\n",
+  };
+  const ev = Array.isArray(source.evidence) && source.evidence.length > 0 ? source.evidence[0] : null;
+  if (ev?.path && existsSync(ev.path)) {
+    files["evidence.json"] = readFileSync(ev.path, "utf8");
+  }
+  for (const [name, content] of Object.entries(files)) {
+    writeFileSync(join(staging, name), content, "utf8");
+  }
+  // …then publish with ONE directory-level rename（atomic; no mixed trio
+  // possible: the reviewer either sees the previous state or the full trio）.
+  // Callers only reach here with Current EMPTY or with a SANCTIONED reseal of
+  // the occupant（replace in place）— so ALL prior entries are removable.
+  for (const f of readdirSync(dir)) {
+    rmSync(join(dir, f), { recursive: true, force: true });
+  }
+  renameSync(staging, dir);
+  return { files: Object.keys(files) };
+}
+
+/**
+ * Read the queue for a surface（fail-closed: corrupt queue -> HOLD）. A
+ * corrupt queue file is NEVER silently discarded（Phase 6 T14）.
+ */
+function loadQueueOrHold(surfaceDir) {
+  const qr = readReviewQueue(surfaceDir ?? null);
+  if (!qr.ok) {
+    return { hold: true, reason: `queue_hold:${qr.holdCode}:${qr.reason ?? ""}`, queue: null };
+  }
+  return { hold: false, reason: null, queue: qr.queue };
+}
+
+/**
+ * Update the Latest navigation pointer for a newly persisted formal review
+ * generation. Best-effort（Phase 6 T15: a Latest failure never blocks or
+ * invalidates review authority）— the queue entry is already durable.
+ */
+function touchLatest(entry, surfaceDir) {
+  const w = writeLatestPointer(entry, { surfaceDir: surfaceDir ?? null });
+  return w.ok ? null : w.reason;
+}
+
+/**
+ * Deliver the current valid bundle to the fixed external-review surface
+ *（Current/）: review-bundle.txt + delivery.json + evidence.json.
+ *
+ * RB-1H repair（atomic-publication / concurrency contract）:
+ *   1. single-owner publication: the whole publish runs under the surface
+ *      lock — a second concurrent delivery fails surface_busy, never
+ *      overwrites the first
+ *   2. occupancy fail-closed: if Current/ already holds a published trio
+ *      （any non-dot entry）the delivery REFUSES（surface_occupied）— an
+ *      un-rotated valid review is never overwritten
+ *   3. the trio is fully built in an INVISIBLE staging dir
+ *      （parent/.incoming-<token>）, then exposed to the reviewer by ONE
+ *      directory-level rename — the reviewer can never observe a mixed trio
+ *      or a partial publication
+ *   4. any failure returns attempted:false — the caller（runCloseoutGate）
+ *      keeps the card at AWAITING_BUNDLE_DELIVERY
+ *
+ * REVART-LC1 review-queue handoff（this card）— the single-slot surface is
+ * now a QUEUE FRONT, not the whole pipeline:
+ *   - Current empty                       -> publish directly; entry becomes
+ *                                            CURRENT; Latest updated（T1）
+ *   - Current occupied, SAME identity     -> idempotent reuse（T7）
+ *   - Current occupied, DIFFERENT card    -> QUEUED behind the occupant;
+ *                                            Latest updated; queued delivery
+ *                                            is SUCCESS, not surface_occupied
+ *                                            failure（T2）
+ *   - Current occupied, sanctioned reseal
+ *     of the occupant's own lineage       -> Current updates to the
+ *                                            superseding generation in place;
+ *                                            no queue duplicate（T10）
+ *   - Current occupied, same card,
+ *     conflicting identity                -> queue entry HOLD（T8）
+ *   - Current occupied, RESOLVED occupant -> auto-rotate（R7）then promote the
+ *                                            next pending review（T3/T19）
+ */
+export function deliverToExternalReviewSurface({ bundlePath, state, source = {}, outDir, surfaceDir = null, lock = null, currentCardId = null, generation = null, jobId = null, queueDir = null }) {
   const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
   const parent = dirname(dir);
+  // The queue projection co-locates with the review surface root
+  //（reviewQueueDir resolves AUTOLOOP_REVIEW_QUEUE override when set）.
+  // Derive from the RESOLVED surface dir so env-isolated surfaces（tests）
+  // never fall back to the real Desktop queue.
+  const qSurface = dir;
   if (!bundlePath || !existsSync(bundlePath) || !state) {
     return { attempted: false, reason: "surface_delivery_input_missing" };
   }
@@ -707,25 +820,68 @@ export function deliverToExternalReviewSurface({ bundlePath, state, source = {},
   }
   const token = ownLock.token;
   const lockPath = ownLock.lockPath;
-  const staging = join(parent, `.incoming-${token}`);
   try {
-    // occupancy fail-closed: an un-rotated published review is NEVER overwritten.
-    // AUTOLOOP_REPORT_LIFECYCLE_REPAIR_1（R7）: a RESOLVED occupant（verdict
-    // bound to its own bundle）is auto-rotated to Archive/ under the same lock
-    // before the next card publishes — a resolved card can never permanently
-    // block the next required review. An UNRESOLVED occupant stays
-    // surface_occupied（fail-closed; never overwritten, never auto-rotated）.
-    // Idempotent re-delivery: an occupant whose identity + sha match THIS
-    // bundle is already our own delivery（crash-after-publish / retry）—
-    // reported as an attempt without touching the trio.
+    const queueLoad = loadQueueOrHold(qSurface);
+    if (queueLoad.hold) {
+      return { attempted: false, reason: queueLoad.reason, surfaceDir: dir, hold: true };
+    }
+    let queue = queueLoad.queue;
+    const cardId = (source.task?.cardId ?? bundleCardIdentity(bundlePath).cardId ?? "UNKNOWN-CARD");
+
+    // ── occupancy gate（bounded re-check: an auto-rotation may promote a
+    // pending review, so the occupancy state can change once）──
     mkdirSync(dir, { recursive: true });
-    const occupied = readdirSync(dir).filter((f) => !f.startsWith("."));
-    if (occupied.length > 0) {
+    let occupancyGuard = 0;
+    for (;;) {
+      if (++occupancyGuard > 2) {
+        return { attempted: false, reason: "surface_occupied:rotation_loop", surfaceDir: dir };
+      }
+      const occupied = readdirSync(dir).filter((f) => !f.startsWith("."));
+      if (occupied.length === 0) {
+        // ── Current empty: publish directly; entry becomes CURRENT（T1）──
+        publishTrioToSurface({ dir, parent, token, bundlePath, state, source, cardId });
+        const up = upsertQueueEntry(queue, {
+          surfaceDir: dir,
+          cardId, generation, jobId,
+          bundleIdentity: state?.delivery?.reviewBundleIdentity ?? null,
+          bundleSha256: state?.delivery?.reviewBundleSha256 ?? null,
+          bundlePath,
+          evidencePath: Array.isArray(source.evidence) && source.evidence[0]?.path ? source.evidence[0].path : null,
+          supersedes: state?.supersedes ?? null,
+        });
+        const mk = up.code === "conflict" ? markHold(up.queue, cardId, "conflicting_identity", { surfaceDir: dir }) : markCurrent(up.queue, cardId, { deliveredAt: new Date().toISOString(), surfaceDir: dir });
+        const wq = writeReviewQueue(mk.queue, { surfaceDir: qSurface });
+        const latestErr = up.code === "conflict" ? null : touchLatest(up.entry, qSurface);
+        return {
+          attempted: true, method: "external-review-surface", attemptedAt: new Date().toISOString(), surfaceDir: dir,
+          files: ["review-bundle.txt", "delivery.json"], entryId: cardId,
+          latestError: latestErr, queueWrite: wq.ok,
+          queuedConflict: up.code === "conflict" ? true : undefined,
+        };
+      }
       const occDelivery = join(dir, "delivery.json");
       const occRec = existsSync(occDelivery) ? readExternalReviewDeliveryRecord(occDelivery) : { ok: false, errors: ["surface_delivery_record_missing"] };
       if (occRec.ok && occRec.state?.delivery?.reviewBundleIdentity && state?.delivery?.reviewBundleIdentity
           && occRec.state.delivery.reviewBundleIdentity === state.delivery.reviewBundleIdentity
           && occRec.state.delivery.reviewBundleSha256 === state.delivery.reviewBundleSha256) {
+        // idempotent re-delivery of the CURRENT occupant（T7: one entry only）.
+        const up = upsertQueueEntry(queue, {
+          surfaceDir: dir,
+          cardId,
+          generation,
+          jobId,
+          bundleIdentity: state.delivery.reviewBundleIdentity,
+          bundleSha256: state.delivery.reviewBundleSha256,
+          bundlePath,
+          evidencePath: Array.isArray(source.evidence) && source.evidence[0]?.path ? source.evidence[0].path : null,
+          supersedes: state.supersedes ?? null,
+        });
+        if (up.code === "enqueued" || up.code === "superseded") {
+          const mk = markCurrent(up.queue, cardId, { deliveredAt: new Date().toISOString(), surfaceDir: dir });
+          writeReviewQueue(mk.queue, { surfaceDir: qSurface });
+        } else if (up.code !== "idempotent") {
+          writeReviewQueue(up.queue, { surfaceDir: qSurface });
+        }
         return { attempted: true, method: "external-review-surface", idempotent: true, attemptedAt: new Date().toISOString(), surfaceDir: dir, files: ["review-bundle.txt", "delivery.json"] };
       }
       const resolved = occRec.ok
@@ -734,6 +890,9 @@ export function deliverToExternalReviewSurface({ bundlePath, state, source = {},
         && occRec.state.verdict.bundleIdentity === occRec.state.delivery?.reviewBundleIdentity
         && EXTERNAL_REVIEW_VERDICTS.includes(occRec.state.externalReviewStatus);
       if (resolved) {
+        // R7 auto-rotation — the resolved occupant is archived under the same
+        // lock; rotateExternalReviewSurface promotes the next pending review
+        //（Phase 3）. Loop back: the occupancy state may have changed.
         const rot = rotateExternalReviewSurface({
           surfaceDir: dir,
           cardId: occRec.cardId ?? "CARD",
@@ -744,43 +903,79 @@ export function deliverToExternalReviewSurface({ bundlePath, state, source = {},
         if (!rot.ok) {
           return { attempted: false, reason: `surface_occupied:auto_rotate_failed:${rot.reason}`, surfaceDir: dir };
         }
-      } else {
-        // RLD2 — identity-explicit occupancy: when the occupant belongs to a
-        // DIFFERENT card than the one being published, the reason names it
-        //（surface_occupied_by_different_card）so the caller can distinguish
-        // a stale-card block from a same-card re-publish block.
-        const occCard = occRec.cardId ?? "unknown";
-        const stale = currentCardId && typeof currentCardId === "string" && occCard !== currentCardId;
-        return { attempted: false, reason: stale ? `surface_occupied_by_different_card:${occCard}!=${currentCardId}` : `surface_occupied:${occupied.slice(0, 5).join(",")}`, surfaceDir: dir };
+        queue = rot.queue ?? queue;
+        continue;
       }
+      // UNRESOLVED occupant — never overwritten.
+      // Same card + different identity:
+      //   sanctioned reseal（supersedes the occupant's generation）-> Current
+      //   updates in place（Phase 5 T10）; no queue duplicate.
+      const occCard = occRec.cardId ?? "unknown";
+      const occIdentity = occRec.state?.delivery?.reviewBundleIdentity ?? null;
+      const sup = state?.supersedes ?? null;
+      const sanctionedReseal = cardId === occCard
+        && occIdentity
+        && sup
+        && sup.reviewBundleIdentity === occIdentity;
+      if (sanctionedReseal) {
+        const up = upsertQueueEntry(queue, {
+          surfaceDir: dir,
+          cardId,
+          generation,
+          jobId,
+          bundleIdentity: state.delivery?.reviewBundleIdentity ?? null,
+          bundleSha256: state.delivery?.reviewBundleSha256 ?? null,
+          bundlePath,
+          evidencePath: Array.isArray(source.evidence) && source.evidence[0]?.path ? source.evidence[0].path : null,
+          supersedes: sup,
+        });
+        publishTrioToSurface({ dir, parent, token, bundlePath, state, source, cardId });
+        const mk = markCurrent(up.queue, cardId, { deliveredAt: new Date().toISOString(), surfaceDir: dir });
+        const wq = writeReviewQueue(mk.queue, { surfaceDir: qSurface });
+        const latestErr = touchLatest(up.entry, qSurface);
+        return {
+          attempted: true, method: "external-review-surface", resealed: true, attemptedAt: new Date().toISOString(),
+          surfaceDir: dir, entryId: cardId, latestError: latestErr, queueWrite: wq.ok,
+        };
+      }
+      if (cardId === occCard) {
+        // same card, different identity, NOT a sanctioned reseal -> HOLD.
+        const up = upsertQueueEntry(queue, {
+          surfaceDir: dir,
+          cardId, generation, jobId,
+          bundleIdentity: state?.delivery?.reviewBundleIdentity ?? "0".repeat(64),
+          bundleSha256: state?.delivery?.reviewBundleSha256 ?? "0".repeat(64),
+          bundlePath,
+          evidencePath: null,
+          supersedes: sup,
+        });
+        const wq = writeReviewQueue(up.queue, { surfaceDir: qSurface });
+        return { attempted: false, reason: `queue_hold:conflicting_identity:${occIdentity ?? "unknown"}`, surfaceDir: dir, hold: true, entryId: cardId, queueWrite: wq.ok };
+      }
+      // different card -> enqueue behind the occupant（T2: legitimate queued
+      // review is SUCCESS, never surface_occupied failure）.
+      const stale = currentCardId && typeof currentCardId === "string" && occCard !== currentCardId;
+      const up = upsertQueueEntry(queue, {
+          surfaceDir: dir,
+        cardId, generation, jobId,
+        bundleIdentity: state.delivery?.reviewBundleIdentity ?? null,
+        bundleSha256: state.delivery?.reviewBundleSha256 ?? null,
+        bundlePath,
+        evidencePath: Array.isArray(source.evidence) && source.evidence[0]?.path ? source.evidence[0].path : null,
+        supersedes: sup,
+      });
+      if (up.code === "conflict") {
+        const wq = writeReviewQueue(up.queue, { surfaceDir: qSurface });
+        return { attempted: false, reason: `queue_hold:conflicting_identity`, surfaceDir: dir, hold: true, entryId: up.entry.cardId, queueWrite: wq.ok };
+      }
+      const wq = writeReviewQueue(up.queue, { surfaceDir: qSurface });
+      const latestErr = touchLatest(up.entry, qSurface);
+      return {
+        attempted: true, queued: true, method: "external-review-queue", attemptedAt: new Date().toISOString(),
+        surfaceDir: dir, entryId: up.entry.cardId, order: up.entry.order,
+        latestError: latestErr, queueWrite: wq.ok, staleCard: stale || undefined,
+      };
     }
-    // build the trio in invisible staging（reviewer cannot see it）…
-    rmSync(staging, { recursive: true, force: true });
-    mkdirSync(staging, { recursive: true });
-    // the surface delivery record honestly records THIS delivery attempt
-    //（informational — never a receipt; the verdict stays the receipt）.
-    const attemptedAt = new Date().toISOString();
-    const recordState = state && typeof state === "object"
-      ? { ...state, delivery: { ...(state.delivery ?? {}), attempted: true, method: "external-review-surface", attemptedAt } }
-      : state;
-    const files = {
-      "review-bundle.txt": readFileSync(bundlePath, "utf8"),
-      "delivery.json": JSON.stringify(serializeExternalReviewState(recordState, { cardId: source.task?.cardId ?? null, fileName: "delivery.json" }), null, 2) + "\n",
-    };
-    const ev = Array.isArray(source.evidence) && source.evidence.length > 0 ? source.evidence[0] : null;
-    if (ev?.path && existsSync(ev.path)) {
-      files["evidence.json"] = readFileSync(ev.path, "utf8");
-    }
-    for (const [name, content] of Object.entries(files)) {
-      writeFileSync(join(staging, name), content, "utf8");
-    }
-    // …then publish with ONE directory-level rename（atomic; no mixed trio
-    // possible: the reviewer either sees the previous state or the full trio）
-    for (const f of readdirSync(dir)) {
-      if (f.startsWith(".")) rmSync(join(dir, f), { recursive: true, force: true });
-    }
-    renameSync(staging, dir);
-    return { attempted: true, method: "external-review-surface", attemptedAt: new Date().toISOString(), surfaceDir: dir, files: Object.keys(files) };
   } catch (e) {
     return { attempted: false, reason: `surface_delivery_failed:${String(e?.message ?? e).slice(0, 200)}`, surfaceDir: dir };
   } finally {
@@ -796,6 +991,92 @@ export function deliverToExternalReviewSurface({ bundlePath, state, source = {},
 }
 
 /**
+ * Promote the oldest eligible pending review to Current（Phase 3）. Caller
+ * MUST hold the surface lock. Deterministic ordering: lowest queue order
+ * first. Never regenerates/reseals — the queue entry's immutable bundle
+ * bytes are copied verbatim to the Current trio.
+ */
+export function promoteNextPendingReviewLocked({ surfaceDir, archiveDir = null, lock = null, queue = null }) {
+  const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
+  const parent = dirname(dir);
+  const q = queue ?? loadQueueOrHold(dir).queue;
+  if (!q) return { ok: false, reason: "queue_hold", promoted: null, queue: q };
+  const pending = oldestPending(q, dir);
+  if (!pending) return { ok: true, reason: "none_pending", promoted: null, queue: q };
+  if (existsSync(dir) && readdirSync(dir).filter((f) => !f.startsWith(".")).length > 0) {
+    return { ok: false, reason: "current_occupied", promoted: null, queue: q };
+  }
+  const token = lock?.token ?? `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  mkdirSync(dir, { recursive: true });
+  const state = buildExternalReviewState({
+    bundle: { identity: pending.bundleIdentity, sha256: pending.bundleSha256 },
+    bundlePath: pending.bundlePath,
+    supersedes: pending.supersedes ?? null,
+  });
+  const record = recordDeliveryAttempt(state, { method: "external-review-surface", attemptedAt: new Date().toISOString() });
+  const source = {
+    task: { cardId: pending.cardId },
+    evidence: pending.evidencePath ? [{ path: pending.evidencePath, sha256: "0".repeat(64) }] : [],
+  };
+  publishTrioToSurface({ dir, parent, token, bundlePath: pending.bundlePath, state: record, source, cardId: pending.cardId });
+  const deliveredAt = new Date().toISOString();
+  const mk = markCurrent(q, pending.cardId, { deliveredAt, surfaceDir: dir });
+  mk.entry.deliveredAt = deliveredAt;
+  writeReviewQueue(mk.queue, { surfaceDir: dir });
+  return { ok: true, promoted: mk.entry, queue: mk.queue, archived: [] };
+}
+
+/**
+ * Public promotion entry（CLI / recovery / tests）: acquire the surface lock,
+ * promote the oldest pending review if Current is empty. Idempotent — safe to
+ * re-run after a crash mid-promotion（T12/T13）.
+ */
+export function promoteNextPendingReview({ surfaceDir = null, archiveDir = null } = {}) {
+  const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
+  const ownLock = acquireExternalReviewSurfaceLock(dir);
+  if (!ownLock.ok) return { ok: false, reason: ownLock.reason ?? "surface_busy", promoted: null };
+  try {
+    return promoteNextPendingReviewLocked({ surfaceDir: dir, archiveDir, lock: ownLock });
+  } finally {
+    releaseExternalReviewSurfaceLock({ lockPath: ownLock.lockPath, token: ownLock.token });
+  }
+}
+
+/**
+ * Startup reconciliation（T13）: if Current is empty and the pending queue is
+ * non-empty, promote the oldest pending review. Idempotent; safe on every
+ * restart / delivery entry.
+ */
+export function reconcileReviewQueue({ surfaceDir = null, archiveDir = null } = {}) {
+  const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
+  const ownLock = acquireExternalReviewSurfaceLock(dir);
+  if (!ownLock.ok) return { ok: false, reason: ownLock.reason ?? "surface_busy", promoted: null };
+  try {
+    const qr = readReviewQueue(dir);
+    if (!qr.ok) return { ok: false, reason: `queue_hold:${qr.holdCode}:${qr.reason ?? ""}`, promoted: null };
+    const q = qr.queue;
+    const pending = oldestPending(q, dir);
+    if (!pending) return { ok: true, promoted: null, reason: "none_pending" };
+    if (existsSync(dir) && readdirSync(dir).filter((f) => !f.startsWith(".")).length > 0) {
+      return { ok: true, promoted: null, reason: "current_occupied" };
+    }
+    return promoteNextPendingReviewLocked({ surfaceDir: dir, archiveDir, lock: ownLock, queue: q });
+  } finally {
+    releaseExternalReviewSurfaceLock({ lockPath: ownLock.lockPath, token: ownLock.token });
+  }
+}
+
+/**
+ * Latest navigation pointer（Phase 4）: "what is the newest formal review
+ * generated?" — NEVER "what blocks the queue". Read-only; fail-closed on a
+ * missing/unreadable pointer（navigation only — review authority lives in
+ * Current/delivery.json + Archive/）.
+ */
+export function latestReviewPointer({ surfaceDir = null } = {}) {
+  return readLatestPointer(surfaceDir ?? null);
+}
+
+/**
  * Rotate the current surface into the flat Archive/ after a verdict:
  *   Archive/<YYYYMMDD>-<CARD>-<identity8>-<VERDICT>-<kind>（kind = the
  *   original file name: review-bundle.txt / delivery.json / evidence.json）
@@ -803,31 +1084,77 @@ export function deliverToExternalReviewSurface({ bundlePath, state, source = {},
  * superseded before an external verdict. Runs under the same single-owner
  * lock（never races a concurrent publish）. Returns the archived paths.
  */
+/**
+ * Rotate the current surface into the flat Archive/ after a verdict:
+ *   Archive/<YYYYMMDD>-<CARD>-<identity8>-<VERDICT>-<kind>（kind = the
+ * original file name: review-bundle.txt / delivery.json / evidence.json）
+ * then clear Current/. `verdict` defaults to PENDING when the card was
+ * superseded before an external verdict. Runs under the same single-owner
+ * lock（never races a concurrent publish）. Returns the archived paths.
+ *
+ * REVART-LC1（this card）— rotation is the promotion seam（Phase 3）: after
+ * archiving + clearing Current, the queue entry for the rotated card is
+ * marked ARCHIVED and the oldest eligible pending review is promoted to
+ * Current（deterministic order; bundle bytes copied verbatim, never
+ * regenerated）. Returns { ok, archived, cleared, promoted|null, queue }.
+ */
 export function rotateExternalReviewSurface({ surfaceDir = null, archiveDir = null, cardId = "CARD", identity = "unknown", verdict = "PENDING", dateStr = null, lock = null } = {}) {
   const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
   const arch = resolve(archiveDir ?? externalReviewArchiveDir());
   const prefix = dateStr ?? new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const label = `${prefix}-${cardId}-${String(identity).slice(0, 8)}-${verdict}`;
-  if (!existsSync(dir)) return { ok: true, archived: [], cleared: true };
   const ownLock = lock ?? acquireExternalReviewSurfaceLock(dir);
   if (!ownLock.ok) {
     return { ok: false, reason: ownLock.reason ?? "surface_busy", archived: [] };
   }
   const archived = [];
   try {
-    mkdirSync(arch, { recursive: true });
-    for (const name of ["review-bundle.txt", "delivery.json", "evidence.json"]) {
-      const src = join(dir, name);
-      if (!existsSync(src)) continue;
-      const dest = join(arch, `${label}-${name}`);
-      renameSync(src, dest);
-      archived.push(dest);
+    if (existsSync(dir)) {
+      mkdirSync(arch, { recursive: true });
+      for (const name of ["review-bundle.txt", "delivery.json", "evidence.json"]) {
+        const src = join(dir, name);
+        if (!existsSync(src)) continue;
+        const dest = join(arch, `${label}-${name}`);
+        renameSync(src, dest);
+        archived.push(dest);
+      }
+      // stray tmp files（dot-prefixed）are temp — removable, never archived
+      for (const f of readdirSync(dir)) {
+        if (f.startsWith(".")) { try { rmSync(join(dir, f), { force: true }); } catch { /* best effort */ } }
+      }
     }
-    // stray tmp files（dot-prefixed）are temp — removable, never archived
-    for (const f of readdirSync(dir)) {
-      if (f.startsWith(".")) { try { rmSync(join(dir, f), { force: true }); } catch { /* best effort */ } }
+    const cleared = !existsSync(dir) || readdirSync(dir).filter((f) => !f.startsWith(".")).length === 0;
+    // ── queue bookkeeping + promotion（Phase 3）──────────────────────────
+    let queue = null;
+    const qr = readReviewQueue(dir);
+    if (qr.ok) {
+      queue = qr.queue;
+      // the rotated occupant（if tracked）is now ARCHIVED（terminal）.
+      const occ = findEntry(queue, cardId, dir) ?? (queue.entries ?? []).find((e) => e.state === "CURRENT" && e.surfaceDir === dir);
+      if (occ) {
+        const mark = occ.state === "CURRENT"
+          ? markArchived(queue, occ.cardId, { surfaceDir: dir })
+          : { ok: true, queue };
+        queue = mark.queue;
+        if (EXTERNAL_REVIEW_VERDICTS.includes(verdict) && occ.state === "CURRENT") {
+          const v = queue.entries.find((e) => e.cardId === occ.cardId && e.surfaceDir === dir);
+          if (v) {
+            v.verdict = { verdict, bundleIdentity: identity, bundleSha256: null, reviewedAt: new Date().toISOString() };
+            v.state = "ARCHIVED";
+            v.updatedAt = new Date().toISOString();
+          }
+        }
+        writeReviewQueue(queue, { surfaceDir: dir });
+      }
+      // promote the next pending review（Current is now empty; FIFO oldest
+      // eligible first）.
+      const promote = promoteNextPendingReviewLocked({ surfaceDir: dir, archiveDir: arch, lock: ownLock, queue });
+      if (promote.ok && promote.promoted) {
+        queue = promote.queue;
+        return { ok: true, archived, cleared: true, promoted: promote.promoted, queue };
+      }
     }
-    return { ok: true, archived, cleared: readdirSync(dir).length === 0 };
+    return { ok: true, archived, cleared, promoted: null, queue, promotionReason: qr.ok ? null : `queue_hold:${qr.holdCode ?? "corrupt"}` };
   } catch (e) {
     return { ok: false, reason: `surface_rotate_failed:${String(e?.message ?? e).slice(0, 200)}`, archived };
   } finally {
