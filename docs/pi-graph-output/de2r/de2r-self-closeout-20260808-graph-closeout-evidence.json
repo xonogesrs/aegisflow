@@ -1,0 +1,187 @@
+{
+  "schema": "autoloop.review-bundle.graph-closeout-evidence/v1",
+  "graphRunId": "de2r-self-closeout-20260808",
+  "final": "PASS",
+  "holdCode": null,
+  "reason": null,
+  "task": {
+    "cardId": "AUTOLOOP-PI-GRAPH-DE2R",
+    "cardTitle": "Production Sub-agent Resume Closure + DE-2 Repair Scope Resolution (DE-2R)",
+    "cardType": "implementation"
+  },
+  "scheduler": {
+    "verdict": "PASS",
+    "order": [
+      "SA-R1",
+      "SA-R2",
+      "SA-W1",
+      "SA-V1"
+    ],
+    "statuses": {
+      "SA-R1": "passed",
+      "SA-R2": "passed",
+      "SA-W1": "passed",
+      "SA-V1": "passed"
+    },
+    "skipped": [],
+    "writerViolations": [],
+    "leaseHolderAfter": null
+  },
+  "nodes": [
+    {
+      "nodeId": "SA-R1",
+      "phaseExecutionId": "exec_de2r_r1",
+      "taskType": "subagent_resume_probe_design",
+      "dependencies": [],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786168800000,
+      "completedAt": 1786168805000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 1,
+        "failed": 0,
+        "total": 1
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "SA-R2",
+      "phaseExecutionId": "exec_de2r_r2",
+      "taskType": "scope_resolution_governance",
+      "dependencies": [],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786168801000,
+      "completedAt": 1786168806000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 1,
+        "failed": 0,
+        "total": 1
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "SA-W1",
+      "phaseExecutionId": "exec_de2r_w1",
+      "taskType": "production_subagent_resume_closure",
+      "dependencies": [
+        "SA-R1",
+        "SA-R2"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786168802000,
+      "completedAt": 1786168807000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 1,
+        "failed": 0,
+        "total": 1
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "SA-V1",
+      "phaseExecutionId": "exec_de2r_v1",
+      "taskType": "regression_and_acceptance",
+      "dependencies": [
+        "SA-W1"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786168803000,
+      "completedAt": 1786168808000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 1,
+        "failed": 0,
+        "total": 1
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    }
+  ],
+  "transitions": [
+    {
+      "phaseId": "SA-R1",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    },
+    {
+      "phaseId": "SA-R2",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    },
+    {
+      "phaseId": "SA-W1",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    },
+    {
+      "phaseId": "SA-V1",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    }
+  ],
+  "reviewBinding": {
+    "implementationDigest": "8c7e17578d737c0713f8e5ca007d976fa213b9625b65a3679e40de43b562cd61",
+    "reviewResultIdentity": "491e97d3852454307a1459e6533925792b8e81dd3879cf35bc94cdbb8a38507f"
+  }
+}

@@ -298,10 +298,10 @@ test("C4L-9 successful executor path keeps a harness-owned implementation-eviden
     assert.equal(r.result.final, "PASS");
     // C4Q: the persisted evidence artifact is the harness-owned
     // implementation evidence; the executor output is a bounded diagnostic.
-    assert.ok(existsSync(join(r.execDir, "phases", "fix_add_implementation", "implementation-evidence.json")));
-    assert.ok(existsSync(join(r.execDir, "phases", "fix_add_implementation", "executor-output.json")));
+    assert.ok(existsSync(join(r.execDir, "phases", "fix_add_implementation", "implementation-evidence-0.json")));
+    assert.ok(existsSync(join(r.execDir, "phases", "fix_add_implementation", "executor-output-0.json")));
     assert.ok(!existsSync(join(r.execDir, "phases", "fix_add_implementation", "executor-diagnostics.json")));
-    const ev = JSON.parse(readFileSync(join(r.execDir, "phases", "fix_add_implementation", "implementation-evidence.json"), "utf8"));
+    const ev = JSON.parse(readFileSync(join(r.execDir, "phases", "fix_add_implementation", "implementation-evidence-0.json"), "utf8"));
     assert.equal(ev.schema_version, "autoloop.implementation-evidence/v1");
     const manifest = JSON.parse(readFileSync(join(r.execDir, "manifest.json"), "utf8"));
     assert.equal(manifest.final_verdict, "PASS");

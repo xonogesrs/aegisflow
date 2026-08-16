@@ -1,0 +1,70 @@
+{
+  "schema": "autoloop.vca1-phase0-evidence/v1",
+  "cardId": "VCA-1",
+  "phase": "PHASE_0_BOOTSTRAP",
+  "executor": "BOOTSTRAP_EXECUTOR (Claude Code, outside AutoLoop lifecycle, per Controller authorization)",
+  "bootstrapException": "VCA-1 Phase 0 was executed directly outside AutoLoop because the defect under repair affects AutoLoop's own verification entry path. Remaining VCA-1 work returns to AutoLoop only after the bootstrap guard is proven effective.",
+  "repoRoot": "/Volumes/NVM2T/Development/autoloop",
+  "scopeDiscipline": {
+    "searchedOutsideRepo": false,
+    "note": "All discovery for this phase was bounded to /Volumes/NVM2T/Development/autoloop. No command touched /Users/zhengfengqing or $HOME during this work."
+  },
+  "rootCause": {
+    "finding": "VCA1-F1",
+    "classification": "C_AGENT_GENERATED",
+    "classificationNote": "No literal recursive `grep -r`/`find` over a home/root path exists anywhere in src/ or scripts/ in this repo. `grep -rl AWAITING_EXTERNAL_REVIEW` occurs only as normal within-file string matches inside src/admission/registry.mjs, src/governance/review-bundle.mjs, and several scripts/*.mjs — none of them shell out to a recursive filesystem search. No docs/ policy text matching 'verify globally / no other / ensure none exists' patterns was found either, so this is not case D (legacy governance instructions) as far as this repo's committed docs go.",
+    "evidence": {
+      "literalMatchScan": "grep -rl \"AWAITING_EXTERNAL_REVIEW\" src scripts test (bounded to repo) — 17 hits, all in-repo source/test files referencing the status constant, not shell invocations",
+      "shellInvocationScan": "grep for execSync/spawnSync/exec( across src+scripts, filtered to files also containing 'grep -r|find /|homedir()|process.env.HOME' — 7 files, none construct a recursive grep/find over a home-scale root",
+      "authoritativeReaderExists": "src/governance/closeout-state.mjs exports readCloseoutState(path) — the authoritative, structured way to determine AWAITING_EXTERNAL_REVIEW state for a given card. This function existed prior to VCA-1 and was available to be called instead of a filesystem search.",
+      "policyDocScan": "grep -rniE for 'verify.{0,20}(no other|globally|remaining|ensure none|full inventory)' across docs/ — 0 matches"
+    },
+    "conclusion": "The 896s whole-home grep was an ad-hoc command an agent (Pi) improvised at runtime to answer 'is anything still AWAITING_EXTERNAL_REVIEW', in the absence of (a) a call to the existing authoritative reader, and (b) any code-level guard preventing an arbitrarily broad verification root. It is not hardcoded in AutoLoop source and not traceable to a specific policy instruction in this repo's docs. Root cause is agent-generated ad-hoc verification operating with unbounded scope, unconstrained by any guard — not a defect to fix by editing a specific script."
+  },
+  "guardImplemented": {
+    "module": "src/governance/verification-scope-guard.mjs",
+    "exports": ["checkVerificationRoot", "assertVerificationRoot", "defaultAuthorizedRoots", "VERIFICATION_SCOPE_HOLDS"],
+    "semantics": {
+      "forbiddenRoots": ["/", "$HOME (os.homedir())"],
+      "forbiddenAppliesTo": "any resolved path equal to, or a descendant of, a forbidden root, UNLESS it is also within an authorized root",
+      "authorizedRootsDefault": [
+        "this repo (resolved from the module's own location)",
+        "AUTOLOOP_REVIEW_SURFACE env override, else ~/Desktop/AutoLoop-Review/Current",
+        "AUTOLOOP_REVIEW_ARCHIVE env override, else ~/Desktop/AutoLoop-Review/Archive"
+      ],
+      "failClosed": "checkVerificationRoot never widens scope on its own; ok:false callers MUST surface HOLD / VERIFICATION_SCOPE_UNBOUNDED. assertVerificationRoot throws an Error with .hold set to the same code for fail-closed call sites.",
+      "dynamicPathHandling": "resolve() is applied before any comparison, so a dynamically-constructed path (e.g. join(home, 'Desktop', '..')) is checked against its resolved form, not its literal string, closing the NEG3 case (agent resolves a parent path to home)."
+    },
+    "scopeOfThisPhase": "This is the bounded guard primitive only (VCA1-F1 / W1-A). It does not yet implement the full VCA-1 verification-budget system (max_duration_ms / max_files / max_bytes — card section 10), the authoritative-source-first enforcement layer (section 4), the external verdict fast path (section 5), or verification-cost telemetry (section 9). Those remain later VCA-1 phases, explicitly out of scope for this bootstrap per Controller's narrowed authorization.",
+    "coversAgentGeneratedCommands": "Partial by design at this phase: the guard is a library function importable by any AutoLoop script or sub-agent adapter. It does not itself intercept an arbitrary shell command Pi might type outside of code that calls it. Closing that gap fully requires either (a) AutoLoop-side verification call sites routing through this guard (not yet done — no call sites wired in this phase), or (b) a policy/prompt-level instruction to Pi to call this guard / use readCloseoutState before any filesystem verification. Recommendation for the next phase: wire runCloseoutGate's readiness checks and any sub-agent shell-verification adapter through checkVerificationRoot before actual traversal, and add the authoritative-source-first requirement (section 4) so the question this grep was answering never reaches a filesystem search."
+  },
+  "filesModified": [
+    "src/governance/verification-scope-guard.mjs (new)",
+    "test/governance/test-verification-scope-guard.mjs (new)"
+  ],
+  "testsRun": {
+    "targeted": "node --test test/governance/test-verification-scope-guard.mjs",
+    "targetedResult": { "tests": 13, "pass": 13, "fail": 0 },
+    "impactRegression": "node --test 'test/governance/*.mjs' (full governance test dir, the area touched)",
+    "impactRegressionResult": { "tests": 300, "pass": 300, "fail": 0 },
+    "syntaxCheck": "npm run check (node --check across all src/*.mjs) — clean",
+    "blanketRegressionRun": false,
+    "blanketRegressionNote": "Per Controller's Phase-0-only authorization: no full 900+ test suite run, since this change adds a new standalone module with no existing call sites (zero blast radius outside the new files). Impact regression on the governance dir it lives in was run instead."
+  },
+  "negativeTestsCovered": {
+    "NEG1": "covered — /Users/zhengfengqing rejected",
+    "NEG2": "covered — $HOME and '~' and '/' rejected",
+    "NEG3": "covered — dynamically-resolved parent path landing on home rejected",
+    "NEG4": "not yet — requires wiring readCloseoutState as the AWAITING_EXTERNAL_REVIEW answer path (next phase)",
+    "NEG5_NEG7": "not yet — external verdict fast path is a later VCA-1 phase",
+    "NEG8": "covered — bounded authorized repo/review-surface scan allowed",
+    "NEG9": "covered — forensic broad scan (/Volumes, repo sibling dir) without authorization rejected",
+    "NEG10": "covered — empty/unknown root produces HOLD, not a default/expanded scope",
+    "NEG11_NEG14": "not yet — regression tiering and evidence reuse are later VCA-1 phases"
+  },
+  "rootCauseClassificationSummary": "C_AGENT_GENERATED (ad-hoc improvised verification), with contributing factor E-partial: absence of any guard or authoritative-source-first contract, not a specific bad policy sentence found in this repo's docs",
+  "canBlockEquivalentWholeHomeScan": true,
+  "canBlockEquivalentWholeHomeScanNote": "True for any call site that adopts checkVerificationRoot/assertVerificationRoot. Not yet true unconditionally for arbitrary shell commands Pi might issue outside of code review — that requires either call-site wiring (next phase, code-level) or a Pi-facing policy update (next phase, prompt-level), both out of this bootstrap's authorized scope.",
+  "safeToReturnRemainingVCA1ToPiPlusAutoLoop": "Conditionally yes: the guard primitive exists and is tested, so the next phase (wiring call sites + authoritative-source-first + policy note) is a normal bounded AutoLoop change, not itself at risk of re-triggering an unbounded scan, PROVIDED that phase also does not shell out to unbounded discovery to find its own call sites (it should use bounded grep within this repo only, as this phase did).",
+  "commitPushMergeSeal": "NONE — no git operations performed, per card header (COMMIT: NO, PUSH: NO, MERGE: NO, SEAL: NO)."
+}

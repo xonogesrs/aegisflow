@@ -1,0 +1,41 @@
+{
+  "schema": "autoloop.cbm3.memory-probe/v1",
+  "dataset": {
+    "records": 10000,
+    "journalBytes": 22097789,
+    "dbBytes": 54210560
+  },
+  "measurements": {
+    "importMs": 47304.8,
+    "importRecPerSec": 211,
+    "openMs": 1682.7,
+    "openParityOk": true,
+    "snapshotMs": 72.1,
+    "exactLookupMs": 0,
+    "exactLookupFound": false,
+    "pathLookupMs": 176.7,
+    "pathLookupFound": true,
+    "ftsQueryMs": 324.7,
+    "ftsSelected": 37,
+    "deterministicRetrievalMs": 311.6,
+    "retrievalSelected": 37,
+    "truncated": true,
+    "repeatDeterministic": true,
+    "repeatMs": 628.7
+  },
+  "resource": {
+    "rssAfterImportMiB": 76,
+    "rssAfterQueriesMiB": 495,
+    "rssDeltaMiB": 419
+  },
+  "determinism": {
+    "snapshotDigest": "e8d29654f8928171990212277dfc91522738c14ad893f40422c0a992cc55a37b",
+    "retrievalDigest": "d9b9868b647f05cf73a8d6b6e0e070d9c3493b55b730a6e82a90de2a73a7656d"
+  },
+  "notes": [
+    "isolated temp store root; production store untouched",
+    "journal append fsync per import（durability contract）— import is NOT the measured hot path",
+    "queries hit indexed sqlite + FTS5; no full DB serialization per query",
+    "no network; no external dependencies"
+  ]
+}

@@ -207,7 +207,7 @@ export function buildReviewEvidenceBundle({
       })),
     },
     durable_references: {
-      evidence_artifact_path: `phases/${phaseId}/implementation-evidence.json`,
+      evidence_artifact_path: `phases/${phaseId}/implementation-evidence-${attempt ?? 0}.json`,
       evidence_artifact_sha256: sha256Text(canonicalJson(evidence) + "\n"),
       executor_completed_event: {
         event_type: "EXECUTOR_COMPLETED",

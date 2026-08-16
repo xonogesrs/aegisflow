@@ -507,9 +507,17 @@ test("C4I-20 the phase-output contract is not modified", () => {
   // modified ON PURPOSE by the C4L authorized executor prompt hardening
   //（reviewer contract + FINAL_RESPONSE_CONTRACT_CORE verbatim）and again by
   // C4N（reviewer evidence-bundle pointer prepended; decision contract + CORE
-  // verbatim）— pin updated to the C4N source state.
+  // verbatim）— pin updated to the C4N source state. phase-task-card.mjs was
+  // modified ON PURPOSE by the Parallel Scheduler x Colima wiring card（task
+  // card now carries phase.runtime so the Colima executor adapter can run the
+  // phase's real isolated-container task）— pin updated to that source state.
+  // phase-response-contract.mjs was modified ON PURPOSE again by VCA-1 Phase
+  // 0B（sectionVerification now carries the AUTHORITATIVE_SOURCE_FIRST /
+  // bounded-verification-root instruction, closing the agent-generated
+  // unbounded-scan gap identified as VCA1-F1）— pin updated to that source
+  // state.
   const phaseResponseSha = sha(join(REPO_A, "src/v2/phase-response-contract.mjs"));
   const phaseTaskCardSha = sha(join(REPO_A, "src/v2/phase-task-card.mjs"));
-  assert.equal(phaseResponseSha, "82e521c2226c9192f113e57ca97a364278253df6eb73e0919a40b23ea67da518");
-  assert.equal(phaseTaskCardSha, "7ecca75df59752de078c10666ab9e7c4f60086f4360805a915367ffa1c633d9a");
+  assert.equal(phaseResponseSha, "d7f35987a2a76de2fde027471bcaa1205ed58ea03436f18b44d11a279ada26df");
+  assert.equal(phaseTaskCardSha, "08bb73aaea96ad87eadc8f2c25056137f6d77f1f4425a7e246983194b8af42f2");
 });

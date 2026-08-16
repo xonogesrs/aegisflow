@@ -1,0 +1,68 @@
+{
+  "schema": "autoloop.durable-failure-model/v1",
+  "card": "AUTOLOOP-PI-GRAPH-DE1",
+  "generatedAt": "2026-08-08T00:00:00.000Z",
+  "failureClasses": [
+    {
+      "class": "PROCESS",
+      "cases": [
+        { "id": "P1", "name": "AutoLoop process crash (SIGKILL/SIGSEGV)", "stack_a": "resumeAutoLoop recovers from last safe checkpoint; writer-phase crash -> RECOVERY_REQUIRED (fail closed)", "stack_b": "full graph re-run required", "recoverySemantics": "at-least-once with idempotent side effects; completed work never lost (D1)" },
+        { "id": "P2", "name": "SIGTERM graceful termination", "stack_a": "abort path leaves consistent checkpoint (test 32)", "stack_b": "no graceful mid-run state", "recoverySemantics": "exactly-once for terminal; resumable otherwise" },
+        { "id": "P3", "name": "machine reboot", "stack_a": "checkpoint + journal on local disk; resume after boot; repository fingerprint must still match (worktree must be clean)", "stack_b": "full re-run", "recoverySemantics": "at-least-once; fingerprint gate fails closed on repo drift" }
+      ]
+    },
+    {
+      "class": "WORKER",
+      "cases": [
+        { "id": "W1", "name": "sub-agent / executor container crash", "stack_a": "EXECUTOR_ERROR -> HOLD journaled; repair budget decremented; retry within budget", "stack_b": "lifecycle-runner bounded repair (in-memory)", "recoverySemantics": "retry with budget; EXECUTOR_ERROR is not PASS (D2)" },
+        { "id": "W2", "name": "writer crash mid-mutation", "stack_a": "interrupted writer -> HOLD/RECOVERY_REQUIRED; never blindly replayed (D3)", "stack_b": "lifecycle runner holds; worktree persists", "recoverySemantics": "no auto-replay of writer mutation; manual/authority recovery" },
+        { "id": "W3", "name": "reviewer crash", "stack_a": "REVIEWER_COMPLETED checkpoint boundary; crash before -> phase re-runs review (read-only)", "stack_b": "in-memory", "recoverySemantics": "at-least-once for read-only review; review is idempotent" }
+      ]
+    },
+    {
+      "class": "RUNTIME",
+      "cases": [
+        { "id": "R1", "name": "Colima restart / docker socket unavailable", "stack_a": "n/a (durable path adapters)", "stack_b": "runTask fails -> EXECUTOR_ERROR -> repair/hold", "recoverySemantics": "retry within budget; container cleanup idempotent" },
+        { "id": "R2", "name": "worktree exists but controller died", "stack_a": "worktree identity pinned in fingerprint; writer resume refused", "stack_b": "worktree dir persists; prepareWorktree idempotent reuses it", "recoverySemantics": "no blind replay; verification required" },
+        { "id": "R3", "name": "stale writer lease", "stack_a": "lease holder persisted in checkpoint; stale remnant -> RESUME_FINGERPRINT_MISMATCH (fail closed)", "stack_b": "in-memory lease; lost on crash (no stale lease on restart)", "recoverySemantics": "fail closed (D8: no authority escalation)" }
+      ]
+    },
+    {
+      "class": "STORAGE",
+      "cases": [
+        { "id": "S1", "name": "checkpoint partial write", "stack_a": "atomic replace under lock + checksum + CAS revision; partial write detected on read", "stack_b": "n/a", "recoverySemantics": "corrupt -> fail closed" },
+        { "id": "S2", "name": "corrupted checkpoint (checksum tamper)", "stack_a": "test 8 detects; resume rejects (CORRUPT)", "stack_b": "n/a", "recoverySemantics": "fail closed, never silent" },
+        { "id": "S3", "name": "journal ahead / database behind", "stack_a": "journal hash chain is canonical; checkpoint references journal head; mismatch -> RESUME_FINGERPRINT_MISMATCH", "stack_b": "CBM-4 memory store: sqlite subset of journal -> lossless rebuild", "recoverySemantics": "lossless rebuild (CBM-4) / fail closed (durable path)" },
+        { "id": "S4", "name": "stale execution record", "stack_a": "execution identity deterministic; resume of terminal run returns COMPLETE (idempotent)", "stack_b": "n/a", "recoverySemantics": "idempotent" }
+      ]
+    },
+    {
+      "class": "EXTERNAL_DEPENDENCY",
+      "cases": [
+        { "id": "E1", "name": "provider timeout", "stack_a": "EXECUTOR_TIMEOUT -> HOLD journaled", "stack_b": "same via lifecycle-runner", "recoverySemantics": "HOLD, no false PASS (D2)" },
+        { "id": "E2", "name": "network outage / API retry", "stack_a": "adapter-level; no durable-specific handling", "stack_b": "same", "recoverySemantics": "caller/adapter responsibility; no silent retry of writer effects" }
+      ]
+    },
+    {
+      "class": "LIFECYCLE_PHASE",
+      "cases": [
+        { "id": "L1", "name": "crash before node start", "stack_a": "PHASE_READY not journaled -> resume replays phase start (read-only safe)", "stack_b": "full re-run", "recoverySemantics": "at-least-once, idempotent" },
+        { "id": "L2", "name": "crash during node execution", "stack_a": "read-only requeue; writer -> RECOVERY_REQUIRED", "stack_b": "full re-run", "recoverySemantics": "no false PASS (D2)" },
+        { "id": "L3", "name": "crash after result before persistence", "stack_a": "result not journaled -> phase re-runs (read-only)", "stack_b": "full re-run", "recoverySemantics": "at-least-once" },
+        { "id": "L4", "name": "crash after persistence before successor scheduling", "stack_a": "PHASE_PASSED journaled + checkpoint -> successor scheduled on resume (D5)", "stack_b": "full re-run", "recoverySemantics": "exactly-once for the completed phase (D1)" },
+        { "id": "L5", "name": "crash during review", "stack_a": "REVIEWER_COMPLETED boundary; review is read-only idempotent", "stack_b": "full re-run", "recoverySemantics": "at-least-once" },
+        { "id": "L6", "name": "crash during repair", "stack_a": "PHASE_REPAIR_REQUESTED journaled; attempt persisted; budget preserved (D4)", "stack_b": "full re-run (budget resets!)", "recoverySemantics": "budget survives restart (D4)" },
+        { "id": "L7", "name": "crash before/after memory write-back", "stack_a": "n/a (write-back not wired)", "stack_b": "CBM-4 idempotent gate: journal-first; duplicate -> WRITEBACK_DUPLICATE (D6)", "recoverySemantics": "idempotent" },
+        { "id": "L8", "name": "crash before closeout", "stack_a": "manifest finalization at terminal; crash before -> run not terminal, resumable", "stack_b": "closeout evidence written post-final; crash before -> re-run", "recoverySemantics": "no terminal claim without terminal journal (D1/D2)" }
+      ]
+    }
+  ],
+  "exactlyOnceWhereRequired": [
+    "completed node result must not be lost (D1) and must not be re-promoted (D2) — satisfied by terminal journal + checkpoint + resume in STACK_A; NOT satisfied by STACK_B",
+    "writer side effects: never blindly replayed (D3) — STACK_A fail-closed; STACK_B relies on worktree + in-memory lease",
+    "memory write-back: idempotent (D6) — satisfied by CBM-4 gate",
+    "telemetry: replay-aware (D7) — GAP at STACK_A durable layer (no replay marker); STACK_B post-final observer is single-shot"
+  ],
+  "forbiddenDuplicateSideEffects": ["writer mutation replay (D3)", "trusted memory duplicate (D6)", "false PASS promotion (D2)"],
+  "allowedDuplicateSideEffects": ["read-only phase re-execution", "review re-run", "idempotent container cleanup", "idempotent worktree revoke"]
+}

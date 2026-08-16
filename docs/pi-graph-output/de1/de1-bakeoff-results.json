@@ -1,0 +1,479 @@
+{
+  "schema": "autoloop.durable-bakeoff-results/v1",
+  "candidate": "A — existing AutoLoop durable execution (runDurableAutoLoop/resumeAutoLoop)",
+  "startedAt": "2026-08-08T03:57:10.357Z",
+  "completedAt": "2026-08-08T03:58:02.218Z",
+  "workload": "4-phase DAG ro1->ro2->writer->verifier; scripted adapters; side-effect markers; real SIGKILL",
+  "results": [
+    {
+      "id": "T0",
+      "name": "baseline (no kill)",
+      "mode": "-",
+      "outcome": "PASS",
+      "counts": {
+        "p_ro1": 1,
+        "p_ro2": 1,
+        "p_writer": 1,
+        "p_verifier": 1
+      },
+      "markers": 8,
+      "pass": true
+    },
+    {
+      "id": "T1",
+      "name": "kill before node start",
+      "mode": "sub-window",
+      "killConditionMet": true,
+      "resumeMs": 5.1,
+      "diskGrowthBytes": 0,
+      "outcome": "RESUME_FINGERPRINT_MISMATCH",
+      "outcomeDetail": "unexpected journal event DAG_ACCEPTED beyond checkpoint head",
+      "resumeError": {
+        "code": "RESUME_FINGERPRINT_MISMATCH",
+        "message": "unexpected journal event DAG_ACCEPTED beyond checkpoint head"
+      },
+      "execCounts": {
+        "p_ro1": 0,
+        "p_ro2": 0,
+        "p_writer": 0,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": false,
+      "recoveryRefused": true
+    },
+    {
+      "id": "T1",
+      "name": "kill before node start",
+      "mode": "safe-boundary",
+      "killConditionMet": true,
+      "resumeMs": 2901,
+      "diskGrowthBytes": 133760,
+      "outcome": "PASS",
+      "outcomeDetail": null,
+      "resumeError": null,
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 1,
+        "p_writer": 1,
+        "p_verifier": 1
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": true,
+      "recoveryRefused": false
+    },
+    {
+      "id": "T2",
+      "name": "kill during read-only sub-agent",
+      "mode": "sub-window",
+      "killConditionMet": true,
+      "resumeMs": 763.4,
+      "diskGrowthBytes": 31721,
+      "outcome": "HOLD",
+      "outcomeDetail": "HOLD",
+      "resumeError": null,
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 0,
+        "p_writer": 0,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": false,
+      "recoveryRefused": false
+    },
+    {
+      "id": "T2",
+      "name": "kill during read-only sub-agent",
+      "mode": "safe-boundary",
+      "killConditionMet": true,
+      "resumeMs": 586.7,
+      "diskGrowthBytes": 32206,
+      "outcome": "HOLD",
+      "outcomeDetail": "HOLD",
+      "resumeError": null,
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 0,
+        "p_writer": 0,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": false,
+      "recoveryRefused": false
+    },
+    {
+      "id": "T3",
+      "name": "kill after node result, before successor scheduling",
+      "mode": "sub-window",
+      "killConditionMet": true,
+      "resumeMs": 2.8,
+      "diskGrowthBytes": 0,
+      "outcome": "RESUME_FINGERPRINT_MISMATCH",
+      "outcomeDetail": "unexpected journal event PHASE_PASSED beyond checkpoint head",
+      "resumeError": {
+        "code": "RESUME_FINGERPRINT_MISMATCH",
+        "message": "unexpected journal event PHASE_PASSED beyond checkpoint head"
+      },
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 0,
+        "p_writer": 0,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": false,
+      "recoveryRefused": true
+    },
+    {
+      "id": "T3",
+      "name": "kill after node result, before successor scheduling",
+      "mode": "safe-boundary",
+      "killConditionMet": true,
+      "resumeMs": 278.8,
+      "diskGrowthBytes": 17141,
+      "outcome": "HOLD",
+      "outcomeDetail": "ORCHESTRATION_EXCEPTION:HOLD / JOURNAL_OUT_OF_ORDER",
+      "resumeError": null,
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 0,
+        "p_writer": 0,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": false,
+      "recoveryRefused": false
+    },
+    {
+      "id": "T4",
+      "name": "kill during writer",
+      "mode": "sub-window",
+      "killConditionMet": true,
+      "resumeMs": 2.9,
+      "diskGrowthBytes": 0,
+      "outcome": "RESUME_FINGERPRINT_MISMATCH",
+      "outcomeDetail": "unexpected journal event PHASE_STARTED beyond checkpoint head",
+      "resumeError": {
+        "code": "RESUME_FINGERPRINT_MISMATCH",
+        "message": "unexpected journal event PHASE_STARTED beyond checkpoint head"
+      },
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 1,
+        "p_writer": 0,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": false,
+      "recoveryRefused": true
+    },
+    {
+      "id": "T4",
+      "name": "kill during writer",
+      "mode": "safe-boundary",
+      "killConditionMet": true,
+      "resumeMs": 68.5,
+      "diskGrowthBytes": 2048,
+      "outcome": "RECOVERY_REQUIRED",
+      "outcomeDetail": "interrupted phase p_writer is not safely resumable",
+      "resumeError": {
+        "code": "INTERRUPTED_WRITER_PHASE_RECOVERY_REQUIRED",
+        "message": "interrupted phase p_writer is not safely resumable"
+      },
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 1,
+        "p_writer": 0,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": true,
+      "recoveryRefused": false
+    },
+    {
+      "id": "T5",
+      "name": "kill after writer mutation, before verification",
+      "mode": "sub-window",
+      "killConditionMet": true,
+      "resumeMs": 69.5,
+      "diskGrowthBytes": 2048,
+      "outcome": "RECOVERY_REQUIRED",
+      "outcomeDetail": "interrupted phase p_writer is not safely resumable",
+      "resumeError": {
+        "code": "INTERRUPTED_WRITER_PHASE_RECOVERY_REQUIRED",
+        "message": "interrupted phase p_writer is not safely resumable"
+      },
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 1,
+        "p_writer": 1,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": true,
+      "recoveryRefused": false
+    },
+    {
+      "id": "T5",
+      "name": "kill after writer mutation, before verification",
+      "mode": "safe-boundary",
+      "killConditionMet": true,
+      "resumeMs": 66.8,
+      "diskGrowthBytes": 2048,
+      "outcome": "RECOVERY_REQUIRED",
+      "outcomeDetail": "interrupted phase p_writer is not safely resumable",
+      "resumeError": {
+        "code": "INTERRUPTED_WRITER_PHASE_RECOVERY_REQUIRED",
+        "message": "interrupted phase p_writer is not safely resumable"
+      },
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 1,
+        "p_writer": 1,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": true,
+      "recoveryRefused": false
+    },
+    {
+      "id": "T6",
+      "name": "kill during verifier",
+      "mode": "sub-window",
+      "killConditionMet": true,
+      "resumeMs": 3.6,
+      "diskGrowthBytes": 0,
+      "outcome": "RESUME_FINGERPRINT_MISMATCH",
+      "outcomeDetail": "unexpected journal event PHASE_STARTED beyond checkpoint head",
+      "resumeError": {
+        "code": "RESUME_FINGERPRINT_MISMATCH",
+        "message": "unexpected journal event PHASE_STARTED beyond checkpoint head"
+      },
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 1,
+        "p_writer": 1,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": false,
+      "recoveryRefused": true
+    },
+    {
+      "id": "T6",
+      "name": "kill during verifier",
+      "mode": "safe-boundary",
+      "killConditionMet": true,
+      "resumeMs": 276.7,
+      "diskGrowthBytes": 22883,
+      "outcome": "HOLD",
+      "outcomeDetail": "ORCHESTRATION_EXCEPTION:HOLD / JOURNAL_OUT_OF_ORDER",
+      "resumeError": null,
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 1,
+        "p_writer": 1,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": false,
+      "recoveryRefused": false
+    },
+    {
+      "id": "T7",
+      "name": "kill during repair attempt",
+      "mode": "sub-window",
+      "killConditionMet": true,
+      "resumeMs": 58.6,
+      "diskGrowthBytes": 2048,
+      "outcome": "RECOVERY_REQUIRED",
+      "outcomeDetail": "interrupted phase p_writer is not safely resumable",
+      "resumeError": {
+        "code": "INTERRUPTED_WRITER_PHASE_RECOVERY_REQUIRED",
+        "message": "interrupted phase p_writer is not safely resumable"
+      },
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 1,
+        "p_writer": 1,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": true,
+      "recoveryRefused": false
+    },
+    {
+      "id": "T7",
+      "name": "kill during repair attempt",
+      "mode": "safe-boundary",
+      "killConditionMet": true,
+      "resumeMs": 3.2,
+      "diskGrowthBytes": 0,
+      "outcome": "RESUME_FINGERPRINT_MISMATCH",
+      "outcomeDetail": "unexpected journal event PHASE_SKIPPED beyond checkpoint head",
+      "resumeError": {
+        "code": "RESUME_FINGERPRINT_MISMATCH",
+        "message": "unexpected journal event PHASE_SKIPPED beyond checkpoint head"
+      },
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 1,
+        "p_writer": 1,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": false,
+      "recoveryRefused": true
+    },
+    {
+      "id": "T8",
+      "name": "kill after review PASS, before closeout",
+      "mode": "sub-window",
+      "killConditionMet": true,
+      "resumeMs": 4.2,
+      "diskGrowthBytes": 0,
+      "outcome": "RESUME_FINGERPRINT_MISMATCH",
+      "outcomeDetail": "unexpected journal event PHASE_PASSED beyond checkpoint head",
+      "resumeError": {
+        "code": "RESUME_FINGERPRINT_MISMATCH",
+        "message": "unexpected journal event PHASE_PASSED beyond checkpoint head"
+      },
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 1,
+        "p_writer": 1,
+        "p_verifier": 1
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": false,
+      "recoveryRefused": true
+    },
+    {
+      "id": "T8",
+      "name": "kill after review PASS, before closeout",
+      "mode": "safe-boundary",
+      "killConditionMet": true,
+      "resumeMs": 305.3,
+      "diskGrowthBytes": 25577,
+      "outcome": "HOLD",
+      "outcomeDetail": "ORCHESTRATION_EXCEPTION:HOLD / JOURNAL_OUT_OF_ORDER",
+      "resumeError": null,
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 1,
+        "p_writer": 1,
+        "p_verifier": 1
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": false,
+      "recoveryRefused": false
+    },
+    {
+      "id": "T10",
+      "name": "machine/runtime restart simulation",
+      "mode": "sub-window",
+      "killConditionMet": true,
+      "resumeMs": 2.2,
+      "diskGrowthBytes": 0,
+      "outcome": "RESUME_FINGERPRINT_MISMATCH",
+      "outcomeDetail": "unexpected journal event PHASE_PASSED beyond checkpoint head",
+      "resumeError": {
+        "code": "RESUME_FINGERPRINT_MISMATCH",
+        "message": "unexpected journal event PHASE_PASSED beyond checkpoint head"
+      },
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 0,
+        "p_writer": 0,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": false,
+      "recoveryRefused": true
+    },
+    {
+      "id": "T10",
+      "name": "machine/runtime restart simulation",
+      "mode": "safe-boundary",
+      "killConditionMet": true,
+      "resumeMs": 2.8,
+      "diskGrowthBytes": 0,
+      "outcome": "RESUME_FINGERPRINT_MISMATCH",
+      "outcomeDetail": "unexpected journal event PHASE_STARTED beyond checkpoint head",
+      "resumeError": {
+        "code": "RESUME_FINGERPRINT_MISMATCH",
+        "message": "unexpected journal event PHASE_STARTED beyond checkpoint head"
+      },
+      "execCounts": {
+        "p_ro1": 1,
+        "p_ro2": 0,
+        "p_writer": 0,
+        "p_verifier": 0
+      },
+      "duplicatedWriterSideEffect": 0,
+      "lostCompletedResult": 0,
+      "pass": false,
+      "recoveryRefused": true
+    },
+    {
+      "id": "T9",
+      "name": "kill during CBM-4 write-back",
+      "outcome": "WRITEBACK_DUPLICATE",
+      "first": "WRITEBACK_ACCEPTED",
+      "retryAfterRebuild": "WRITEBACK_DUPLICATE",
+      "losslessRebuild": true,
+      "parityOk": true,
+      "currentRecords": 1,
+      "pass": true
+    },
+    {
+      "id": "T11",
+      "name": "duplicate recovery invocation",
+      "mode": "-",
+      "firstOutcome": "PASS",
+      "secondOutcome": "PASS",
+      "markersBefore": 8,
+      "markersAfter": 8,
+      "pass": true
+    },
+    {
+      "id": "T12",
+      "name": "checkpoint corruption",
+      "corrupt": "tampered",
+      "outcome": "REJECTED",
+      "error": {
+        "code": "HOLD / SNAPSHOT_CHECKSUM_MISMATCH",
+        "message": "CURRENT checksum mismatch"
+      },
+      "executionBeforeReject": 0,
+      "pass": true
+    }
+  ],
+  "safety": {
+    "silentDuplicateMutation": 0,
+    "lostCompletedResult": 0,
+    "falsePass": 0,
+    "authorityEscalation": 0
+  },
+  "recoveryRefused": 8,
+  "safetyPass": true,
+  "pass": false
+}

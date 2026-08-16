@@ -1,0 +1,48 @@
+{
+  "schema": "autoloop.de2-performance/v1",
+  "card": "AUTOLOOP-PI-GRAPH-DE2",
+  "generatedAt": "2026-08-08T10:01:49.876Z",
+  "goal": "durability cost must be materially smaller than the cost of re-running failed autonomous work — NOT zero overhead.",
+  "method": "synthetic 2-phase readonly graph, injected adapters（no containers; single shared colima instance, preserveInstance）; wall time = in-process hrtime; resume = fresh child process; disk = du store bytes; D7 telemetry = recordGraphTelemetry on a recovery-provenanced graph result vs baseline",
+  "measured": {
+    "durabilityDisabled": {
+      "graphMs": 716.11
+    },
+    "durabilityEnabled": {
+      "graphMs": 2334.61
+    },
+    "durabilityOverheadMs": 1618.51,
+    "journal": {
+      "events": 32,
+      "bytes": 22565,
+      "checkpointsOverRun": 15,
+      "checkpointBytes": 2920
+    },
+    "diskGrowthBytes": 84726,
+    "resumeReconstruction": {
+      "wallMs": 45.85,
+      "cpuMs": 14.07,
+      "rssMb": 6.02
+    },
+    "telemetryRecoveryOverhead": {
+      "baseEventMs": 0.011,
+      "recoveryEventMs": 0.011,
+      "deltaMs": 0
+    }
+  },
+  "context": {
+    "durableJournalCheckpointPerPhase": {
+      "journalEventsPerRun": "~9-17（GRAPH_CREATED/INPUT_FROZEN/DAG_ACCEPTED + per-phase READY/STARTED/TERMINAL + CHECKPOINT_PUBLISHED + RUN_* + MANIFEST_FINALIZED）",
+      "checkpointsPerRun": "~5-11（every safe boundary; CURRENT.json single atomic write + checksum + lease, fsync）"
+    },
+    "resumeLatency": {
+      "fromCrashMatrix": "C2/C3/C4/C5/C8/C9/C13 resumed to PASS in 10-30s total（dominated by colima container re-runs of remaining phases, NOT the durable reconstruction — reconstruction is ms-scale）",
+      "vsFullRerun": "a crash mid-graph resumes the UNCOMPLETED remainder; a full re-run would re-execute ALL phases including completed ones（and re-pay model/container cost）"
+    },
+    "overheadVsBenefit": {
+      "benefit": "crash mid-graph -> resume instead of full re-run; completed results recovered（C4/C8）without re-execution; repair budget preserved（C10）; corrupt state fail-closed（C15）",
+      "conclusion": "durability cost is materially smaller than re-running failed autonomous work"
+    }
+  },
+  "note": "COST-1 telemetry remains passive and unaffected（test:telemetry green; D7 recovery provenance additive — measured delta above）."
+}

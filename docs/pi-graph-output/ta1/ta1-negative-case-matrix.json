@@ -1,0 +1,104 @@
+{
+  "schema": "autoloop.admission-negative-case-matrix/v1",
+  "card": "AUTOLOOP-TA1",
+  "generatedAt": "2026-08-09T00:00:00.000Z",
+  "note": "Each case has: failure mode, detection, fail-closed response, and a TA-2 test hook. All 12 are required exit criteria. Fail-closed means the system REFUSES (HOLD / DENIED) — never a silent downgrade, never a best-effort continue.",
+  "cases": [
+    {
+      "id": "NEG1",
+      "name": "trivial task wrongly escalated to full lifecycle",
+      "failure": "an XS/LOW typo task gets sub-agents + Colima + durable + big review bundle (overkill)",
+      "detection": "telemetry overkill metric: profile weight vs actual outcome; audit admission reasons vs task text",
+      "response": "classifier must emit FAST_PATH for XS/LOW; overkill is a quality metric, not a HOLD (the task still succeeds), but it is measured and surfaced",
+      "testHook": "classify(typo task) == FAST_PATH; profile projection grants no heavyweight capability"
+    },
+    {
+      "id": "NEG2",
+      "name": "high-risk tiny task wrongly downgraded",
+      "failure": "3-line destructive/database change classified LOW because size is small",
+      "detection": "signal scan is INDEPENDENT of size; RS.DATABASE_MUTATION / RS.DESTRUCTIVE_WRITE trigger CRITICAL regardless",
+      "response": "CRITICAL profile: controller gate + decomposition + durable + external review; fast path forbidden",
+      "testHook": "classify(3-line delete-from-db) == {risk: CRITICAL, profile: CRITICAL}"
+    },
+    {
+      "id": "NEG3",
+      "name": "writer gains write capability under read-only admission",
+      "failure": "a node admitted read-only executes with write tools / mutationScope",
+      "detection": "sub-agent envelope toolPermissions built FROM admission.capabilities; mutationScope empty for read-only; envelope identity covers admission digest",
+      "response": "envelope construction fails closed; any write tool outside granted set -> contract violation -> node HOLD",
+      "testHook": "envelope(admission denied writer) has no write tool and empty mutationScope; mutation attempt -> violation"
+    },
+    {
+      "id": "NEG4",
+      "name": "unauthorized capability smuggled in",
+      "failure": "a capability id not in the registry, or a grant not in the (size,risk) matrix cell, appears in the admission record",
+      "detection": "admission validation: capability subset of registry; profile cell match; deny-by-default (anything unlisted is denied)",
+      "response": "malformed/unauthorized admission -> HOLD / ADMISSION_INVALID; never executed",
+      "testHook": "validate(admission with bogus capability) fails; validate(grant not in matrix cell) fails"
+    },
+    {
+      "id": "NEG5",
+      "name": "memory write-back not authorized by admission",
+      "failure": "a task writes to Codebase Memory without memory_policy.writeback_allowed",
+      "detection": "write-back gate requires explicit admission authorization (RS.MEMORY_WRITEBACK is CRITICAL-class); default deny",
+      "response": "WRITEBACK_AUTHORITY_INSUFFICIENT; no partial write",
+      "testHook": "writeback(admission writeback_allowed=false) -> WRITEBACK_AUTHORITY_INSUFFICIENT"
+    },
+    {
+      "id": "NEG6",
+      "name": "remote/network action not escalated",
+      "failure": "a task fetches/pushes to a remote while classified LOW",
+      "detection": "RS.NETWORK_REMOTE (HIGH) / write-to-remote (CRITICAL) scan; pi transport host allowlist + guarded fetch",
+      "response": "escalation to HIGH/CRITICAL; controller gate before external effect; remote write denied without authorization",
+      "testHook": "classify(task with fetch/push text) >= HIGH; transport rejects non-allowed host"
+    },
+    {
+      "id": "NEG7",
+      "name": "destructive action masked by size classifier",
+      "failure": "size classifier sees 1 file so risk signals are ignored",
+      "detection": "risk signal scan runs on the FULL task statement independent of size; separation contract (size never lowers risk)",
+      "response": "CRITICAL profile; no fast path",
+      "testHook": "classify(1-file destructive migration) == CRITICAL (not XS/LOW fast path)"
+    },
+    {
+      "id": "NEG8",
+      "name": "capability policy conflicts with lifecycle policy",
+      "failure": "admission says durable+external review but authority record forbids them (or vice versa)",
+      "detection": "authority_binding.subset_of_lifecycle_authorization check at admission",
+      "response": "HOLD / AUTHORITY_CONFLICT — never guess, never silently pick the weaker side",
+      "testHook": "admission vs authority record conflict -> HOLD / AUTHORITY_CONFLICT"
+    },
+    {
+      "id": "NEG9",
+      "name": "multiple authoritative review surfaces",
+      "failure": "implementation + repair + closeout each delivered as separate manual review cards",
+      "detection": "one-card-one-review-surface contract: closeout gate refuses a second non-superseding bundle for the same card; single Current/ surface",
+      "response": "second delivery without supersede binding -> HOLD; internal artifacts never become manual review cards",
+      "testHook": "second bundle for same card without supersede -> delivery refused"
+    },
+    {
+      "id": "NEG10",
+      "name": "repair generation does not supersede predecessor",
+      "failure": "a REPAIR produces a new bundle that doesn't bind identity+sha+path of the previous generation",
+      "detection": "linear supersede chain validation (FM-3 §14 mechanism); delivery record carries supersedes binding",
+      "response": "bundle validation fails (missing/partial SUPERSEDES binding) -> no delivery",
+      "testHook": "bundle without supersede binding on repair generation -> validation HOLD"
+    },
+    {
+      "id": "NEG11",
+      "name": "task runtime modifies the admission decision itself",
+      "failure": "an executing task edits its own admission record / classifier to widen capability grants",
+      "detection": "admission record is immutable at runtime (frozen in checkpoint fingerprint; admission_id verified at every boundary); RS.SELF_MODIFICATION classifies such tasks CRITICAL with explicit authorization",
+      "response": "tamper detection -> HOLD / ADMISSION_TAMPERED; never re-classified silently",
+      "testHook": "mutating the admission record mid-run -> checkpoint fingerprint mismatch -> HOLD"
+    },
+    {
+      "id": "NEG12",
+      "name": "classification evidence insufficient yet default-allow",
+      "failure": "a task with no supporting evidence is defaulted to LOW / allowed",
+      "detection": "under_classified flag when any dimension lacks evidence; fail-closed: insufficient evidence -> minimum MEDIUM, never LOW",
+      "response": "escalate; require research-first to gather evidence; default-deny until evidence sufficient",
+      "testHook": "classify(task with empty reasons) -> under_classified=true and risk >= MEDIUM; never LOW"
+    }
+  ]
+}

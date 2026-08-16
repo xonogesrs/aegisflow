@@ -1,0 +1,28 @@
+{
+  "schema": "autoloop.external-review-delivery/v2",
+  "cardId": "AUTOLOOP-PI-GRAPH-DE1",
+  "fileName": "delivery.json",
+  "reviewBundleGenerated": true,
+  "reviewBundleValidated": true,
+  "reviewBundleDeliveryRequired": true,
+  "externalReviewStatus": "HOLD",
+  "externalReviewStatusReason": "verdict HOLD bound to reviewBundleIdentity=aedcafcc8453bc9346e2abaceafb6b7b7615636eafc8c3c9e167773cde3e867b（verdict is the receipt: RECEIVED + REVIEWED proven in one step）",
+  "delivery": {
+    "required": true,
+    "attempted": true,
+    "method": "external-review-surface",
+    "attemptedAt": "2026-08-08T04:02:34.640Z",
+    "bundlePath": "docs/pi-graph-output/de1/card-closeout-bundle-20260808-aedcafcc.txt",
+    "reviewBundleIdentity": "aedcafcc8453bc9346e2abaceafb6b7b7615636eafc8c3c9e167773cde3e867b",
+    "reviewBundleSha256": "ae31691b15dd4257f28bf18d1aec9443b554e0970902f6dc273c31ccbeee68a9"
+  },
+  "verdict": {
+    "verdict": "HOLD",
+    "reviewerIdentity": "Controller / External Reviewer",
+    "reviewedAt": "2026-08-08T04:28:47Z",
+    "bundleIdentity": "aedcafcc8453bc9346e2abaceafb6b7b7615636eafc8c3c9e167773cde3e867b",
+    "bundleSha256": "ae31691b15dd4257f28bf18d1aec9443b554e0970902f6dc273c31ccbeee68a9",
+    "findingsDigest": "a1e2594ca28431230e9ac05260f0e4298f8a6b515ad69aa56b096185c15bf4dd"
+  },
+  "supersedes": null
+}

@@ -1,0 +1,381 @@
+================================================================================
+AUTOLOOP REVIEW BUNDLE (CLOSEOUT)
+================================================================================
+REVIEW_BUNDLE_SCHEMA: autoloop.review-bundle/v1
+REVIEW_BUNDLE_IDENTITY: 59dc320ee3694325381a1c4266a15b43281213d208ed7dbccb9c9f143ce60b79
+CARD_ID: AUTOLOOP-PI-GRAPH-CBM3-1
+CARD_TITLE: Local Memory Store and Deterministic Retrieval Engine
+CARD_TYPE: implementation
+GENERATED_AT: 2026-08-07T15:13:55.354Z
+
+================================================================================
+1. Review Request
+================================================================================
+CARD_ID: AUTOLOOP-PI-GRAPH-CBM3-1
+CARD_TITLE: Local Memory Store and Deterministic Retrieval Engine
+CARD_TYPE: implementation
+GRAPH_RUN_ID: cbm3-self-closeout-20260807
+NODE_ID: SA-R1, SA-R2, SA-W1, SA-V1
+PHASE_EXECUTION_ID: exec_b9ee987378d4ce2175d37d193267d8d6, exec_428124882e18e31e6139688fd119efd5, exec_dbe6a1086944f160c02ee998eec00117, exec_97d29b0b8315544252fcce1cda3b6b2f
+STAGE_IDS: executor, mutation_scope_gate, reviewer, reviewer_verdict
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+REQUESTED_REVIEW_VERDICT: PASS / REPAIR / HOLD
+This bundle is the single complete text artifact submitted for external review of card AUTOLOOP-PI-GRAPH-CBM3-1.
+
+================================================================================
+2. Executive Status
+================================================================================
+EXECUTIVE_STATUS: PASS
+EXECUTION_PASS: true
+VERIFIER_PASS: true
+INDEPENDENT_REVIEW_PASS: true
+REVIEW_BUNDLE_READY: true
+REVIEW_BUNDLE_DELIVERY_REQUIRED: true
+EXTERNAL_REVIEW_STATUS: AWAITING_EXTERNAL_REVIEW
+SUMMARY: CBM-3 complete: LocalMemoryStore（SQLite + JSONL hash-chain journal, crash/rebuild recovery, explicit validated import only）+ deterministic retrieval engine（query contract, eligibility, documented ranking tuple, conflict surfacing, relationship provenance, snapshot/retrieval digests, limits）+ Graph read-only integration（memoryContext = DATA, EMPTY_MEMORY vs MEMORY_STORE_INVALID semantics）+ 85 focused tests + 10k-record performance probe. Zero automatic write-back（CBM-4）. This superseding generation repairs the closeout-bundle evidence per the external REPAIR verdict: section 9 now lists CARD_IMPLEMENTATION_FILES / GRAPH_CLOSEOUT_OUTPUTS / PRE_EXISTING_DIRTY_FILES with CBM-3's real file inventory, and the colima-all regression label is clarified to the zero-writeback boundary test.
+
+
+================================================================================
+3. Task Identity
+================================================================================
+CARD_ID: AUTOLOOP-PI-GRAPH-CBM3-1
+CARD_TITLE: Local Memory Store and Deterministic Retrieval Engine
+CARD_TYPE: implementation
+GRAPH_RUN_ID: cbm3-self-closeout-20260807
+NODE_ID: SA-R1, SA-R2, SA-W1, SA-V1
+PHASE_EXECUTION_ID: exec_b9ee987378d4ce2175d37d193267d8d6, exec_428124882e18e31e6139688fd119efd5, exec_dbe6a1086944f160c02ee998eec00117, exec_97d29b0b8315544252fcce1cda3b6b2f
+STAGE_IDS: executor, mutation_scope_gate, reviewer, reviewer_verdict
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+
+
+================================================================================
+4. Repository and Worktree Identity
+================================================================================
+REPOSITORY: git@github.com:xonogesrs/autoloop.git
+BRANCH: governance/reversible-lifecycle-draft-pr
+HEAD: 2e897e995202c0c8c079c5fdc96b9f5d42d50d25
+TREE_SHA: 7ca2c9100b208e15647ff1e0524ffc4e0857e7e0
+WORKTREE_PATH: /Volumes/NVM2T/Development/autoloop
+BASELINE_DIRTY_DIGEST: dirty:2ea01463b34021a19abf3a9d6d74809ebcef03bf357ec971b75e7c5a5eda83de
+FINAL_DIRTY_DIGEST: dirty:2ea01463b34021a19abf3a9d6d74809ebcef03bf357ec971b75e7c5a5eda83de
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+5. Objective
+================================================================================
+Build the real AutoLoop Codebase Memory layer on the CBM-2 Memory Contract v1: LocalMemoryStore（SQLite primary + append-only JSONL hash-chain journal at ~/.autoloop/memory/ with AUTOLOOP_MEMORY_STATE_ROOT override; open/close/initialize/migrate/validate/get/query/snapshot/rebuildFromJournal/verifyJournalParity/explicitImport）; deterministic retrieval（autoloop.memory-query/v1, eligibility pipeline, documented ranking tuple with stable recordId tie-break, conflict surfacing, relationship-aware provenance, maxRecords/maxBytes deterministic truncation, storeSnapshotDigest + retrievalDigest）; crash/rebuild recovery（journal-first durability, sqlite⊆journal lossless rebuild, fail-closed MEMORY_STORE_INVALID）; and Graph read-only integration（repo/worktree/tree identity → deterministic retrieval → structured autoloop.memory-context/v1 DATA context → executor/reviewer context）. NO automatic write-back in this card（CBM-4）.
+
+================================================================================
+6. Authorized Scope
+================================================================================
+  - src/memory/
+  - test/memory/
+  - src/runtime/colima-graph-runner.mjs
+  - src/subagent/subagent-contract.mjs
+  - src/subagent/subagent-executor-adapter.mjs
+  - src/subagent/subagent-review-agent.mjs
+  - scripts/cbm3-self-closeout.mjs
+  - scripts/cbm3-memory-probe.mjs
+  - package.json
+  - docs/pi-graph-output/cbm3/
+AUTHORIZED_PATHS: src/memory/, test/memory/, src/runtime/colima-graph-runner.mjs, src/subagent/subagent-contract.mjs, src/subagent/subagent-executor-adapter.mjs, src/subagent/subagent-review-agent.mjs, scripts/cbm3-self-closeout.mjs, scripts/cbm3-memory-probe.mjs, package.json, docs/pi-graph-output/cbm3/
+
+
+================================================================================
+7. Explicitly Unauthorized Scope
+================================================================================
+  - automatic production memory write-back（CBM-4）
+  - self-evolution
+  - scheduler policy modification
+  - automatic trust promotion
+  - automatic Controller ruling
+  - multi-writer changes
+  - writer lease redesign
+  - review/repair redesign
+  - new vector database / embedding API / network memory service / cloud storage
+  - secret storage / credential ingestion
+  - commit/push/merge/seal
+UNAUTHORIZED_PATHS: automatic production memory write-back（CBM-4）, self-evolution, scheduler policy modification, automatic trust promotion, automatic Controller ruling, multi-writer changes, writer lease redesign, review/repair redesign, new vector database / embedding API / network memory service / cloud storage, secret storage / credential ingestion, commit/push/merge/seal
+
+
+================================================================================
+8. Architecture and Design Decisions
+================================================================================
+  - store root = ~/.autoloop/memory/（no pre-existing memory state root; env override AUTOLOOP_MEMORY_STATE_ROOT for test isolation; never inside a git worktree; tests use isolated tmpdirs）
+  - store identity = sha256(canonical({schema, schemaVersion, journalGenesisDigest, backend})) — fixed for the contract, identical across rebuilds; never path/mtime/sqlite internals
+  - explicitImport is the ONLY write path: full CBM-2 validation（schema/identity/secret scan/scope/evidence/journal）→ journal append（fsync）→ sqlite upsert → FTS; idempotent（UNIQUE(recordId) and UNIQUE(logical_key,content_hash)）; automatic write-back is CBM-4
+  - journal-first durability + parity: open validates the full chain（corrupt middle / dup / gap → MEMORY_STORE_INVALID fail-closed）; missing sqlite + valid journal → lossless rebuild; sqlite⊆journal（crash between append and insert）→ lossless rebuild; sqlite with records absent from the journal → MEMORY_STORE_INVALID（cannot reconcile without data loss）
+  - query contract autoloop.memory-query/v1: repository REQUIRED hex64; worktree/commit/tree/graphRunId/task optional; recordTypes/scope filters; trustFloor default VERIFIED（production trusted context ≥ VERIFIED; RAW/UNVERIFIED never enter trusted context）; validityPolicy CURRENT|INCLUDE_STALE|ALL; conflictPolicy SURFACE only; unknown fields/enums/malformed/oversized → fail closed
+  - eligibility pipeline: repository hard boundary → worktree isolation → scope compatibility → trust floor → validity（CURRENT default; STALE/INVALIDATED/TOMBSTONED excluded; CONFLICTED surfaced, never selected）→ security/schema light re-validation（identity recompute + secret scan; no evidence file IO at query time）; tree-baseline staleness（scope.tree ≠ query tree → STALE for this context）
+  - deterministic ranking tuple（documented + test-frozen）: 1 identityMatch（2 explicit recordId / 1 exact logicalKey）→ 2 scopeSpecificity（3 path-pinned / 2 symbol-pinned / 1 tree-pinned）→ 3 trustRank → 4 relationshipApplicability（identity-selected record's relationship graph）→ 5 lexicalMatchClass（deterministic term count — never bm25）→ 6 recordId ascending（stable tie-break）
+  - FTS5 pinned tokenizer（unicode61 remove_diacritics 0, CBM-2）used ONLY for lexical candidate generation（binary in/out）; bm25/rowid/implicit ordering NEVER enter ranking or digest; every SQL has explicit deterministic ORDER BY; SQL candidate prefilter（repo/worktree/trust/validity/type/tree/graphRun/task in parameterized WHERE）avoids full-table serialization per query
+  - conflict surfacing: two+ CURRENT records sharing logicalKey with ≥2 contentHash → conflictGroup（records excluded from selection, never merged / never 'choose first/newest/highest score'）; CONFLICTED-validity and conflict-table records surfaced with reason; relationships（DERIVED_FROM/VERIFIES/REVIEWS/SUPERSEDES/INVALIDATES/CONFLICTS_WITH/APPLIES_TO/PRODUCED_BY）preserved as applicable provenance per selected record
+  - storeSnapshotDigest = sha256(canonical({records by recordId: recordId/logicalKey/contentHash/recordType/trust/validityStatus/scope + inConflictTable; relationships by relationshipId; conflicts by group})) — excludes rowid/WAL/mtime/absolute path/FTS score/latency; insertion-order invariant; rebuild invariant
+  - retrievalDigest = sha256(canonical({queryIdentity, context, storeSnapshotDigest, selectedRecordIds in order, conflictGroups, excludedSummary, truncated, limits})) — same snapshot + same query ⇒ same digest（repeat/restart/rebuild/insertion-order proven）
+  - Graph read-only integration: runColimaGraph({memory:{provider}}) resolves repo/worktree/tree identity → retrieval → structured autoloop.memory-context/v1（kind MEMORY_CONTEXT_DATA + authorityBoundary; memory is DATA, never instructions, never overrides Controller/governance）→ attached to result/nodes/phase.runtime and carried in sub-agent envelopes（executor/reviewer context）; missing store → EMPTY_MEMORY（graph continues）; corrupt store → HOLD/MEMORY_STORE_INVALID（fail closed, before any colima work）; scheduler/writer-lease/mutation/review/repair/commit authority untouched
+  - limits: maxRecords default 50（1..1000）, maxBytes default 64KiB（1..256KiB）; truncation applies AFTER deterministic ranking in stable order（never serialisation timing）; result exposes counts/byteCount/truncated/excludedSummary
+  - performance probe（10,000 synthetic records, isolated tmpdir; scripts/cbm3-memory-probe.mjs）: import 47.3s（211 rec/s, journal fsync per import — not the hot path）; store open 1.68s（incl. journal↔sqlite parity verify）; snapshot digest 72ms; exact recordId lookup <1ms; path+symbol lookup 177ms; FTS candidate query 325ms; deterministic retrieval 312ms（37 selected, truncated at limits）; repeat query deterministic; RSS 76MiB after import → 495MiB after first heavy query（plateau — allocator retention, not per-query growth）; open parity ok. Full JSON in docs/pi-graph-output/cbm3/cbm3-memory-probe-20260807-evidence.json
+
+================================================================================
+9. Files Added / Modified / Deleted
+================================================================================
+CARD_IMPLEMENTATION_FILES:
+    - src/memory/graph-context.mjs
+    - src/memory/local-store.mjs
+    - src/memory/query-schema.mjs
+    - src/memory/retrieval.mjs
+    - src/memory/snapshot.mjs
+    - test/memory/helpers-cbm3.mjs
+    - test/memory/test-graph-colima-writeback.mjs
+    - test/memory/test-graph-context.mjs
+    - test/memory/test-local-store.mjs
+    - test/memory/test-query-schema.mjs
+    - test/memory/test-rebuild-determinism.mjs
+    - test/memory/test-retrieval-security.mjs
+    - test/memory/test-retrieval.mjs
+    - test/memory/test-snapshot.mjs
+    - scripts/cbm3-memory-probe.mjs
+    - scripts/cbm3-self-closeout.mjs
+    - src/runtime/colima-graph-runner.mjs
+    - src/subagent/subagent-contract.mjs
+    - src/subagent/subagent-executor-adapter.mjs
+    - src/subagent/subagent-graph-runner.mjs
+    - src/subagent/subagent-review-agent.mjs
+    - package.json
+GRAPH_CLOSEOUT_OUTPUTS:
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-083f246b.txt
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-b1c61eb1.txt
+    - docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-c03d9205.txt
+    - docs/pi-graph-output/cbm3/cbm3-memory-probe-20260807-evidence.json
+    - docs/pi-graph-output/cbm3/cbm3-self-closeout-20260807-graph-closeout-evidence.json
+PRE_EXISTING_DIRTY_FILES:
+    - docs/pi-graph-output/cbm2/card-closeout-bundle-20260806-f484fae1.txt
+    - docs/pi-graph-output/cbm2/cbm2-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-443d736c.txt
+    - docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-955e9ce1.txt
+    - docs/pi-graph-output/cbm2r/cbm2r-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-646b9cb9.txt
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-890417e7.txt
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-89fe0bcf.txt
+    - docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-a9279a81.txt
+    - docs/pi-graph-output/rb1g/external-review-delivery-646b9cb9.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-890417e7.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-89fe0bcf.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-91cf6d38.json
+    - docs/pi-graph-output/rb1g/external-review-delivery-a9279a81.json
+    - docs/pi-graph-output/rb1g/rb1g-self-closeout-20260807-graph-closeout-evidence.json
+    - docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-20a147b5.txt
+    - docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-cbf3a4c5.txt
+    - docs/pi-graph-output/rb1h/rb1h-self-closeout-20260807-graph-closeout-evidence.json
+    - scripts/c3-colima-task.mjs
+    - scripts/capture-review-repair-evidence.mjs
+    - scripts/capture-subagent-writer-evidence.mjs
+    - scripts/cbm2-self-closeout.mjs
+    - scripts/cbm2r-self-closeout.mjs
+    - scripts/colima-runtime-integration.mjs
+    - scripts/collect-test-accounting.mjs
+    - scripts/gov-closeout-bundle.mjs
+    - scripts/gov-external-review-surface.mjs
+    - scripts/rb1g-self-closeout.mjs
+    - scripts/rb1h-self-closeout.mjs
+    - scripts/rb1r-self-closeout.mjs
+    - src/governance/review-bundle.mjs
+    - src/memory/canonical.mjs
+    - src/memory/contract.mjs
+    - src/memory/identity.mjs
+    - src/memory/index.mjs
+    - src/memory/jsonl-journal.mjs
+    - src/memory/schema.mjs
+    - src/memory/sqlite-schema.mjs
+    - src/memory/validation.mjs
+    - src/runtime/colima-executor-adapter.mjs
+    - src/runtime/colima-pipeline.mjs
+    - src/runtime/colima-reviewer-adapter.mjs
+    - src/runtime/colima-runtime.mjs
+    - src/runtime/colima-worktree.mjs
+    - src/subagent/subagent-reviewer-adapter.mjs
+    - src/subagent/subagent-writer-executor-adapter.mjs
+    - src/v2/execution-orchestrator.mjs
+    - src/v2/phase-task-card.mjs
+    - test/governance/test-card-inventory.mjs
+    - test/governance/test-external-review-delivery.mjs
+    - test/governance/test-external-review-surface.mjs
+    - test/governance/test-git-status-parsing.mjs
+    - test/governance/test-graph-closeout.mjs
+    - test/governance/test-review-bundle.mjs
+    - test/memory/helpers.mjs
+    - test/memory/test-canonical.mjs
+    - test/memory/test-jsonl.mjs
+    - test/memory/test-record-schema.mjs
+    - test/memory/test-security.mjs
+    - test/memory/test-sqlite.mjs
+    - test/memory/test-trust-validity.mjs
+    - test/test-c3-colima-pipeline.mjs
+    - test/test-colima-graph.mjs
+    - test/test-colima-runtime.mjs
+    - test/test-graph-closeout-integration.mjs
+    - test/test-subagent-graph.mjs
+    - test/test-subagent-review-repair-graph.mjs
+    - test/test-subagent-writer-graph.mjs
+    - test/v2/test-pre-decomposition-interruption.mjs
+ADDED:
+  (none)
+MODIFIED:
+  (none)
+DELETED:
+  (none)
+
+================================================================================
+10. Diff Summary
+================================================================================
+Graph cbm3-self-closeout-20260807: 4 node(s) all PASS; 0 added / 0 modified / 0 deleted (worktree outputs)
+
+================================================================================
+11. Execution Results
+================================================================================
+TESTS_EXECUTED:
+    - graph node SA-R1:subagent
+    - graph node SA-R2:subagent
+    - regenerated from graph evidence
+    - graph node SA-W1:subagent
+    - graph node SA-V1:subagent
+TESTS_PASSED: 1
+TESTS_FAILED: 0
+TESTS_TOTAL: 1
+EXECUTION_PASS: true
+
+
+================================================================================
+12. Verification Results
+================================================================================
+VERIFIER_PASS: true
+VERIFIER_RESULT: PASS
+VERIFIER_SUMMARY: scheduler verdict PASS; join: SA-R1:PASS -> SA-R2:PASS -> SA-W1:PASS -> SA-V1:PASS
+
+
+================================================================================
+13. Independent Review Results
+================================================================================
+REVIEW_PASS: true
+REVIEW_RESULT: PASS
+REVIEW_RESULT_IDENTITY: 53dcd1b4c7a825855f4795462642b67d20a8bfc259dbf7d7f1a0770da76efba6
+BLOCKING_FINDINGS: []
+REVIEW_SUMMARY: independent review agent result
+
+
+================================================================================
+14. Repair Attempts
+================================================================================
+  - attempt=0 taskType=subagent (repair) status=REPAIR resultIdentity=graph:cbm3-self-closeout-20260807:SA-W1:repair:0
+  - attempt=1 taskType=subagent (repair) status=PASS resultIdentity=graph:cbm3-self-closeout-20260807:SA-W1:attempt:1
+REPAIR_BUDGET_MAX: 1
+REPAIR_BUDGET_USED: 1
+SUPERSEDES_BUNDLE_IDENTITY: b1c61eb10d2c1da86a1bb31ce9ab1c559b4888267a787eeba3521ea313f7f0d0
+SUPERSEDES_BUNDLE_SHA256: fab0536fde87e9a9658d5811b8be8a10dbc05a557ef7f437e5839f9712b0593a
+SUPERSEDES_BUNDLE_PATH: /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-b1c61eb1.txt
+
+
+================================================================================
+15. Negative and Fail-Closed Cases
+================================================================================
+  - unknown query field / enum / schema → QUERY_* fail closed
+  - missing/malformed repository identity → QUERY_MALFORMED
+  - cross-repo / cross-worktree records never match（same path/content/symbol never bypasses isolation）
+  - RAW/UNVERIFIED excluded from trusted context（production trust floor VERIFIED）
+  - STALE/INVALIDATED/TOMBSTONED excluded by default validity policy
+  - CONFLICTED surfaced as first-class conflict groups（never silently picked）
+  - secret-bearing record rejected before journal append; hostile text stored as DATA only
+  - SQL-injection query text handled as data; query contract injection rejected
+  - corrupt journal（middle line/dup/gap）→ MEMORY_STORE_INVALID; corrupt sqlite → MEMORY_STORE_INVALID（never silently empty）
+  - sqlite ahead of journal → MEMORY_STORE_INVALID（cannot reconcile without data loss）
+  - future memory schema / unknown migration → MIGRATION_INVALID
+  - graph with corrupt memory store → HOLD / MEMORY_STORE_INVALID
+
+================================================================================
+16. Regression Results
+================================================================================
+  - suite=npm run check (syntax) tests=1 pass=1 fail=0
+  - suite=test:memory-contract（CBM-2 preserved; explicit file list, helpers module-load no longer double-counted） tests=80 pass=80 fail=0
+  - suite=test:memory-retrieval（query-schema 11 / local-store 18 / retrieval 24 / snapshot 6 / rebuild-determinism 5 / retrieval-security 14 / graph-context 7） tests=85 pass=85 fail=0
+  - suite=test:governance tests=229 pass=229 fail=0
+  - suite=test:scripted-lifecycle tests=43 pass=43 fail=0
+  - suite=test:v2 tests=357 pass=357 fail=0
+  - suite=test:c2 tests=43 pass=43 fail=0
+  - suite=test:c3 tests=41 pass=41 fail=0
+  - suite=test:colima-all（single full clean run, concurrency=1, incl. CBM-3 graph zero-writeback boundary test） tests=42 pass=42 fail=0
+REGRESSION_OVERALL: At CBM-3 closeout time: check OK; memory-contract 80/80（CBM-2 files unchanged）; memory-retrieval 85/85（new focused suite）; governance 229/229; scripted-lifecycle 43/43; v2 357/357; c2 43/43; c3 41/41; colima-all 42/42 in ONE full clean run（incl. the new test/memory/test-graph-colima-writeback.mjs proving zero automatic write-back on the real pipeline）.
+
+
+================================================================================
+17. Evidence Inventory
+================================================================================
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/cbm3/cbm3-self-closeout-20260807-graph-closeout-evidence.json
+EVIDENCE_MANIFEST_DIGEST: 9fdd0ac0a8b03631d0093e16d0f7b43c85ba042537723416da306e30b799e06d
+
+
+================================================================================
+18. Evidence Hashes
+================================================================================
+  - /Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/cbm3/cbm3-self-closeout-20260807-graph-closeout-evidence.json
+      sha256=e5c791a614ecd5444f17768b1c64bdd235c0f4178a51121e29a24cc8377fa9a4
+
+================================================================================
+19. Security and Secret Scan
+================================================================================
+SECRET_SCAN_RESULT: clean
+SECRET_SCAN_NOTES: NOT_APPLICABLE
+SECRET_DETECTED: false
+INGESTION_ALLOWLIST: structured graph node results, review-agent results, lifecycle transitions, closeout evidence snapshot
+INGESTION_DENYLIST: secrets/credentials/private keys/logs/db contents/user data, unvalidated free-text stdout
+
+================================================================================
+20. Repository Integrity
+================================================================================
+HEAD: 2e897e995202c0c8c079c5fdc96b9f5d42d50d25
+TREE_SHA: 7ca2c9100b208e15647ff1e0524ffc4e0857e7e0
+WORKTREE_CLEAN: false
+DIRTY_PATHS: package.json, src/v2/execution-orchestrator.mjs, src/v2/phase-task-card.mjs, test/v2/test-pre-decomposition-interruption.mjs, docs/pi-graph-output/cbm2/card-closeout-bundle-20260806-f484fae1.txt, docs/pi-graph-output/cbm2/cbm2-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-443d736c.txt, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-955e9ce1.txt, docs/pi-graph-output/cbm2r/cbm2r-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-083f246b.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-b1c61eb1.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-c03d9205.txt, docs/pi-graph-output/cbm3/cbm3-memory-probe-20260807-evidence.json, docs/pi-graph-output/cbm3/cbm3-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-646b9cb9.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-890417e7.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-89fe0bcf.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-a9279a81.txt, docs/pi-graph-output/rb1g/external-review-delivery-646b9cb9.json, docs/pi-graph-output/rb1g/external-review-delivery-890417e7.json, docs/pi-graph-output/rb1g/external-review-delivery-89fe0bcf.json, docs/pi-graph-output/rb1g/external-review-delivery-91cf6d38.json, docs/pi-graph-output/rb1g/external-review-delivery-a9279a81.json, docs/pi-graph-output/rb1g/rb1g-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-20a147b5.txt, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-cbf3a4c5.txt, docs/pi-graph-output/rb1h/rb1h-self-closeout-20260807-graph-closeout-evidence.json, scripts/c3-colima-task.mjs, scripts/capture-review-repair-evidence.mjs, scripts/capture-subagent-writer-evidence.mjs, scripts/cbm2-self-closeout.mjs, scripts/cbm2r-self-closeout.mjs, scripts/cbm3-memory-probe.mjs, scripts/cbm3-self-closeout.mjs, scripts/colima-runtime-integration.mjs, scripts/collect-test-accounting.mjs, scripts/gov-closeout-bundle.mjs, scripts/gov-external-review-surface.mjs, scripts/rb1g-self-closeout.mjs, scripts/rb1h-self-closeout.mjs, scripts/rb1r-self-closeout.mjs, src/governance/review-bundle.mjs, src/memory/canonical.mjs, src/memory/contract.mjs, src/memory/graph-context.mjs, src/memory/identity.mjs, src/memory/index.mjs, src/memory/jsonl-journal.mjs, src/memory/local-store.mjs, src/memory/query-schema.mjs, src/memory/retrieval.mjs, src/memory/schema.mjs, src/memory/snapshot.mjs, src/memory/sqlite-schema.mjs, src/memory/validation.mjs, src/runtime/colima-executor-adapter.mjs, src/runtime/colima-graph-runner.mjs, src/runtime/colima-pipeline.mjs, src/runtime/colima-reviewer-adapter.mjs, src/runtime/colima-runtime.mjs, src/runtime/colima-worktree.mjs, src/subagent/subagent-contract.mjs, src/subagent/subagent-executor-adapter.mjs, src/subagent/subagent-graph-runner.mjs, src/subagent/subagent-review-agent.mjs, src/subagent/subagent-reviewer-adapter.mjs, src/subagent/subagent-writer-executor-adapter.mjs, test/governance/test-card-inventory.mjs, test/governance/test-external-review-delivery.mjs, test/governance/test-external-review-surface.mjs, test/governance/test-git-status-parsing.mjs, test/governance/test-graph-closeout.mjs, test/governance/test-review-bundle.mjs, test/memory/helpers-cbm3.mjs, test/memory/helpers.mjs, test/memory/test-canonical.mjs, test/memory/test-graph-colima-writeback.mjs, test/memory/test-graph-context.mjs, test/memory/test-jsonl.mjs, test/memory/test-local-store.mjs, test/memory/test-query-schema.mjs, test/memory/test-rebuild-determinism.mjs, test/memory/test-record-schema.mjs, test/memory/test-retrieval-security.mjs, test/memory/test-retrieval.mjs, test/memory/test-security.mjs, test/memory/test-snapshot.mjs, test/memory/test-sqlite.mjs, test/memory/test-trust-validity.mjs, test/test-c3-colima-pipeline.mjs, test/test-colima-graph.mjs, test/test-colima-runtime.mjs, test/test-graph-closeout-integration.mjs, test/test-subagent-graph.mjs, test/test-subagent-review-repair-graph.mjs, test/test-subagent-writer-graph.mjs
+UNTRACKED_FILES: docs/pi-graph-output/cbm2/card-closeout-bundle-20260806-f484fae1.txt, docs/pi-graph-output/cbm2/cbm2-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-443d736c.txt, docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-955e9ce1.txt, docs/pi-graph-output/cbm2r/cbm2r-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-083f246b.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-b1c61eb1.txt, docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-c03d9205.txt, docs/pi-graph-output/cbm3/cbm3-memory-probe-20260807-evidence.json, docs/pi-graph-output/cbm3/cbm3-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-646b9cb9.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-890417e7.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-89fe0bcf.txt, docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-a9279a81.txt, docs/pi-graph-output/rb1g/external-review-delivery-646b9cb9.json, docs/pi-graph-output/rb1g/external-review-delivery-890417e7.json, docs/pi-graph-output/rb1g/external-review-delivery-89fe0bcf.json, docs/pi-graph-output/rb1g/external-review-delivery-91cf6d38.json, docs/pi-graph-output/rb1g/external-review-delivery-a9279a81.json, docs/pi-graph-output/rb1g/rb1g-self-closeout-20260807-graph-closeout-evidence.json, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-20a147b5.txt, docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-cbf3a4c5.txt, docs/pi-graph-output/rb1h/rb1h-self-closeout-20260807-graph-closeout-evidence.json, scripts/c3-colima-task.mjs, scripts/capture-review-repair-evidence.mjs, scripts/capture-subagent-writer-evidence.mjs, scripts/cbm2-self-closeout.mjs, scripts/cbm2r-self-closeout.mjs, scripts/cbm3-memory-probe.mjs, scripts/cbm3-self-closeout.mjs, scripts/colima-runtime-integration.mjs, scripts/collect-test-accounting.mjs, scripts/gov-closeout-bundle.mjs, scripts/gov-external-review-surface.mjs, scripts/rb1g-self-closeout.mjs, scripts/rb1h-self-closeout.mjs, scripts/rb1r-self-closeout.mjs, src/governance/review-bundle.mjs, src/memory/canonical.mjs, src/memory/contract.mjs, src/memory/graph-context.mjs, src/memory/identity.mjs, src/memory/index.mjs, src/memory/jsonl-journal.mjs, src/memory/local-store.mjs, src/memory/query-schema.mjs, src/memory/retrieval.mjs, src/memory/schema.mjs, src/memory/snapshot.mjs, src/memory/sqlite-schema.mjs, src/memory/validation.mjs, src/runtime/colima-executor-adapter.mjs, src/runtime/colima-graph-runner.mjs, src/runtime/colima-pipeline.mjs, src/runtime/colima-reviewer-adapter.mjs, src/runtime/colima-runtime.mjs, src/runtime/colima-worktree.mjs, src/subagent/subagent-contract.mjs, src/subagent/subagent-executor-adapter.mjs, src/subagent/subagent-graph-runner.mjs, src/subagent/subagent-review-agent.mjs, src/subagent/subagent-reviewer-adapter.mjs, src/subagent/subagent-writer-executor-adapter.mjs, test/governance/test-card-inventory.mjs, test/governance/test-external-review-delivery.mjs, test/governance/test-external-review-surface.mjs, test/governance/test-git-status-parsing.mjs, test/governance/test-graph-closeout.mjs, test/governance/test-review-bundle.mjs, test/memory/helpers-cbm3.mjs, test/memory/helpers.mjs, test/memory/test-canonical.mjs, test/memory/test-graph-colima-writeback.mjs, test/memory/test-graph-context.mjs, test/memory/test-jsonl.mjs, test/memory/test-local-store.mjs, test/memory/test-query-schema.mjs, test/memory/test-rebuild-determinism.mjs, test/memory/test-record-schema.mjs, test/memory/test-retrieval-security.mjs, test/memory/test-retrieval.mjs, test/memory/test-security.mjs, test/memory/test-snapshot.mjs, test/memory/test-sqlite.mjs, test/memory/test-trust-validity.mjs, test/test-c3-colima-pipeline.mjs, test/test-colima-graph.mjs, test/test-colima-runtime.mjs, test/test-graph-closeout-integration.mjs, test/test-subagent-graph.mjs, test/test-subagent-review-repair-graph.mjs, test/test-subagent-writer-graph.mjs
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+21. Known Risks and Limitations
+================================================================================
+  - retrieval digest determinism depends on canonical JSON + pinned FTS tokenizer + explicit ORDER BY; the suite freezes repeat/restart/rebuild/insertion-order identity
+  - RSS retention under 10k-record single-repo queries plateaus ~420MiB after first query（allocator retention, not per-query growth）— bounded, sub-second latency
+  - conflict resolution（promote/supersede/invalidate）is lifecycle work — CBM-4
+  - automatic production write-back / trust promotion / conflict resolution are CBM-4
+  - no vector / semantic retrieval（deterministic lexical + scope + identity only, by contract）
+  - execution-memory retention windowing deferred（append-only for v1）
+
+================================================================================
+22. Rollback Procedure
+================================================================================
+Remove src/memory/query-schema.mjs, snapshot.mjs, retrieval.mjs, local-store.mjs, graph-context.mjs（keep CBM-2 files）; revert the memory wiring in src/runtime/colima-graph-runner.mjs / src/subagent/*（memory param + envelope memoryContext）; remove test/memory/ CBM-3 tests + scripts/cbm3-self-closeout.mjs + scripts/cbm3-memory-probe.mjs; revert package.json scripts; CBM-2 test:memory-contract stays green; Graph behavior returns to pre-CBM-3（memory option absent）.
+
+================================================================================
+23. Open Questions
+================================================================================
+  (none)
+
+================================================================================
+24. Recommended Next Step
+================================================================================
+CBM-4 — Governed Production Memory Write-back
+
+================================================================================
+25. External Reviewer Verdict Template
+================================================================================
+VERDICT: PASS / REPAIR / HOLD
+REVIEWER_IDENTITY: <reviewer>
+REVIEWED_AT: <date>
+FINDINGS_DIGEST: <sha256>
+NEXT_ACTION_IF_PASS: <next card>
+NEXT_ACTION_IF_REPAIR: <bounded repair within budget>
+NEXT_ACTION_IF_HOLD: <stop downstream>
+
+
+=== END OF REVIEW BUNDLE ===
+REVIEW_BUNDLE_SHA256: 5865d4b60977eea0a68667e77b1e2d222fa181bb3c33865b8a01e5167b7355ea

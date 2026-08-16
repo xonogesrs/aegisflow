@@ -175,7 +175,7 @@ test("C4N-3 objective facts + durable references are available to the reviewer",
       assert.ok("command" in t && "exit_code" in t && "outcome" in t);
     }
     const dr = r.bundle.durable_references;
-    assert.equal(dr.evidence_artifact_path, `phases/${card.phaseId}/implementation-evidence.json`);
+    assert.equal(dr.evidence_artifact_path, `phases/${card.phaseId}/implementation-evidence-0.json`);
     assert.match(dr.evidence_artifact_sha256, /^[0-9a-f]{64}$/);
     assert.equal(dr.executor_completed_event.event_type, "EXECUTOR_COMPLETED");
     assert.match(dr.executor_completed_event.evidence_hash, /^[0-9a-f]{64}$/);

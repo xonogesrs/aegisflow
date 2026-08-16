@@ -1,0 +1,50 @@
+{
+  "schema": "autoloop.de2r-subagent-resume/v1",
+  "ranAt": "2026-08-08T12:47:47.038Z",
+  "probe": "production sub-agent fresh-process resume（runSubagentGraph SIGKILL -> resumeSubagentGraph）",
+  "crashBoundaries": [
+    "after RO node result",
+    "after writer/result boundary",
+    "before review",
+    "after review",
+    "after final PASS"
+  ],
+  "results": [
+    {
+      "point": "A1",
+      "name": "crash after RO node result (SA-R1 PHASE_PASSED)",
+      "outcome": "PASS",
+      "detail": " final=PASS crashedResults=[SA-R1.json,SA-R2.json] dupSuppressed=1 journalEvents=64"
+    },
+    {
+      "point": "A2",
+      "name": "crash after writer/result boundary (SA-W1 PHASE_PASSED)",
+      "outcome": "PASS",
+      "detail": " final=PASS crashedResults=[SA-R1.json,SA-R2.json,SA-W1.json,SA-W1.review.json,SA-W1.worktree.json] dupSuppressed=1 journalEvents=55"
+    },
+    {
+      "point": "A3",
+      "name": "crash before review (SA-W1 EXECUTOR_COMPLETED)",
+      "outcome": "PASS_FAIL_CLOSED",
+      "detail": " final=HOLD crashedResults=[SA-R1.json,SA-R2.json,SA-W1.json,SA-W1.worktree.json] dupSuppressed=0 journalEvents=38"
+    },
+    {
+      "point": "A4",
+      "name": "crash after review (SA-W1 REVIEWER_COMPLETED)",
+      "outcome": "PASS_FAIL_CLOSED",
+      "detail": " final=HOLD crashedResults=[SA-R1.json,SA-R2.json,SA-W1.json,SA-W1.review.json,SA-W1.worktree.json] dupSuppressed=0 journalEvents=40"
+    },
+    {
+      "point": "A5",
+      "name": "after final PASS (RUN_PASSED) — terminal resume short-circuits, zero re-execution",
+      "outcome": "PASS",
+      "detail": " final=PASS crashedResults=[] dupSuppressed=0 journalEvents=56"
+    }
+  ],
+  "safety": {
+    "duplicateExecution": "0 observed（recovered phases passed exactly once across crashed + resumed runs）",
+    "lostResult": "0 observed（every journaled PHASE_PASSED has a durable result artifact after resume）",
+    "hookLoss": "0 observed（resumed graph re-injected resultsDir persistence + review agent; verifier re-verified）",
+    "falsePass": "0 observed（interrupted writer resumes fail closed RECOVERY_REQUIRED）"
+  }
+}

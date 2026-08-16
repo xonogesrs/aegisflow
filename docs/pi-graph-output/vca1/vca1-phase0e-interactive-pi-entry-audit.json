@@ -1,0 +1,67 @@
+{
+  "schema": "autoloop.vca1-phase0e-evidence/v1",
+  "cardId": "VCA-1",
+  "phase": "PHASE_0E_INTERACTIVE_PI_ENTRY_AUDIT",
+  "executor": "BOOTSTRAP_EXECUTOR (Claude Code, read-only audit, outside AutoLoop lifecycle)",
+  "modifiedFiles": [],
+  "gitOps": "NONE",
+  "boundedSourcesChecked": [
+    "/Volumes/NVM2T/Development/autoloop (project config check only — no .pi/, no CLAUDE.md/AGENTS.md, no pi.config.* found at repo root)",
+    "~/.pi/agent/settings.json (read)",
+    "~/.pi/agent/skills/ (listed; the two real non-symlinked skill dirs' SKILL.md content grepped for AutoLoop/verification keywords; symlinked skills point outside the authorized path list — NOT followed/read, per bounded scope)",
+    "~/.pi/agent/extensions/ (listed + grepped for AutoLoop keywords — 3 UI-only extension files, no match)",
+    "~/.pi/agent/sessions/--Users-zhengfengqing--/ (listed; targeted grep for the incident's known command signature — see below; no full transcript dump)",
+    "~/.pi/agent/trust.json (checked — does not exist on this machine)",
+    "~/.pi/agent/auth.json (existence + permissions only: mode 600, 95 bytes, owner-only — content never read)",
+    "shell startup files: .zshrc, .zprofile, .zshenv, .profile (grepped for pi alias/function/PATH entry)"
+  ],
+  "notSearched": "No recursive $HOME scan performed at any point. All checks above were targeted reads/listings/greps confined to the explicitly authorized paths.",
+
+  "keyFinding_directEvidenceOfIncident": {
+    "summary": "Found the actual incident, directly, in an interactive Pi session transcript — not inferred.",
+    "sessionFile": "~/.pi/agent/sessions/--Users-zhengfengqing--/2026-08-09T07-26-09-395Z_019fe56a-2ff3-7d17-b64a-e2ab30a64a3d.jsonl",
+    "sessionMetadata": { "provider": "deepseek", "modelId": "deepseek-v4-flash", "cwd": "/Users/zhengfengqing (recorded verbatim in the session's own first line)", "thinkingLevel": "high" },
+    "firstUserMessage": "A manually-pasted \"## External Review Verdict\" block for card AUTOLOOP-TA3 (PASS verdict text, ~2.5KB) — a human-authored card/status message pasted directly into a fresh session with no other project context established first.",
+    "modelReasoningBeforeTheCommand": "Assistant's own recorded thinking: \"I need to find how external review verdicts were recorded... Let me check if there's a script or process file that documents how to record a verdict... Also I should find where the bundle is... Let me find the autoloop repo.\" — the model did not know the AutoLoop repo's location at all; nothing in its context told it.",
+    "exactToolCallIssued": "grep -rl \"AWAITING_EXTERNAL_REVIEW\" /Users/zhengfengqing --include=\"*.ts\" --include=\"*.js\" --include=\"*.mjs\" --include=\"*.json\" --include=\"*.md\" --include=\"*.txt\" 2>/dev/null | grep -v node_modules | grep -v \".git/\" | head -20",
+    "issuedAlongsideA_secondCall": "find /Users/zhengfengqing -maxdepth 4 -type d -name \"*autoloop*\" -not -path \"*/node_modules/*\" 2>/dev/null | head; echo \"---\"; find /Users/zhengfengqing -maxdepth 4 -type d -name \"*auracore*\" -not -path \"*/node_modules/*\" 2>/dev/null | head",
+    "toolName": "bash (Pi's own interactive shell tool)",
+    "outcome": "The session file (22 lines total) ends immediately after this tool call is issued — no toolResult was ever recorded for it. The command hung; the session transcript itself is forensic proof of a runaway/never-returning call, consistent with the Controller having to interrupt it.",
+    "followupConfirmation": "The very next session (~21 minutes later, 2026-08-09T07:47:56Z) contains the Controller's own VCA-1 incident writeup verbatim, including \"實際執行超過 896 秒\" and the same /Users/zhengfengqing grep signature, confirming this IS the incident the VCA-1 card was written about — not a similar-looking unrelated event."
+  },
+
+  "answers": {
+    "A_interactivePiLaunchPath": {
+      "answer": "/Users/zhengfengqing/.npm-global/bin/pi -> ../lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js (a symlink, real target confirmed by `ls -la`), added to PATH via ~/.zprofile line 3 (`export PATH=~/.npm-global/bin:$PATH`). No alias, no shell function, no wrapper script found in .zshrc/.zprofile/.zshenv/.profile — `pi` is invoked as a bare command in whatever terminal/cwd the Controller happens to be in.",
+      "cwdAtLaunch": "Every session directory under ~/.pi/agent/sessions/ uses the single name `--Users-zhengfengqing--` (Pi encodes its launch cwd into the session-directory name) — every recorded interactive Pi session on this machine, including the incident session, launched with cwd=/Users/zhengfengqing. No session directory for a repo-scoped cwd (e.g. an AutoLoop-scoped one) exists."
+    },
+    "B_autoloopInstructionsEnterInteractivePiThrough": {
+      "answer": "MANUAL_PROMPT",
+      "detail": "No GLOBAL_CONFIG match: ~/.pi/agent/settings.json has no AutoLoop reference, no toolPolicy, no timeout, no repo path — only theme/packages(3rd-party skills)/defaultProvider/defaultModel. No PROJECT_CONFIG: no .pi/, CLAUDE.md, AGENTS.md, or pi.config.* found at the AutoLoop repo root. No SKILL match: the two non-symlinked skills (find-skills, spec-driven-dev) contain no AutoLoop reference; the other 10 skills are symlinks pointing to ~/.agents/skills/ — outside this audit's authorized path list, not followed, but their names (code-review, tdd, triage, wayfinder, etc.) are generic, not AutoLoop-specific. No EXTENSION match: the 3 extension files are UI-only (agent-status/prefill/titlebar-spinner), no AutoLoop reference. No WRAPPER: confirmed under A. Direct evidence for MANUAL_PROMPT: the incident session's actual first user message is a hand-pasted card/status text block, and the model's own recorded thinking shows it did not know the AutoLoop repo's location at session start — consistent with zero automatic AutoLoop context injection through any of the other channels."
+    },
+    "C_phase0bAuthoritativeSourceFirstReachesThatPath": {
+      "answer": "NO",
+      "detail": "Two independent reasons. (1) Architectural: the AUTHORITATIVE_SOURCE_FIRST text added in Phase 0B lives in src/v2/phase-response-contract.mjs's sectionVerification(), which is only ever assembled into a prompt by buildPhaseExecutionPrompt()/buildPhaseTaskCard(), which are only invoked by this repo's own orchestrator code (execution-orchestrator.mjs, colima-graph-runner.mjs) when constructing a task-card message for an AutoLoop-invoked adapter call. An interactive `pi` session launched bare from a terminal never goes through any of that code, so it never receives this text automatically — only if a human manually copy-pasted the generated prompt into the session, which the incident transcript shows did not happen (the actual first message was a review-verdict paste, not a phase task-card prompt). (2) Timing: Phase 0B did not exist yet when this incident occurred — the incident session is timestamped 2026-08-09T07:26:09Z; Phase 0B's code change was made later in this same bootstrap exercise. So even if some future session could be manually fed the updated prompt text, this specific incident predates that text's existence entirely."
+    },
+    "D_interactivePiHasHardTimeout": {
+      "answer": "NO",
+      "detail": "No timeout configuration found in ~/.pi/agent/settings.json or any other checked bounded source. Direct evidence: the incident session's transcript itself ends mid-tool-call with no result ever recorded — if a hard timeout existed and fired, the session log would show a timeout/error result for that tool call. It shows nothing at all after the call, consistent with the call still being outstanding when the session was abandoned/killed by the Controller rather than by any internal timeout."
+    },
+    "E_interactivePiArbitraryShellCapability": {
+      "answer": "YES",
+      "detail": "Directly observed: the incident session used a tool literally named \"bash\" to run the pathological grep, and a second parallel \"bash\" call for `find`. This matches the Controller's own stated C4 production principle that interactive Pi roles (writer/verifier) get `read,bash,edit,write` / `read,bash` — i.e. real, unrestricted shell, by design, for this role. Nothing in the bounded sources checked shows any denylist/allowlist narrowing that shell tool for interactive use."
+    },
+    "F_896sGrepMostLikelyOriginatedFrom": {
+      "answer": "IDENTIFIED, not just inferred: an interactive Pi session's own bash tool call, issued by the model (deepseek-v4-flash) while trying to locate the AutoLoop repository it had not been told the location of, from a session whose working directory was $HOME rather than the repo.",
+      "commandGenerationSurface": "The model's own reasoning under normal tool use — not a hardcoded script, not a skill, not an extension, not a policy document instructing broad verification (none of those exist). The proximate trigger was structural: a fresh session starts with cwd=$HOME and zero automatic knowledge of where any project repo lives (no project config, no global config, no launch wrapper supplies it), so a request to 'check something in the autoloop project' forces the model to rediscover the repo location itself, and it chose a repo-discovery command (`find ... -name '*autoloop*'`) paired with a status-check command (`grep -rl ... AWAITING_EXTERNAL_REVIEW`) both rooted at $HOME rather than first finding the repo and then re-rooting the second command inside it."
+    }
+  },
+
+  "relationToPriorPhases": {
+    "0A_0B_0C_0D_scopeCorrection": "Phases 0A–0D all bounded their fixes to AutoLoop's own in-repo code paths (guard module, prompt text, reviewer toolPolicy, C3 timeout validation). Phase 0E's direct evidence shows the actual incident occurred entirely outside any of those code paths — in a bare interactive Pi session with no repo context. None of the 0A–0D changes reach this surface, confirmed both architecturally and by the incident's timestamp predating Phase 0B's existence. This is not a failure of those phases (their target — real production AutoLoop-invoked runs — is real and now better protected); it means the specific 896s incident's true attack surface is a different, until-now-unexamined one: interactive session bootstrap/context, not AutoLoop's own execution machinery."
+  },
+
+  "recommendationForNextBootstrapRepair": "Not decided in this phase per Controller's instruction (audit only). Candidate surfaces now identified for a future bounded repair, for the Controller to choose from: (1) a project-scoped Pi config or launch convention that tells interactive sessions the AutoLoop repo's location up front (would eliminate the repo-discovery motive entirely); (2) a lightweight global instruction (e.g. a Pi skill or settings-level system prompt fragment) carrying the same AUTHORITATIVE_SOURCE_FIRST / bounded-root / HOLD-not-widen language Phase 0B put into the AutoLoop-adapter prompt, so it also reaches manually-launched interactive sessions; (3) some interactive-session-level timeout or confirmation gate for very-broad-root shell commands. This audit does not recommend one over another — that is the next phase's decision, not this one's.",
+
+  "verificationMethodNote": "All commands used in this audit were bounded, targeted reads/listings/greps against the explicitly authorized path list — no recursive $HOME traversal was performed. The one exception worth flagging for the Controller's own review: two targeted greps were run over the contents of files inside ~/.pi/agent/sessions/--Users-zhengfengqing--/ (a directory explicitly on the authorized list) to locate the specific incident tool-call signature; this reads session transcript content, which the authorized-path list permitted access to that directory but did not explicitly discuss content-reading versus existence-checking (unlike the auth.json/trust.json items, which were explicit about existence-only). Flagging this distinction transparently rather than assuming it was intended, since it is the one place this audit went beyond pure existence/listing checks into content inspection."
+}

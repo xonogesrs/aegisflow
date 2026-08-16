@@ -1,0 +1,120 @@
+{
+  "schema": "autoloop.vca1-r1-r2-evidence/v1",
+  "cardId": "VCA-1",
+  "round": "R1_R2",
+  "executor": "pi-autoloop",
+  "executorEntry": "npm run pi:autoloop",
+  "generatedAt": "2026-08-09T09:30:00.000Z",
+  "mode": "READ_ONLY_AUDIT",
+  "gitOps": "NONE",
+  "bootstrapEvidence": "Phase 0A-0F treated as existing prior evidence; not re-run",
+  "verificationRootDiscipline": "PASS — all commands bounded to /Volumes/NVM2T/Development/autoloop and the two named review-surface dirs; no /, ~, $HOME, /Users/zhengfengqing rooted discovery; no scope widening to backfill history",
+
+  "gates": [
+    { "id": "G1", "gate": "npm run check", "kind": "REGRESSION_PARSE", "trigger": "any card", "purpose": "syntax gate over src", "authoritativeSource": "source files", "filesystemScope": "repo src/", "durationEvidence": { "kind": "MEASURED", "wallMs": 420 }, "testsRun": 0, "evidenceReuse": "none", "overlap": "subset of V1 checks", "historicalDetectionValue": "LOW", "decision": "KEEP" },
+    { "id": "G2", "gate": "scripts/ta1-verify.mjs", "kind": "V1_VERIFY", "trigger": "TA-1 close", "purpose": "research deliverables validation", "authoritativeSource": "ta1-*.json + schema validator", "filesystemScope": "repo docs/pi-graph-output/ta1/", "durationEvidence": { "kind": "NOT_INSTRUMENTED", "note": "no verification.json persisted; estimate 1-2s" }, "testsRun": "16 checks, no suites", "evidenceReuse": "none", "overlap": "none significant", "historicalDetectionValue": "HIGH", "decision": "KEEP + persist verification accounting (add verification.json + durations)" },
+    { "id": "G3", "gate": "scripts/ta2-verify.mjs", "kind": "V1_VERIFY", "trigger": "TA-2 close", "purpose": "admission/capability implementation + wiring verification", "authoritativeSource": "source modules + ta2-verification.json", "filesystemScope": "repo", "durationEvidence": { "kind": "PARTIAL", "note": "verifiedAt only in evidence; current 8-suite regression ~143s measured" }, "testsRun": "V1-V18 + 8 suites", "evidenceReuse": "reads ta1 inventory", "overlap": "V17 suite duplication (see overlap matrix)", "historicalDetectionValue": "HIGH", "decision": "KEEP" },
+    { "id": "G4", "gate": "scripts/ta2r-verify.mjs", "kind": "V1_VERIFY", "trigger": "TA-2R close", "purpose": "bounded-repair verification + NEG matrix", "authoritativeSource": "source + ta2r-verification.json", "filesystemScope": "repo", "durationEvidence": { "kind": "PARTIAL", "note": "verifiedAt only; ~143s current" }, "testsRun": "V1-V21 + 8 suites", "evidenceReuse": "baseline pathShas", "overlap": "V17 suite duplication", "historicalDetectionValue": "HIGH", "decision": "KEEP" },
+    { "id": "G5", "gate": "scripts/ta3-verify.mjs", "kind": "V1_VERIFY", "trigger": "TA-3 close", "purpose": "budget-enforcement machine verification", "authoritativeSource": "source + ta3-verification.json", "filesystemScope": "repo", "durationEvidence": { "kind": "PARTIAL", "note": "verifiedAt only; V17 regression measured ~143s; 915 tests recorded incl. 70 double-counted" }, "testsRun": "V1-V21 + 9 suites (915 recorded)", "evidenceReuse": "ta3 baseline + ta2r bundles", "overlap": "3 V17 sub-suites are subsets of test:governance; IR-4 re-runs test:budget", "historicalDetectionValue": "HIGH", "decision": "KEEP + SIMPLIFY V17 suite list (remove 3 subset entries)" },
+    { "id": "G6", "gate": "scripts/rld2-verify.mjs", "kind": "V1_VERIFY", "trigger": "RLD-2 close", "purpose": "root-cause + repair verification", "authoritativeSource": "source + rld2-verification.json", "filesystemScope": "repo + review surface (read)", "durationEvidence": { "kind": "NOT_INSTRUMENTED" }, "testsRun": "V1-V14 + suites", "evidenceReuse": "incident snapshot", "overlap": "none significant", "historicalDetectionValue": "HIGH", "decision": "KEEP" },
+    { "id": "G7", "gate": "scripts/ta2r-independent-review.mjs", "kind": "V2_IR", "trigger": "TA-2R close", "purpose": "independent recompute of V1 claims", "authoritativeSource": "source re-derivation", "filesystemScope": "repo", "durationEvidence": { "kind": "NOT_INSTRUMENTED", "note": "no suite re-run; sub-second to ~1s" }, "testsRun": "IR-1..IR-10", "evidenceReuse": "verification accounting", "overlap": "IR-8 re-parses git status (dup of V18)", "historicalDetectionValue": "MEDIUM", "decision": "KEEP" },
+    { "id": "G8", "gate": "scripts/ta3-independent-review.mjs", "kind": "V2_IR", "trigger": "TA-3 close", "purpose": "independent recompute of V1 claims", "authoritativeSource": "source re-derivation", "filesystemScope": "repo", "durationEvidence": { "kind": "NOT_INSTRUMENTED", "note": "re-runs test:budget (~0.2s)" }, "testsRun": "IR-1..IR-10 + budget suite re-run", "evidenceReuse": "verification accounting", "overlap": "IR-4 re-runs test:budget already green in V17", "historicalDetectionValue": "MEDIUM", "decision": "SIMPLIFY — drop IR-4 suite re-run; reuse V17 budget accounting" },
+    { "id": "G9", "gate": "scripts/rld2-independent-review.mjs", "kind": "V2_IR", "trigger": "RLD-2 close", "purpose": "independent recompute", "authoritativeSource": "source re-derivation", "filesystemScope": "repo + surface (read)", "durationEvidence": { "kind": "NOT_INSTRUMENTED" }, "testsRun": "IR-1..IR-10", "evidenceReuse": "verification accounting", "overlap": "none significant", "historicalDetectionValue": "MEDIUM", "decision": "KEEP" },
+    { "id": "G10", "gate": "TA-1/TA-2 independent review (unscripted)", "kind": "V2_IR", "trigger": "TA-1/TA-2 close", "purpose": "fresh-session independent review", "authoritativeSource": "hand-authored evidence JSON — NO script exists", "filesystemScope": "repo (evidence only)", "durationEvidence": { "kind": "NOT_INSTRUMENTED" }, "testsRun": "0 machine checks (manual narrative)", "evidenceReuse": "none", "overlap": "inconsistent with G7-G9 pattern", "historicalDetectionValue": "MEDIUM (ta1 NBF1-3 real findings)", "decision": "IMPROVE — script it like ta2r/ta3 or explicitly mark manual" },
+    { "id": "G11", "gate": "per-card self-closeout scripts (17 bespoke)", "kind": "CLOSEOUT", "trigger": "card close", "purpose": "mandatory graph closeout: bundle render + validation + git facts + evidence snapshot", "authoritativeSource": "runMandatoryGraphCloseout/runCloseoutGate + git", "filesystemScope": "repo + review surface", "durationEvidence": { "kind": "NOT_INSTRUMENTED", "note": "bundle render+validate ~seconds; colima variants dominated by G13" }, "testsRun": 0, "evidenceReuse": "card-start baseline + verification.json", "overlap": "17 near-duplicate scaffolds; source of synthetic timestamps", "historicalDetectionValue": "HIGH", "decision": "MERGE — into state-driven closeout (report-lifecycle-repair-1/fm3-rbi pattern)" },
+    { "id": "G12", "gate": "scripts/gov-closeout-bundle.mjs (state-driven)", "kind": "CLOSEOUT", "trigger": "any card", "purpose": "shared closeout CLI", "authoritativeSource": "runCloseoutGate/runStateDrivenCloseout", "filesystemScope": "repo", "durationEvidence": { "kind": "NOT_INSTRUMENTED" }, "testsRun": 0, "evidenceReuse": "closeout-state.json", "overlap": "none — it is the merge target", "historicalDetectionValue": "HIGH", "decision": "KEEP" },
+    { "id": "G13", "gate": "test:colima-all (9 integration files, container-backed)", "kind": "REGRESSION_INTEGRATION", "trigger": "old-card closeouts + npm script", "purpose": "real containerized graph-run integration", "authoritativeSource": "Colima runtime + repo", "filesystemScope": "repo (containers via colima)", "durationEvidence": { "kind": "MEASURED_PARTIAL", "note": ">420s and still running when killed mid test-c3-colima-pipeline; full total NOT_INSTRUMENTED; individual container tests 30-55s" }, "testsRun": "9 files, ~200+ tests", "evidenceReuse": "none", "overlap": "re-run per card even for docs/telemetry/memory-only scope; duplicates G14 content", "historicalDetectionValue": "HIGH", "decision": "IMPROVE — scope-gate to runtime-touching cards; instrument total duration" },
+    { "id": "G14", "gate": "scripts/collect-test-accounting.mjs", "kind": "REGRESSION_PERFILE", "trigger": "cbm2r/cbm3/cbm4/cost1 closeouts", "purpose": "per-file test accounting (CBM-2R finding 3)", "authoritativeSource": "node --test per file", "filesystemScope": "repo test/", "durationEvidence": { "kind": "NOT_INSTRUMENTED", "note": "re-executes every test file in a separate process" }, "testsRun": "all suites re-run file-by-file", "evidenceReuse": "none", "overlap": "duplicates every suite run from V1/colima-all", "historicalDetectionValue": "LOW now (anti-tamper purpose superseded by structured verification.json)", "decision": "DISABLE as routine; keep script for forensic use" },
+    { "id": "G15", "gate": "scripts/gov-external-review-surface.mjs", "kind": "DELIVERY", "trigger": "bundle delivery/rotation", "purpose": "fixed review-surface delivery, fail-closed", "authoritativeSource": "validateReviewBundle + currentReviewDelivery", "filesystemScope": "~/Desktop/AutoLoop-Review/Current + Archive (explicitly authorized)", "durationEvidence": { "kind": "NOT_INSTRUMENTED", "note": "seconds" }, "testsRun": 0, "evidenceReuse": "bundle identity/sha", "overlap": "re-validates bundle closeout already validated", "historicalDetectionValue": "HIGH (RLD-2 stale-delivery detection)", "decision": "KEEP" },
+    { "id": "G16", "gate": "gov-commit-checkpoint / commit-integration / push-gate / draft-pr", "kind": "LIFECYCLE", "trigger": "checkpoint/PR/push boundaries", "purpose": "lifecycle gates (scope, secrets, live bindings, review-unit)", "authoritativeSource": "checkpoint-commit-gate.mjs, review-unit-gate.mjs", "filesystemScope": "repo", "durationEvidence": { "kind": "NOT_INSTRUMENTED" }, "testsRun": 0, "evidenceReuse": "inventory", "overlap": "dormant during cards (no commits by design)", "historicalDetectionValue": "MEDIUM", "decision": "KEEP (dormant; not per-card verification)" },
+    { "id": "G17", "gate": "probe/benchmark scripts (cbm3-memory-probe, cost1-telemetry-probe, de1-bakeoff, de1r-bakeoff, de2-crash-matrix, de2-perf-probe, de2r-subagent-resume-probe, rld2-reproduction)", "kind": "PROBE", "trigger": "per-card investigation", "purpose": "one-shot benchmarks / crash matrices / reproduction", "authoritativeSource": "measured results (de1r 205s, de2 805s embedded in closeout evidence)", "filesystemScope": "repo (+colima)", "durationEvidence": { "kind": "EMBEDDED", "note": "de1r/de2 benchmark durations real; others NOT_INSTRUMENTED" }, "testsRun": "benchmark scenarios", "evidenceReuse": "none", "overlap": "de2-perf overlaps de2-crash (same card)", "historicalDetectionValue": "HIGH for their card, LOW as routine", "decision": "KEEP (one-shot only, never routine)" },
+    { "id": "G18", "gate": "guardrails: verification-scope-guard.mjs + AGENTS.md + scripts/pi-autoloop.sh + guardrail tests", "kind": "GUARD", "trigger": "every interactive/automated verification", "purpose": "forbid $HOME//-rooted discovery; authoritative-source-first", "authoritativeSource": "guard module + AGENTS.md", "filesystemScope": "repo (+ named surface paths only)", "durationEvidence": { "kind": "MEASURED", "note": "guard tests ~0.1s; zero routine cost" }, "testsRun": "~20 tests", "evidenceReuse": "n/a", "overlap": "none", "historicalDetectionValue": "the only gate that makes the 896s class impossible", "decision": "KEEP (foundation)" },
+    { "id": "G19", "gate": "test:memory suite (23 files, 229 tests)", "kind": "REGRESSION", "trigger": "cbm/memory cards + test:memory-* scripts", "purpose": "memory write-back/retrieval regression", "authoritativeSource": "source modules", "filesystemScope": "repo", "durationEvidence": { "kind": "MEASURED", "wallMs": 51300 }, "testsRun": 229, "evidenceReuse": "none", "overlap": "NOT part of ta-line V17 (coverage asymmetry)", "historicalDetectionValue": "HIGH for memory cards", "decision": "KEEP; note asymmetry for W1" },
+    { "id": "G20", "gate": "telemetry gate (cost1 overhead evidence + src/telemetry/*)", "kind": "OBSERVATION", "trigger": "graph runs with observer", "purpose": "measure observation overhead + record run cost", "authoritativeSource": "cost1-telemetry-overhead-20260807-evidence.json (measured)", "filesystemScope": "$HOME/.autoloop-telemetry-* (per-card) — OUTSIDE bounded roots", "durationEvidence": { "kind": "MEASURED", "note": "1.71ms/graph, +43.7 MiB RSS, 1224 B/event, 538KB/440 events" }, "testsRun": "benchmark 40 iterations", "evidenceReuse": "aggregate evidence", "overlap": "none", "historicalDetectionValue": "HIGH (only real per-run cost instrumentation)", "decision": "IMPROVE — mirror telemetry into repo or authorize the telemetry dirs" }
+  ],
+
+  "measuredCostBaseline": {
+    "measuredAt": "2026-08-09",
+    "machineNote": "local, read-only node --test runs; colima running",
+    "suites": [
+      { "suite": "test:budget", "wallMs": 210, "tests": 44 },
+      { "suite": "test:admission", "wallMs": 46430, "tests": 76 },
+      { "suite": "test:governance", "wallMs": 7140, "tests": 309 },
+      { "suite": "test:scripted-lifecycle", "wallMs": 2940, "tests": 44 },
+      { "suite": "test:telemetry", "wallMs": 1340, "tests": 37 },
+      { "suite": "test:v2", "wallMs": 84860, "tests": 372 },
+      { "suite": "test:memory", "wallMs": 51300, "tests": 229 },
+      { "suite": "test:colima-all", "wallMs": ">420000 (killed mid-suite, total NOT_INSTRUMENTED)", "tests": "~9 files" },
+      { "suite": "npm run check", "wallMs": 420, "tests": 0 }
+    ],
+    "ta3StyleV17DistinctTimeMs": 142920,
+    "recordedVsDistinctTestCount": { "recorded": 915, "distinct": 845, "doubleCounted": 70, "doubleCountedSource": "review-bundle(26) + graph-closeout(28) + external-review-delivery(16) are subsets of test:governance" }
+  },
+
+  "historicalInstrumentation": {
+    "REAL": ["cbm2, cbm3, cbm4, cost1, de1 closeout node timings (ms-precision 1-15s)", "de1r 205s bakeoff + de2 805s crash-matrix embedded durations", "ta2/ta2r/ta3 verification.json regression counts + verifiedAt", "cost1 telemetry overhead micro-benchmark", "896s incident (Phase 0E evidence + session transcript)"],
+    "SYNTHETIC": ["ta2, ta2r x4, ta3, rld2 closeout node timings (5-min-step values hardcoded in self-closeout graphResult objects)", "ta1 closeout timings (round 250s/1650s/500s, authored)", "rb1g/rb1h/cbm2r/de2r round second-granularity timings"],
+    "NOT_INSTRUMENTED": ["per-gate wall time for all verify/IR/closeout script runs (verification.json has verifiedAt only)", "token/tool-call/memory cost of verification runs (tokenSource NOT_REPORTED)", "test:colima-all total duration", "ta1 verification accounting (not persisted)"],
+    "reconstructionVerdict": "Historical per-gate wall time is NOT recoverable from evidence. Only regression test counts, 5 cards' real closeout-node timings, two embedded benchmarks, the telemetry micro-benchmark, and the 896s incident are measurable. No scope widening was performed to backfill."
+  },
+
+  "overlapMatrix": {
+    "V17SubSuiteDuplication": { "detail": "test:review-bundle, test:graph-closeout, test:external-review-delivery are subsets of test:governance and are executed as separate suite entries in ta3/ta2r V17", "testsDoubleCounted": 70, "verdict": "REDUNDANT" },
+    "IR4BudgetReRun": { "detail": "ta3-independent-review IR-4 re-executes test:budget already green in V17", "verdict": "REDUNDANT" },
+    "PerFileAccounting": { "detail": "collect-test-accounting re-executes every test file in a separate process, duplicating all suite content", "verdict": "REDUNDANT" },
+    "ColimaAllPerCard": { "detail": "old-card closeouts re-run full test:colima-all (>420s) even for docs/telemetry/memory-only scope", "verdict": "REDUNDANT" },
+    "MultipleBundleGenerations": { "detail": "ta1: 5 bundles, ta2: 4, ta2r: 4 closeout evidence files + bundles for one resolved generation", "verdict": "REDUNDANT" },
+    "IRGitStatusDup": { "detail": "V2 IR-8 re-parses git status already parsed in V1 V18 (by-design independence, cheap)", "verdict": "BY_DESIGN" },
+    "CloseoutRendersV1Accounting": { "detail": "closeout re-renders verifier accounting from verification.json", "verdict": "BY_DESIGN (single truth)" },
+    "DeliveryRevalidatesBundle": { "detail": "delivery gate re-validates the bundle closeout already validated", "verdict": "BY_DESIGN (fail-closed)" }
+  },
+
+  "subtractionFirstDecisions": {
+    "S1": { "gate": "G18 guardrails", "decision": "KEEP", "rationale": "foundation; zero routine cost; makes 896s class impossible" },
+    "S2": { "gate": "G2-G6 V1 verify", "decision": "KEEP + instrument durations", "rationale": "core gate; add wallMs per check/suite to verification.json" },
+    "S3": { "gate": "V17 suite list", "decision": "SIMPLIFY", "rationale": "remove 3 subset entries; honest accounting; -70 double-counted tests" },
+    "S4": { "gate": "G8 IR-4", "decision": "SIMPLIFY", "rationale": "reuse V17 budget accounting; IR = recompute claims, not suite re-run" },
+    "S5": { "gate": "G14 collect-test-accounting", "decision": "DISABLE as routine (keep for forensics)", "rationale": "per-file re-execution is the most redundant cost; purpose superseded" },
+    "S6": { "gate": "G13 test:colima-all", "decision": "IMPROVE", "rationale": "scope-gate to runtime-touching cards; instrument total duration (currently unbounded)" },
+    "S7": { "gate": "G11 bespoke self-closeouts", "decision": "MERGE", "rationale": "into state-driven closeout; removes ~17 duplicate scaffolds and the synthetic-timestamp source" },
+    "S8": { "gate": "G12 gov-closeout-bundle", "decision": "KEEP", "rationale": "merged target" },
+    "S9": { "gate": "multi-bundle generations", "decision": "SIMPLIFY", "rationale": "one authoritative bundle per generation + supersede chain; reseals reuse last bundle + delta" },
+    "S10": { "gate": "synthetic node timings", "decision": "REMOVE/IMPROVE", "rationale": "stop authoring fake durations; fill from real gate measurement" },
+    "S11": { "gate": "G10 unscripted TA-1/TA-2 IR", "decision": "IMPROVE", "rationale": "script it or explicitly mark manual" },
+    "S12": { "gate": "G15 delivery", "decision": "KEEP", "rationale": "cheap, fail-closed, RLD-2-proven" },
+    "S13": { "gate": "G16 commit/push/PR gates", "decision": "KEEP dormant", "rationale": "lifecycle gates, not per-card verification" },
+    "S14": { "gate": "G17 probes", "decision": "KEEP one-shot only", "rationale": "investigation tools, never routine" },
+    "S15": { "gate": "G19 memory suite", "decision": "KEEP", "rationale": "necessary for memory cards; coverage asymmetry noted for W1" },
+    "S16": { "gate": "G20 telemetry store location", "decision": "IMPROVE", "rationale": "mirror telemetry into repo or authorize telemetry dirs; only real cost evidence lives outside bounded roots" },
+    "S17": { "gate": "G1 npm run check", "decision": "KEEP", "rationale": "0.42s trivial syntax gate" },
+    "order": ["S3", "S4", "S5", "S6", "S7", "S9", "S10", "S16", "S2"]
+  },
+
+  "highestCostVerificationPaths": [
+    { "rank": 1, "path": "test:colima-all", "cost": ">420s (unbounded in evidence)", "class": "REDUNDANT when run per-card on non-runtime cards; NECESSARY for runtime cards" },
+    { "rank": 2, "path": "V1 regression aggregate (ta-line V17)", "cost": "~143s/card", "class": "NECESSARY core" },
+    { "rank": 3, "path": "test:v2", "cost": "85s (372 tests)", "class": "NECESSARY" },
+    { "rank": 4, "path": "test:memory", "cost": "51s (229 tests)", "class": "NECESSARY for memory cards; outside ta-line V17" },
+    { "rank": 5, "path": "test:admission", "cost": "46s (76 tests)", "class": "NECESSARY" },
+    { "rank": 6, "path": "896s whole-home grep incident", "cost": "896s single event", "class": "PATHOLOGICAL (now guarded by G18)" }
+  ],
+
+  "costClassification": {
+    "NECESSARY": ["unit/regression suite content", "V1 checks", "V2 independent cross-checks", "bundle validation + delivery fail-closed gates", "scope guardrails", "baseline content-identity (V18)"],
+    "REDUNDANT": ["V17 sub-suite duplication (70 tests)", "ta3 V2 budget re-run", "per-file accounting re-execution", "per-card full colima-all on non-runtime cards", "multiple bundle generations per card"],
+    "PATHOLOGICAL": ["896s $HOME-rooted grep (guarded)", "synthetic duration claims in ta2/ta2r/ta3/rld2/ta1 closeout evidence", "unbounded colima-all duration"]
+  },
+
+  "acceptance": {
+    "verificationInventory": "PASS (20 gates, 9 attributes each)",
+    "historicalCostAnalysis": "PASS (real vs synthetic vs NOT_INSTRUMENTED; current baseline measured)",
+    "overlapMatrix": "PASS",
+    "subtractionFirstDecisions": "PASS (S1-S17 ordered)",
+    "highestCostPaths": "PASS (ranked list)",
+    "necessaryRedundantPathological": "PASS",
+    "noHomeRootedDiscovery": "PASS (all commands bounded to repo + named surface paths; telemetry location gap flagged as governance item, not acted on)"
+  },
+
+  "stopPoint": "Audit complete per Controller instruction. No W1 repair performed — repair decisions deferred to Controller.",
+  "recommendedNextStep": "Controller reviews §4 decisions (S1-S17) and chooses W1 repair scope. Candidate W1 items: S2/S10 instrumentation (real durations in verification.json + remove synthetic timestamps), S3/S4 suite-list simplification, S7 merge to state-driven closeout."
+}

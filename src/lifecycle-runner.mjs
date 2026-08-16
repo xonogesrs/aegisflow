@@ -28,6 +28,19 @@ import {
 } from "./v2/harness-evidence.mjs";
 import { classifyHold } from "./hold-taxonomy.mjs";
 import { normalize as normalizeReviewerVerdict, FAIL_CLOSED as REVIEWER_FAIL_CLOSED } from "./normalize-reviewer-json.mjs";
+import { isValidLifecycleState } from "./governance/lifecycle-state.mjs";
+
+// VCA-1 Phase 0C — the reviewer prompt (phase-response-contract.mjs
+// sectionAuthority) already declares "You have NO tools and NO mutation
+// authority... cannot inspect the repository yourself", but prior to this
+// change that was prompt text only: callAdapter below passed the SAME
+// taskCard.toolPolicy to both the executor and reviewer role, so a
+// permissive executor toolPolicy silently also reached the reviewer
+// invocation. The reviewer is a verification-only role by contract, so its
+// tool policy is hard-pinned here — independent of taskCard.toolPolicy —
+// closing a real HARD_TOOL_SURFACE gap between what the reviewer prompt
+// claims and what the adapter actually granted.
+const REVIEWER_TOOL_POLICY = Object.freeze({ mode: "no-tools" });
 
 // Single reviewer-verdict authority: normalize-reviewer-json.mjs. It already
 // enforces required fields, enum membership (including its own canonical
@@ -230,7 +243,7 @@ export async function runLifecycle({
         attempt,
         timeoutMs,
         environmentAllowlist: taskCard.environmentAllowlist,
-        toolPolicy: taskCard.toolPolicy,
+        toolPolicy: phase === "reviewer" ? REVIEWER_TOOL_POLICY : taskCard.toolPolicy,
         abortSignal,
         ...extra,
       }) };
@@ -406,4 +419,52 @@ export async function runLifecycle({
       recommended_next_action: verdict.recommended_next_action,
     });
   }
+}
+
+// ── CP-2R2 Finding 2 — authoritative lifecycle eligibility ──────────────
+//
+// The Control Plane / optimizer must NOT derive lifecycle eligibility from
+// budget counters（budget constrains execution; it cannot mint CONTINUE /
+// RETRY / REPAIR / REVIEW）. The Lifecycle Runner owns which transitions are
+// legal now, so the eligible transition set（cost-optimizer contract §3
+// CONTINUE / RETRY / REPLAN）is derived HERE from lifecycle state + admission
+// repair authority, never from budget meters.
+
+export const LIFECYCLE_RETRY_REPLAN_CHOICES = Object.freeze(["CONTINUE", "RETRY", "REPLAN"]);
+
+/**
+ * Authoritative eligible transition set owned by the Lifecycle Runner.
+ *
+ * @param {object} opts
+ * @param {string|null} opts.lifecycleState — a valid reversible-lifecycle
+ *        state（governance/lifecycle-state.mjs）; the authoritative "where are
+ *        we now" fact.
+ * @param {number|null} opts.repairBudget — admission.repair_budget（the TA-2
+ *        repair AUTHORITY, not the runtime repair_attempt_count meter）.
+ * @param {number} opts.repairAttempts — lifecycle repair attempts consumed
+ *        so far.
+ * @returns {string[]|null} — eligible transitions（subset of
+ *   LIFECYCLE_RETRY_REPLAN_CHOICES）; null = lifecycle authority unavailable
+ *   （caller must HOLD）; [] = terminal/no forward transition（HOLD）.
+ */
+export function deriveLifecycleEligibleTransitions({ lifecycleState = null, repairBudget = null, repairAttempts = 0 } = {}) {
+  // Missing/unknown lifecycle state ⇒ authority unavailable — fail closed.
+  if (!isValidLifecycleState(lifecycleState)) return null;
+  // Terminal / controller-owned states offer no forward transition.
+  if (lifecycleState === "CONTROLLER_REQUIRED" || lifecycleState === "INTEGRATION_READY") return [];
+
+  const transitions = ["CONTINUE"];
+  // RETRY is a lifecycle fact（the runner may re-attempt while the lifecycle
+  // is still in a reversible, non-terminal state）— NOT derived from the
+  // budget retry_count meter.
+  transitions.push("RETRY");
+
+  // REPLAN（repair/re-decompose）is legal ONLY inside the admission repair
+  // authority, never from the budget repair_attempt_count meter.
+  const rb = Number(repairBudget ?? 0);
+  const used = Number(repairAttempts ?? 0);
+  if (Number.isFinite(rb) && rb > 0 && Number.isFinite(used) && used < rb) {
+    transitions.push("REPLAN");
+  }
+  return transitions;
 }

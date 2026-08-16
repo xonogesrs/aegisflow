@@ -1,0 +1,283 @@
+{
+  "schema": "autoloop.review-bundle.graph-closeout-evidence/v1",
+  "graphRunId": "de1-self-closeout-20260808",
+  "final": "PASS",
+  "holdCode": null,
+  "reason": null,
+  "task": {
+    "cardId": "AUTOLOOP-PI-GRAPH-DE1",
+    "cardTitle": "Durable Execution / Crash-Recovery Architecture & Bake-off",
+    "cardType": "research"
+  },
+  "scheduler": {
+    "verdict": "PASS",
+    "order": [
+      "SA-R1",
+      "SA-R2",
+      "SA-W1",
+      "SA-V1"
+    ],
+    "statuses": {
+      "SA-R1": "passed",
+      "SA-R2": "passed",
+      "SA-W1": "passed",
+      "SA-V1": "passed"
+    },
+    "skipped": [],
+    "writerViolations": [],
+    "leaseHolderAfter": null
+  },
+  "nodes": [
+    {
+      "nodeId": "SA-R1",
+      "phaseExecutionId": "exec_1504e6c2888a1c174e1867a5a8aea5ea",
+      "taskType": "subagent",
+      "dependencies": [],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786161690613,
+      "completedAt": 1786161698760,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "SA-R2",
+      "phaseExecutionId": "exec_256e43116a09a879bfa4cfcc26e67091",
+      "taskType": "subagent",
+      "dependencies": [],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786161690614,
+      "completedAt": 1786161698769,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "SA-W1",
+      "phaseExecutionId": "exec_8ea87375a2972acf07ba5e1450913506",
+      "taskType": "subagent",
+      "dependencies": [
+        "SA-R1",
+        "SA-R2"
+      ],
+      "final": "PASS",
+      "attempt": 1,
+      "reason": null,
+      "startedAt": 1786161698769,
+      "completedAt": 1786161699754,
+      "worktreeVerified": true,
+      "worktreeRevoked": true,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 1,
+        "failed": 0,
+        "total": 1
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "SA-V1",
+      "phaseExecutionId": "exec_87a3436fd5668bf19f50083cff45b8ee",
+      "taskType": "subagent",
+      "dependencies": [
+        "SA-W1"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786161699784,
+      "completedAt": 1786161702693,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    }
+  ],
+  "transitions": [
+    {
+      "phaseId": "SA-R1",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "executor",
+          "attempt": 0,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "mutation_scope_gate",
+          "attempt": 0,
+          "status": null,
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer",
+          "attempt": 0,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    },
+    {
+      "phaseId": "SA-R2",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "executor",
+          "attempt": 0,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "mutation_scope_gate",
+          "attempt": 0,
+          "status": null,
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer",
+          "attempt": 0,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    },
+    {
+      "phaseId": "SA-W1",
+      "final": "PASS",
+      "attempt": 1,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "executor",
+          "attempt": 0,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "mutation_scope_gate",
+          "attempt": 0,
+          "status": null,
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer",
+          "attempt": 0,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "NEEDS_SUPPLEMENT",
+          "recommended_next_action": "REPAIR"
+        },
+        {
+          "phase": "executor",
+          "attempt": 1,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "mutation_scope_gate",
+          "attempt": 1,
+          "status": null,
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer",
+          "attempt": 1,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 1,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    },
+    {
+      "phaseId": "SA-V1",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "executor",
+          "attempt": 0,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "mutation_scope_gate",
+          "attempt": 0,
+          "status": null,
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer",
+          "attempt": 0,
+          "status": "completed",
+          "verdict": null,
+          "recommended_next_action": null
+        },
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    }
+  ]
+}

@@ -38,6 +38,62 @@ export const AUTOLOOP_STATE_PASS = "AUTOLOOP_TERMINAL_PASS";
 export const AUTOLOOP_STATE_HOLD = "AUTOLOOP_TERMINAL_HOLD";
 export const AUTOLOOP_STATE_NOT_BENEFICIAL = "AUTOLOOP_TERMINAL_NOT_BENEFICIAL";
 
+// ── DE-2 F1: semantic post-head event classification ────────────────────
+// DE-1 proved recoverability failures when valid events appear beyond the
+// checkpoint head (RESUME_FINGERPRINT_MISMATCH 'unexpected journal event ...
+// beyond checkpoint head'). The fix is NOT a permissive allowlist: every
+// event is classified by whether the durable truth it carries is already
+// captured / deterministically re-derivable (replay-safe), is an intermediate
+// marker folded into resumed state (resume-safe), or is unknown / invalid
+// (fail closed).
+//
+// replay-safe — deterministic re-derivation; resume proceeds, the event is
+//   never re-journaled. Its durable consequence is captured by the checkpoint
+//   at the next safe boundary or is idempotent by construction.
+// resume-safe — intermediate marker whose durable consequence is either
+//   already persisted as an artifact (evidence / verdict / patch / result)
+//   or recoverable from the checkpoint state (writer -> RECOVERY_REQUIRED,
+//   read-only -> requeue or completed-result recovery).
+export const POST_HEAD_EVENT_SEMANTICS = Object.freeze({
+  replaySafe: new Set([
+    "CHECKPOINT_PUBLISHED",
+    "PHASE_READY",
+    "PHASE_REPAIR_REQUESTED",
+    "RUN_PASSED", "RUN_HELD", "RUN_NOT_BENEFICIAL",
+    "MANIFEST_FINALIZED",
+    "RESUME_REQUESTED", "RESUME_VALIDATED", "RESUME_REJECTED",
+    "READ_ONLY_PHASE_REQUEUED_AFTER_INTERRUPTION",
+    "GRAPH_CREATED", "GRAPH_INPUT_FROZEN",
+  ]),
+  resumeSafe: new Set([
+    // DE-1 F1 examples: journaled before their checkpoint -> post-head on crash
+    "DAG_ACCEPTED",
+    "PHASE_STARTED",
+    "EXECUTOR_COMPLETED",
+    "REVIEWER_COMPLETED",
+    "PHASE_PASSED", "PHASE_HELD", "PHASE_FAILED",
+    "PHASE_SKIPPED",
+    "SYSTEM_DELTA_READY",
+    // lifecycle error markers（intermediate; the phase hold is the outcome）
+    "SYSTEM_DELTA_PERSISTENCE_FAILED",
+    "EXECUTOR_OUTPUT_PERSISTENCE_FAILED",
+    "RESUME_REJECTED",
+    // DE-2 writer recovery markers (intermediate; the checkpoint state is truth)
+    "WRITER_SIDE_EFFECT_COMMITTED",
+    "WRITER_RECOVERY_CLASSIFIED",
+  ]),
+});
+
+/**
+ * Classify a post-head journal event semantically.
+ * @returns {"replay-safe"|"resume-safe"|"invalid"}
+ */
+export function classifyPostHeadEvent(eventType) {
+  if (POST_HEAD_EVENT_SEMANTICS.replaySafe.has(eventType)) return "replay-safe";
+  if (POST_HEAD_EVENT_SEMANTICS.resumeSafe.has(eventType)) return "resume-safe";
+  return "invalid";
+}
+
 // ── C4I single resume-capability authority ──────────────────────────────
 // One classifier decides both (a) the canonical c2d_control_state published
 // into every checkpoint and (b) the capability gate used by the resume API.
@@ -171,6 +227,9 @@ export function buildConfigurationFingerprint({
   executorAdapterPolicyHash,
   reviewerAdapterPolicyHash,
   persistenceFormatVersion,
+  // TA-2（O）: frozen admission digest binds every checkpoint to its
+  // admission（admission change -> fingerprint mismatch -> HOLD）.
+  admissionFingerprint,
 }) {
   return sha256Text(canonicalJson({
     max_repair_attempts: maxRepairAttempts,
@@ -184,6 +243,7 @@ export function buildConfigurationFingerprint({
     executor_adapter_policy_hash: executorAdapterPolicyHash ?? null,
     reviewer_adapter_policy_hash: reviewerAdapterPolicyHash ?? null,
     persistence_format_version: persistenceFormatVersion,
+    admission_fingerprint: admissionFingerprint ?? null,
   }));
 }
 

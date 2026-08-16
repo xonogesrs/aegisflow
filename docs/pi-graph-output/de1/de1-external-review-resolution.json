@@ -1,0 +1,53 @@
+{
+  "schema": "autoloop.external-review-resolution/v1",
+  "cardId": "AUTOLOOP-PI-GRAPH-DE1",
+  "cardTitle": "Durable Execution / Crash-Recovery Architecture & Bake-off",
+  "resolvedAt": "2026-08-08T05:40:00Z",
+  "reviewer": "Controller / External Reviewer",
+  "priorState": {
+    "externalReviewStatus": "HOLD",
+    "holdCode": "DE1_RESEARCH_EXTENSION_REQUIRED",
+    "findingCode": "DE1_EXTERNAL_CANDIDATE_BAKEOFF_INCOMPLETE",
+    "bundleIdentity": "aedcafcc8453bc9346e2abaceafb6b7b7615636eafc8c3c9e167773cde3e867b",
+    "findingsDigest": "a1e2594ca28431230e9ac05260f0e4298f8a6b515ad69aa56b096185c15bf4dd",
+    "reason": "external candidates (Temporal/Restate) were not executed as live runtimes in the DE-1 bake-off"
+  },
+  "resolution": {
+    "status": "HOLD_LIFTED",
+    "basis": "DE-1R — External Candidate Live Prototype Bake-off (AUTOLOOP-PI-GRAPH-DE1R), bundle 2ff86a262ad9e75f1c2b8efbaffbc0ea53e9fc4dc4237c601b8d480830a6f182, external review verdict PASS (AUTOLOOP_PI_GRAPH_DE1R_EXTERNAL_REVIEW_CONFIRMED, externalReviewComplete=true)",
+    "de1rEvidence": {
+      "deployment": "docs/pi-graph-output/de1r/de1r-deployment.json",
+      "bakeoff": "docs/pi-graph-output/de1r/de1r-bakeoff-results.json",
+      "restateDisposition": "docs/pi-graph-output/de1r/de1r-restate-disposition.json",
+      "comparison": "docs/pi-graph-output/de1r/de1r-comparison.json",
+      "decision": "docs/pi-graph-output/de1r/de1r-decision.json"
+    }
+  },
+  "finalDisposition": {
+    "selection": "PASS / EXISTING_DURABLE_EXECUTION_SELECTED",
+    "candidate": "A — Existing AutoLoop durable execution (STACK_A)",
+    "status": "DE-1 CLOSED — the provisional selection (EXISTING AUTOLOOP LEADS) is formally finalized by measurement",
+    "previousProvisional": "PROVISIONAL: EXISTING AUTOLOOP LEADS (DE-1 external review HOLD, 2026-08-08T04:28:47Z)"
+  },
+  "governanceSequenceCorrection": {
+    "bundleSection": "DE-1R bundle Section 24 said 'After DE-2, close DE-1 formally' — NOT adopted",
+    "correctSequence": [
+      "DE-1R external PASS (2026-08-08T05:40:00Z)",
+      "DE-1 HOLD lifted using DE-1R evidence (this record)",
+      "DE-1 final disposition: PASS / EXISTING_DURABLE_EXECUTION_SELECTED",
+      "DE-2 — Native Durable Execution Hardening (next)"
+    ],
+    "reason": "DE-1 HOLD existed solely because the external candidate live bake-off was incomplete; DE-1R closed that gap. No reason to keep DE-1 on HOLD while entering DE-2."
+  },
+  "downstream": {
+    "nextCard": "DE-2 — Native Durable Execution Hardening",
+    "de2Work": [
+      "wire STACK_A behind runColimaGraph (production Graph path durability)",
+      "complete the resume post-head whitelist (F1)",
+      "fix the resumed-orchestrator journal/revision edge (F2/F3)",
+      "telemetry replay-awareness (D7)",
+      "writer worktree restoration policy"
+    ],
+    "de2Reference": "Temporal idempotency commit-token pattern (DE-1R S4) as reference for DE-2 writer dedup"
+  }
+}

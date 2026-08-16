@@ -1,0 +1,149 @@
+{
+  "schema": "autoloop.review-bundle.graph-closeout-evidence/v1",
+  "graphRunId": "ta2-self-closeout-20260809",
+  "final": "PASS",
+  "holdCode": null,
+  "reason": null,
+  "task": {
+    "cardId": "AUTOLOOP-TA2",
+    "cardTitle": "Task Admission + Capability Policy Implementation and Graph Wiring (TA-2)",
+    "cardType": "implementation"
+  },
+  "scheduler": {
+    "verdict": "PASS",
+    "order": [
+      "R1-readonly-confirmation",
+      "W1-implement-admission-core",
+      "W2-wire-graph-seams",
+      "W3-closeout-hardening",
+      "V1-verify-and-regress",
+      "V2-independent-review"
+    ],
+    "statuses": {
+      "R1-readonly-confirmation": "passed",
+      "W1-implement-admission-core": "passed",
+      "W2-wire-graph-seams": "passed",
+      "W3-closeout-hardening": "passed",
+      "V1-verify-and-regress": "passed",
+      "V2-independent-review": "passed"
+    },
+    "skipped": [],
+    "writerViolations": [],
+    "leaseHolderAfter": null
+  },
+  "nodes": [
+    {
+      "nodeId": "R1-readonly-confirmation",
+      "phaseExecutionId": "ta2-self-closeout-20260809:R1",
+      "taskType": "readonly-confirmation",
+      "dependencies": [],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786262400000,
+      "completedAt": 1786262700000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "W1-implement-admission-core",
+      "phaseExecutionId": "ta2-self-closeout-20260809:W1",
+      "taskType": "implement-admission-core",
+      "dependencies": [
+        "R1-readonly-confirmation"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786262700000,
+      "completedAt": 1786263300000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "W2-wire-graph-seams",
+      "phaseExecutionId": "ta2-self-closeout-20260809:W2",
+      "taskType": "wire-graph-seams",
+      "dependencies": [
+        "W1-implement-admission-core"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786263300000,
+      "completedAt": 1786263900000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "W3-closeout-hardening",
+      "phaseExecutionId": "ta2-self-closeout-20260809:W3",
+      "taskType": "closeout-hardening",
+      "dependencies": [
+        "W2-wire-graph-seams"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786263900000,
+      "completedAt": 1786264200000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "V1-verify-and-regress",
+      "phaseExecutionId": "ta2-self-closeout-20260809:V1",
+      "taskType": "verify-and-regress",
+      "dependencies": [
+        "W3-closeout-hardening"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786264200000,
+      "completedAt": 1786264500000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "V2-independent-review",
+      "phaseExecutionId": "ta2-self-closeout-20260809:V2",
+      "taskType": "independent-review",
+      "dependencies": [
+        "V1-verify-and-regress"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786264500000,
+      "completedAt": 1786264800000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": null,
+      "reviewBlockingFindings": []
+    }
+  ],
+  "transitions": []
+}

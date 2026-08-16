@@ -1,0 +1,57 @@
+{
+  "schema": "autoloop.ta2-independent-review/v1",
+  "card": "AUTOLOOP-TA2",
+  "generation": "TA-2R",
+  "supersedesBundleIdentity": "432e85b5742b194d24c4558b1eec8f1415dcdc6ee52c2f934eff900f9e0a6272",
+  "reviewedAt": "2026-08-09T04:49:02.203Z",
+  "reviewer": "independent review cross-check (deterministic, local)",
+  "total": 8,
+  "passed": 8,
+  "failed": 0,
+  "ok": true,
+  "checks": [
+    {
+      "id": "IR-1.verification_ok",
+      "ok": true,
+      "detail": "ta2r-verify 21/21"
+    },
+    {
+      "id": "IR-2.sample_ids_deterministic",
+      "ok": true,
+      "detail": "4 samples; ids re-derive + validate"
+    },
+    {
+      "id": "IR-3.schema_additive_only",
+      "ok": true,
+      "detail": "missing= additions=mutation_scope,tool_permissions"
+    },
+    {
+      "id": "IR-4.matrix_parity",
+      "ok": true,
+      "detail": "7 profiles match"
+    },
+    {
+      "id": "IR-5.risk_signal_parity",
+      "ok": true,
+      "detail": "15 signals; missing= extra="
+    },
+    {
+      "id": "IR-6.neg_suite",
+      "ok": true,
+      "detail": "admission suite 76/76 pass"
+    },
+    {
+      "id": "IR-7.production_gate_nonbypassable",
+      "ok": true,
+      "detail": "no admission -> ADMISSION_REQUIRED (spy never invoked); tampered -> ADMISSION_DRIFT; valid -> dispatched unchanged"
+    },
+    {
+      "id": "IR-8.content_delta_attribution",
+      "ok": true,
+      "detail": "baseline pathShas=287; unattributable=0; delta=25 (membership 17 + content 8); content-modified: src/governance/card-inventory.mjs,src/governance/review-bundle.mjs,src/runtime/colima-graph-runner.mjs,src/subagent/subagent-graph-runner.mjs,src/v2/durable-graph.mjs,test/admission/test-closeout-hardening.mjs"
+    }
+  ],
+  "blockingFindings": [],
+  "nonBlockingFindings": [],
+  "digest": "04c57336ca8ddf7bc6a9379b627816428fed09fb43d4bf4d53a3750043f93b0b"
+}

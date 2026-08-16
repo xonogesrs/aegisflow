@@ -1,0 +1,64 @@
+{
+  "schema": "autoloop.durable-execution-bakeoff-result/v1",
+  "card": "AUTOLOOP-PI-GRAPH-DE1",
+  "generatedAt": "2026-08-08T00:00:00.000Z",
+  "winner": {
+    "candidate": "A — Existing AutoLoop durable execution",
+    "outcome": "PASS / EXISTING_DURABLE_EXECUTION_SELECTED",
+    "rationale": [
+      "AutoLoop already owns a mature in-process durable-execution layer (STACK_A: evidence journal + atomic checkpoint + fingerprint chain + safe resume + manifest; 41 focused tests green) that satisfies invariants D1-D8 except D7 (telemetry replay-awareness).",
+      "The bake-off shows the existing layer fails CLOSED at every tested crash point: zero silent duplicate mutations, zero lost completed results, zero false PASS promotions, zero authority escalations (safety hard gates 100%).",
+      "The recoverability gaps found (resume post-head whitelist missing DAG_ACCEPTED/PHASE_STARTED/EXECUTOR_COMPLETED/REVIEWER_COMPLETED/PHASE_PASSED/PHASE_SKIPPED; a resumed-orchestrator JOURNAL_OUT_OF_ORDER edge) are bounded, in-process fixes — squarely DE-2 native-hardening scope, NOT a reason to import a workflow runtime.",
+      "The dominant gap is architectural wiring, not engine capability: the production Graph path (runColimaGraph) invokes runExecutionOrchestrator directly and never uses the durable layer — wiring STACK_A behind the Graph path is the high-value change.",
+      "Temporal would add a server + DB + deterministic-replay constraints + worker lifecycle + upgrade/versioning burden for correctness needs STACK_A already covers in-process.",
+      "Restate fails the Stage 13 security gate (bundled Scarf phone-home telemetry) and is BSL-licensed.",
+      "Value/complexity: existing hardening ≈ minimal complexity for full recoverability; either external runtime = new service + storage + SDK + ops for the same invariants."
+    ]
+  },
+  "correctnessMatrix": {
+    "candidate": "A",
+    "workload": "4-phase DAG ro1->ro2->writer->verifier, real SIGKILL at 2 kill modes x 10 crash points + T0/T9/T11/T12",
+    "safetyHardGates": {
+      "silentDuplicateMutation": 0,
+      "lostCompletedResult": 0,
+      "falsePass": 0,
+      "authorityEscalation": 0,
+      "gate": "PASS"
+    },
+    "recovery": {
+      "safeRecoveryAtDesignedBoundaries": "writer phases correctly fail closed (RECOVERY_REQUIRED, D3); early kills resume (T1 safe boundary PASS); post-pass kill resumes to terminal (T8/T11 path when checkpoint lands)",
+      "recoveryRefusedAtJournalToCheckpointWindow": 8,
+      "failureFamilies": [
+        "F1: resume post-head whitelist omits DAG_ACCEPTED / PHASE_STARTED / EXECUTOR_COMPLETED / REVIEWER_COMPLETED / PHASE_PASSED / PHASE_HELD / PHASE_FAILED / PHASE_SKIPPED — all are journaled BEFORE their checkpoint, so a crash in the journal->checkpoint sub-window refuses resume (RESUME_FINGERPRINT_MISMATCH 'unexpected journal event ... beyond checkpoint head'). Fail-closed (run stuck, no data loss), not self-healing.",
+        "F2: resumed orchestrator edge — after a clean post-pass checkpoint, the continued resume can fail with ORCHESTRATION_EXCEPTION:JOURNAL_OUT_OF_ORDER (C2D checkpoint revision/journal edge at the resumed boundary; first-resumed-view status diff treats already-passed phases as newly terminal).",
+        "F3: read-only requeue edge (T2): resume of an interrupted read-only phase returned HOLD instead of completing — same edge family as F2."
+      ]
+    }
+  },
+  "rejectedAlternatives": [
+    {
+      "candidate": "B — Temporal",
+      "rejected": true,
+      "reasons": [
+        "Adds a multi-service server (frontend/history/matching/worker) + database (SQLite dev / PostgreSQL / MySQL) + worker process + workflow-versioning operational surface for correctness the existing in-process layer already provides",
+        "Deterministic-workflow replay requires AutoLoop's model adapters to be activities (true in effect) but adds SDK-level constraints, worker lifecycle management, and upgrade/version-set burden",
+        "Rollback/removal cost: service + DB teardown, workflow code version pinning",
+        "Value gained (durable timers, signals, long-running workflows) is not currently required by AutoLoop's graph model"
+      ]
+    },
+    {
+      "candidate": "C — Restate",
+      "rejected": true,
+      "reasons": [
+        "FAILS Stage 13 security gate: @restatedev/restate-server depends on @scarf/scarf (default phone-home analytics) — unexplained network behavior rejected by AutoLoop's security contract",
+        "BSL license (not OSI) adds legal surface",
+        "Adds a server process + RocksDB/PostgreSQL storage",
+        "Same journaling concept as STACK_A but requires the server to be the durability authority — more moving parts for the same invariants"
+      ]
+    }
+  ],
+  "integrationArchitecture": "AutoLoop Graph -> DurableExecutionProvider (autoloop.durable-execution-provider/v1) -> backend. AutoLoop retains Graph topology, scheduler policy, decomposition, writer authority, review/repair, evidence, CBM, telemetry, Controller authority. The provider seam is defined; STACK_A already implements every provider method natively (see de1-provider-contract.json currentMapping).",
+  "rollbackArchitecture": "Candidate A requires no rollback (in-process, no external dependency). If a provider were later swapped in behind the seam, removal = delete the adapter + stop the backend service; the AutoLoop native path remains the fallback.",
+  "nextStep": "DE-2 — Native Durable Execution Hardening: (1) wire the durable layer behind runColimaGraph (production Graph path durability), (2) complete the resume post-head whitelist (F1), (3) fix the resumed-orchestrator journal/revision edge (F2/F3), (4) make COST-1 telemetry replay-aware (D7), (5) persist worktree restoration policy for writer recovery.",
+  "recommendation": "Do NOT introduce Temporal or Restate. The existing durable layer is the correct base; the production Graph path must be wired to it, and the bounded resume-edge fixes are the DE-2 work."
+}

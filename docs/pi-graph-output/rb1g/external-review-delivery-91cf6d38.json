@@ -1,0 +1,28 @@
+{
+  "schema": "autoloop.external-review-delivery/v2",
+  "cardId": "AUTOLOOP-PI-GRAPH-RB1G-1",
+  "fileName": "external-review-delivery-91cf6d38.json",
+  "reviewBundleGenerated": true,
+  "reviewBundleValidated": true,
+  "reviewBundleDeliveryRequired": true,
+  "externalReviewStatus": "REPAIR",
+  "externalReviewStatusReason": "verdict REPAIR bound to reviewBundleIdentity=91cf6d38d27dba25f7840d8ec27101d02d1db83202b925c5694c16f622f3aa29（verdict is the receipt: RECEIVED + REVIEWED proven in one step）",
+  "delivery": {
+    "required": true,
+    "attempted": true,
+    "method": "presented-in-conversation",
+    "attemptedAt": "2026-08-07T09:34:00Z",
+    "bundlePath": "/Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/rb1g/card-closeout-bundle-20260807-91cf6d38.txt",
+    "reviewBundleIdentity": "91cf6d38d27dba25f7840d8ec27101d02d1db83202b925c5694c16f622f3aa29",
+    "reviewBundleSha256": "cce7b0e7b1a15174b3d2da669b4cdebe56aca1f065ec5ca04c5f31504d3c5fd4"
+  },
+  "verdict": {
+    "verdict": "REPAIR",
+    "reviewerIdentity": "GPT-5.6 Sol / External Reviewer",
+    "reviewedAt": "2026-08-07T09:47:00Z",
+    "bundleIdentity": "91cf6d38d27dba25f7840d8ec27101d02d1db83202b925c5694c16f622f3aa29",
+    "bundleSha256": "cce7b0e7b1a15174b3d2da669b4cdebe56aca1f065ec5ca04c5f31504d3c5fd4",
+    "findingsDigest": "144da4e299f4d192d48a63d87df7f98755a85df8d8e95c738c4304c483d75eac"
+  },
+  "supersedes": null
+}

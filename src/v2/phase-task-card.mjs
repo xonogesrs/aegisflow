@@ -163,6 +163,10 @@ export function buildPhaseTaskCard({
     covers: Array.isArray(phase.covers) ? phase.covers.map((c) => ({ ...c })) : [],
     dependsOn: Array.isArray(phase.depends_on) ? phase.depends_on.slice() : [],
     verificationPlan: phase.verification_plan ?? null,
+    // Colima pipeline wiring: the per-phase runtime spec（mode/command/expect/
+    // limits/worktreePath/scratchPath）is carried verbatim so the Colima
+    // executor adapter can run the phase's real task in an isolated container.
+    runtime: phase?.runtime ?? null,
     repositoryRoot: cwd,
     allowedPaths,
     forbiddenPaths: parentForbidden.slice(),

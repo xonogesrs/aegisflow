@@ -219,7 +219,7 @@ function readJournalEvent(execDir, eventType) {
 }
 
 function readOutputArtifact(execDir, phaseId = "fix_add_implementation") {
-  const p = join(execDir, "phases", phaseId, "executor-output.json");
+  const p = join(execDir, "phases", phaseId, "executor-output-0.json");
   return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null;
 }
 
@@ -238,7 +238,7 @@ test("C4J-1 prose final assistant text no longer gates evidence; bounded output 
     assert.ok(!readJournalEvent(r.execDir, "PHASE_HELD"), "no PHASE_HELD for prose executor output");
     // the bounded, non-authoritative output diagnostic is persisted
     const diag = readOutputArtifact(r.execDir);
-    assert.ok(diag, "executor-output.json exists");
+    assert.ok(diag, "executor-output-0.json exists");
     assert.equal(diag.kind, "executor_output_diagnostic");
     assert.equal(diag.authoritative, false);
     assert.equal(diag.final_assistant_text.stored, prose);
@@ -295,7 +295,7 @@ test("C4J-3 oversized final assistant text is truncated with deterministic metad
     assert.equal(diag.final_assistant_text.truncated, true);
     assert.ok(diag.final_assistant_text.stored_length <= EXECUTOR_DIAGNOSTICS_LIMITS.max_final_text_bytes);
     assert.equal(diag.final_assistant_text.stored, "x".repeat(EXECUTOR_DIAGNOSTICS_LIMITS.max_final_text_bytes));
-    const content = readFileSync(join(r.execDir, "phases", "fix_add_implementation", "executor-output.json"), "utf8");
+    const content = readFileSync(join(r.execDir, "phases", "fix_add_implementation", "executor-output-0.json"), "utf8");
     assert.ok(!content.includes("x".repeat(3000)), "oversized tail not persisted");
   } finally { cleanup(r); }
 });
@@ -309,7 +309,7 @@ test("C4J-4 synthetic secret blocks output-diagnostic persistence without echo",
     const held = readJournalEvent(r.execDir, "PHASE_HELD");
     assert.ok(held, "PHASE_HELD present");
     assert.equal(held.payload.reason, "EXECUTOR_OUTPUT_PERSISTENCE_FAILED");
-    assert.ok(!existsSync(join(r.execDir, "phases", "fix_add_implementation", "executor-output.json")));
+    assert.ok(!existsSync(join(r.execDir, "phases", "fix_add_implementation", "executor-output-0.json")));
     for (const f of readdirSync(join(r.execDir, "journal")).filter((x) => x.endsWith(".json"))) {
       assert.ok(!readFileSync(join(r.execDir, "journal", f), "utf8").includes(secret));
     }
@@ -340,7 +340,7 @@ test("C4J-6 output diagnostic artifact is written before the EXECUTOR_COMPLETED 
   const r = await runDurable({ executorStdout: "All evidence collected.", executorMetadata: diagMetadata() });
   try {
     assert.equal(r.result.final, "PASS");
-    const artifactPath = join(r.execDir, "phases", "fix_add_implementation", "executor-output.json");
+    const artifactPath = join(r.execDir, "phases", "fix_add_implementation", "executor-output-0.json");
     assert.ok(existsSync(artifactPath), "artifact exists");
     const artifactMtime = statSync(artifactPath).mtimeMs;
     const completed = readJournalEvent(r.execDir, "EXECUTOR_COMPLETED");
@@ -362,7 +362,7 @@ test("C4J-7 successful path keeps a harness-owned implementation-evidence artifa
     assert.ok(!journal.includes("PHASE_HELD"));
     assert.ok(!existsSync(join(r.execDir, "phases", "fix_add_implementation", "executor-diagnostics.json")));
     // the persisted artifact is the harness-owned implementation evidence
-    const ev = JSON.parse(readFileSync(join(r.execDir, "phases", "fix_add_implementation", "implementation-evidence.json"), "utf8"));
+    const ev = JSON.parse(readFileSync(join(r.execDir, "phases", "fix_add_implementation", "implementation-evidence-0.json"), "utf8"));
     assert.ok(ev && typeof ev === "object");
     assert.equal(ev.schema_version, "autoloop.implementation-evidence/v1");
     assert.equal(ev.executor_invocation.role, "executor");

@@ -1,0 +1,24 @@
+{
+  "schema": "autoloop.durable-execution-bakeoff-result/de1r/v1",
+  "card": "AUTOLOOP-PI-GRAPH-DE1R",
+  "generatedAt": "2026-08-08T05:29:00.000Z",
+  "supersedes": { "de1": "AUTOLOOP-PI-GRAPH-DE1 selection held as PROVISIONAL: EXISTING AUTOLOOP LEADS (external review HOLD / DE1_RESEARCH_EXTENSION_REQUIRED, 2026-08-08)" },
+  "winner": {
+    "candidate": "A — Existing AutoLoop durable execution (STACK_A)",
+    "outcome": "PASS / EXISTING_DURABLE_EXECUTION_SELECTED",
+    "rationale": [
+      "DE-1R ran Candidate B (Temporal) as a LIVE server deployment with the same real-SIGKILL failure classes (S0-S6). The provisional selection is now finalized by measurement, not assumption.",
+      "Temporal recovers automatically (re-dispatch + deterministic replay, zero lost results) — a genuine improvement over STACK_A's manual resume and F1/F2/F3 gaps.",
+      "But Temporal's at-least-once activity semantics re-execute the ENTIRE writer activity from scratch after a mid-activity kill and duplicate the committed side effect unless the app implements an idempotency pattern (S3 vs S4). STACK_A already fails the writer CLOSED (0 duplicates in all 22 DE-1 runs). The writer-dedup burden is NOT removed by Temporal — it is relocated to app code that DE-2 would add to STACK_A anyway.",
+      "Temporal does not provide an automatic exactly-once workflowId guard after completion (S5: default reuse allows a new execution; REJECT_DUPLICATE only blocks while running), whereas STACK_A's repeated resume returns COMPLETE with zero re-execution (T11).",
+      "Corrupt-state handling: STACK_A rejects a tampered checkpoint at resume time; Temporal/SQLite detects corruption but validates lazily on access (S6). Both fail closed; STACK_A's detection is proactive.",
+      "Footprint: 1 server process (196MB) + DB + 3 listeners + worker + SDK (154 packages) + workflow versioning vs zero added services for STACK_A.",
+      "F1/F2/F3 (the only real recoverability gaps found in DE-1) are bounded, in-process, fail-closed fixes squarely in DE-2 scope — not architectural gaps requiring a workflow runtime.",
+      "AutoLoop's graph model does not require durable timers/signals/long-running workflows (DE-1 fitNotes).",
+      "Restate is eliminated by the Stage 13 gate (SEC-1 @scarf/scarf phone-home BLOCKER + SEC-2 BSL), re-verified live (see de1r-restate-disposition.json)."
+    ]
+  },
+  "selectionStatus": "FINALIZED — DE-1 provisional selection (EXISTING AUTOLOOP LEADS) upgraded to a measured final: PASS / EXISTING_DURABLE_EXECUTION_SELECTED",
+  "nextStep": "DE-2 — Native Durable Execution Hardening: (1) wire STACK_A behind runColimaGraph (production Graph path durability), (2) complete the resume post-head whitelist (F1), (3) fix the resumed-orchestrator journal/revision edge (F2/F3), (4) telemetry replay-awareness (D7), (5) writer worktree restoration policy. Optionally adopt Temporal's idempotency commit-token pattern as a reference for DE-2 writer dedup.",
+  "recommendation": "Do NOT introduce Temporal or Restate as production dependencies. The existing durable layer (STACK_A) remains the correct base; its F1/F2/F3 gaps are bounded DE-2 hardening work."
+}

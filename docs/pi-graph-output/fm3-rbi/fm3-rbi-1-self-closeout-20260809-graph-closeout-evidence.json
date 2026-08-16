@@ -1,0 +1,144 @@
+{
+  "schema": "autoloop.review-bundle.graph-closeout-evidence/v1",
+  "graphRunId": "fm3-rbi-1-self-closeout-20260809",
+  "final": "PASS",
+  "holdCode": null,
+  "reason": null,
+  "task": {
+    "cardId": "AUTOLOOP-REVIEW-BUNDLE-INVENTORY-REPAIR-1",
+    "cardTitle": "Review Bundle Inventory Consistency Repair (authorized / touched / CARD_IMPLEMENTATION_FILES cross-check)",
+    "cardType": "repair"
+  },
+  "scheduler": {
+    "verdict": "PASS",
+    "order": [
+      "R1-audit-inventory",
+      "W1-implement-consistency",
+      "V1-verify-regression"
+    ],
+    "statuses": {
+      "R1-audit-inventory": "passed",
+      "W1-implement-consistency": "passed",
+      "V1-verify-regression": "passed"
+    },
+    "skipped": [],
+    "writerViolations": [],
+    "leaseHolderAfter": null
+  },
+  "nodes": [
+    {
+      "nodeId": "R1-audit-inventory",
+      "phaseExecutionId": "exec_fm3rbi_r1",
+      "taskType": "audit_inventory",
+      "dependencies": [],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": "2026-08-09T00:30:00.000Z",
+      "completedAt": "2026-08-09T00:35:00.000Z",
+      "worktreeVerified": true,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 0,
+        "failed": 0,
+        "total": 0
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "W1-implement-consistency",
+      "phaseExecutionId": "exec_fm3rbi_w1",
+      "taskType": "write_inventory_consistency",
+      "dependencies": [
+        "R1-audit-inventory"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": "2026-08-09T00:35:00.000Z",
+      "completedAt": "2026-08-09T01:20:00.000Z",
+      "worktreeVerified": true,
+      "worktreeRevoked": true,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 27,
+        "failed": 0,
+        "total": 27
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "V1-verify-regression",
+      "phaseExecutionId": "exec_fm3rbi_v1",
+      "taskType": "verify_regression",
+      "dependencies": [
+        "W1-implement-consistency"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": "2026-08-09T01:20:00.000Z",
+      "completedAt": "2026-08-09T01:35:00.000Z",
+      "worktreeVerified": true,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 269,
+        "failed": 0,
+        "total": 269
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    }
+  ],
+  "transitions": [
+    {
+      "phaseId": "R1-audit-inventory",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    },
+    {
+      "phaseId": "W1-implement-consistency",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    },
+    {
+      "phaseId": "V1-verify-regression",
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "lifecycleTransitions": [
+        {
+          "phase": "reviewer_verdict",
+          "attempt": 0,
+          "status": null,
+          "verdict": "PASS",
+          "recommended_next_action": "STOP"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "schema": "autoloop.review-bundle.graph-closeout-evidence/v1",
+  "graphRunId": "ta1-surface-reseal-20260809",
+  "final": "PASS",
+  "holdCode": null,
+  "reason": null,
+  "task": {
+    "cardId": "AUTOLOOP-TA1",
+    "cardTitle": "Task Admission + Risk Tier + Capability Usage Policy Research & Design (TA-1)",
+    "cardType": "research"
+  },
+  "scheduler": {
+    "verdict": "PASS",
+    "order": [
+      "R1-audit-capabilities",
+      "W1-design-admission",
+      "V1-verify-contract"
+    ],
+    "statuses": {
+      "R1-audit-capabilities": "passed",
+      "W1-design-admission": "passed",
+      "V1-verify-contract": "passed"
+    },
+    "skipped": [],
+    "writerViolations": [],
+    "leaseHolderAfter": null
+  },
+  "nodes": [
+    {
+      "nodeId": "R1-audit-capabilities",
+      "phaseExecutionId": "exec_ta1_r1",
+      "taskType": "audit_capability_inventory",
+      "dependencies": [],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786206600000,
+      "completedAt": 1786206850000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 23,
+        "failed": 0,
+        "total": 23,
+        "note": "23 existing capabilities audited with full R1 attributes (purpose/trigger/caller/permissions/side-effects/cost/failure/isolation/evidence/when-unnecessary/when-mandatory)"
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "W1-design-admission",
+      "phaseExecutionId": "exec_ta1_w1",
+      "taskType": "write_design_deliverables",
+      "dependencies": [
+        "R1-audit-capabilities"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786206850000,
+      "completedAt": 1786208500000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 17,
+        "failed": 0,
+        "total": 17,
+        "note": "17 deliverable/evidence files produced under docs/pi-graph-output/ta1/ (15 JSON + card spec + summary)"
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    },
+    {
+      "nodeId": "V1-verify-contract",
+      "phaseExecutionId": "exec_ta1_v1",
+      "taskType": "verify_machine_contract",
+      "dependencies": [
+        "W1-design-admission"
+      ],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": 1786208500000,
+      "completedAt": 1786209000000,
+      "worktreeVerified": null,
+      "worktreeRevoked": false,
+      "subagentResultStatus": "PASS",
+      "subagentTestResults": {
+        "passed": 18,
+        "failed": 0,
+        "total": 18,
+        "note": "scripts/ta1-verify.mjs 18/18 checks PASS (V1-V18, incl. V18 three-way delta consistency); independent review PASS 0 blocking; regression governance 270/270, review-bundle 26/26, graph-closeout 25/25, lifecycle 43/43, delivery 16/16; all delta counts in the surface narrative are derived from the machine delta"
+      },
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    }
+  ],
+  "transitions": []
+}

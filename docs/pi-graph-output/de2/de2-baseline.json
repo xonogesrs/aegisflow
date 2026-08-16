@@ -1,0 +1,29 @@
+{
+  "schema": "autoloop.de2-baseline/v1",
+  "card": "AUTOLOOP-PI-GRAPH-DE2",
+  "recordedAt": "2026-08-08T05:50:00Z",
+  "repository": "git@github.com:xonogesrs/autoloop.git",
+  "branch": "governance/reversible-lifecycle-draft-pr",
+  "head": "2e897e995202c0c8c079c5fdc96b9f5d42d50d25",
+  "treeSha": "7ca2c9100b208e15647ff1e0524ffc4e0857e7e0",
+  "worktreePath": "/Volumes/NVM2T/Development/autoloop",
+  "dirty": {
+    "porcelainDigest": "b9aeb223a555cf704e754a7902322ae5ebad7a4d33b8cbeaaeb50dc4cbd89f43",
+    "dirtyEntries": 52,
+    "modifiedTracked": ["package.json", "src/v2/execution-orchestrator.mjs", "src/v2/phase-task-card.mjs", "test/v2/test-pre-decomposition-interruption.mjs"],
+    "untrackedFiles": 173,
+    "note": "pre-existing dirty set identical to the DE-1 bundle baseline; NOT reset/cleaned per Stage 0"
+  },
+  "predecessors": {
+    "cbm4": { "status": "PASS", "delivery": "20260808-AUTOLOOP-PI-GRAPH-CBM4-1-ea9832df-PASS-delivery.json" },
+    "cost1": { "status": "PASS", "delivery": "20260807-AUTOLOOP-PI-GRAPH-COST1-1-185a348f-PASS-delivery.json" },
+    "de1r": { "status": "PASS", "delivery": "docs/pi-graph-output/de1r/external-review-delivery-2ff86a26.json", "bundle": "docs/pi-graph-output/de1r/card-closeout-bundle-20260808-2ff86a26.txt" },
+    "de1": { "status": "HOLD_LIFTED -> PASS / EXISTING_DURABLE_EXECUTION_SELECTED -> CLOSED", "resolution": "docs/pi-graph-output/de1/de1-external-review-resolution.json" }
+  },
+  "runtimeIdentities": {
+    "graphRunner": "runColimaGraph (src/runtime/colima-graph-runner.mjs) -> runExecutionOrchestrator (src/v2/execution-orchestrator.mjs) -> runDecompositionGraph (src/v2/runner.mjs, sealed) -> runLifecycle (src/lifecycle-runner.mjs)",
+    "durableStack": "STACK_A: src/autoloop.mjs -> runDurableAutoLoop/resumeAutoLoop (src/v2/durable-execution.mjs) over RunEvidenceStore (src/evidence/run-evidence-store.mjs) + checkpoint-bridge (src/v2/checkpoint-bridge.mjs) + sealed C2D checkpoint-store (src/c2d/checkpoint-store.mjs) + lease/permit (src/c2d/lease.mjs, permit.mjs)",
+    "providerSeam": "autoloop.durable-execution-provider/v1 (docs/pi-graph-output/de1/de1-provider-contract.json): 12 methods, all implemented natively by STACK_A"
+  },
+  "verdict": "baseline verified — proceed to Stage 1"
+}

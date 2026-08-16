@@ -284,11 +284,11 @@ test("C4Q-10 evidence artifact SHA and journal references are consistent", async
     const ev = evResult.evidence;
     const store = new RunEvidenceStore({ root, executionId: RUN_ID, chainId: "c4q", checkpointId: "ckpt", repoRoot: cwd });
     store.init();
-    const written = store.writePhaseArtifact("p_impl", "implementation-evidence.json", ev);
+    const written = store.writePhaseArtifact("p_impl", "implementation-evidence-0.json", ev);
     const bundle = buildReviewEvidenceBundle({ executionId: RUN_ID, taskCard: card, attempt: 0, evidence: ev, observedChangedPaths: [] });
     assert.equal(bundle.ok, true);
     assert.equal(bundle.bundle.durable_references.evidence_artifact_sha256, written.sha256);
-    assert.equal(bundle.bundle.durable_references.evidence_artifact_path, "phases/p_impl/implementation-evidence.json");
+    assert.equal(bundle.bundle.durable_references.evidence_artifact_path, "phases/p_impl/implementation-evidence-0.json");
     assert.equal(bundle.bundle.durable_references.executor_completed_event.evidence_hash, sha256Text(canonicalJson(ev)));
   } finally { cleanup(cwd); cleanup(root); }
 });
@@ -472,14 +472,14 @@ test("C4Q-13 durable run: executor output diagnostic saved bounded; evidence har
     });
     assert.equal(result.final, "PASS", `run HOLD: reason=${result.reason} phases=${JSON.stringify(result.phaseResults)}`);
     const execDir = join(root, executionId);
-    const outputArtifact = join(execDir, "phases", "fix_add_implementation", "executor-output.json");
+    const outputArtifact = join(execDir, "phases", "fix_add_implementation", "executor-output-0.json");
     assert.ok(existsSync(outputArtifact), "executor output diagnostic must be persisted");
     const diag = JSON.parse(readFileSync(outputArtifact, "utf8"));
     assert.equal(diag.kind, "executor_output_diagnostic");
     assert.equal(diag.authoritative, false);
     assert.equal(diag.final_assistant_text.truncated, true, "bounded diagnostic must truncate");
     assert.ok(diag.final_assistant_text.stored_length <= 2048);
-    const evArtifact = join(execDir, "phases", "fix_add_implementation", "implementation-evidence.json");
+    const evArtifact = join(execDir, "phases", "fix_add_implementation", "implementation-evidence-0.json");
     assert.ok(existsSync(evArtifact));
     const ev = JSON.parse(readFileSync(evArtifact, "utf8"));
     assert.equal(ev.contract_id, phaseExecutionId(executionId, "fix_add_implementation"));

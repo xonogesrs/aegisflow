@@ -1,0 +1,21 @@
+{
+  "schema": "autoloop.external-review-delivery/v2",
+  "cardId": "AUTOLOOP-PI-GRAPH-DE2",
+  "fileName": "delivery.json",
+  "reviewBundleGenerated": true,
+  "reviewBundleValidated": true,
+  "reviewBundleDeliveryRequired": true,
+  "externalReviewStatus": "AWAITING_EXTERNAL_REVIEW",
+  "externalReviewStatusReason": null,
+  "delivery": {
+    "required": true,
+    "attempted": true,
+    "method": "sender-provided",
+    "attemptedAt": "2026-08-08T08:03:10.106Z",
+    "bundlePath": "docs/pi-graph-output/de2/card-closeout-bundle-20260808-1c546aba.txt",
+    "reviewBundleIdentity": "1c546aba2810b962f2fac3ee9c5b1b80a044c7b50afb24b699b729f08431e7b4",
+    "reviewBundleSha256": "5d28e3d57f57b84c1968ba21bf33e5881fa9b46bbba012885c1a004fd2d38c32"
+  },
+  "verdict": null,
+  "supersedes": null
+}

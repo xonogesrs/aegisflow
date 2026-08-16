@@ -50,7 +50,7 @@
       "properties": {
         "model": {
           "type": "string",
-          "description": "Must be in the DeepSeek executor allowlist. Currently: deepseek/deepseek-v4-flash, deepseek/deepseek-v4-pro."
+          "description": "Pi Agent executor model. Single-model policy (R9): deepseek/deepseek-v4-flash ONLY — no fallback, no routing, no deepseek-v4-pro. The executor allowlist contains exactly one entry: deepseek/deepseek-v4-flash. (Documentation reconciliation from TA-1: the legacy wording listing deepseek-v4-pro was removed WITHOUT enabling it.)"
         },
         "variant": { "type": ["string", "null"] },
         "agent": { "type": ["string", "null"] },

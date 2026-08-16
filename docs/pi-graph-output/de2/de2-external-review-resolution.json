@@ -1,0 +1,30 @@
+{
+  "schema": "autoloop.external-review-resolution/v1",
+  "cardId": "AUTOLOOP-PI-GRAPH-DE2",
+  "cardTitle": "Native Durable Execution Hardening (DE-2)",
+  "resolvedAt": "2026-08-08T23:05:00Z",
+  "reviewer": "Controller / External Reviewer",
+  "priorState": {
+    "externalReviewStatus": "HOLD",
+    "holdCode": "DE2_EXTERNAL_EXTENSION_REQUIRED",
+    "findingCode": "DE2_PRODUCTION_SUB_AGENT_RESUME_INCOMPLETE + DE2_REPAIR_SCOPE_EXCEEDED",
+    "bundleIdentity": "90d8676f1666bb186f9ea4a7aa25b5b3336072cd00f82b7fd0755843f9678690",
+    "findingsDigest": "d253db38a1b4da9f8c71df0f212f0ea073d6672105e5ea92a28f2fa409df4275",
+    "reason": "production sub-agent fresh-process resume was not fully wired（sub-agent resume wiring was the documented next step before Autonomous Research）and the DE-2 repair's file inventory exceeded the recorded authorized scope（formal scope resolution required）"
+  },
+  "resolution": {
+    "status": "HOLD_LIFTED",
+    "basis": "DE-2R — Production Sub-agent Resume Closure + DE-2 Repair Scope Resolution (AUTOLOOP-PI-GRAPH-DE2R), bundle 98a2ba3b4b0e247dd540fa6b3a9a2a0dbb6baf772499f6e7fcf4f8905e427f83, external review verdict PASS (AUTOLOOP_PI_GRAPH_DE2R_EXTERNAL_REVIEW_CONFIRMED, externalReviewComplete=true)",
+    "de2rEvidence": {
+      "cardSpec": "docs/pi-graph-output/de2r/DE-2R-card-spec.md",
+      "probe": "docs/pi-graph-output/de2r/de2r-subagent-resume.json",
+      "verdict": "docs/pi-graph-output/de2r/de2r-external-review-verdict.md"
+    }
+  },
+  "finalDisposition": {
+    "verdict": "PASS / AUTOLOOP_NATIVE_DURABLE_PRODUCTION_GRAPH_CONFIRMED",
+    "status": "DE-2 CLOSED — the DE-2 HOLD is lifted via DE-2R; the native durable production Graph path (runSubagentGraph → runDurableGraph → runColimaGraph, durable by default) plus the production sub-agent fresh-process resume entry (resumeSubagentGraph) is formally confirmed by measurement (real-SIGKILL crash matrix + canonical colima regression)",
+    "previousHold": "HOLD / DE2_EXTERNAL_EXTENSION_REQUIRED (DE-2 external review, 2026-08-08T22:47:00Z, bundle 90d8676f…)"
+  },
+  "nextStep": "Autonomous Research Escalation — the production sequence Memory -> code/repository evidence -> tests/probes -> official docs/upstream -> broader web -> bounded experimental bake-off -> HOLD only for genuine authority/manual/secret boundaries; long-running research graphs now survive crashes with full production sub-agent recovery (DE-2/DE-2R)."
+}

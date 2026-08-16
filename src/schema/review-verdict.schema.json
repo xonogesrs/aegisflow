@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AutoLoop review verdict artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "jobId", "lineageId", "generation",
+    "candidateIdentity", "specIdentity", "findingsDigest",
+    "reviewerIdentity", "verdict", "summary", "recommendedNextAction", "createdAt"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "autoloop.review-verdict/v1" },
+    "jobId": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "lineageId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "generation": { "type": "integer", "minimum": 1 },
+    "candidateIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changedTreeIdentity", "patchSha256", "currentHead", "baseHead", "repository", "branch"],
+      "properties": {
+        "changedTreeIdentity": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "patchSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "currentHead": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "baseHead": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "repository": { "type": "string", "minLength": 1 },
+        "branch": { "type": "string", "minLength": 1 }
+      }
+    },
+    "specIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["specId", "specDigest"],
+      "properties": {
+        "specId": { "type": "string", "minLength": 1 },
+        "specDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "findingsDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "reviewerIdentity": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "verdict": { "type": "string", "enum": ["PASS", "REPAIR", "HOLD"] },
+    "summary": { "type": "string", "minLength": 1 },
+    "recommendedNextAction": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" }
+  }
+}

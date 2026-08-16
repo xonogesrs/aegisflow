@@ -437,3 +437,42 @@ test("C2: split pair with one half missing → HOLD MISSING_ADAPTER_PAIR before 
   assert.equal(outcome.reason, "MISSING_ADAPTER_PAIR");
   assert.equal(executorAdapter.callRecord.length, 0, "no adapter call before fail-closed HOLD");
 });
+
+// VCA-1 Phase 0C — the reviewer prompt (sectionAuthority) has always claimed
+// "You have NO tools", but prior to this fix the runner passed the SAME
+// taskCard.toolPolicy to both roles, so a permissive executor toolPolicy
+// silently reached the reviewer's Pi invocation too. The reviewer role is
+// verification-only by contract, so its toolPolicy is now hard-pinned in
+// lifecycle-runner.mjs regardless of what taskCard.toolPolicy says.
+test("VCA-1 Phase 0C: reviewer role always gets a hard no-tools toolPolicy, even when taskCard.toolPolicy is permissive", async () => {
+  const seenToolPolicy = { executor: undefined, reviewer: undefined };
+  const adapter = createScriptedAdapter([
+    {
+      expect: { phase: "executor", attempt: 0 },
+      result: (request) => {
+        seenToolPolicy.executor = request.toolPolicy;
+        return completed(evidenceJson());
+      },
+    },
+    {
+      expect: { phase: "reviewer", attempt: 0 },
+      result: (request) => {
+        seenToolPolicy.reviewer = request.toolPolicy;
+        return completed(verdictJson({ verdict: "PASS", recommended_next_action: "STOP" }));
+      },
+    },
+  ]);
+
+  const permissiveToolPolicy = { mode: "allowlist", tools: ["bash"] };
+  const outcome = await runLifecycle({
+    cwd: "/tmp",
+    taskCard: baseCard({ toolPolicy: permissiveToolPolicy }),
+    adapter,
+    maxRepairAttempts: 0,
+    timeoutMs: 1000,
+  });
+
+  assert.equal(outcome.final, "PASS");
+  assert.deepEqual(seenToolPolicy.executor, permissiveToolPolicy, "executor keeps the task card's own toolPolicy");
+  assert.deepEqual(seenToolPolicy.reviewer, { mode: "no-tools" }, "reviewer is hard-pinned to no-tools regardless of taskCard.toolPolicy");
+});
