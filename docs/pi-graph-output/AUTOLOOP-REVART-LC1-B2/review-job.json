@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "autoloop.review-job/v1",
+  "lineageId": "AUTOLOOP-REVART-LC1-B2",
+  "jobId": "AUTOLOOP-REVART-LC1-B2.g0001",
+  "generation": 1,
+  "candidateIdentity": {
+    "changedTreeIdentity": "5e41f4ce4dc6ad2ea1c95b8da4bb0408aa9af64cf659c7bc57618298b9f6affc",
+    "patchSha256": "3ad90349dc5626a1b914654e0ef39c488f01bb40622ed03ac859d54766490a3b",
+    "currentHead": "421739a20c131c35639d008cadca3b37a673f03c",
+    "baseHead": "421739a20c131c35639d008cadca3b37a673f03c",
+    "repository": "xonogesrs/autoloop",
+    "branch": "governance/decomp-opt1-design-freeze"
+  },
+  "specId": "AUTOLOOP-REVART-LC1-B2",
+  "specDigest": "b97f6e8c93aaea9c87ff995ef153c73d66cc9831bab5ae5dd2f72ebf1ba9e01e",
+  "reviewRound": 1,
+  "repairRound": 0,
+  "state": "ACCEPTED",
+  "stateVersion": 8,
+  "requiredArtifacts": [
+    {
+      "role": "findings",
+      "required": true,
+      "writeMode": "exclusive-create"
+    },
+    {
+      "role": "verdict",
+      "required": true,
+      "writeMode": "exclusive-create"
+    }
+  ],
+  "repoIdentity": "xonogesrs/autoloop",
+  "worktreeIdentity": "/private/tmp/autoloop",
+  "lifecycleIdentity": {
+    "admissionId": "b26adefcce25b455a697b2a6b8f64d2b8def59b03ec7d69734e0164a0114b532",
+    "bindingDigest": "ac5a32a4bfe42230edec8d903edd300c142970de911551f6c167af1f22ec3acf",
+    "sourceAuthorityDigest": "6c49d345c8741b771800e99c97816fbcee374a945c679a5289e6d9e7056ee31e",
+    "outDir": "/private/tmp/autoloop/docs/pi-graph-output/revart-lc1-b2",
+    "baselineContentDigest": "a3b0cebe3df9148993a53a98edf9af93767539fc4859e988cce09ad470857339"
+  },
+  "findingsDigest": "dbecf9d50e3a91dd81414c52140966bc58fbbb87484925cd5fc6b674e5dcbec7",
+  "verdictDigest": "5893aae0f41c72e5ad719f68f8663b8548d96c2c4f28e1f0cb09b7c21200ea7e",
+  "acceptedAt": "2026-08-16T13:15:53.625Z",
+  "acceptanceAuthority": "dogfood-controller-session"
+}

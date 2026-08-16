@@ -1,0 +1,224 @@
+{
+  "schema": "autoloop.task-admission/v1",
+  "schema_version": 1,
+  "task_id": "AUTOLOOP-REVART-LC1-B2-TASK",
+  "classifier_version": "1.0.0",
+  "size": "M",
+  "risk": "HIGH",
+  "profile": "HIGH",
+  "size_details": {
+    "size": "M",
+    "total_score": 10,
+    "under_classified": false,
+    "dimensions": {
+      "affected_files": {
+        "score": 3,
+        "reasons": [
+          "multi-file"
+        ]
+      },
+      "affected_subsystems": {
+        "score": 3,
+        "reasons": [
+          "multi-subsystem"
+        ]
+      },
+      "dependency_depth": {
+        "score": 0,
+        "reasons": [
+          "none"
+        ]
+      },
+      "ambiguity": {
+        "score": 0,
+        "reasons": [
+          "exact text"
+        ]
+      },
+      "expected_execution_steps": {
+        "score": 0,
+        "reasons": [
+          "one"
+        ]
+      },
+      "verification_burden": {
+        "score": 2,
+        "reasons": [
+          "verify"
+        ]
+      },
+      "external_dependencies": {
+        "score": 2,
+        "reasons": [
+          "network"
+        ]
+      },
+      "concurrency_potential": {
+        "score": 0,
+        "reasons": [
+          "none"
+        ]
+      },
+      "statefulness": {
+        "score": 0,
+        "reasons": [
+          "stateless"
+        ]
+      },
+      "rollback_complexity": {
+        "score": 0,
+        "reasons": [
+          "revert"
+        ]
+      }
+    },
+    "tierRange": "10..15"
+  },
+  "risk_details": {
+    "risk": "HIGH",
+    "signals": [
+      {
+        "signal_id": "RS.NETWORK_REMOTE",
+        "class": "HIGH",
+        "triggered": true,
+        "reason": "remote fetch"
+      }
+    ],
+    "escalation_log": [
+      ">=1 HIGH signal -> HIGH (1)"
+    ],
+    "strict_reviewer_routing": true
+  },
+  "reasons": [
+    "size=M (score 10)",
+    "risk=HIGH (1 triggered signals)",
+    "profile=HIGH"
+  ],
+  "capabilities": {
+    "required": [
+      "CAP.CHECKPOINT_RESUME",
+      "CAP.COLIMA_ISOLATION",
+      "CAP.DURABLE_EXECUTION",
+      "CAP.EXTERNAL_REVIEW_DELIVERY",
+      "CAP.INDEPENDENT_REVIEW",
+      "CAP.READONLY_SUBAGENT",
+      "CAP.REVIEW_BUNDLE",
+      "CAP.TASK_DECOMPOSITION",
+      "CAP.WORKTREE_ISOLATION",
+      "CAP.WRITER_SUBAGENT"
+    ],
+    "allowed": [
+      "CAP.MEMORY_RETRIEVAL"
+    ],
+    "denied": [
+      "CAP.BOUNDED_REPAIR",
+      "CAP.C2D_ATOMIC_STATE",
+      "CAP.CLOSEOUT_STATE",
+      "CAP.DIRECT_EXECUTION",
+      "CAP.EVIDENCE_GENERATION",
+      "CAP.GRAPH_SCHEDULER",
+      "CAP.LIFECYCLE_GOVERNANCE",
+      "CAP.MEMORY_WRITEBACK",
+      "CAP.PI_TRANSPORT",
+      "CAP.RISK_NORMALIZATION",
+      "CAP.SECRET_SECURITY",
+      "CAP.SINGLE_WRITER_LEASE",
+      "CAP.TELEMETRY"
+    ]
+  },
+  "lifecycle_profile": {
+    "direct_execution_allowed": false,
+    "decomposition_required": true,
+    "decomposition_depth_bound": 32,
+    "research_first_required": true,
+    "readonly_exploration_required": true,
+    "subagent_required": true,
+    "writer_allowed": true
+  },
+  "isolation_policy": "colima",
+  "durability_policy": "durable_resume",
+  "memory_policy": {
+    "retrieval_allowed": true,
+    "writeback_allowed": false
+  },
+  "review_policy": {
+    "strength": "external",
+    "independent_review_required": true,
+    "external_review_required": true,
+    "strict_reviewer_routing": true
+  },
+  "repair_budget": 1,
+  "evidence_policy": "persistent",
+  "human_gates": [
+    "controller_pre_execution",
+    "controller_closeout"
+  ],
+  "review_surface_policy": {
+    "authoritative_single_surface": true,
+    "chain": "linear",
+    "generation_policy": [
+      "supersede_previous",
+      "preserve_history",
+      "self_contained_chain",
+      "no_chat_dependence",
+      "revalidate_before_delivery"
+    ]
+  },
+  "authority_binding": {
+    "authority_record_digest": "6c49d345c8741b771800e99c97816fbcee374a945c679a5289e6d9e7056ee31e",
+    "subset_of_lifecycle_authorization": true
+  },
+  "fail_closed": true,
+  "mutation_scope": [
+    "src/schema/review-job.schema.json",
+    "src/governance/review-job.mjs",
+    "src/governance/review-lifecycle.mjs",
+    "src/admission/admission-gate.mjs",
+    "src/control-plane/coordinator.mjs",
+    "scripts/gov-controller-ingest-result.mjs",
+    "test/governance/test-review-job-convergence.mjs",
+    "test/control-plane/test-review-required-coordinator.mjs",
+    "test/governance/test-v3-gov-scripts.mjs",
+    "test/governance/test-review-lifecycle.mjs",
+    "docs/pi-graph-output/revart-lc1-b2/"
+  ],
+  "tool_permissions": [
+    "READ_ONLY",
+    "SCRATCH_WRITE"
+  ],
+  "extensions": {
+    "review_closeout": {
+      "schema": "autoloop.review-closeout/v1",
+      "card_id": "AUTOLOOP-REVART-LC1-B2",
+      "card_title": "Review-Job Materialization + Controller Ingest Convergence",
+      "card_type": "implementation",
+      "out_dir": "docs/pi-graph-output/revart-lc1-b2",
+      "spec_id": "AUTOLOOP-REVART-LC1-B2",
+      "spec_path": "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md",
+      "spec_digest": "b97f6e8c93aaea9c87ff995ef153c73d66cc9831bab5ae5dd2f72ebf1ba9e01e",
+      "repository": "xonogesrs/autoloop",
+      "worktree": "/private/tmp/autoloop",
+      "branch": "governance/decomp-opt1-design-freeze",
+      "base": "421739a20c131c35639d008cadca3b37a673f03c",
+      "base_head": "421739a20c131c35639d008cadca3b37a673f03c",
+      "authorized_scope": [
+        "src/schema/review-job.schema.json",
+        "src/governance/review-job.mjs",
+        "src/governance/review-lifecycle.mjs",
+        "src/admission/admission-gate.mjs",
+        "src/control-plane/coordinator.mjs",
+        "scripts/gov-controller-ingest-result.mjs",
+        "test/governance/test-review-job-convergence.mjs",
+        "test/control-plane/test-review-required-coordinator.mjs",
+        "test/governance/test-v3-gov-scripts.mjs",
+        "test/governance/test-review-lifecycle.mjs",
+        "docs/pi-graph-output/revart-lc1-b2/",
+        "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md"
+      ],
+      "bundle_path": "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-bundle.txt",
+      "source_authority_digest": "6c49d345c8741b771800e99c97816fbcee374a945c679a5289e6d9e7056ee31e"
+    }
+  },
+  "decision_time": "2026-08-16T13:13:34.539Z",
+  "admission_id": "b26adefcce25b455a697b2a6b8f64d2b8def59b03ec7d69734e0164a0114b532"
+}

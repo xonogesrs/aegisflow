@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "autoloop.review-findings/v1",
+  "jobId": "AUTOLOOP-REVART-LC1-B2.g0001",
+  "lineageId": "AUTOLOOP-REVART-LC1-B2",
+  "generation": 1,
+  "candidateIdentity": {
+    "changedTreeIdentity": "5e41f4ce4dc6ad2ea1c95b8da4bb0408aa9af64cf659c7bc57618298b9f6affc",
+    "patchSha256": "3ad90349dc5626a1b914654e0ef39c488f01bb40622ed03ac859d54766490a3b",
+    "currentHead": "421739a20c131c35639d008cadca3b37a673f03c",
+    "baseHead": "421739a20c131c35639d008cadca3b37a673f03c",
+    "repository": "xonogesrs/autoloop",
+    "branch": "governance/decomp-opt1-design-freeze"
+  },
+  "specIdentity": {
+    "specId": "AUTOLOOP-REVART-LC1-B2",
+    "specDigest": "b97f6e8c93aaea9c87ff995ef153c73d66cc9831bab5ae5dd2f72ebf1ba9e01e"
+  },
+  "reviewerIdentity": "controller-dogfood-reviewer",
+  "findings": [
+    {
+      "findingId": "DF-1",
+      "severity": "INFO",
+      "subject": "ACCEPTED mint uniqueness",
+      "description": "acceptReviewJob has exactly one call site (scripts/gov-controller-ingest-result.mjs); ensureCurrentReviewJob never advances a job past REQUIRED.",
+      "recommendedDisposition": "verified"
+    },
+    {
+      "findingId": "DF-2",
+      "severity": "INFO",
+      "subject": "B2-2 authority-bound job root",
+      "description": "review-job root is dirname(resolve(gitTopLevel(binding.worktree), binding.out_dir)); process.cwd() plays no role; N3 proves a foreign cwd cannot relocate the job; every ensure re-verifies against persisted state.outDir (REVIEW_JOB_ROOT_BINDING_DRIFT).",
+      "recommendedDisposition": "verified"
+    },
+    {
+      "findingId": "DF-3",
+      "severity": "INFO",
+      "subject": "B2-3 lifecycle identity chain",
+      "description": "admissionId, bindingDigest, sourceAuthorityDigest, outDir, baselineContentDigest persisted on the job with seven drift guards (N2, N4-N9); lineage/jobId/spec/live-candidate also verified on every resume.",
+      "recommendedDisposition": "verified"
+    },
+    {
+      "findingId": "DF-4",
+      "severity": "INFO",
+      "subject": "B2-5 Controller ingest independence",
+      "description": "ingest derives the governed root from v3 closeout_metadata and validates the job chain vs authorityDigest(record) + persisted state before acceptance — never trusts delivery.json claims, caller metadata, filenames, or cwd.",
+      "recommendedDisposition": "verified"
+    },
+    {
+      "findingId": "DF-5",
+      "severity": "INFO",
+      "subject": "B2-6 terminal semantics",
+      "description": "state-driven terminal after completion: APPLIED+PASS + review outstanding is REVIEW_PENDING (never PASS); governance-domain re-entry resumes and reuses the job; implementation-domain mutation HOLDs via REVIEW_JOB_CANDIDATE_DRIFT.",
+      "recommendedDisposition": "verified"
+    },
+    {
+      "findingId": "DF-6",
+      "severity": "INFO",
+      "subject": "Resume matrix + acceptance tests",
+      "description": "B2-7 matrix A-E and T1-T4 + N1-N12 all green; durable checkpoint resume keeps exactly one job and the frozen admission identity.",
+      "recommendedDisposition": "verified"
+    },
+    {
+      "findingId": "OBS-1",
+      "severity": "MINOR",
+      "subject": "Coordinator candidate compare is plan-time",
+      "description": "the consumer gate feeds the plan-time liveReviewBinding; for post-acceptance verdict consumption the candidate compare should be re-derived at consumption time (ingest already recomputes independently at acceptance).",
+      "recommendedDisposition": "defer"
+    },
+    {
+      "findingId": "OBS-2",
+      "severity": "MINOR",
+      "subject": "Zero-digest authority_record_digest",
+      "description": "default remains unguarded for lifecycle-inactive admissions (guarded by ZERO64 in resolveReviewCloseout when a binding is present).",
+      "recommendedDisposition": "defer"
+    },
+    {
+      "findingId": "OBS-3",
+      "severity": "MINOR",
+      "subject": "Legacy external-review-result.json readers",
+      "description": "still read by integration-commit/draft-pr/push gates (CLI-only flows, not wired into runAdmittedGraph/coordinator).",
+      "recommendedDisposition": "defer"
+    }
+  ],
+  "summary": "Independent review of the REVART-LC1-B2 changeset (review-job materialization + controller ingest convergence).",
+  "createdAt": "2026-08-16T13:15:53.317Z"
+}

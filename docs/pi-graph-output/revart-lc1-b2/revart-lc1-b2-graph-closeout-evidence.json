@@ -1,0 +1,41 @@
+{
+  "schema": "autoloop.review-bundle.graph-closeout-evidence/v1",
+  "graphRunId": "revart-lc1-b2",
+  "final": "PASS",
+  "holdCode": null,
+  "reason": null,
+  "task": {
+    "cardId": "AUTOLOOP-REVART-LC1-B2",
+    "cardTitle": "Review-Job Materialization + Controller Ingest Convergence",
+    "cardType": "implementation"
+  },
+  "scheduler": {
+    "verdict": null,
+    "order": [],
+    "statuses": {},
+    "skipped": [],
+    "writerViolations": [],
+    "leaseHolderAfter": null
+  },
+  "nodes": [
+    {
+      "nodeId": "P1",
+      "phaseExecutionId": null,
+      "taskType": "implementation",
+      "dependencies": [],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": null,
+      "completedAt": null,
+      "timingSource": "UNKNOWN",
+      "worktreeVerified": null,
+      "worktreeRevoked": null,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    }
+  ],
+  "transitions": []
+}

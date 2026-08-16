@@ -1,0 +1,80 @@
+{
+  "schema": "autoloop.closeout-state/v1",
+  "task": {
+    "cardId": "AUTOLOOP-REVART-LC1-B2",
+    "cardTitle": "Review-Job Materialization + Controller Ingest Convergence",
+    "cardType": "implementation"
+  },
+  "requiresReview": true,
+  "reviewRequiredAt": "2026-08-16T13:14:27.391Z",
+  "outDir": "/private/tmp/autoloop/docs/pi-graph-output/revart-lc1-b2",
+  "authorizedScope": [
+    "src/schema/review-job.schema.json",
+    "src/governance/review-job.mjs",
+    "src/governance/review-lifecycle.mjs",
+    "src/admission/admission-gate.mjs",
+    "src/control-plane/coordinator.mjs",
+    "scripts/gov-controller-ingest-result.mjs",
+    "test/governance/test-review-job-convergence.mjs",
+    "test/control-plane/test-review-required-coordinator.mjs",
+    "test/governance/test-v3-gov-scripts.mjs",
+    "test/governance/test-review-lifecycle.mjs",
+    "docs/pi-graph-output/revart-lc1-b2/",
+    "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md"
+  ],
+  "baseline": {
+    "schema": "autoloop.card-inventory.baseline/v1",
+    "cardId": "AUTOLOOP-REVART-LC1-B2",
+    "capturedAt": "2026-08-16T13:14:27.357Z",
+    "repository": "git@github.com:xonogesrs/autoloop.git",
+    "branch": "governance/decomp-opt1-design-freeze",
+    "head": "421739a20c131c35639d008cadca3b37a673f03c",
+    "treeSha": "0aaa0ed6d560665836c3e1067bc16a2972acf22d",
+    "worktreePath": "/private/tmp/autoloop",
+    "dirtyPaths": [
+      "docs/pi-graph-output/revart-lc1-b2/admission.json",
+      "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-authority.json",
+      "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md"
+    ],
+    "untrackedFiles": [
+      "docs/pi-graph-output/revart-lc1-b2/admission.json",
+      "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-authority.json",
+      "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md"
+    ],
+    "canonicalLines": [
+      "?? docs/pi-graph-output/revart-lc1-b2/admission.json",
+      "?? docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-authority.json",
+      "?? docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md"
+    ],
+    "dirtyDigest": "dirty:64b3dbbd17baea30d42ca0e2cda8763a8aed4cd843ce1cfb9132ba83cfd2e017",
+    "attributionModel": "content-v1",
+    "pathShas": {
+      "docs/pi-graph-output/revart-lc1-b2/admission.json": "58ebe1af19aa99fc2e0e72d7ac0ea38d350f2c23256657ed2352a054e8130a69",
+      "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-authority.json": "e82ea2f03e149dc6349abb516aa599314b89383f7cfa643ecc6b94d90f017dcc",
+      "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md": "b97f6e8c93aaea9c87ff995ef153c73d66cc9831bab5ae5dd2f72ebf1ba9e01e"
+    },
+    "contentDigest": "a3b0cebe3df9148993a53a98edf9af93767539fc4859e988cce09ad470857339"
+  },
+  "reviewCloseout": {
+    "schema": "autoloop.review-closeout/v1",
+    "bindingDigest": "ac5a32a4bfe42230edec8d903edd300c142970de911551f6c167af1f22ec3acf",
+    "admissionId": "b26adefcce25b455a697b2a6b8f64d2b8def59b03ec7d69734e0164a0114b532"
+  },
+  "cardFiles": {
+    "closeoutOutputs": [
+      "docs/pi-graph-output/revart-lc1-b2/closeout-state.json",
+      "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-graph-closeout-evidence.json"
+    ]
+  },
+  "closeout": {
+    "status": "APPLIED",
+    "final": "PASS",
+    "stage": "REVIEW_BUNDLE_READY",
+    "bundleIdentity": "2d2931e4357385f6cc2afcd6207f9423adcedbb741e033834cb97aab6abafff2",
+    "bundleSha256": "4aa6ec5616b4a83db82ada39faeaaa045e679c55eb5a1c57762080e9631119ce",
+    "externalReviewStatus": "AWAITING_EXTERNAL_REVIEW",
+    "verdict": null,
+    "appliedAt": "2026-08-16T13:14:35.123Z",
+    "blockedReason": null
+  }
+}

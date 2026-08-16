@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "autoloop.review-verdict/v1",
+  "jobId": "AUTOLOOP-REVART-LC1-B2.g0001",
+  "lineageId": "AUTOLOOP-REVART-LC1-B2",
+  "generation": 1,
+  "candidateIdentity": {
+    "changedTreeIdentity": "5e41f4ce4dc6ad2ea1c95b8da4bb0408aa9af64cf659c7bc57618298b9f6affc",
+    "patchSha256": "3ad90349dc5626a1b914654e0ef39c488f01bb40622ed03ac859d54766490a3b",
+    "currentHead": "421739a20c131c35639d008cadca3b37a673f03c",
+    "baseHead": "421739a20c131c35639d008cadca3b37a673f03c",
+    "repository": "xonogesrs/autoloop",
+    "branch": "governance/decomp-opt1-design-freeze"
+  },
+  "specIdentity": {
+    "specId": "AUTOLOOP-REVART-LC1-B2",
+    "specDigest": "b97f6e8c93aaea9c87ff995ef153c73d66cc9831bab5ae5dd2f72ebf1ba9e01e"
+  },
+  "findingsDigest": "dbecf9d50e3a91dd81414c52140966bc58fbbb87484925cd5fc6b674e5dcbec7",
+  "reviewerIdentity": "controller-dogfood-reviewer",
+  "verdict": "PASS",
+  "summary": "B2 architecture verified: single job owner, authority-bound root, identity chain enforced at creation/resume/ingest; T1-T4 + N1-N12 green; regression 745/752 with the 7 pre-existing environment-bound failures unchanged.",
+  "recommendedNextAction": "Proceed to CBM live integration; close REVART-LC1.",
+  "createdAt": "2026-08-16T13:15:53.346Z"
+}

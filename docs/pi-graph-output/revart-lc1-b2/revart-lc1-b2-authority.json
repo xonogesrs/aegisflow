@@ -1,0 +1,94 @@
+{
+  "schema": "autoloop.lifecycle-authorization/v3",
+  "card_id": "AUTOLOOP-REVART-LC1-B2",
+  "run_id": "AUTOLOOP-REVART-LC1-B2-r1",
+  "issued_at": "2026-08-16T13:13:34.536Z",
+  "authorized_by": "controller",
+  "repository": "xonogesrs/autoloop",
+  "worktree": "/private/tmp/autoloop",
+  "branch": "governance/decomp-opt1-design-freeze",
+  "base": "421739a20c131c35639d008cadca3b37a673f03c",
+  "base_head": "421739a20c131c35639d008cadca3b37a673f03c",
+  "authorized_paths": [
+    "src/schema/review-job.schema.json",
+    "src/governance/review-job.mjs",
+    "src/governance/review-lifecycle.mjs",
+    "src/admission/admission-gate.mjs",
+    "src/control-plane/coordinator.mjs",
+    "scripts/gov-controller-ingest-result.mjs",
+    "test/governance/test-review-job-convergence.mjs",
+    "test/control-plane/test-review-required-coordinator.mjs",
+    "test/governance/test-v3-gov-scripts.mjs",
+    "test/governance/test-review-lifecycle.mjs",
+    "docs/pi-graph-output/revart-lc1-b2/",
+    "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md"
+  ],
+  "bundle_path": "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-bundle.txt",
+  "spec_path": "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md",
+  "closeout_metadata": {
+    "card_title": "Review-Job Materialization + Controller Ingest Convergence",
+    "card_type": "implementation",
+    "out_dir": "docs/pi-graph-output/revart-lc1-b2"
+  },
+  "lifecycle_authorization": {
+    "decomposition": {
+      "allowed": false,
+      "max_depth": 0,
+      "max_total_nodes": 0
+    },
+    "independent_review": {
+      "allowed": true,
+      "require_fresh_session": true,
+      "require_same_artifact_digest": true
+    },
+    "bounded_repair": {
+      "allowed": false,
+      "max_rounds": 0,
+      "scope_expansion": false
+    },
+    "checkpoint_commit": {
+      "allowed": false,
+      "require_local_gates_pass": true,
+      "require_clean_index_before_stage": true,
+      "require_expected_paths_only": true
+    },
+    "feature_branch_push": {
+      "allowed": false,
+      "branch_pattern": "governance/*",
+      "force_push": false,
+      "require_remote_ancestor_check": false
+    },
+    "draft_pr": {
+      "allowed": false,
+      "base_branch": "main",
+      "draft_only": true,
+      "create_if_missing": false,
+      "update_if_present": false
+    },
+    "external_review": {
+      "required": false,
+      "require_bundle": false,
+      "bundle_path": "docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-bundle.txt"
+    },
+    "review_unit": {
+      "allowed": true,
+      "repository_count": 1,
+      "worktree_count": 1,
+      "parent_card_count": 1,
+      "architecture_goal_count": 1,
+      "maximum_internal_milestones": 3,
+      "maximum_changed_paths": 64,
+      "maximum_patch_lines": 20000,
+      "maximum_repair_rounds": 1
+    },
+    "merge_main": {
+      "allowed": false
+    },
+    "release": {
+      "allowed": false
+    },
+    "seal": {
+      "allowed": false
+    }
+  }
+}

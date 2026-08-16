@@ -1,0 +1,314 @@
+================================================================================
+AUTOLOOP REVIEW BUNDLE (CLOSEOUT)
+================================================================================
+REVIEW_BUNDLE_SCHEMA: autoloop.review-bundle/v1
+REVIEW_BUNDLE_IDENTITY: 2d2931e4357385f6cc2afcd6207f9423adcedbb741e033834cb97aab6abafff2
+CARD_ID: AUTOLOOP-REVART-LC1-B2
+CARD_TITLE: Review-Job Materialization + Controller Ingest Convergence
+CARD_TYPE: implementation
+GENERATED_AT: 2026-08-16T13:14:35.119Z
+
+================================================================================
+1. Review Request
+================================================================================
+CARD_ID: AUTOLOOP-REVART-LC1-B2
+CARD_TITLE: Review-Job Materialization + Controller Ingest Convergence
+CARD_TYPE: implementation
+GRAPH_RUN_ID: revart-lc1-b2
+NODE_ID: P1
+PHASE_EXECUTION_ID: 
+STAGE_IDS: NOT_APPLICABLE
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+REQUESTED_REVIEW_VERDICT: PASS / REPAIR / HOLD
+This bundle is the single complete text artifact submitted for external review of card AUTOLOOP-REVART-LC1-B2.
+
+================================================================================
+1.5. Admission Decision
+================================================================================
+ADMISSION_SCHEMA: autoloop.task-admission/v1
+ADMISSION_TASK_ID: AUTOLOOP-REVART-LC1-B2-TASK
+ADMISSION_ID: b26adefcce25b455a697b2a6b8f64d2b8def59b03ec7d69734e0164a0114b532
+ADMISSION_SIZE: M
+ADMISSION_RISK: HIGH
+ADMISSION_PROFILE: HIGH
+ADMISSION_REPAIR_BUDGET: 1
+ADMISSION_EVIDENCE_POLICY: persistent
+ADMISSION_EXTERNAL_REVIEW_REQUIRED: true
+ADMISSION_CAPABILITIES_REQUIRED: CAP.CHECKPOINT_RESUME, CAP.COLIMA_ISOLATION, CAP.DURABLE_EXECUTION, CAP.EXTERNAL_REVIEW_DELIVERY, CAP.INDEPENDENT_REVIEW, CAP.READONLY_SUBAGENT, CAP.REVIEW_BUNDLE, CAP.TASK_DECOMPOSITION, CAP.WORKTREE_ISOLATION, CAP.WRITER_SUBAGENT
+ADMISSION_CAPABILITIES_ALLOWED: CAP.MEMORY_RETRIEVAL
+ADMISSION_CAPABILITIES_DENIED: CAP.BOUNDED_REPAIR, CAP.C2D_ATOMIC_STATE, CAP.CLOSEOUT_STATE, CAP.DIRECT_EXECUTION, CAP.EVIDENCE_GENERATION, CAP.GRAPH_SCHEDULER, CAP.LIFECYCLE_GOVERNANCE, CAP.MEMORY_WRITEBACK, CAP.PI_TRANSPORT, CAP.RISK_NORMALIZATION, CAP.SECRET_SECURITY, CAP.SINGLE_WRITER_LEASE, CAP.TELEMETRY
+ADMISSION_REASONS:
+  - size=M (score 10)
+  - risk=HIGH (1 triggered signals)
+  - profile=HIGH
+
+
+================================================================================
+2. Executive Status
+================================================================================
+EXECUTIVE_STATUS: PASS
+EXECUTION_PASS: true
+VERIFIER_PASS: true
+INDEPENDENT_REVIEW_PASS: true
+REVIEW_BUNDLE_READY: true
+REVIEW_BUNDLE_DELIVERY_REQUIRED: true
+EXTERNAL_REVIEW_STATUS: AWAITING_EXTERNAL_REVIEW
+SUMMARY: 1 node(s) in revart-lc1-b2; graph final PASS; closeout gate pending
+
+
+================================================================================
+3. Task Identity
+================================================================================
+CARD_ID: AUTOLOOP-REVART-LC1-B2
+CARD_TITLE: Review-Job Materialization + Controller Ingest Convergence
+CARD_TYPE: implementation
+GRAPH_RUN_ID: revart-lc1-b2
+NODE_ID: P1
+PHASE_EXECUTION_ID: NOT_APPLICABLE
+STAGE_IDS: NOT_APPLICABLE
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+
+
+================================================================================
+4. Repository and Worktree Identity
+================================================================================
+REPOSITORY: git@github.com:xonogesrs/autoloop.git
+BRANCH: governance/decomp-opt1-design-freeze
+HEAD: 421739a20c131c35639d008cadca3b37a673f03c
+TREE_SHA: 0aaa0ed6d560665836c3e1067bc16a2972acf22d
+WORKTREE_PATH: /private/tmp/autoloop
+BASELINE_DIRTY_DIGEST: dirty:64b3dbbd17baea30d42ca0e2cda8763a8aed4cd843ce1cfb9132ba83cfd2e017
+FINAL_DIRTY_DIGEST: dirty:b45319f74ae656a49b6d1b57f0c9d16c24dda375d0aa1dadcf943aa1c7767b65
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+5. Objective
+================================================================================
+Card closeout via state-driven mandatory closeout (AUTOLOOP-REVART-LC1-B2)
+
+================================================================================
+5.5. Budget Enforcement
+================================================================================
+BUDGET_ENFORCEMENT_SCHEMA: autoloop.budget-enforcement-result/v1
+BUDGET_AUTHORIZED: true
+BUDGET_SURFACE: production
+BUDGET_ADMISSION_ID: b26adefcce25b455a697b2a6b8f64d2b8def59b03ec7d69734e0164a0114b532
+BUDGET_ENVELOPE_ID: 960171102a53b9014365dd56a2cbd0b3972c298f9f72b20f0e2ef9236943daab
+BUDGET_ENVELOPE_SOURCE: profile
+BUDGET_STATE: CONTINUE
+BUDGET_APPROACHING_RATIO: 0.8
+BUDGET_CLOSEOUT_AUTHORIZED: false
+BUDGET_RECONCILIATION_DIVERGED: none
+BUDGET_DIMENSIONS:
+  - wall_clock_ms: limit=7200000 ms consumed=500 reserved=0 remaining=7199500
+  - node_execution_count: limit=128 count consumed=1 reserved=0 remaining=127
+  - sub_agent_execution_count: limit=24 count consumed=0 reserved=0 remaining=24
+  - repair_attempt_count: limit=2 count consumed=0 reserved=0 remaining=2
+  - verifier_reviewer_attempts: limit=8 count consumed=0 reserved=0 remaining=8
+  - retry_count: limit=4 count consumed=0 reserved=0 remaining=4
+BUDGET_ENFORCEMENT_SECTIONS:
+  - assert-admission
+  - derive-envelope
+  - init-resume-ledger
+  - pre-dispatch
+  - execute-bounded
+  - record-consumption
+  - post-op-invariant
+  - durable-checkpoint-evidence
+
+
+================================================================================
+6. Authorized Scope
+================================================================================
+  - src/schema/review-job.schema.json
+  - src/governance/review-job.mjs
+  - src/governance/review-lifecycle.mjs
+  - src/admission/admission-gate.mjs
+  - src/control-plane/coordinator.mjs
+  - scripts/gov-controller-ingest-result.mjs
+  - test/governance/test-review-job-convergence.mjs
+  - test/control-plane/test-review-required-coordinator.mjs
+  - test/governance/test-v3-gov-scripts.mjs
+  - test/governance/test-review-lifecycle.mjs
+  - docs/pi-graph-output/revart-lc1-b2/
+  - docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md
+AUTHORIZED_PATHS: src/schema/review-job.schema.json, src/governance/review-job.mjs, src/governance/review-lifecycle.mjs, src/admission/admission-gate.mjs, src/control-plane/coordinator.mjs, scripts/gov-controller-ingest-result.mjs, test/governance/test-review-job-convergence.mjs, test/control-plane/test-review-required-coordinator.mjs, test/governance/test-v3-gov-scripts.mjs, test/governance/test-review-lifecycle.mjs, docs/pi-graph-output/revart-lc1-b2/, docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md
+
+
+================================================================================
+7. Explicitly Unauthorized Scope
+================================================================================
+  (none)
+UNAUTHORIZED_PATHS: NOT_APPLICABLE
+
+
+================================================================================
+8. Architecture and Design Decisions
+================================================================================
+  (none)
+
+================================================================================
+9. Files Added / Modified / Deleted
+================================================================================
+CARD_IMPLEMENTATION_FILES:
+  (none)
+GRAPH_CLOSEOUT_OUTPUTS:
+    - docs/pi-graph-output/revart-lc1-b2/closeout-state.json
+    - docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-graph-closeout-evidence.json
+PRE_EXISTING_DIRTY_FILES:
+    - docs/pi-graph-output/revart-lc1-b2/admission.json
+    - docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-authority.json
+    - docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md
+CARD_INVENTORY_MODEL: delta-v1
+ATTRIBUTION_MODEL: content-v1
+BASELINE_HEAD: 421739a20c131c35639d008cadca3b37a673f03c
+BASELINE_DIRTY_DIGEST: dirty:64b3dbbd17baea30d42ca0e2cda8763a8aed4cd843ce1cfb9132ba83cfd2e017
+BASELINE_CONTENT_DIGEST: a3b0cebe3df9148993a53a98edf9af93767539fc4859e988cce09ad470857339
+BASELINE_DIRTY_PATHS:
+    - docs/pi-graph-output/revart-lc1-b2/admission.json
+    - docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-authority.json
+    - docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md
+CURRENT_CARD_DELTA_PATHS:
+    - docs/pi-graph-output/revart-lc1-b2/closeout-state.json
+    - docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-graph-closeout-evidence.json
+DELTA_ATTRIBUTION:
+    - ADDED docs/pi-graph-output/revart-lc1-b2/closeout-state.json
+    - ADDED docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-graph-closeout-evidence.json
+ADDED:
+    - docs/pi-graph-output/revart-lc1-b2/closeout-state.json
+    - docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-graph-closeout-evidence.json
+MODIFIED:
+  (none)
+DELETED:
+  (none)
+
+================================================================================
+10. Diff Summary
+================================================================================
+Graph revart-lc1-b2: 1 node(s) all PASS; 2 added / 0 modified / 0 deleted (worktree outputs)
+
+================================================================================
+11. Execution Results
+================================================================================
+NODES_EXECUTED:
+    - graph node P1:implementation
+NODES_PASSED: 1
+NODES_FAILED: 0
+NODES_TOTAL: 1
+EXECUTION_PASS: true
+
+
+================================================================================
+12. Verification Results
+================================================================================
+VERIFIER_PASS: true
+VERIFIER_RESULT: PASS
+VERIFIER_SUMMARY: scheduler verdict PASS; join: P1:PASS
+
+
+================================================================================
+13. Independent Review Results
+================================================================================
+REVIEW_PASS: true
+REVIEW_RESULT: PASS
+REVIEW_RESULT_IDENTITY: 96edfb00946a2f6b71d3c2efabba71840bbdd18bd13654f6c88e6144e8c2d11f
+BLOCKING_FINDINGS: []
+REVIEW_SUMMARY: graph internal verification: 41 tests green; mutation set matches spec
+
+
+================================================================================
+14. Repair Attempts
+================================================================================
+  NOT_APPLICABLE (no repair attempts)
+REPAIR_BUDGET_MAX: 1
+REPAIR_BUDGET_USED: 0
+GENERATION_TYPE: implementation
+REPAIR_LINEAGE_REPAIR_ITERATIONS: 0
+REPAIR_LINEAGE_SURFACE_RESEALS: 0
+SUPERSEDES_BUNDLE_IDENTITY: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_SHA256: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_PATH: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_VERDICT: NOT_APPLICABLE
+
+
+================================================================================
+15. Negative and Fail-Closed Cases
+================================================================================
+  (none)
+
+================================================================================
+16. Regression Results
+================================================================================
+  (none)
+REGRESSION_OVERALL: see card evidence
+
+
+================================================================================
+17. Evidence Inventory
+================================================================================
+  - /private/tmp/autoloop/docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-graph-closeout-evidence.json
+EVIDENCE_MANIFEST_DIGEST: 61d71a365d8b04e800666d10ad1a86a8aa2de5943d71f3d122107a4991f7ceeb
+
+
+================================================================================
+18. Evidence Hashes
+================================================================================
+  - /private/tmp/autoloop/docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-graph-closeout-evidence.json
+      sha256=f8ec42cc128e9a027e19c13fa22a714e80de7a8d1c43cbcf0de78233cc3c48da
+
+================================================================================
+19. Security and Secret Scan
+================================================================================
+SECRET_SCAN_RESULT: clean
+SECRET_SCAN_NOTES: NOT_APPLICABLE
+SECRET_DETECTED: false
+INGESTION_ALLOWLIST: structured graph node results, review-agent results, lifecycle transitions, closeout evidence snapshot
+INGESTION_DENYLIST: secrets/credentials/private keys/logs/db contents/user data, unvalidated free-text stdout
+
+================================================================================
+20. Repository Integrity
+================================================================================
+HEAD: 421739a20c131c35639d008cadca3b37a673f03c
+TREE_SHA: 0aaa0ed6d560665836c3e1067bc16a2972acf22d
+WORKTREE_CLEAN: false
+DIRTY_PATHS: docs/pi-graph-output/revart-lc1-b2/admission.json, docs/pi-graph-output/revart-lc1-b2/closeout-state.json, docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-authority.json, docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md, docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-graph-closeout-evidence.json
+UNTRACKED_FILES: docs/pi-graph-output/revart-lc1-b2/admission.json, docs/pi-graph-output/revart-lc1-b2/closeout-state.json, docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-authority.json, docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-card-spec.md, docs/pi-graph-output/revart-lc1-b2/revart-lc1-b2-graph-closeout-evidence.json
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+21. Known Risks and Limitations
+================================================================================
+  (none)
+  (none)
+
+================================================================================
+22. Rollback Procedure
+================================================================================
+Worktree outputs are revocable; re-run the graph closeout gate to regenerate the bundle.
+
+================================================================================
+23. Open Questions
+================================================================================
+  (none)
+
+================================================================================
+24. Recommended Next Step
+================================================================================
+NOT_APPLICABLE
+
+================================================================================
+25. External Reviewer Verdict Template
+================================================================================
+VERDICT: PASS / REPAIR / HOLD
+REVIEWER_IDENTITY: <reviewer>
+REVIEWED_AT: <date>
+FINDINGS_DIGEST: <sha256>
+NEXT_ACTION_IF_PASS: <next card>
+NEXT_ACTION_IF_REPAIR: <bounded repair within budget>
+NEXT_ACTION_IF_HOLD: <stop downstream>
+
+
+=== END OF REVIEW BUNDLE ===
+REVIEW_BUNDLE_SHA256: 4aa6ec5616b4a83db82ada39faeaaa045e679c55eb5a1c57762080e9631119ce

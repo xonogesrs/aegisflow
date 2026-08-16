@@ -1,0 +1,46 @@
+{
+  "schema": "autoloop.revart-lc1.dogfood-evidence/v1",
+  "cardId": "AUTOLOOP-REVART-LC1-B2",
+  "commits": { "b0b1": "665070b", "b2": "421739a" },
+  "chain": [
+    { "step": "authority v3", "status": "PASS", "artifact": "revart-lc1-b2-authority.json" },
+    { "step": "frozen admission (binding projected)", "status": "PASS", "artifact": "admission.json" },
+    { "step": "execution PASS (verification runner: 41 B2+B1 tests serial + mutation-set check)", "status": "PASS", "evidence": "revart-lc1-b2-graph-closeout-evidence.json" },
+    { "step": "closeout-state + bundle + delivery (REVIEW_PENDING)", "status": "PASS", "artifacts": ["closeout-state.json", "card-closeout-bundle-20260816-2d2931e4.txt", "surface/"] },
+    { "step": "ensureCurrentReviewJob", "status": "PASS", "job": "AUTOLOOP-REVART-LC1-B2.g0001", "state": "REQUIRED -> STAGED" },
+    { "step": "external review (findings + PASS verdict persisted, staged)", "status": "PASS", "artifacts": ["AUTOLOOP-REVART-LC1-B2/review-findings.g0001.json", "AUTOLOOP-REVART-LC1-B2/review-verdict.g0001.json"] },
+    { "step": "Controller ingest (sole acceptReviewJob mint)", "status": "PASS", "state": "ACCEPTED", "authority": "dogfood-controller-session" },
+    { "step": "surface verdict (apply-verdict)", "status": "PASS", "surface": "surface/delivery.json", "externalReviewStatus": "PASS" },
+    { "step": "final closeout (final-closeout CLI)", "status": "PASS", "stage": "REVIEW_ACCEPTED" },
+    { "step": "handoff artifact", "status": "PASS", "artifact": "surface/review-bundle.txt" }
+  ],
+  "final": {
+    "stage": "REVIEW_ACCEPTED",
+    "bundleIdentity": "2d2931e4357385f6cc2afcd6207f9423adcedbb741e033834cb97aab6abafff2",
+    "bundleSha256": "4aa6ec5616b4a83db82ada39faeaaa045e679c55eb5a1c57762080e9631119ce",
+    "reviewerIdentity": "controller-dogfood-reviewer",
+    "findingsDigest": "dbecf9d50e3a91dd81414c52140966bc58fbbb87484925cd5fc6b674e5dcbec7",
+    "verdictDigest": "5893aae0f41c72e5ad719f68f8663b8548d96c2c4f28e1f0cb09b7c21200ea7e"
+  },
+  "notes": [
+    "Delivery surface is repo-local (docs/pi-graph-output/revart-lc1-b2/surface) — the real ~/Desktop/AutoLoop-Review surface was NOT touched to avoid clobbering the live occupant; review-bundle.txt is the handoff artifact (Latest/review.txt equivalent)."
+  ],
+  "debt": [
+    {
+      "id": "REVART-LC1-DEBT-1",
+      "kind": "test-robustness",
+      "title": "Parallel node --test load-sensitive flake (delivery-retry test)",
+      "detail": "Verification runner used --test-concurrency=1 (deterministic under load; same convention as test:colima-all). One parallel-load flake was observed in the delivery-retry test during the first dogfood attempt; the suite is green standalone and in serial batches. Non-blocking: no evidence of code defect.",
+      "disposition": "deferred",
+      "blocking": false
+    },
+    {
+      "id": "REVART-LC1-DEBT-2",
+      "kind": "descriptive-state-lag",
+      "title": "closeout-state.externalReviewStatus remains AWAITING after acceptance",
+      "detail": "Existing RB2R1 split semantics: authoritative acceptance is the surface record (externalReviewStatus PASS) + ACCEPTED review job; closeout-state.json descriptive field is frozen at bundle-ready time (stage REVIEW_BUNDLE_READY). runAdmittedGraph re-entry therefore returns REVIEW_PENDING (descriptive); final-closeout authority returns REVIEW_ACCEPTED. Model change deferred — authoritative state and final closeout are both correct.",
+      "disposition": "deferred",
+      "blocking": false
+    }
+  ]
+}
