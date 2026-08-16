@@ -1165,14 +1165,20 @@ export async function resumeDurableGraph({
     // I1-R1 (B): crash between the artifact write and the journal event —
     // repair the journal so the emission record always exists alongside the
     // artifact (replay-safe marker; never a second artifact write).
+    // I1-R1.5: verifyJournal() failure here MUST fail closed — never swallow
+    // an integrity error and treat it as "just no manifest event".
     let manifestEventExists = false;
+    let journalScan;
     try {
-      const jv = store.verifyJournal();
-      for (let s = 1; s <= jv.count; s++) {
-        const { event } = store.readEvent(s);
-        if (event?.event_type === "DECOMPOSITION_MANIFEST_WRITTEN") { manifestEventExists = true; break; }
-      }
-    } catch { /* verification failure propagates below */ }
+      journalScan = store.verifyJournal();
+    } catch (e) {
+      throw new DurableGraphHoldError("RESUME_FINGERPRINT_MISMATCH",
+        `journal integrity failure during manifest rescan: ${e?.code || e?.name || "error"}`);
+    }
+    for (let s = 1; s <= journalScan.count; s++) {
+      const { event } = store.readEvent(s);
+      if (event?.event_type === "DECOMPOSITION_MANIFEST_WRITTEN") { manifestEventExists = true; break; }
+    }
     if (!manifestEventExists) {
       store.appendEvent({
         event_type: "DECOMPOSITION_MANIFEST_WRITTEN",

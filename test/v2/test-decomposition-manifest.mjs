@@ -704,3 +704,47 @@ test("I1-R1 graph path: resumeDurableGraph three-way manifest verification passe
     rmSync(scratchRoot, { recursive: true, force: true });
   }
 });
+
+// ── I1-R1.5: journal rescan integrity failure must fail closed ──────────
+// A corrupted journal must never be treated as "just no manifest event":
+// resume HOLDs, appends NO recovered_journal_gap marker and NO
+// RESUME_VALIDATED. (The integrity failure surfaces at the first
+// verifyJournal() — the read-only pre-gate; the manifest-rescan
+// verifyJournal() has the identical rethrow semantics by code construction
+// and can only be hit by a mid-resume journal mutation race.)
+test("I1-R1.5: journal integrity failure fails closed (no gap repair, no RESUME_VALIDATED)", async () => {
+  const cwd = gitFixture();
+  const root = mkdtempSync(join(tmpdir(), "i1-r15-"));
+  const executionId = mintExecutionId();
+  try {
+    const { execDir } = manifestFixture({ cwd, root, executionId, withArtifact: true, withEvent: false, withCheckpointPin: false });
+    const journalDir = join(execDir, "journal");
+    const files = readdirSync(journalDir).filter((f) => f.endsWith(".json")).sort();
+    const before = files.length;
+    // corrupt the last journal event so verifyJournal() fails
+    const lastPath = join(journalDir, files[files.length - 1]);
+    writeFileSync(lastPath, readFileSync(lastPath, "utf8") + "tampered-by-i1-r15-test\n", "utf8");
+
+    await assert.rejects(
+      resumeAutoLoopInternal({
+        persistenceRoot: root, executionId,
+        decompositionAdapter: { generate: async () => ({ status: "completed", requestCount: 1, elapsedMs: 1, parsed: ONE_PHASE_IR() }) },
+        ...resumeFactories(),
+        hooks: resumeHooks(),
+      }),
+      (e) => /JOURNAL|RESUME_FINGERPRINT|integrity/i.test(String(e?.code || e?.name || e?.message || "")),
+      "resume must HOLD on journal integrity failure",
+    );
+    const events = readdirSync(journalDir).filter((f) => f.endsWith(".json"))
+      .flatMap((f) => readFileSync(join(journalDir, f), "utf8").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean));
+    assert.equal(events.some((e) => e.event_type === "DECOMPOSITION_MANIFEST_WRITTEN" && e.payload?.recovered_journal_gap === true), false,
+      "gap-repair event must NOT be appended after an integrity failure");
+    assert.equal(events.some((e) => e.event_type === "RESUME_VALIDATED"), false,
+      "RESUME_VALIDATED must NOT be appended after an integrity failure");
+    const after = readdirSync(journalDir).filter((f) => f.endsWith(".json")).length;
+    assert.ok(after <= before + 1, "journal must not grow beyond a single rejection record");
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});

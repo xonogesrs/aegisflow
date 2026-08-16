@@ -93,6 +93,16 @@ Also fixed while greening the suites (fixture-only, no production behavior chang
 
 Final suite state: `test-decomposition-manifest` 15/15 (T1–T8 + 5 orderings + 2 graph proofs), `test-durable-execution` 23/23, `test-durable-graph` 11/11, checkpoint-bridge + pre-decomposition-interruption + autoloop-entrypoint 50/50. Zero failures.
 
+## 8b. I1-R1.5 closure record (targeted re-review — journal rescan fail-closed)
+
+Targeted re-review finding: both resume paths wrapped the manifest-rescan `verifyJournal()` in a `try/catch` whose catch swallowed the error (the comment claimed it propagated; it did not) — an integrity failure was misread as "just no manifest event", then the gap-repair event and `RESUME_VALIDATED` were appended anyway, violating fail-closed semantics.
+
+Fix (both `durable-execution.mjs` and `durable-graph.mjs`): `verifyJournal()` failure is now caught ONLY to rethrow a `RESUME_FINGERPRINT_MISMATCH` ("journal integrity failure during manifest rescan: <code>") — the resume rejection path handles it, no gap-repair event and no `RESUME_VALIDATED` are appended.
+
+Targeted negative test added (I1-R1.5): corrupt the journal → resume HOLDs, appends NO `recovered_journal_gap` marker and NO `RESUME_VALIDATED`, journal does not grow beyond the rejection record. Note on reachability: in a single resume call the integrity failure surfaces at the FIRST `verifyJournal()` (the read-only pre-gate, which already fails closed); the rescan `verifyJournal()` has identical rethrow semantics and can only be hit by a mid-resume journal mutation race — its catch behavior is fixed by code construction and asserted by the same fail-closed contract.
+
+Suite state after fix: `test-decomposition-manifest` 16/16, `test-durable-execution` 23/23, `test-durable-graph` 11/11 — 50/50, zero failures.
+
 ## 9. Reviewer verdict (post-I1-R1)
 
 ```text
