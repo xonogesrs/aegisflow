@@ -21,6 +21,16 @@
 //
 // Reuses IMPL1 capabilities only (readReviewJob / candidateDrift / specDrift /
 // deriveReviewJobContext); no new artifact format, no new identity owner.
+//
+// TERMINAL REVIEW ORDERING CONTRACT (AUTH1-TC1 R-TC1-01): the ACCEPTED review
+// job that satisfies this gate MUST be bound to the final local commit HEAD
+// (candidateIdentity.currentHead). A pre-commit working-tree acceptance
+// becomes stale the moment the candidate is committed (HEAD changes →
+// candidate drift → HOLD here). The live binding below is the mechanical
+// enforcement of that ordering: never weaken or remove currentHead from
+// candidateDrift. To re-bind after a commit, use the formal successor
+// generation (createSuccessorReviewJob, review-job.mjs) — never reuse a stale
+// ACCEPTED artifact.
 
 import { resolve } from "node:path";
 import { readReviewJob, jobIdFor } from "./review-job.mjs";

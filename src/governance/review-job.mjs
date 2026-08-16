@@ -195,6 +195,132 @@ export function createReviewJob({
   return { ok: true, job, path };
 }
 
+// ── Successor generation (AUTH1-TC1 R-TC1-02) ──────────────────────────
+
+/**
+ * Create a successor review job (new generation) from the current job.
+ *
+ * This is the formal revalidation path for context drift (§29 / AC15): when
+ * the reviewed context changes (e.g. the candidate is committed and HEAD
+ * moves), the current ACCEPTED job is stale and MUST be superseded, then a
+ * fresh generation bound to the NEW context is created.
+ *
+ * Transition (single caller-facing operation):
+ *   current (non-terminal) → SUPERSEDED (supersededBy = new jobId)
+ *     → current pointer converges atomically to the new REQUIRED generation
+ *
+ * Legal predecessor:
+ *   - current.state ∉ {SUPERSEDED, HOLD}  → normal path (supersede + converge)
+ *   - current.state == SUPERSEDED && current.supersededBy == new jobId
+ *     → crash-resume (supersede completed, converge pending)
+ *   - otherwise → fail closed (REVIEW_JOB_SUPERSEEDED_BY_OTHER /
+ *     REVIEW_JOB_TERMINAL_HELD)
+ *
+ * Idempotency: when `predecessorJobId` is supplied and the current pointer is
+ * already the successor of that predecessor (supersedes == predecessorJobId),
+ * returns the existing successor (crash after converge).
+ *
+ * Invariants (R-TC1-02): generation monotonic; same lineageId; lineage links
+ * priorJobId / priorFindingsDigest / priorVerdictDigest / supersedes carried;
+ * predecessor findings/verdict artifacts untouched; current pointer converged
+ * via atomic replace (never delete-and-recreate); the supersede CAS makes
+ * concurrent successor creation fail closed; a stale predecessor can never
+ * re-satisfy live enforcement (assertReviewArtifactEnforced requires the
+ * current pointer to be ACCEPTED and reads only that pointer).
+ */
+export function createSuccessorReviewJob({
+  cardId,
+  candidateIdentity,
+  specId,
+  specDigest,
+  predecessorJobId = null,
+  reviewRound = 1,
+  repairRound = 0,
+  repoIdentity,
+  worktreeIdentity,
+} = {}, opts = {}) {
+  const current = readReviewJob(cardId, opts);
+  if (!current.ok) return current;
+  const job = current.job;
+
+  // Idempotent resume: current pointer already IS the successor of the
+  // intended predecessor (crash after converge).
+  if (predecessorJobId && job.supersedes === predecessorJobId) {
+    return { ok: true, idempotent: true, job, path: current.path, predecessor: predecessorJobId };
+  }
+
+  const newGeneration = job.generation + 1;
+  const newJobId = jobIdFor(cardId, newGeneration);
+
+  // Legal predecessor checks (fail closed).
+  if (job.state === "HOLD") {
+    return { ok: false, code: "REVIEW_JOB_TERMINAL_HELD", job, path: current.path };
+  }
+  if (job.state === "SUPERSEDED") {
+    if (job.supersededBy !== newJobId) {
+      return { ok: false, code: "REVIEW_JOB_SUPERSEEDED_BY_OTHER", supersededBy: job.supersededBy, job, path: current.path };
+    }
+    // crash-resume: supersede already persisted; fall through to converge.
+  } else {
+    // Normal path: mark the predecessor SUPERSEDED first (CAS). A concurrent
+    // successor creator loses this CAS → fail closed (never two g0002).
+    const s = updateReviewJob(cardId, {
+      expectedStateVersion: job.stateVersion,
+      patch: { state: "SUPERSEDED", supersededBy: newJobId },
+    }, opts);
+    if (!s.ok) return s;
+  }
+
+  // Re-read: the predecessor must now be SUPERSEDED by exactly this successor.
+  const predRead = readReviewJob(cardId, opts);
+  if (!predRead.ok) return predRead;
+  const pred = predRead.job;
+  if (pred.state !== "SUPERSEDED" || pred.supersededBy !== newJobId) {
+    return { ok: false, code: "REVIEW_JOB_PREDECESSOR_NOT_SUPERSEDED", state: pred.state, supersededBy: pred.supersededBy ?? null, path: current.path };
+  }
+
+  // Build the successor job (same lineage, monotonic generation, lineage
+  // links). State REQUIRED — it runs the full lifecycle like a fresh job.
+  const successor = {
+    schemaVersion: REVIEW_JOB_SCHEMA_ID,
+    lineageId: cardId,
+    jobId: newJobId,
+    generation: newGeneration,
+    candidateIdentity,
+    specId,
+    specDigest,
+    reviewRound,
+    repairRound,
+    priorJobId: pred.jobId,
+    supersedes: pred.jobId,
+    state: "REQUIRED",
+    stateVersion: 1,
+    requiredArtifacts: [
+      { role: "findings", required: true, writeMode: "exclusive-create" },
+      { role: "verdict", required: true, writeMode: "exclusive-create" },
+    ],
+  };
+  if (pred.findingsDigest !== undefined) successor.priorFindingsDigest = pred.findingsDigest;
+  if (pred.verdictDigest !== undefined) successor.priorVerdictDigest = pred.verdictDigest;
+  if (repoIdentity !== undefined) successor.repoIdentity = repoIdentity;
+  if (worktreeIdentity !== undefined) successor.worktreeIdentity = worktreeIdentity;
+
+  const errors = validateAgainstSchema(REVIEW_JOB_SCHEMA, successor, "review-job");
+  if (errors.length > 0) {
+    return { ok: false, code: "REVIEW_JOB_SCHEMA_INVALID", errors, path: current.path };
+  }
+
+  // Converge the current pointer atomically (replace under lock; never
+  // delete-and-recreate).
+  const path = reviewJobPath(cardId, opts);
+  try {
+    writeJsonAtomicReplaceUnderLock(path, successor);
+  } catch (e) {
+    return { ok: false, code: "REVIEW_JOB_POINTER_CONVERGE_FAILED", error: e?.message ?? String(e), path };
+  }
+  return { ok: true, job: successor, predecessor: pred.jobId, path, superseded: true };
+}
+
 export function readReviewJob(cardId, opts = {}) {
   const path = reviewJobPath(cardId, opts);
   if (!existsSync(path)) {
