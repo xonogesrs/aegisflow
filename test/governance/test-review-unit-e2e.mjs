@@ -18,11 +18,12 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { writeFileSync, mkdirSync, mkdtempSync, readFileSync, existsSync, rmSync, realpathSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createTempRepo, testRemoteMatch, CARD_ID, RUN_ID } from "./helpers.mjs";
 import { buildChangeInventory } from "../../src/governance/change-inventory.mjs";
+import { candidateDomain } from "../../src/governance/candidate-domain-policy.mjs";
 import { remoteUrlMatchesAuthorizedRepository, productionRemoteMatch } from "../../scripts/shared/gov-args.mjs";
 import { generateReviewBundle } from "../../scripts/gov-review-bundle.mjs";
 import { runPushGate } from "../../scripts/gov-push-gate.mjs";
@@ -51,15 +52,110 @@ function genBundle(argv, verifyCommands) {
   }
 }
 
+// PGMA1: canonical evidence root OUTSIDE the fixture repo (unique sibling
+// dir per fixture) so unmigrated legacy gates never see the review-job in
+// the worktree and tests never collide on the same evidence path.
+function evidenceRootFor(dir) {
+  return join(dirname(dir), `pgma1-evidence-${basename(dir)}`);
+}
+
 // In-process push gate with the TEST-ONLY remote adapter injected (local
-// bare remotes are never part of the production remote policy).
+// bare remotes are never part of the production remote policy). The
+// canonical surface is always the fixture surface at <dir>/out/surface.
 function pushGate(argv, dir) {
+  const prev = process.env.AUTOLOOP_PI_GRAPH_OUTPUT;
+  process.env.AUTOLOOP_PI_GRAPH_OUTPUT = evidenceRootFor(dir);
   try {
-    const report = runPushGate({ argv, cwd: dir, remotePolicy: testRemoteMatch });
+    const report = runPushGate({ argv, cwd: dir, surfaceDir: join(dir, "out", "surface"), remotePolicy: testRemoteMatch });
     return { status: 0, report, stderr: "" };
   } catch (e) {
     return { status: 1, report: null, stderr: `${e.code ?? ""}\n${e.message}` };
+  } finally {
+    if (prev === undefined) delete process.env.AUTOLOOP_PI_GRAPH_OUTPUT;
+    else process.env.AUTOLOOP_PI_GRAPH_OUTPUT = prev;
   }
+}
+
+// PGMA1: materialize the canonical promotion evidence for the fixture card —
+// review-job ACCEPTED (identity recomputed over the candidate domain) +
+// surface delivery (PASS/PENDING) + delivered bundle (body digest bound).
+// The review-job lives OUTSIDE the repo (AUTOLOOP_PI_GRAPH_OUTPUT seam) so
+// it never dirties the fixture worktree for unmigrated legacy gates.
+function materializeCanonicalEvidence(dir, { status = "PASS", evidenceRoot = null } = {}) {
+  const git = (args) => execFileSync("git", args, { cwd: dir, encoding: "utf8" });
+  const baseHead = git(["rev-parse", "main"]).trim();
+  const head = git(["rev-parse", "HEAD"]).trim();
+  const branch = git(["branch", "--show-current"]).trim();
+  const inv = buildChangeInventory({ git, cwd: dir, baseBranch: "main", candidateDomain });
+  const root = evidenceRoot ?? evidenceRootFor(dir);
+  const cardDir = join(root, CARD_ID);
+  mkdirSync(cardDir, { recursive: true });
+  const job = {
+    schemaVersion: "autoloop.review-job/v1",
+    lineageId: CARD_ID,
+    jobId: `${CARD_ID}.g0002`,
+    generation: 2,
+    candidateIdentity: {
+      changedTreeIdentity: inv.changedTreeIdentity,
+      patchSha256: inv.patchSha256,
+      currentHead: head,
+      baseHead,
+      repository: "xonogesrs/autoloop",
+      branch,
+    },
+    specId: CARD_ID,
+    specDigest: "d".repeat(64),
+    reviewRound: 1,
+    repairRound: 0,
+    priorJobId: `${CARD_ID}.g0001`,
+    supersedes: `${CARD_ID}.g0001`,
+    state: "ACCEPTED",
+    stateVersion: 8,
+    requiredArtifacts: [
+      { role: "findings", required: true, writeMode: "exclusive-create" },
+      { role: "verdict", required: true, writeMode: "exclusive-create" },
+    ],
+    priorFindingsDigest: "c".repeat(64),
+    priorVerdictDigest: "b".repeat(64),
+    repoIdentity: "xonogesrs/autoloop",
+    worktreeIdentity: realpathSync(dir),
+    findingsDigest: "a".repeat(64),
+    verdictDigest: "e".repeat(64),
+    acceptedAt: new Date().toISOString(),
+    acceptanceAuthority: "controller",
+  };
+  writeFileSync(join(cardDir, "review-job.json"), JSON.stringify(job));
+  const surface = join(dir, "out", "surface");
+  mkdirSync(surface, { recursive: true });
+  const bundleId = "f".repeat(64);
+  const bundleBody = `REVIEW_BUNDLE_IDENTITY: ${bundleId}\nFIXTURE BUNDLE\n`;
+  const bundleSha = createHash("sha256").update(bundleBody).digest("hex");
+  writeFileSync(join(surface, "review-bundle.txt"), bundleBody + `REVIEW_BUNDLE_SHA256: ${bundleSha}\n`);
+  const delivery = {
+    schema: "autoloop.external-review-delivery/v2",
+    cardId: CARD_ID,
+    fileName: "delivery.json",
+    reviewBundleGenerated: true,
+    reviewBundleValidated: true,
+    reviewBundleDeliveryRequired: true,
+    externalReviewStatus: status,
+    externalReviewStatusReason: null,
+    delivery: {
+      required: true,
+      attempted: true,
+      method: "external-review-surface",
+      attemptedAt: new Date().toISOString(),
+      bundlePath: join(surface, "review-bundle.txt"),
+      reviewBundleIdentity: bundleId,
+      reviewBundleSha256: bundleSha,
+    },
+    verdict: status === "PASS"
+      ? { verdict: "PASS", reviewerIdentity: "external-reviewer-1", reviewedAt: new Date().toISOString(), bundleIdentity: bundleId, bundleSha256: bundleSha, findingsDigest: null }
+      : null,
+    supersedes: null,
+  };
+  writeFileSync(join(surface, "delivery.json"), JSON.stringify(delivery));
+  return { surface, bundleId, bundleSha, evidenceRoot: root };
 }
 
 const GITIGNORE = "authority.json\nmeta.json\nout/\ngovernance/\nremote/\nverify.mjs\n";
@@ -163,10 +259,11 @@ test("e2e: checkpoint → clean bundle → PENDING push blocked → controller P
   assert.equal(bundle.report.bundle_sha256.length, 64);
   assert.equal(bundle.report.review_round, 1);
 
-  // ── PENDING blocks push (no result artifact → EXTERNAL_REVIEW_RESULT_MISSING) ──
+  // ── PENDING blocks push (delivery not PASS → canonical HOLD) ──
+  materializeCanonicalEvidence(dir, { status: "PENDING" });
   const pushPending = pushGate(["--authority-file", authorityPath], dir);
   assert.notEqual(pushPending.status, 0);
-  assert.match(pushPending.stderr, /EXTERNAL_REVIEW_RESULT_MISSING/);
+  assert.match(pushPending.stderr, /DELIVERY_NOT_PASS/);
   const remoteBranches = execFileSync("git", ["--git-dir", bareDir, "branch", "--list"], { encoding: "utf8" }).trim();
   assert.equal(remoteBranches, "", "nothing pushed before PASS");
 
@@ -198,12 +295,24 @@ test("e2e: checkpoint → clean bundle → PENDING push blocked → controller P
   const headAfter = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
   assert.equal(headAfter, headBefore, "integration must NOT create a new commit");
 
-  // ── PUSH dry-run now PASSES: the reviewed checkpoint HEAD is pushable ──
+  // ── PUSH dry-run now PASSES: canonical delivery PASS bound to the
+  // reviewed checkpoint HEAD ──
+  materializeCanonicalEvidence(dir, { status: "PASS" });
   const pushPass = pushGate(["--authority-file", authorityPath], dir);
   assert.equal(pushPass.status, 0, pushPass.stderr);
   assert.equal(pushPass.report.allowed, true);
 
-  // ── ARTIFACT MODIFIED → blocked again (digest mismatch) ──
+  // ── CANONICAL DELIVERY TAMPERED → push blocked again (verdict unbound) ──
+  const deliveryPath = join(dir, "out", "surface", "delivery.json");
+  const tamperedDelivery = JSON.parse(readFileSync(deliveryPath, "utf8"));
+  tamperedDelivery.verdict.bundleSha256 = "0".repeat(64);
+  writeFileSync(deliveryPath, JSON.stringify(tamperedDelivery, null, 2));
+  const pushBlocked = pushGate(["--authority-file", authorityPath], dir);
+  assert.notEqual(pushBlocked.status, 0);
+  assert.match(pushBlocked.stderr, /DELIVERY_VERDICT_UNBOUND/);
+
+  // ── LEGACY result artifact modified → integration blocked (out-of-scope
+  // legacy gate keeps its own digest-bound behavior) ──
   const resultPath = join(outDir, "governance", "external-review-result.json");
   const tampered = JSON.parse(readFileSync(resultPath, "utf8"));
   tampered.bundle_sha256 = "0".repeat(64);
@@ -214,8 +323,6 @@ test("e2e: checkpoint → clean bundle → PENDING push blocked → controller P
   ], dir);
   assert.notEqual(blocked.status, 0);
   assert.match(blocked.stderr, /EVIDENCE_IDENTITY_MISMATCH/);
-  const pushBlocked = pushGate(["--authority-file", authorityPath], dir);
-  assert.notEqual(pushBlocked.status, 0);
 
   const mainHead = execFileSync("git", ["rev-parse", "main"], { cwd: dir, encoding: "utf8" }).trim();
   assert.equal(mainHead, execFileSync("git", ["rev-parse", "main"], { cwd: dir, encoding: "utf8" }).trim());
@@ -360,6 +467,9 @@ test("[neg 5] committed out-of-scope path blocks bundle AND push", (t) => {
   assert.notEqual(bundle.status, 0);
   assert.match(bundle.stderr, /GOVERNANCE_SCOPE_EXPANSION_REQUIRED/);
   assert.equal(existsSync(bundlePath), false, "no bundle when a path is out of scope");
+  // canonical evidence in place → the gate reaches the writable-scope check
+  // and the committed out-of-scope path still blocks the push
+  materializeCanonicalEvidence(dir);
   const push = pushGate(["--authority-file", authorityPath], dir);
   assert.notEqual(push.status, 0);
   assert.match(push.stderr, /GOVERNANCE_SCOPE_EXPANSION_REQUIRED/);
@@ -614,23 +724,31 @@ test("[neg 11] custom PR body missing card/result binding is rejected", (t) => {
     "--base-branch", "main", "--out-dir", outDir, "--meta", join(outDir, "meta.json"),
   ], verifyFixtureCommands(dir));
   assert.equal(bundle.status, 0, bundle.stderr);
-  const findingsFile = join(outDir, "findings.txt");
-  writeFileSync(findingsFile, "pass");
-  const ingest = run("gov-controller-ingest-result.mjs", [
-    "--bundle-dir", outDir, "--card-id", CARD_ID, "--run-id", RUN_ID,
-    "--verdict", "PASS", "--reviewer-identity", "external-reviewer-1",
-    "--authorization-source", "controller-session:e2e", "--findings-file", findingsFile,
-  ], dir);
-  assert.equal(ingest.status, 0, ingest.stderr);
+  // canonical evidence PASS + the reviewed head pushed to the remote (draft
+  // PR is a post-push integration record)
+  const fx = materializeCanonicalEvidence(dir);
+  const bareDir = join(dir, "remote", "xonogesrs", "autoloop.git");
+  mkdirSync(bareDir, { recursive: true });
+  execFileSync("git", ["init", "--bare", "-q"], { cwd: bareDir });
+  git(["remote", "add", "origin", bareDir]);
+  git(["push", "-q", "origin", "HEAD:refs/heads/governance/test-unit"]);
   // a custom body without card/result binding must be rejected for CREATE
   const unboundBody = join(outDir, "unbound-body.md");
   writeFileSync(unboundBody, "## unrelated content\nno card binding here\n");
-  const draft = run("gov-draft-pr.mjs", [
-    "--authority-file", authorityPath, "--cwd", dir,
-    "--body-file", unboundBody, "--head", "governance/test-unit",
-  ], dir);
-  assert.notEqual(draft.status, 0);
-  assert.match(draft.stderr, /PR_NOT_BOUND_TO_PARENT_CARD/);
+  const prevEv = process.env.AUTOLOOP_PI_GRAPH_OUTPUT;
+  process.env.AUTOLOOP_PI_GRAPH_OUTPUT = fx.evidenceRoot;
+  try {
+    const draft = run("gov-draft-pr.mjs", [
+      "--authority-file", authorityPath, "--cwd", dir,
+      "--surface", fx.surface,
+      "--body-file", unboundBody,
+    ], dir);
+    assert.notEqual(draft.status, 0);
+    assert.match(draft.stderr, /PR_NOT_BOUND_TO_PARENT_CARD/);
+  } finally {
+    if (prevEv === undefined) delete process.env.AUTOLOOP_PI_GRAPH_OUTPUT;
+    else process.env.AUTOLOOP_PI_GRAPH_OUTPUT = prevEv;
+  }
 });
 
 test("[neg 14] exhausted repair lineage cannot restart as a fresh card: same authority record with a different card_id is a live-binding violation（reauthorization requires a NEW authority record）", (t) => {

@@ -1,10 +1,19 @@
 #!/usr/bin/env node
 // scripts/gov-push-gate.mjs
 //
-// Feature-branch push gate CLI (§8/§13). Push is only allowed after a
-// *verified* external review PASS backed by the harness-owned
-// external-review-result.json. Dry-run by default; pass --apply to push.
+// Feature-branch push gate (§8/§13) — PGMA1 canonical authority migration.
+// Push is only allowed when the CANONICAL promotion authority holds:
+//
+//   review-job ACCEPTED
+//   + delivery verdict PASS bound to the delivered bundle digest
+//   + recomputed candidate identity == review-job candidate identity
+//   + reviewed HEAD == local HEAD == remote HEAD
+//     (or remote behind → pure fast-forward)
+//
+// The RC1A-retired `external-review-result.json` is NEVER read; its presence
+// grants nothing (RC1A §7.2). Dry-run by default; pass --apply to push.
 // Never force-pushes; never auto-rebases; diverged remote → HOLD.
+//
 // `--external-review-status PASS` / `--reviewed-artifact-identity` are
 // REJECTED (self-declared / caller-supplied authority).
 //
@@ -15,14 +24,15 @@
 // `remotePolicy`) — never through a production CLI flag.
 
 import { execFileSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs, asBool } from "./shared/gov-args.mjs";
-import { git, loadRecord, buildInventory, rejectSelfDeclaredFlags, contextFor, assertLiveBindings, assertScopeCoversInventory, productionRemoteMatch } from "./shared/gov-args.mjs";
+import { git, loadRecord, rejectSelfDeclaredFlags, assertLiveBindings, assertScopeCoversInventory, productionRemoteMatch } from "./shared/gov-args.mjs";
 import { normalizeAuthority } from "../src/governance/lifecycle-authorization.mjs";
-import { readExternalReviewResult } from "../src/governance/external-review.mjs";
-import { evaluatePushGate, pushViolationsToHold } from "../src/governance/feature-branch-push-gate.mjs";
-import { expandPath } from "../src/governance/change-inventory.mjs";
+import { buildChangeInventory } from "../src/governance/change-inventory.mjs";
+import { candidateDomain } from "../src/governance/candidate-domain-policy.mjs";
+import { readReviewJobEvidence, readDeliveryEvidence, verifyDeliveryBundleDigest, evaluatePromotionAuthority } from "../src/governance/promotion-authority.mjs";
 
 /** Fail-closed: throw a hold-coded error. The CLI main converts it to exit(1);
  * library callers (tests) catch it and read `e.code` / `e.message`. */
@@ -30,6 +40,10 @@ function fail(code, message) {
   const e = new Error(message);
   e.code = code;
   throw e;
+}
+
+function defaultSurfaceDir() {
+  return join(homedir(), "Desktop", "AutoLoop-Review", "Current");
 }
 
 /**
@@ -41,6 +55,8 @@ function fail(code, message) {
  * @param {object} [opts.flags] — pre-parsed flags (alternative to argv).
  * @param {string} [opts.cwd] — repository worktree (defaults to --cwd /
  *   process.cwd()).
+ * @param {string} [opts.surfaceDir] — external review surface (defaults to
+ *   --surface / ~/Desktop/AutoLoop-Review/Current).
  * @param {string} [opts.remote] — remote name (defaults to --remote / origin).
  * @param {Function} [opts.remotePolicy] — remote-URL authorizer
  *   (url, repoId) => boolean. Production ALWAYS uses productionRemoteMatch
@@ -48,11 +64,12 @@ function fail(code, message) {
  *   remotes) through this parameter — internal dependency injection only.
  * @returns {object} the push report (also printed to stdout for the CLI).
  */
-export function runPushGate({ argv, flags: flagsIn, cwd, remote, remotePolicy = productionRemoteMatch } = {}) {
+export function runPushGate({ argv, flags: flagsIn, cwd, surfaceDir, remote, remotePolicy = productionRemoteMatch } = {}) {
   const { flags } = flagsIn ? { flags: flagsIn } : parseArgs(argv ?? process.argv.slice(2));
   const apply = asBool(flags.apply, false);
   const cwdActual = cwd || flags.cwd || process.cwd();
   const remoteName = remote || flags.remote || "origin";
+  const surface = surfaceDir || flags.surface || defaultSurfaceDir();
 
   const selfDeclared = rejectSelfDeclaredFlags(flags);
   if (selfDeclared.length > 0) {
@@ -66,7 +83,6 @@ export function runPushGate({ argv, flags: flagsIn, cwd, remote, remotePolicy = 
   // by assertLiveBindings.
   const cardId = record.card_id || "";
   const runId = record.run_id || "";
-  const agentIdentity = flags.agent || "pi-deepseek-v4-flash";
 
   // Remote identity check: the remote used for push must resolve to the
   // authorized repository under the ACTIVE remote policy. Production policy
@@ -82,42 +98,31 @@ export function runPushGate({ argv, flags: flagsIn, cwd, remote, remotePolicy = 
     fail("HOLD / REMOTE_NOT_AUTHORIZED", `remote "${remoteName}" does not resolve to authorized repository ${record.repository}`);
   }
 
-  // Recompute current identities + bind the live environment to the record.
-  const inventory = buildInventory(cwdActual, baseBranch);
+  // Candidate-domain inventory (E1-A): harness-owned governance outputs under
+  // docs/pi-graph-output/ are excluded, so the recomputed identity covers the
+  // SAME path set the review-job bound — never the post-review lifecycle
+  // artifacts. Writable-scope enforcement uses this same candidate domain.
+  const inventory = buildChangeInventory({ git: (args) => git(args, cwdActual), cwd: cwdActual, baseBranch, candidateDomain });
   assertLiveBindings({ record, cwd: cwdActual, inventory, baseBranch, cardId, runId, flags });
-  assertScopeCoversInventory(inventory, record.authorized_paths || []);
-  const bundlePath = flags.bundlePath
-    ? expandPath(flags.bundlePath, cwdActual)
-    : (record.bundle_path ? expandPath(record.bundle_path, cwdActual) : "");
 
-  // Harness-owned result artifact — fixed controller path derived from the
-  // bundle directory (outside the executor writable scope), never --result-file.
-  const bundleDir = bundlePath ? dirname(bundlePath) : "";
-  let result = null;
-  try {
-    result = bundleDir ? readExternalReviewResult(bundleDir) : null;
-  } catch (e) {
-    if (e.code === "HOLD / EXTERNAL_REVIEW_RESULT_MISSING" || e.code === "HOLD / EXTERNAL_REVIEW_RESULT_INVALID") {
-      fail(e.code, e.message);
-    }
-    fail(e.code ?? e.message, e.message);
-  }
-  // review round comes from the verified artifact, never from CLI flags
-  const reviewRound = result ? result.review_round : 1;
-  const current = contextFor({ authority, inventory, bundlePath, cardId, runId, reviewRound, agentIdentity, record });
+  // ── Canonical promotion authority (PGMA1) — fail-closed evidence chain. ──
+  const rj = readReviewJobEvidence(cardId, { cwd: cwdActual });
+  if (!rj.ok) fail(rj.code, rj.errors.join("; "));
+  const dl = readDeliveryEvidence(surface);
+  if (!dl.ok) fail(dl.code, dl.errors.join("; "));
+  const bd = verifyDeliveryBundleDigest(surface, {
+    expectedSha256: dl.record.delivery.reviewBundleSha256,
+    expectedIdentity: dl.record.delivery.reviewBundleIdentity,
+  });
+  if (!bd.ok) fail(bd.code, bd.errors.join("; "));
 
-  const branch = inventory.branch;
-  const head = inventory.head;
-
-  // remote probe (read-only)
+  // Remote probe (read-only).
   let remoteReachable = false;
-  let remoteBranchKnown = false;
   let remoteHead = null;
   try {
-    const out = git(["ls-remote", remoteName, `refs/heads/${branch}`], cwdActual);
+    const out = git(["ls-remote", remoteName, `refs/heads/${inventory.branch}`], cwdActual);
     remoteReachable = true;
-    if (out.trim()) { remoteHead = out.split("\t")[0]; remoteBranchKnown = true; }
-    else { remoteHead = null; remoteBranchKnown = true; }
+    if (out.trim()) remoteHead = out.split("\t")[0];
   } catch {
     remoteReachable = false;
   }
@@ -127,41 +132,68 @@ export function runPushGate({ argv, flags: flagsIn, cwd, remote, remotePolicy = 
     fastForwardOnly = true;
   } else if (remoteHead) {
     try {
-      git(["merge-base", "--is-ancestor", remoteHead, head], cwdActual);
+      git(["merge-base", "--is-ancestor", remoteHead, inventory.head], cwdActual);
       fastForwardOnly = true;
     } catch {
       fastForwardOnly = false;
     }
   }
 
-  const upstream = `${remoteName}/${branch}`;
-  const gate = evaluatePushGate({
-    authority,
-    branch,
-    remoteBranch: remoteHead ? `${remoteName}/${branch}` : null,
+  const evalResult = evaluatePromotionAuthority({
+    reviewJob: rj.record,
+    delivery: dl.record,
+    bundleSha256: bd.sha256,
+    inventory,
+    localHead: inventory.head,
+    remoteHead,
     remoteReachable,
-    remoteBranchKnown,
-    upstream,
     fastForwardOnly,
-    force: asBool(flags.force, false),
-    result,
-    current,
-    lifecycleState: flags.lifecycleState || "EXTERNAL_REVIEW_PASS",
   });
-
-  if (!gate.allowed) {
-    const err = pushViolationsToHold(gate.violations, !fastForwardOnly || !remoteReachable);
-    fail(err.code, gate.violations.join("; "));
+  if (!evalResult.allowed) {
+    const code = evalResult.violations[0]?.split(":")[0] ?? "HOLD / PROMOTION_AUTHORITY_DENIED";
+    fail(code, evalResult.violations.join("; "));
   }
 
-  if (!apply) {
-    const report = { allowed: true, dryRun: true, branch, head, remoteHead, verified: true };
+  // Idempotent read-only outcome: the remote already holds exactly the
+  // reviewed head. No push, no writable-scope gate (nothing is mutated).
+  if (evalResult.status === "PROMOTION_ALREADY_SATISFIED") {
+    const report = {
+      allowed: true,
+      alreadySatisfied: true,
+      status: evalResult.status,
+      identity: evalResult.identity,
+      branch: inventory.branch,
+      head: inventory.head,
+      remoteHead,
+    };
     console.log(JSON.stringify(report, null, 1));
     return report;
   }
 
-  execFileSync("git", ["push", remoteName, `HEAD:${branch}`], { cwd: cwdActual, encoding: "utf8" });
-  const report = { allowed: true, pushed: true, branch, head };
+  // AUTHORIZED: a real (fast-forward) push is required — the writable-scope
+  // gate runs over the candidate domain before any mutation.
+  assertScopeCoversInventory(inventory, record.authorized_paths || []);
+  if (!fastForwardOnly) {
+    fail("HOLD / REMOTE_BRANCH_DIVERGED", `remote ${remoteName}/${inventory.branch} ${remoteHead} is not an ancestor of ${inventory.head}`);
+  }
+
+  if (!apply) {
+    const report = {
+      allowed: true,
+      dryRun: true,
+      status: evalResult.status,
+      identity: evalResult.identity,
+      branch: inventory.branch,
+      head: inventory.head,
+      remoteHead,
+      verified: true,
+    };
+    console.log(JSON.stringify(report, null, 1));
+    return report;
+  }
+
+  execFileSync("git", ["push", remoteName, `HEAD:${inventory.branch}`], { cwd: cwdActual, encoding: "utf8" });
+  const report = { allowed: true, pushed: true, status: evalResult.status, identity: evalResult.identity, branch: inventory.branch, head: inventory.head };
   console.log(JSON.stringify(report, null, 1));
   return report;
 }

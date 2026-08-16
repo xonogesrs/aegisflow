@@ -1,0 +1,78 @@
+{
+  "schema": "autoloop.lifecycle-authorization/v2",
+  "card_id": "autoloop-pgma1",
+  "run_id": "autoloop-pgma1-r1",
+  "issued_at": "2026-08-16T00:00:00.000Z",
+  "authorized_by": "controller",
+  "repository": "xonogesrs/autoloop",
+  "worktree": "/Volumes/NVM2T/Development/worktrees/autoloop-gate-migration",
+  "branch": "governance/push-draft-gate-authority-migration",
+  "base": "78facaff2200ae5176a74b8deef5f612220d7cde",
+  "base_head": "78facaff2200ae5176a74b8deef5f612220d7cde",
+  "authorized_paths": [
+    "scripts/gov-push-gate.mjs",
+    "scripts/gov-draft-pr.mjs",
+    "src/governance/promotion-authority.mjs",
+    "test/governance/test-promotion-gate-authority.mjs",
+    "test/governance/test-review-unit-e2e.mjs",
+    "docs/pi-graph-output/pgma1/autoloop-pgma1-card-spec.md",
+    "docs/pi-graph-output/pgma1/autoloop-pgma1-authority.json"
+  ],
+  "bundle_path": "docs/pi-graph-output/pgma1/autoloop-pgma1-bundle.txt",
+  "spec_path": "docs/pi-graph-output/pgma1/autoloop-pgma1-card-spec.md",
+  "lifecycle_authorization": {
+    "decomposition": {
+      "allowed": false,
+      "max_depth": 0,
+      "max_total_nodes": 0
+    },
+    "independent_review": {
+      "allowed": true,
+      "require_fresh_session": true,
+      "require_same_artifact_digest": true
+    },
+    "bounded_repair": {
+      "allowed": false,
+      "max_rounds": 0,
+      "scope_expansion": false
+    },
+    "checkpoint_commit": {
+      "allowed": true,
+      "require_local_gates_pass": true,
+      "require_clean_index_before_stage": true,
+      "require_expected_paths_only": true
+    },
+    "feature_branch_push": {
+      "allowed": true,
+      "branch_pattern": "governance/push-draft-*",
+      "force_push": false,
+      "require_remote_ancestor_check": true
+    },
+    "draft_pr": {
+      "allowed": false,
+      "base_branch": "main",
+      "draft_only": true,
+      "create_if_missing": false,
+      "update_if_present": false
+    },
+    "external_review": {
+      "required": true,
+      "require_bundle": true,
+      "bundle_path": "docs/pi-graph-output/pgma1/autoloop-pgma1-bundle.txt"
+    },
+    "review_unit": {
+      "allowed": true,
+      "repository_count": 1,
+      "worktree_count": 1,
+      "parent_card_count": 1,
+      "architecture_goal_count": 1,
+      "maximum_internal_milestones": 3,
+      "maximum_changed_paths": 16,
+      "maximum_patch_lines": 3000,
+      "maximum_repair_rounds": 0
+    },
+    "merge_main": { "allowed": false },
+    "release": { "allowed": false },
+    "seal": { "allowed": false }
+  }
+}
