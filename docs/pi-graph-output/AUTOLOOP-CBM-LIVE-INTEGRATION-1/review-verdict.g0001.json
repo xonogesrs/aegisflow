@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "autoloop.review-verdict/v1",
+  "jobId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1.g0001",
+  "lineageId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
+  "generation": 1,
+  "candidateIdentity": {
+    "changedTreeIdentity": "ccf6ed16cfe13bfdf92acfc9496fa77d04c6d01b19d249353132e904ecce16b0",
+    "patchSha256": "7feb78773a91e34eee81f1d42597b9c8da795b75fa6e418cdb268a18c338fe5c",
+    "currentHead": "251d9ae4b4559f7c824d4a6043f860c0e8e2aed8",
+    "baseHead": "d36d016771570b71e28cb93fa2f23f654b873856",
+    "repository": "xonogesrs/autoloop",
+    "branch": "governance/decomp-opt1-design-freeze"
+  },
+  "specIdentity": {
+    "specId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
+    "specDigest": "2c85ec1ac88fc10a66ef2186d7198e218048580ef7f8e92fa1e46d5cd24bbb37"
+  },
+  "findingsDigest": "130abd07aff0b2891a4ea89b9ce1ef5d2ba89cf415d1c8171153146c0d8470fc",
+  "reviewerIdentity": "external-reviewer",
+  "verdict": "PASS",
+  "summary": "Independent external review of superseding bundle 9703d458 (supersedes feb69523 / ae2f31b8): CBM live integration independently verified — bundle identity/provenance, exact authorized mutation set, A1-A16 matrix vs live behavior, CLI delegation to the existing retrieval engine, one-site production provider injection with fail-closed runner gate, default-denied retrieval capability, repository isolation, stale-with-provenance semantics, persistence/parity, corruption fail-closed, real executor query, sub-agent on-demand invocation (ENVIRONMENT_BOUND sandbox WAL CANTOPEN, capability proven, in-sandbox AVAILABLE not demonstrated), benchmark vs source truth, regression (196/196 formal; broader sweep failures all pre-existing/environment-bound), no unrelated mutation. No BLOCKER/MAJOR findings. Generic committed-before-baseline provenance gap documented in the resealed bundle §8/§21 — follow-up card, not a CBM defect.",
+  "recommendedNextAction": "Controller ingest via the sole ACCEPTED authority (acceptReviewJob); then final closeout; then the committed-before-baseline provenance-gap repair card; then Parent->Child Context/Evidence Inheritance design. Do NOT begin Parent->Child automatically.",
+  "createdAt": "2026-08-16T14:27:06.778Z"
+}

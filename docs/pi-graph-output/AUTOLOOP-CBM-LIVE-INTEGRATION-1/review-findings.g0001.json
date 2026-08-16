@@ -1,0 +1,135 @@
+{
+  "schemaVersion": "autoloop.review-findings/v1",
+  "jobId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1.g0001",
+  "lineageId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
+  "generation": 1,
+  "candidateIdentity": {
+    "changedTreeIdentity": "ccf6ed16cfe13bfdf92acfc9496fa77d04c6d01b19d249353132e904ecce16b0",
+    "patchSha256": "7feb78773a91e34eee81f1d42597b9c8da795b75fa6e418cdb268a18c338fe5c",
+    "currentHead": "251d9ae4b4559f7c824d4a6043f860c0e8e2aed8",
+    "baseHead": "d36d016771570b71e28cb93fa2f23f654b873856",
+    "repository": "xonogesrs/autoloop",
+    "branch": "governance/decomp-opt1-design-freeze"
+  },
+  "specIdentity": {
+    "specId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
+    "specDigest": "2c85ec1ac88fc10a66ef2186d7198e218048580ef7f8e92fa1e46d5cd24bbb37"
+  },
+  "reviewerIdentity": "external-reviewer",
+  "findings": [
+    {
+      "findingId": "EXT-F1",
+      "severity": "INFO",
+      "subject": "Bundle identity / SHA / supersession chain",
+      "description": "Superseding bundle card-closeout-bundle-reseal-r1.txt: identity 9703d458, content sha d92162cf (recomputed), SUPERSEDES -> feb69523 / ae2f31b8; superseded artifact retained byte-identical (fff4c934 whole-file sha); surface delivery record bound to 9703d458 with supersedes chain; validateReviewBundle 0 errors. The superseded bundle was NOT treated as the current candidate.",
+      "recommendedDisposition": "Proceed"
+    },
+    {
+      "findingId": "EXT-F2",
+      "severity": "INFO",
+      "subject": "Implementation provenance d36d016 -> 251d9ae",
+      "description": "Single implementation commit 251d9ae (2026-08-16 21:44:26 +0800) on base d36d016 (21:19:48 +0800), candidate tree 8bc33e49. Matches the card-spec baseline declaration.",
+      "recommendedDisposition": "Proceed"
+    },
+    {
+      "findingId": "EXT-F3",
+      "severity": "INFO",
+      "subject": "Exact 6-file mutation set equals authorized scope",
+      "description": "git diff --name-status d36d016..251d9ae = spec (A) + package.json (M) + scripts/autoloop-memory-query.mjs (A) + src/admission/admission-gate.mjs (M) + 2 new test files (A). Exactly the card-spec authorized mutation set; no extras, no omissions.",
+      "recommendedDisposition": "Proceed"
+    },
+    {
+      "findingId": "EXT-F4",
+      "severity": "INFO",
+      "subject": "A1-A16 evidence matrix individually verified",
+      "description": "Matrix (cbm-live-integration-1-r1-evidence-matrix.json) has all 16 items with concrete results; card-targeted test files assert the claimed semantics (A2 schema, A6 zero cross-repo leakage, A7 EMPTY_MEMORY+population, A8/A9 stale+provenance, A15 corrupt INVALID; A4 FAST_PATH receives NO provider, A3/A5 provider auto-constructed + AVAILABLE repository-bound retrieval); live re-probes reproduced AVAILABLE retrieval, isolation (excludedRepository=6), corruption fail-closed (exit 2), stale detection.",
+      "recommendedDisposition": "Proceed"
+    },
+    {
+      "findingId": "EXT-F5",
+      "severity": "INFO",
+      "subject": "CLI delegates to existing CBM retrieval logic",
+      "description": "scripts/autoloop-memory-query.mjs imports only LocalMemoryStore/resolveRepositoryIdentity/MemoryStoreInvalidError + query-schema; retrieval goes through store.query -> retrieveMemory (local-store.mjs:319). No duplicated ranking/identity/store logic in the CLI (no bm25/score/rank code).",
+      "recommendedDisposition": "Proceed"
+    },
+    {
+      "findingId": "EXT-F6",
+      "severity": "INFO",
+      "subject": "Production dispatch auto-constructs/injects the provider at ONE site",
+      "description": "admission-gate.mjs:298-310: runAdmittedGraph constructs createGraphMemoryProvider({}) iff isRetrievalAuthorized(admission); caller-supplied provider respected unchanged; unauthorized admission gets NO provider and the runner gate (colima-graph-runner.mjs:220: isRetrievalAuthorized && memory && typeof provider.retrieveGraphMemory === 'function') fails closed. No dogfood-only injection path in production.",
+      "recommendedDisposition": "Proceed"
+    },
+    {
+      "findingId": "EXT-F7",
+      "severity": "INFO",
+      "subject": "memory_retrieval_allowed is authority-controlled and default-denied",
+      "description": "policy-projection.mjs: FAST_PATH (default admission profile) projects memory_retrieval_allowed=false; retrieval is an explicit capability (CAP.MEMORY_RETRIEVAL) enabled only by elevated profiles. The card's own admission enabled it deliberately via the HIGH profile (ADMISSION_CAPABILITIES_ALLOWED: CAP.MEMORY_RETRIEVAL), bound to the v3 authority + frozen admission.",
+      "recommendedDisposition": "Proceed"
+    },
+    {
+      "findingId": "EXT-F8",
+      "severity": "INFO",
+      "subject": "Wrong repository identity cannot leak records",
+      "description": "Live probe: query from /Volumes/NVM2T/Development/autoloop identity (a8d93536) -> selected 0, excludedRepository=6, totalCandidates=8; own records visible only under own identity (2 EXECUTION at RAW floor). Identity = sha256({remote, canonicalPath}); hard boundary, no aliasing.",
+      "recommendedDisposition": "Proceed"
+    },
+    {
+      "findingId": "EXT-F9",
+      "severity": "INFO",
+      "subject": "Stale state surfaced with provenance, never labeled current",
+      "description": "freshness block reports indexed/currentTree/indexedTrees/stale; records bound to tree 8bc33e49 are excluded at retrieval while the current tree is newer (selected 0 under CURRENT); INCLUDE_STALE surfaces them WITH their tree provenance. No watcher; check-at-use semantics.",
+      "recommendedDisposition": "Proceed"
+    },
+    {
+      "findingId": "EXT-F10",
+      "severity": "INFO",
+      "subject": "Persistence/reopen + journal/SQLite parity",
+      "description": "open/close/reopen: verifyJournalParity ok, digest stable e267fdc1 (sqlite==journal), 8 records identical id sets. Restart-safe, lossless-rebuild semantics covered by test-local-store + test-rebuild-determinism (green).",
+      "recommendedDisposition": "Proceed"
+    },
+    {
+      "findingId": "EXT-F11",
+      "severity": "INFO",
+      "subject": "Corruption/mismatch fail-closed",
+      "description": "Tampered journal -> state INVALID, MEMORY_STORE_INVALID:JOURNAL_CHAIN_INVALID, CLI exit 2 (never silent empty); missing store -> EMPTY_MEMORY exit 0 (valid explicit answer). Same semantics as the Graph provider (missing -> EMPTY_MEMORY, corrupt -> HOLD).",
+      "recommendedDisposition": "Proceed"
+    },
+    {
+      "findingId": "EXT-F12",
+      "severity": "INFO",
+      "subject": "Real executor query proof",
+      "description": "Main-process (executor-side) CLI query: AVAILABLE, 1 CODE record selected; createGraphMemoryProvider retrieveGraphMemory -> AVAILABLE with memoryContext. The formal runner's injected-provider check (A3/A10) is asserted by test-admission-memory-provider.",
+      "recommendedDisposition": "Proceed"
+    },
+    {
+      "findingId": "EXT-F13",
+      "severity": "INFO",
+      "subject": "Sub-agent on-demand query capability + CANTOPEN classification",
+      "description": "A real read-only scout executed the CLI on demand (3 queries; identity resolved; fail-closed INVALID/exit 2 under the sandbox's SQLite WAL CANTOPEN on every open path — CLI subprocess, reader, direct DatabaseSync), and independently verified the store healthy (valid SQLite magic, 8 well-formed journal events) + the CLI surface (identity resolution, query validation, retrieval path, state/exit codes). Classification ENVIRONMENT_BOUND is CORRECT: the sandbox denies SQLite open() (WAL sidecar creation); the same CLI returns AVAILABLE from normal processes and the store is healthy — but the AVAILABLE-state retrieval from INSIDE the sub-agent sandbox is NOT demonstrated and is NOT converted to PASS on the strength of store health elsewhere. The on-demand INVOCATION capability is proven (possession + invocation + governed fail-closed behavior).",
+      "recommendedDisposition": "Proceed with documented limitation"
+    },
+    {
+      "findingId": "EXT-F14",
+      "severity": "INFO",
+      "subject": "Benchmark matches direct source truth",
+      "description": "Benchmark claims verified against source: filesSurfaced == the card's 5 changed code files; wiring facts (provider at runAdmittedGraph, FAST_PATH default-deny, identity model) match source; B-3 honest-empty for non-changed lifecycle modules; 11 live queries, 0 incorrect/stale retrievals.",
+      "recommendedDisposition": "Proceed"
+    },
+    {
+      "findingId": "EXT-F15",
+      "severity": "INFO",
+      "subject": "Broader regression evidence",
+      "description": "Formal 17-suite run: 196/196. Broader sweep (71 files, memory+admission+governance): 849 tests, 841 pass, 8 fail — ALL classified PRE-EXISTING / ENVIRONMENT_BOUND / UNRELATED: 2x vendor-integrity (FR4 deployment not installed), 3x verification-scope/vca1 (tests hardcode /Volumes/NVM2T canonical path while the guard derives roots from module location /tmp/autoloop), 1x git-status-parsing live-repo state expectation (canonical repo clean), 1x colima-pipeline test (scratch-ownership; test:colima-all environment), 1x cascade (verification-timing runs git-status-parsing). None touch the card's mutation set; no INTRODUCED failures.",
+      "recommendedDisposition": "Proceed"
+    },
+    {
+      "findingId": "EXT-F16",
+      "severity": "INFO",
+      "subject": "No unrelated production mutation",
+      "description": "Post-implementation commits (48b479d, 2e8a093) touch only docs/pi-graph-output (card governance artifacts + reseal evidence). Zero production code changed after 251d9ae.",
+      "recommendedDisposition": "Proceed"
+    }
+  ],
+  "summary": "Independent external review of superseding bundle 9703d458 (supersedes feb69523 / ae2f31b8): CBM live integration independently verified — bundle identity/provenance, exact authorized mutation set, A1-A16 matrix vs live behavior, CLI delegation to the existing retrieval engine, one-site production provider injection with fail-closed runner gate, default-denied retrieval capability, repository isolation, stale-with-provenance semantics, persistence/parity, corruption fail-closed, real executor query, sub-agent on-demand invocation (ENVIRONMENT_BOUND sandbox WAL CANTOPEN, capability proven, in-sandbox AVAILABLE not demonstrated), benchmark vs source truth, regression (196/196 formal; broader sweep failures all pre-existing/environment-bound), no unrelated mutation. No BLOCKER/MAJOR findings. Generic committed-before-baseline provenance gap documented in the resealed bundle §8/§21 — follow-up card, not a CBM defect.",
+  "createdAt": "2026-08-16T14:27:06.763Z"
+}
