@@ -3649,7 +3649,22 @@ export async function runStateDrivenCloseout({
       blockedReason: r.final !== "PASS" ? (r.reason ?? null) : null,
     },
   };
-  writeCloseoutState({ path: statePath, state: nextState });
+  // R-13（RSL2-06）: a REQUIRED state persistence failure fails closed — the
+  // disposition is never silently dropped（previously the write result was
+  // ignored）.
+  const writeResult = writeCloseoutState({ path: statePath, state: nextState });
+  if (!writeResult.ok) {
+    return {
+      applied: true,
+      final: "HOLD",
+      holdCode: "CLOSEOUT_STATE_WRITE_FAILED",
+      reason: `CLOSEOUT_STATE_WRITE_FAILED:${writeResult.reason}`,
+      bundlePath: r.bundlePath ?? null,
+      bundle: r.bundle ?? null,
+      externalReview: r.externalReview ?? null,
+      statePath,
+    };
+  }
 
   return { ...r, statePath };
 }

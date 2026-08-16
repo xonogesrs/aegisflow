@@ -30,6 +30,7 @@ import { attachBudgetResult } from "../budget/graph-wiring.mjs";
 import { phaseExecutionId } from "../v2/phase-task-card.mjs";
 import { captureChangedPaths } from "../shared/git-diff-utils.mjs";
 import { runMandatoryGraphCloseout, runStateDrivenCloseout } from "../governance/review-bundle.mjs";
+import { applyExecutionReviewBarrier as productionExecutionReviewBarrier, deriveExecutionReviewRequirement } from "../governance/execution-review.mjs";
 import { createColimaExecutorAdapter } from "./colima-executor-adapter.mjs";
 import { createColimaReviewerAdapter } from "./colima-reviewer-adapter.mjs";
 import {
@@ -141,6 +142,13 @@ export async function runColimaGraph({
   closeoutGate,
   closeoutSourceBuilder,
   closeoutEvidenceWriter,
+  // RSL2 — Domain A execution-review barrier（LATEST surface）: internal DI
+  // for tests（defaults to the production applyExecutionReviewBarrier; never
+  // a CLI flag）. `executionReviewSurfaceDir` / `executionReviewArchiveDir`
+  // override the fixed Latest/ + Latest/archive/ paths.
+  executionReviewBarrier = null,
+  executionReviewSurfaceDir = null,
+  executionReviewArchiveDir = null,
   memory = null,
   // COST-1 passive telemetry observer（OPT-IN）. Runs AFTER the graph result
   // + closeout gate are final; failures are swallowed and degrade to a
@@ -458,26 +466,37 @@ export async function runColimaGraph({
   let cardHoldCode = orchestratorResult.holdCode;
   let cardReason = orchestratorResult.reason;
   let closeoutResult = { applied: false, final: null, holdCode: null, reason: "closeout_not_required" };
+  // RSL2 — Domain A（LATEST surface）: every FORMAL execution（frozen
+  // admission present）must publish an execution review before any terminal
+  // verdict. The requirement is admission-derived（authoritative）— the
+  // caller's closeout declaration is at most an input, never the authority
+  //（RSL2-03）. Publication failure fails closed（HOLD downgrade）.
+  const needsCardCloseout = Boolean(closeout && (closeout.requiresReview === true || closeout.statePath));
+  const executionReviewRequirement = deriveExecutionReviewRequirement(admission);
+  const needsExecutionReview = executionReviewRequirement.required;
+  const graphView = (needsCardCloseout || needsExecutionReview)
+    ? {
+        executionId,
+        final: orchestratorResult.final,
+        holdCode: orchestratorResult.holdCode,
+        reason: orchestratorResult.reason,
+        scheduler: orchestratorResult.scheduler,
+        nodeResults: [...nodeResults.values()],
+        transitions: orchestratorResult.transitions,
+        join: [...nodeResults.values()],
+        // TA-2: the closeout source records the admission decision（evidence +
+        // explainability; U）. Null when the graph ran unadmitted.
+        admission: admission ?? null,
+      }
+    : null;
+  let executionReviewResult = { applied: false };
   // AUTOLOOP_REPORT_LIFECYCLE_REPAIR_1（R3 / R1）: the production hook also
   // fires from PERSISTED closeout-state（closeout.statePath）— a structured,
   // machine-readable review-required declaration replaces the need for a
   // card-specific script. The legacy in-memory `closeout.requiresReview`
   // path is unchanged（regression）; state-driven runs only when the caller
   // explicitly declares closeout.statePath.
-  if (closeout && (closeout.requiresReview === true || closeout.statePath)) {
-    const graphView = {
-      executionId,
-      final: orchestratorResult.final,
-      holdCode: orchestratorResult.holdCode,
-      reason: orchestratorResult.reason,
-      scheduler: orchestratorResult.scheduler,
-      nodeResults: [...nodeResults.values()],
-      transitions: orchestratorResult.transitions,
-      join: [...nodeResults.values()],
-      // TA-2: the closeout source records the admission decision（evidence +
-      // explainability; U）. Null when the graph ran unadmitted.
-      admission: admission ?? null,
-    };
+  if (needsCardCloseout) {
     if (closeout.statePath) {
       // state-driven: the persisted record is authoritative for requiresReview
       // + identity + scope（idempotent; R2 fail-closed on incomplete metadata）
@@ -514,6 +533,46 @@ export async function runColimaGraph({
       cardVerdict = "HOLD";
       cardHoldCode = closeoutResult.holdCode ?? "REVIEW_BUNDLE_INVALID";
       cardReason = closeoutResult.reason ?? "REVIEW_BUNDLE_GATE_FAILED";
+    }
+  }
+
+  // ── RSL2 Domain A barrier（universal execution review publication）─────
+  // Runs AFTER the bundle gate and BEFORE the final verdict is returned. A
+  // formal execution（admission present）that fails to publish its execution
+  // review to Latest/ cannot transition to a terminal PASS（fail-closed）;
+  // a HOLD outcome whose review cannot be published records the failure so
+  // the caller can see why the execution review is missing.
+  if (needsExecutionReview && graphView) {
+    const barrier = await (executionReviewBarrier ?? productionExecutionReviewBarrier)({
+      graphView,
+      admission,
+      closeout,
+      repoPath,
+      cwd,
+      surfaceDir: executionReviewSurfaceDir ?? null,
+      archiveDir: executionReviewArchiveDir ?? null,
+    });
+    executionReviewResult = barrier.result
+      ? {
+          applied: true,
+          ok: barrier.ok,
+          required: barrier.required,
+          identity: barrier.result.identity ?? null,
+          sha256: barrier.result.sha256 ?? null,
+          path: barrier.result.path ?? null,
+          archivedPath: barrier.result.archivedPath ?? null,
+          idempotent: barrier.result.idempotent ?? false,
+          holdCode: barrier.result.holdCode ?? null,
+          reason: barrier.result.reason ?? null,
+        }
+      : { applied: true, ok: false, required: true, holdCode: barrier.holdCode, reason: barrier.reason };
+    if (!barrier.ok) {
+      cardVerdict = "HOLD";
+      cardHoldCode = barrier.holdCode ?? "EXECUTION_REVIEW_NOT_PUBLISHED";
+      cardReason = barrier.reason ?? "EXECUTION_REVIEW_NOT_PUBLISHED";
+      if (orchestratorResult.final !== "PASS" && cardReason && !cardReason.startsWith("EXECUTION_REVIEW")) {
+        cardReason = `${orchestratorResult.final}:${cardReason}`;
+      }
     }
   }
 
@@ -603,6 +662,23 @@ export async function runColimaGraph({
           // PASS（internal closeout）is NOT an external review. CARD_COMPLETE /
           // EXTERNAL_REVIEW_PASS require externalReview.complete === true.
           externalReview: closeoutResult.externalReview ?? null,
+        }
+      : { applied: false },
+    // RSL2 — Domain A execution review publication record（Latest/）. When
+    // `applied`, the graph already published its execution review BEFORE this
+    // result was returned（barrier ran pre-verdict）.
+    executionReview: executionReviewResult.applied
+      ? {
+          applied: true,
+          ok: executionReviewResult.ok ?? false,
+          required: executionReviewResult.required ?? false,
+          identity: executionReviewResult.identity ?? null,
+          sha256: executionReviewResult.sha256 ?? null,
+          path: executionReviewResult.path ?? null,
+          archivedPath: executionReviewResult.archivedPath ?? null,
+          idempotent: executionReviewResult.idempotent ?? false,
+          holdCode: executionReviewResult.holdCode ?? null,
+          reason: executionReviewResult.reason ?? null,
         }
       : { applied: false },
     instance: { profile, socket: instanceSocket(profile) },

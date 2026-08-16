@@ -44,13 +44,14 @@
 // Local-only, deterministic, no network. Never commits/pushes/seals.
 
 import { existsSync, readFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   runCloseoutGate,
   runStateDrivenCloseout,
   validateReviewBundle,
   collectRepoFacts,
+  bundleContentSha256,
   REVIEW_BUNDLE_SOURCE_SCHEMA,
   buildExternalReviewState,
   recordDeliveryAttempt,
@@ -274,12 +275,35 @@ if (mode === "apply-verdict") {
     console.error(`verdict_blocked: ${rec.errors.join(";")}`);
     process.exit(1);
   }
+  // R-13（RSL2-06）: the verdict must bind the ACTUAL delivered bytes — never
+  // the delivery record's self-claim. Re-read the authoritative surface bundle
+  //（the review-bundle.txt next to this delivery record）, recompute identity +
+  // content sha, and require them to match the record; a stale or divergent
+  // bundle can never mint a verdict（fail-closed）.
+  const surfaceBundle = join(dirname(recPath), "review-bundle.txt");
+  if (!existsSync(surfaceBundle)) {
+    console.error(`verdict_blocked: surface_bundle_missing:${surfaceBundle}`);
+    process.exit(1);
+  }
+  const bundleText = readFileSync(surfaceBundle, "utf8");
+  const actualIdentity = bundleText.match(/^REVIEW_BUNDLE_IDENTITY:\s*([0-9a-f]{64})$/m)?.[1] ?? null;
+  const actualSha = bundleContentSha256(surfaceBundle);
+  const recordIdentity = rec.state?.delivery?.reviewBundleIdentity ?? null;
+  const recordSha = rec.state?.delivery?.reviewBundleSha256 ?? null;
+  if (!actualIdentity || actualIdentity !== recordIdentity) {
+    console.error(`verdict_blocked: surface_bundle_identity_diverges_from_record:${actualIdentity ? actualIdentity.slice(0, 8) : "none"}!=${recordIdentity ? recordIdentity.slice(0, 8) : "none"}`);
+    process.exit(1);
+  }
+  if (!actualSha || actualSha !== recordSha) {
+    console.error(`verdict_blocked: surface_bundle_sha_diverges_from_record:${actualSha ? actualSha.slice(0, 12) : "none"}!=${recordSha ? recordSha.slice(0, 12) : "none"}`);
+    process.exit(1);
+  }
   const applied = applyExternalReviewVerdict(rec.state, {
     verdict,
     reviewerIdentity: reviewer,
     reviewedAt,
-    bundleIdentity: rec.state.delivery?.reviewBundleIdentity ?? null,
-    bundleSha256: rec.state.delivery?.reviewBundleSha256 ?? null,
+    bundleIdentity: actualIdentity,
+    bundleSha256: actualSha,
     agentIdentity: agent,
     findingsDigest: findingsDigest ?? undefined,
   });

@@ -133,21 +133,19 @@ if (mode === "deliver") {
   const card = arg("--card", null);
   const method = arg("--method", "external-review-surface");
   const attemptedAt = arg("--attempted-at", new Date().toISOString());
-  const force = process.argv.includes("--force");
   if (!bp || !existsSync(bp)) {
-    console.error("usage: node scripts/gov-external-review-surface.mjs --deliver <bundle.txt> [--evidence <evidence.json>] [--card <id>] [--method <m>] [--attempted-at <ISO>] [--force]");
+    console.error("usage: node scripts/gov-external-review-surface.mjs --deliver <bundle.txt> [--evidence <evidence.json>] [--card <id>] [--method <m>] [--attempted-at <ISO>]");
     process.exit(2);
   }
+  // R-13（RSL2-06）: validation can never be bypassed. A bundle that fails the
+  // CURRENT validator cannot be delivered（fail-closed）— the forced path
+  //（--force, reviewBundleValidated=false）is removed; it allowed an
+  // unvalidated artifact to reach the inbox surface.
   const check = validateReviewBundle(bp, { authorizedDir: dirname(bp) });
-  if (!check.ok && !force) {
+  if (!check.ok) {
     console.error(`deliver_blocked valid=false holdCode=${check.holdCode ?? "null"}`);
     for (const e of check.errors ?? []) console.error(`  error: ${e}`);
-    console.error("  (use --force to deliver a pre-convention bundle that fails the CURRENT validator —") ;
-    console.error("   the external reviewer is the one who renders the verdict on it)");
     process.exit(1);
-  }
-  if (!check.ok) {
-    console.error(`deliver_forced valid=false（validator: ${check.errors.join(";")}）`);
   }
   const txt = readFileSync(bp, "utf8");
   const identity = txt.match(/^REVIEW_BUNDLE_IDENTITY: ([0-9a-f]{64})$/m)?.[1] ?? null;
