@@ -30,6 +30,7 @@ import { validateAdmission, assertAdmissionFrozen, deriveAdmissionId } from "./a
 import { createBudgetEnforcement } from "../budget/enforcement.mjs";
 import { attachBudgetResult } from "../budget/graph-wiring.mjs";
 import { digestOf } from "../canonical-digest.mjs";
+import { resolveReviewCloseout, prepareReviewLifecycle, completeReviewLifecycle } from "../governance/review-lifecycle.mjs";
 
 export const PRODUCTION_GATE_HOLDS = Object.freeze({
   ADMISSION_REQUIRED: "ADMISSION_REQUIRED",
@@ -158,7 +159,7 @@ export function assertProductionAdmission(admission) {
  * @returns {Promise<object>} runner result, or the HOLD when the gate fails
  *   BEFORE the runner is invoked（nodeResults: [] — no execution started）.
  */
-export async function runAdmittedGraph({ admission, graph = null, runner = null, budget = null, ...runnerOpts }) {
+export async function runAdmittedGraph({ admission, graph = null, runner = null, budget = null, reviewSurfaceDir = null, ...runnerOpts }) {
   const gate = assertProductionAdmission(admission);
   if (!gate.ok) {
     return {
@@ -170,6 +171,26 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
       closeout: { applied: false },
     };
   }
+
+  // ── REVART-LC1-B1 — review lifecycle authority gate (pure, pre-dispatch).
+  // A review-required admission (review_policy.strength independent|external)
+  // MUST carry a complete frozen `extensions.review_closeout` binding with a
+  // non-zero authority digest chain and mutation_scope ⊆ authorized_scope;
+  // a non-review-required admission MUST NOT carry one. Any violation HOLDs
+  // BEFORE the runner is invoked (nodeResults: []).
+  const lifecycle = resolveReviewCloseout(admission);
+  if (!lifecycle.ok) {
+    return {
+      final: "HOLD",
+      holdCode: lifecycle.holdCode,
+      reason: lifecycle.reason,
+      nodeResults: [],
+      transitions: [],
+      closeout: { applied: false },
+      lifecycle: { active: false, holdCode: lifecycle.holdCode },
+    };
+  }
+
   let fn = runner;
   if (!fn) {
     if (graph === "colima") {
@@ -246,14 +267,71 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
   }
   const enforcement = enforcementResult.enforcement;
 
+  // ── REVART-LC1-B1 — admission-driven lifecycle bootstrap BEFORE dispatch.
+  // For a review-required run, materialize + persist the canonical
+  // closeout-state.json from the frozen binding (create-or-verify; FM-3
+  // card-start baseline). Any bootstrap failure HOLDs here — the runner is
+  // NEVER invoked (fail-closed, Issue #8 negative #1). Caller `closeout`
+  // runner opts are NON-authoritative once a binding is present (B0: no
+  // runtime supplement) and are stripped so the runner cannot double-drive
+  // or redirect the lifecycle seam.
+  let prepared = null;
+  let forward = runnerOpts;
+  if (lifecycle.active) {
+    if (Object.prototype.hasOwnProperty.call(forward, "closeout")) {
+      forward = { ...forward };
+      delete forward.closeout;
+    }
+    prepared = await prepareReviewLifecycle({ admission, binding: lifecycle.binding });
+    if (!prepared.ok) {
+      return {
+        final: "HOLD",
+        holdCode: prepared.holdCode,
+        reason: prepared.reason,
+        nodeResults: [],
+        transitions: [],
+        closeout: { applied: false },
+        lifecycle: { active: true, holdCode: prepared.holdCode },
+      };
+    }
+  }
+
   // The frozen admission is forwarded UNCHANGED（the runner consumes it; it
   // never re-derives or amends it — A1）; the budget enforcement travels with
   // it so the production runner executes the pre-dispatch → record → post-op
   // chain（and the durable layer persists the ledger checkpoint）.
-  const result = await fn({ ...runnerOpts, admission, budget: { ...(budget ?? {}), enforcement } });
+  const result = await fn({ ...forward, admission, budget: { ...(budget ?? {}), enforcement } });
   // Finalize + reconcile（NEG13）: the runner's runtime evidence and the
   // ledger MUST agree; divergence is a HOLD, never a warning-only event.
-  return attachBudgetResult(result, enforcement);
+  let finalResult = attachBudgetResult(result, enforcement);
+
+  // ── REVART-LC1-B1 — mandatory completion trigger. At implementation PASS,
+  // automatically run the existing state-driven closeout against the
+  // bootstrapped state (bundle generation/validation/delivery stay owned by
+  // review-bundle). Terminal remap (B0 I11): bundle/delivery PASS with review
+  // outstanding is REVIEW_PENDING — a review-required run NEVER returns
+  // terminal PASS from here; only an accepted authoritative review (the
+  // Controller acceptance path) yields PASS. HOLD / AWAITING_BUNDLE_DELIVERY
+  // propagate fail-closed — never a successful terminal without artifacts.
+  if (lifecycle.active && finalResult.final === "PASS") {
+    const outcome = await completeReviewLifecycle({
+      admission,
+      binding: lifecycle.binding,
+      graphResult: finalResult,
+      repoRoot: prepared.repoRoot,
+      surfaceDir: reviewSurfaceDir,
+    });
+    const closeout = { applied: true, ...outcome };
+    const f = outcome.final;
+    if (f === "HOLD" || f === "AWAITING_BUNDLE_DELIVERY") {
+      finalResult = { ...finalResult, final: f, holdCode: outcome.holdCode ?? null, reason: outcome.reason ?? null, closeout };
+    } else if (f === "PASS") {
+      finalResult = { ...finalResult, final: "PASS", holdCode: null, reason: null, closeout };
+    } else {
+      finalResult = { ...finalResult, final: "REVIEW_PENDING", holdCode: null, reason: null, closeout };
+    }
+  }
+  return finalResult;
 }
 
 // Per-runner production wrappers（thin; same mandatory gate）.

@@ -200,6 +200,81 @@ export function readCloseoutState(path) {
 }
 
 /**
+ * AUTOLOOP-REVART-LC1-B1 — bootstrap the canonical closeout-state record
+ * from the frozen `review_closeout` binding (B0 contract). The binding is
+ * the ONLY metadata source; nothing here reads runner opts or card text.
+ * The additive `reviewCloseout` block carries the resume identity
+ * (binding digest + admission id) for create-or-verify on resume.
+ */
+export function closeoutStateForBinding({
+  binding,
+  bindingDigest,
+  admissionId,
+  resolvedOutDir,
+  baseline,
+  reviewRequiredAt = new Date().toISOString(),
+} = {}) {
+  return {
+    schema: CLOSEOUT_STATE_SCHEMA,
+    task: {
+      cardId: binding?.card_id ?? null,
+      cardTitle: binding?.card_title ?? null,
+      cardType: binding?.card_type ?? null,
+    },
+    requiresReview: true,
+    reviewRequiredAt,
+    outDir: resolvedOutDir,
+    authorizedScope: Array.isArray(binding?.authorized_scope) ? binding.authorized_scope.slice() : [],
+    baseline: baseline ?? null,
+    reviewCloseout: {
+      schema: binding?.schema ?? null,
+      bindingDigest,
+      admissionId,
+    },
+  };
+}
+
+/**
+ * Verify a persisted closeout-state record against the frozen binding —
+ * the RESUME branch of create-or-verify. Any drift (identity, resolved
+ * outDir, binding digest, admission id, baseline) fails closed:
+ * HOLD / CLOSEOUT_BOOTSTRAP_BINDING_DRIFT — never atomic-replace.
+ * Pure (no I/O).
+ */
+export function verifyCloseoutStateAgainstBinding(state, {
+  binding,
+  bindingDigest,
+  admissionId,
+  resolvedOutDir,
+} = {}) {
+  const drift = [];
+  if (!state || typeof state !== "object" || Array.isArray(state)) {
+    drift.push("state_absent");
+    return { ok: false, drift };
+  }
+  if (state.schema !== CLOSEOUT_STATE_SCHEMA) drift.push(`schema:${state.schema}`);
+  if (state.requiresReview !== true) drift.push("requiresReview");
+  if (state.task?.cardId !== binding?.card_id) drift.push("cardId");
+  if (state.task?.cardTitle !== binding?.card_title) drift.push("cardTitle");
+  if (state.task?.cardType !== binding?.card_type) drift.push("cardType");
+  if (state.outDir !== resolvedOutDir) drift.push("outDir");
+  if (!state.reviewCloseout || typeof state.reviewCloseout !== "object") {
+    drift.push("reviewCloseout");
+  } else {
+    if (state.reviewCloseout.schema !== binding?.schema) drift.push("reviewCloseout.schema");
+    if (state.reviewCloseout.bindingDigest !== bindingDigest) drift.push("reviewCloseout.bindingDigest");
+    if (state.reviewCloseout.admissionId !== admissionId) drift.push("reviewCloseout.admissionId");
+  }
+  // FM-3 card-start baseline must be present and structurally valid (content-v1).
+  if (!state.baseline || typeof state.baseline !== "object" || Array.isArray(state.baseline)
+    || !Array.isArray(state.baseline.dirtyPaths)
+    || typeof state.baseline.contentDigest !== "string") {
+    drift.push("baseline");
+  }
+  return { ok: drift.length === 0, drift };
+}
+
+/**
  * R2 — deterministically materialize the mandatory closeout contract from
  * the persisted state. Fail-closed: a requiresReview card missing any
  * CLOSEOUT_REQUIRED_FIELDS entry returns CLOSEOUT_METADATA_INCOMPLETE with

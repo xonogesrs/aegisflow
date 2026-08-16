@@ -1,13 +1,23 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "autoloop.lifecycle-authorization/v2",
+  "$id": "autoloop.lifecycle-authorization/v3",
   "title": "AutoLoop Review-Unit Lifecycle Authorization",
-  "description": "Entry-card-level authorization for one coherent review unit: decompose → execute internal milestones → local checkpoint commits → full verification → desktop external review bundle → WAITING_FOR_EXTERNAL_REVIEW → external PASS → integration commit → feature-branch push → draft PR (integration record only). Fail-closed: any capability not explicitly allowed is denied; restrictive requirements can never be cancelled by a looser runtime.",
+  "description": "Entry-card-level authorization for one coherent review unit: decompose → execute internal milestones → local checkpoint commits → full verification → desktop external review bundle → WAITING_FOR_EXTERNAL_REVIEW → external PASS → integration commit → feature-branch push → draft PR (integration record only). Fail-closed: any capability not explicitly allowed is denied; restrictive requirements can never be cancelled by a looser runtime. v3 adds the optional additive `closeout_metadata` block (AUTOLOOP-REVART-LC1-B0): the single authoritative source for the review-closeout bootstrap metadata (card_title / card_type / out_dir). v2 records without the block remain valid; a review-required card whose record lacks it HOLDs at admission.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "card_id", "run_id", "repository", "worktree", "branch", "base", "base_head", "authorized_paths", "bundle_path", "lifecycle_authorization"],
   "properties": {
-    "schema": { "type": "string", "const": "autoloop.lifecycle-authorization/v2" },
+    "schema": { "type": "string", "enum": ["autoloop.lifecycle-authorization/v2", "autoloop.lifecycle-authorization/v3"] },
+    "closeout_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["card_title", "card_type", "out_dir"],
+      "properties": {
+        "card_title": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "card_type": { "type": "string", "enum": ["implementation", "research", "repair", "integration", "closeout"] },
+        "out_dir": { "type": "string", "minLength": 1, "maxLength": 1024 }
+      }
+    },
     "card_id": { "type": "string", "minLength": 1, "maxLength": 128 },
     "card_revision": { "type": "string", "minLength": 1, "maxLength": 64 },
     "issued_at": { "type": "string", "format": "date-time" },

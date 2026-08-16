@@ -308,7 +308,7 @@ export function assertMutationWithinAdmissionScope(admission, requestedPaths) {
  * Assemble the full admission record from a classification result + evidence
  *（produces the schema-compliant record; caller freezes it）.
  */
-export function buildAdmissionRecord({ taskId, classification, authorityRecordDigest = null, mutationScope = [], decisionTime = null, extensions = {} } = {}) {
+export function buildAdmissionRecord({ taskId, classification, authorityRecordDigest = null, mutationScope = [], decisionTime = null, extensions = {}, reviewCloseout = null } = {}) {
   const profilePolicies = projectProfilePolicies(classification.profile);
   const caps = projectCapabilities({ profile: classification.profile, risk: classification.risk });
   const strict = classification.risk === "HIGH" || classification.risk === "CRITICAL";
@@ -321,6 +321,14 @@ export function buildAdmissionRecord({ taskId, classification, authorityRecordDi
       .map((id) => resolveCapability(id)?.required_permissions ?? [])
       .flat(),
   )].sort();
+  // REVART-LC1-B0: the frozen `review_closeout` binding (projected via
+  // lifecycle-authorization.projectReviewCloseout) rides in the sanctioned
+  // `extensions` slot so admission_id binds it (canonical hash) and any
+  // binding mutation is ADMISSION_DRIFT at the production gate.
+  const mergedExtensions = { ...(extensions ?? {}) };
+  if (reviewCloseout && typeof reviewCloseout === "object") {
+    mergedExtensions.review_closeout = reviewCloseout;
+  }
   return {
     schema: "autoloop.task-admission/v1",
     schema_version: 1,
@@ -350,6 +358,6 @@ export function buildAdmissionRecord({ taskId, classification, authorityRecordDi
     fail_closed: true,
     mutation_scope: [...(mutationScope ?? [])],
     tool_permissions: toolPermissions,
-    ...(Object.keys(extensions ?? {}).length ? { extensions } : {}),
+    ...(Object.keys(mergedExtensions).length ? { extensions: mergedExtensions } : {}),
   };
 }

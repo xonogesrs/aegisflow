@@ -24,8 +24,11 @@ import { entryBlock, entryRecord, CARD_ID, BRANCH } from "./helpers.mjs";
 const entry = entryRecord();
 const block = entryBlock();
 
-test("schema id is v2 (review-unit contract)", () => {
-  assert.equal(SCHEMA_ID, "autoloop.lifecycle-authorization/v2");
+test("schema id is v3 (REVART-LC1-B0 additive closeout_metadata); v2 records stay valid", () => {
+  // B0 freeze: v2 -> v3 additive bump (closeout_metadata block). The schema
+  // still ACCEPTS v2 records (properties.schema enum), proven by
+  // test-review-lifecycle.mjs "v3 backward compatibility".
+  assert.equal(SCHEMA_ID, "autoloop.lifecycle-authorization/v3");
 });
 
 test("default deny: absent block denies everything", () => {

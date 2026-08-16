@@ -26,10 +26,11 @@
 // never merges, never seals. Absent authorization ⇒ all denied.
 
 import { existsSync, readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import { C2dHoldError, assertNotSymlink, ensureDir0700, writeJsonExclusiveCreate } from "../c2d/fs-atomic.mjs";
 import { canonicalize, digestOf } from "../canonical-digest.mjs";
+import { specDigestOf } from "./spec-identity.mjs";
 import { GOV_HOLD, hold } from "./holds.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -509,6 +510,144 @@ export function effectiveAuthority(parent, child, runtime) {
   };
 
   return { ...out, ...top };
+}
+
+// ---------------------------------------------------------------------------
+// AUTOLOOP-REVART-LC1-B0 — closeout_metadata + review-closeout binding.
+// ---------------------------------------------------------------------------
+//
+// B0 freeze: `card_title` / `card_type` / `out_dir` have NO other frozen
+// machine-authoritative source. They are added to THIS record (v3 additive
+// `closeout_metadata` block) and projected into the frozen admission as
+// `admission.extensions.review_closeout` before freezeAdmission. The runtime
+// never supplements or derives them (no runner opts, no card-text parsing).
+// This module is the ONLY projection implementation.
+
+/** Card-type vocabulary for closeout metadata. MUST stay in parity with
+ * review-bundle.mjs `CARD_TYPES` (asserted by test-review-lifecycle). */
+export const CLOSEOUT_CARD_TYPES = Object.freeze([
+  "implementation", "research", "repair", "integration", "closeout",
+]);
+
+export const REVIEW_CLOSEOUT_SCHEMA = "autoloop.review-closeout/v1";
+
+/** Repo-relative path contract: no absolute path, no `..` segments. */
+export function isRepoRelativePath(p) {
+  if (typeof p !== "string" || p.length === 0) return false;
+  if (isAbsolute(p)) return false;
+  const segs = p.split("/");
+  return segs.every((s) => s !== ".." && s.length > 0);
+}
+
+/** Validate the v3 `closeout_metadata` block (fail-closed, deny-first). */
+export function validateCloseoutMetadata(meta) {
+  const errors = [];
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) {
+    return { valid: false, errors: ["closeout_metadata:type"] };
+  }
+  if (typeof meta.card_title !== "string" || meta.card_title.length === 0) errors.push("closeout_metadata.card_title");
+  if (!CLOSEOUT_CARD_TYPES.includes(meta.card_type)) errors.push(`closeout_metadata.card_type:${meta.card_type}`);
+  if (!isRepoRelativePath(meta.out_dir)) errors.push(`closeout_metadata.out_dir:${meta.out_dir}`);
+  for (const k of Object.keys(meta)) {
+    if (k !== "card_title" && k !== "card_type" && k !== "out_dir") errors.push(`closeout_metadata:unknown:${k}`);
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+const HEX64 = /^[0-9a-f]{64}$/;
+const HEX40 = /^[0-9a-f]{40}$/;
+const ZERO64 = /^0+$/;
+
+/**
+ * Validate a frozen `autoloop.review-closeout/v1` binding. Fail-closed: all
+ * fields required; no partial binding. Returns { ok, errors }.
+ */
+export function validateReviewCloseoutBinding(binding) {
+  const errors = [];
+  if (!binding || typeof binding !== "object" || Array.isArray(binding)) {
+    return { ok: false, errors: ["review_closeout:type"] };
+  }
+  if (binding.schema !== REVIEW_CLOSEOUT_SCHEMA) errors.push(`review_closeout.schema:${binding.schema}`);
+  for (const f of ["card_id", "card_title", "card_type", "out_dir", "spec_id", "spec_path", "repository", "worktree", "branch", "base"]) {
+    if (typeof binding[f] !== "string" || binding[f].length === 0) errors.push(`review_closeout.${f}`);
+  }
+  if (!CLOSEOUT_CARD_TYPES.includes(binding.card_type)) errors.push(`review_closeout.card_type:${binding.card_type}`);
+  if (!isRepoRelativePath(binding.out_dir)) errors.push(`review_closeout.out_dir:${binding.out_dir}`);
+  if (!isRepoRelativePath(binding.spec_path)) errors.push(`review_closeout.spec_path:${binding.spec_path}`);
+  if (binding.bundle_path !== undefined && binding.bundle_path !== "" && !isRepoRelativePath(binding.bundle_path)) {
+    errors.push(`review_closeout.bundle_path:${binding.bundle_path}`);
+  }
+  if (typeof binding.base_head !== "string" || !HEX40.test(binding.base_head)) errors.push("review_closeout.base_head");
+  if (typeof binding.spec_digest !== "string" || !HEX64.test(binding.spec_digest)) errors.push("review_closeout.spec_digest");
+  if (typeof binding.source_authority_digest !== "string" || !HEX64.test(binding.source_authority_digest) || ZERO64.test(binding.source_authority_digest)) {
+    errors.push("review_closeout.source_authority_digest");
+  }
+  if (!Array.isArray(binding.authorized_scope) || binding.authorized_scope.length === 0
+    || !binding.authorized_scope.every((p) => typeof p === "string" && p.length > 0)) {
+    errors.push("review_closeout.authorized_scope");
+  }
+  return { ok: errors.length === 0, errors };
+}
+
+/** Deterministic digest of the frozen binding (resume identity element). */
+export function reviewCloseoutBindingDigest(binding) {
+  return digestOf(canonicalize(binding));
+}
+
+/**
+ * The SINGLE projection implementation (B0 §2/§3): project the frozen
+ * review_closeout binding from a validated lifecycle-authorization record
+ * (v2 or v3) + the canonical spec bytes. Values are copied verbatim from the
+ * record except `spec_digest` (derived from bytes via spec-identity — never
+ * caller-supplied). A review-required card whose record lacks
+ * `closeout_metadata` fails closed here — the issuer cannot mint a partial
+ * binding.
+ *
+ * @param {object} opts.record — validated lifecycle-authorization record
+ * @param {Buffer|string} opts.specBytes — canonical spec file bytes
+ * @param {string|null} [opts.specId] — nominal spec locator (defaults to card_id)
+ * @returns {{ok:true, binding:object} | {ok:false, errors:string[]}}
+ */
+export function projectReviewCloseout({ record, specBytes, specId = null } = {}) {
+  const errors = [];
+  if (!record || typeof record !== "object") errors.push("record:type");
+  else {
+    const check = validateAuthorityRecord(record);
+    if (!check.valid) errors.push(...check.errors.slice(0, 6));
+    const meta = record.closeout_metadata;
+    const mc = validateCloseoutMetadata(meta);
+    if (!mc.valid) errors.push(...mc.errors);
+  }
+  if (specBytes === undefined || specBytes === null) errors.push("spec_bytes_required");
+  if (errors.length > 0) return { ok: false, errors };
+  const meta = record.closeout_metadata;
+  let specDigest = null;
+  try {
+    specDigest = specDigestOf(specBytes);
+  } catch (e) {
+    return { ok: false, errors: [`spec_digest:${String(e?.code ?? e?.message ?? e)}`] };
+  }
+  const binding = {
+    schema: REVIEW_CLOSEOUT_SCHEMA,
+    card_id: record.card_id,
+    card_title: meta.card_title,
+    card_type: meta.card_type,
+    out_dir: meta.out_dir,
+    spec_id: specId ?? record.card_id,
+    spec_path: record.spec_path,
+    spec_digest: specDigest,
+    repository: record.repository,
+    worktree: record.worktree,
+    branch: record.branch,
+    base: record.base,
+    base_head: record.base_head,
+    authorized_scope: Array.isArray(record.authorized_paths) ? record.authorized_paths.slice() : [],
+    bundle_path: record.bundle_path ?? "",
+    source_authority_digest: authorityDigest(record),
+  };
+  const v = validateReviewCloseoutBinding(binding);
+  if (!v.ok) return { ok: false, errors: v.errors };
+  return { ok: true, binding };
 }
 
 // ---------------------------------------------------------------------------
