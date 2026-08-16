@@ -1,0 +1,89 @@
+{
+  "schema": "autoloop.lifecycle-authorization/v3",
+  "card_id": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
+  "run_id": "AUTOLOOP-CBM-LIVE-INTEGRATION-1-r1",
+  "issued_at": "2026-08-16T13:45:35.381Z",
+  "authorized_by": "controller",
+  "repository": "xonogesrs/autoloop",
+  "worktree": "/private/tmp/autoloop",
+  "branch": "governance/decomp-opt1-design-freeze",
+  "base": "d36d016",
+  "base_head": "d36d016",
+  "authorized_paths": [
+    "scripts/autoloop-memory-query.mjs",
+    "src/admission/admission-gate.mjs",
+    "test/memory/test-cbm-live-query-cli.mjs",
+    "test/admission/test-admission-memory-provider.mjs",
+    "package.json",
+    "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-card-spec.md",
+    "docs/pi-graph-output/cbm-live-integration-1/"
+  ],
+  "bundle_path": "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-bundle.txt",
+  "spec_path": "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-card-spec.md",
+  "closeout_metadata": {
+    "card_title": "CBM Live Integration: Harness Query Surface + Production Provider Wiring",
+    "card_type": "implementation",
+    "out_dir": "docs/pi-graph-output/cbm-live-integration-1"
+  },
+  "lifecycle_authorization": {
+    "decomposition": {
+      "allowed": false,
+      "max_depth": 0,
+      "max_total_nodes": 0
+    },
+    "independent_review": {
+      "allowed": true,
+      "require_fresh_session": true,
+      "require_same_artifact_digest": true
+    },
+    "bounded_repair": {
+      "allowed": false,
+      "max_rounds": 0,
+      "scope_expansion": false
+    },
+    "checkpoint_commit": {
+      "allowed": false,
+      "require_local_gates_pass": true,
+      "require_clean_index_before_stage": true,
+      "require_expected_paths_only": true
+    },
+    "feature_branch_push": {
+      "allowed": false,
+      "branch_pattern": "",
+      "force_push": false,
+      "require_remote_ancestor_check": false
+    },
+    "draft_pr": {
+      "allowed": false,
+      "base_branch": "",
+      "draft_only": true,
+      "create_if_missing": false,
+      "update_if_present": false
+    },
+    "external_review": {
+      "required": true,
+      "require_bundle": true,
+      "bundle_path": "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-bundle.txt"
+    },
+    "review_unit": {
+      "allowed": true,
+      "repository_count": 1,
+      "worktree_count": 1,
+      "parent_card_count": 1,
+      "architecture_goal_count": 1,
+      "maximum_internal_milestones": 3,
+      "maximum_changed_paths": 64,
+      "maximum_patch_lines": 20000,
+      "maximum_repair_rounds": 1
+    },
+    "merge_main": {
+      "allowed": false
+    },
+    "release": {
+      "allowed": false
+    },
+    "seal": {
+      "allowed": false
+    }
+  }
+}

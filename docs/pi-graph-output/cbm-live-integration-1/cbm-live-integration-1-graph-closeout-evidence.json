@@ -1,0 +1,41 @@
+{
+  "schema": "autoloop.review-bundle.graph-closeout-evidence/v1",
+  "graphRunId": "cbm-live-integration-1",
+  "final": "PASS",
+  "holdCode": null,
+  "reason": null,
+  "task": {
+    "cardId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
+    "cardTitle": "CBM Live Integration: Harness Query Surface + Production Provider Wiring",
+    "cardType": "implementation"
+  },
+  "scheduler": {
+    "verdict": null,
+    "order": [],
+    "statuses": {},
+    "skipped": [],
+    "writerViolations": [],
+    "leaseHolderAfter": null
+  },
+  "nodes": [
+    {
+      "nodeId": "SA-V1",
+      "phaseExecutionId": null,
+      "taskType": "verifier",
+      "dependencies": [],
+      "final": "PASS",
+      "attempt": 0,
+      "reason": null,
+      "startedAt": null,
+      "completedAt": null,
+      "timingSource": "UNKNOWN",
+      "worktreeVerified": null,
+      "worktreeRevoked": null,
+      "subagentResultStatus": null,
+      "subagentTestResults": null,
+      "reviewResultStatus": "PASS",
+      "reviewBlockingFindings": []
+    }
+  ],
+  "transitions": []
+}

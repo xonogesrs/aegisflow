@@ -1,0 +1,286 @@
+================================================================================
+AUTOLOOP REVIEW BUNDLE (CLOSEOUT)
+================================================================================
+REVIEW_BUNDLE_SCHEMA: autoloop.review-bundle/v1
+REVIEW_BUNDLE_IDENTITY: feb69523e7e0fe4f93726364488ad2c4d16727d47664f3247449b54b3e121d2d
+CARD_ID: AUTOLOOP-CBM-LIVE-INTEGRATION-1
+CARD_TITLE: CBM Live Integration: Harness Query Surface + Production Provider Wiring
+CARD_TYPE: implementation
+GENERATED_AT: 2026-08-16T13:46:39.245Z
+
+================================================================================
+1. Review Request
+================================================================================
+CARD_ID: AUTOLOOP-CBM-LIVE-INTEGRATION-1
+CARD_TITLE: CBM Live Integration: Harness Query Surface + Production Provider Wiring
+CARD_TYPE: implementation
+GRAPH_RUN_ID: cbm-live-integration-1
+NODE_ID: SA-V1
+PHASE_EXECUTION_ID: 
+STAGE_IDS: NOT_APPLICABLE
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+REQUESTED_REVIEW_VERDICT: PASS / REPAIR / HOLD
+This bundle is the single complete text artifact submitted for external review of card AUTOLOOP-CBM-LIVE-INTEGRATION-1.
+
+================================================================================
+2. Executive Status
+================================================================================
+EXECUTIVE_STATUS: PASS
+EXECUTION_PASS: true
+VERIFIER_PASS: true
+INDEPENDENT_REVIEW_PASS: true
+REVIEW_BUNDLE_READY: true
+REVIEW_BUNDLE_DELIVERY_REQUIRED: true
+EXTERNAL_REVIEW_STATUS: AWAITING_EXTERNAL_REVIEW
+SUMMARY: 1 node(s) in cbm-live-integration-1; graph final PASS; closeout gate pending
+
+
+================================================================================
+3. Task Identity
+================================================================================
+CARD_ID: AUTOLOOP-CBM-LIVE-INTEGRATION-1
+CARD_TITLE: CBM Live Integration: Harness Query Surface + Production Provider Wiring
+CARD_TYPE: implementation
+GRAPH_RUN_ID: cbm-live-integration-1
+NODE_ID: SA-V1
+PHASE_EXECUTION_ID: NOT_APPLICABLE
+STAGE_IDS: NOT_APPLICABLE
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+
+
+================================================================================
+4. Repository and Worktree Identity
+================================================================================
+REPOSITORY: git@github.com:xonogesrs/autoloop.git
+BRANCH: governance/decomp-opt1-design-freeze
+HEAD: 251d9ae4b4559f7c824d4a6043f860c0e8e2aed8
+TREE_SHA: 8bc33e4980f43c67fe1b4ba2d505fbae1dfd580b
+WORKTREE_PATH: /private/tmp/autoloop
+BASELINE_DIRTY_DIGEST: dirty:9ecadb443d51a9a504834d7ebd991798650bbf37cf9a9154360e692d36f6992a
+FINAL_DIRTY_DIGEST: dirty:36dfd75ff3fc1d6068eda888fb9b69a490d3c071b9d202612cbe67b6a092889f
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+5. Objective
+================================================================================
+Card closeout via state-driven mandatory closeout (AUTOLOOP-CBM-LIVE-INTEGRATION-1)
+
+================================================================================
+5.5. Budget Enforcement
+================================================================================
+BUDGET_ENFORCEMENT_SCHEMA: autoloop.budget-enforcement-result/v1
+BUDGET_AUTHORIZED: true
+BUDGET_SURFACE: production
+BUDGET_ADMISSION_ID: 82cab55fac12bf0be48032f9e8bd618906af26e2e70cd7cfe70bdbf9f0fc403c
+BUDGET_ENVELOPE_ID: cdf50baa958dc420b55e275663a58f098b96d96d4cef1a4cffe9bcb1b4ac152d
+BUDGET_ENVELOPE_SOURCE: profile
+BUDGET_STATE: CONTINUE
+BUDGET_APPROACHING_RATIO: 0.8
+BUDGET_CLOSEOUT_AUTHORIZED: false
+BUDGET_RECONCILIATION_DIVERGED: none
+BUDGET_DIMENSIONS:
+  - wall_clock_ms: limit=7200000 ms consumed=500 reserved=0 remaining=7199500
+  - node_execution_count: limit=128 count consumed=1 reserved=0 remaining=127
+  - sub_agent_execution_count: limit=24 count consumed=0 reserved=0 remaining=24
+  - repair_attempt_count: limit=2 count consumed=0 reserved=0 remaining=2
+  - verifier_reviewer_attempts: limit=8 count consumed=0 reserved=0 remaining=8
+  - retry_count: limit=4 count consumed=0 reserved=0 remaining=4
+BUDGET_ENFORCEMENT_SECTIONS:
+  - assert-admission
+  - derive-envelope
+  - init-resume-ledger
+  - pre-dispatch
+  - execute-bounded
+  - record-consumption
+  - post-op-invariant
+  - durable-checkpoint-evidence
+
+
+================================================================================
+6. Authorized Scope
+================================================================================
+  - scripts/autoloop-memory-query.mjs
+  - src/admission/admission-gate.mjs
+  - test/memory/test-cbm-live-query-cli.mjs
+  - test/admission/test-admission-memory-provider.mjs
+  - package.json
+  - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-card-spec.md
+  - docs/pi-graph-output/cbm-live-integration-1/
+AUTHORIZED_PATHS: scripts/autoloop-memory-query.mjs, src/admission/admission-gate.mjs, test/memory/test-cbm-live-query-cli.mjs, test/admission/test-admission-memory-provider.mjs, package.json, docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-card-spec.md, docs/pi-graph-output/cbm-live-integration-1/
+
+
+================================================================================
+7. Explicitly Unauthorized Scope
+================================================================================
+  (none)
+UNAUTHORIZED_PATHS: NOT_APPLICABLE
+
+
+================================================================================
+8. Architecture and Design Decisions
+================================================================================
+  (none)
+
+================================================================================
+9. Files Added / Modified / Deleted
+================================================================================
+CARD_IMPLEMENTATION_FILES:
+  (none)
+GRAPH_CLOSEOUT_OUTPUTS:
+    - docs/pi-graph-output/cbm-live-integration-1/closeout-state.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json
+PRE_EXISTING_DIRTY_FILES:
+    - docs/pi-graph-output/cbm-live-integration-1/admission.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-authority.json
+CARD_INVENTORY_MODEL: delta-v1
+ATTRIBUTION_MODEL: content-v1
+BASELINE_HEAD: 251d9ae4b4559f7c824d4a6043f860c0e8e2aed8
+BASELINE_DIRTY_DIGEST: dirty:9ecadb443d51a9a504834d7ebd991798650bbf37cf9a9154360e692d36f6992a
+BASELINE_CONTENT_DIGEST: 203ee0e89c197a330918fa1153f7529428ba8998a613d8d0762f9c7d0d779dee
+BASELINE_DIRTY_PATHS:
+    - docs/pi-graph-output/cbm-live-integration-1/admission.json
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-authority.json
+CURRENT_CARD_DELTA_PATHS:
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm-live-integration-1/closeout-state.json
+DELTA_ATTRIBUTION:
+    - ADDED docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json
+    - ADDED docs/pi-graph-output/cbm-live-integration-1/closeout-state.json
+ADDED:
+    - docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json
+    - docs/pi-graph-output/cbm-live-integration-1/closeout-state.json
+MODIFIED:
+  (none)
+DELETED:
+  (none)
+
+================================================================================
+10. Diff Summary
+================================================================================
+Graph cbm-live-integration-1: 1 node(s) all PASS; 2 added / 0 modified / 0 deleted (worktree outputs)
+
+================================================================================
+11. Execution Results
+================================================================================
+NODES_EXECUTED:
+    - graph node SA-V1:verifier
+NODES_PASSED: 1
+NODES_FAILED: 0
+NODES_TOTAL: 1
+EXECUTION_PASS: true
+
+
+================================================================================
+12. Verification Results
+================================================================================
+VERIFIER_PASS: true
+VERIFIER_RESULT: PASS
+VERIFIER_SUMMARY: scheduler verdict PASS; join: SA-V1:PASS
+
+
+================================================================================
+13. Independent Review Results
+================================================================================
+REVIEW_PASS: true
+REVIEW_RESULT: PASS
+REVIEW_RESULT_IDENTITY: 5b35157f1534c43904ff537a2e4093244d0c61b219ce53e732753ed6588f8ec9
+BLOCKING_FINDINGS: []
+REVIEW_SUMMARY: formal verification: 196 tests green; mutation set == spec; provider wired (memory state AVAILABLE)
+
+
+================================================================================
+14. Repair Attempts
+================================================================================
+  NOT_APPLICABLE (no repair attempts)
+REPAIR_BUDGET_MAX: 1
+REPAIR_BUDGET_USED: 0
+GENERATION_TYPE: implementation
+REPAIR_LINEAGE_REPAIR_ITERATIONS: 0
+REPAIR_LINEAGE_SURFACE_RESEALS: 0
+SUPERSEDES_BUNDLE_IDENTITY: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_SHA256: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_PATH: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_VERDICT: NOT_APPLICABLE
+
+
+================================================================================
+15. Negative and Fail-Closed Cases
+================================================================================
+  (none)
+
+================================================================================
+16. Regression Results
+================================================================================
+  (none)
+REGRESSION_OVERALL: see card evidence
+
+
+================================================================================
+17. Evidence Inventory
+================================================================================
+  - /private/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json
+EVIDENCE_MANIFEST_DIGEST: c1d9d6f57dafb3af47cdba1d6da3f13e8f102ce2393331e424046e2823cde2a8
+
+
+================================================================================
+18. Evidence Hashes
+================================================================================
+  - /private/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json
+      sha256=39977ebb21116a1b5783b31bcf9b0b59ff9c5036d0c243c0be392a8a91932528
+
+================================================================================
+19. Security and Secret Scan
+================================================================================
+SECRET_SCAN_RESULT: clean
+SECRET_SCAN_NOTES: NOT_APPLICABLE
+SECRET_DETECTED: false
+INGESTION_ALLOWLIST: structured graph node results, review-agent results, lifecycle transitions, closeout evidence snapshot
+INGESTION_DENYLIST: secrets/credentials/private keys/logs/db contents/user data, unvalidated free-text stdout
+
+================================================================================
+20. Repository Integrity
+================================================================================
+HEAD: 251d9ae4b4559f7c824d4a6043f860c0e8e2aed8
+TREE_SHA: 8bc33e4980f43c67fe1b4ba2d505fbae1dfd580b
+WORKTREE_CLEAN: false
+DIRTY_PATHS: docs/pi-graph-output/cbm-live-integration-1/admission.json, docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-authority.json, docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json, docs/pi-graph-output/cbm-live-integration-1/closeout-state.json
+UNTRACKED_FILES: docs/pi-graph-output/cbm-live-integration-1/admission.json, docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-authority.json, docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-graph-closeout-evidence.json, docs/pi-graph-output/cbm-live-integration-1/closeout-state.json
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+21. Known Risks and Limitations
+================================================================================
+  (none)
+  (none)
+
+================================================================================
+22. Rollback Procedure
+================================================================================
+Worktree outputs are revocable; re-run the graph closeout gate to regenerate the bundle.
+
+================================================================================
+23. Open Questions
+================================================================================
+  (none)
+
+================================================================================
+24. Recommended Next Step
+================================================================================
+NOT_APPLICABLE
+
+================================================================================
+25. External Reviewer Verdict Template
+================================================================================
+VERDICT: PASS / REPAIR / HOLD
+REVIEWER_IDENTITY: <reviewer>
+REVIEWED_AT: <date>
+FINDINGS_DIGEST: <sha256>
+NEXT_ACTION_IF_PASS: <next card>
+NEXT_ACTION_IF_REPAIR: <bounded repair within budget>
+NEXT_ACTION_IF_HOLD: <stop downstream>
+
+
+=== END OF REVIEW BUNDLE ===
+REVIEW_BUNDLE_SHA256: ae2f31b8f44f3d0d3f72478fe8d472772be61ac4e94081bb2f0b7c81fb411081

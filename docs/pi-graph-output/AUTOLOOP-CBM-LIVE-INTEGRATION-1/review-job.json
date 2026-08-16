@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "autoloop.review-job/v1",
+  "lineageId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
+  "jobId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1.g0001",
+  "generation": 1,
+  "candidateIdentity": {
+    "changedTreeIdentity": "ccf6ed16cfe13bfdf92acfc9496fa77d04c6d01b19d249353132e904ecce16b0",
+    "patchSha256": "7feb78773a91e34eee81f1d42597b9c8da795b75fa6e418cdb268a18c338fe5c",
+    "currentHead": "251d9ae4b4559f7c824d4a6043f860c0e8e2aed8",
+    "baseHead": "d36d016771570b71e28cb93fa2f23f654b873856",
+    "repository": "xonogesrs/autoloop",
+    "branch": "governance/decomp-opt1-design-freeze"
+  },
+  "specId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
+  "specDigest": "2c85ec1ac88fc10a66ef2186d7198e218048580ef7f8e92fa1e46d5cd24bbb37",
+  "reviewRound": 1,
+  "repairRound": 0,
+  "state": "REQUIRED",
+  "stateVersion": 1,
+  "requiredArtifacts": [
+    {
+      "role": "findings",
+      "required": true,
+      "writeMode": "exclusive-create"
+    },
+    {
+      "role": "verdict",
+      "required": true,
+      "writeMode": "exclusive-create"
+    }
+  ],
+  "repoIdentity": "xonogesrs/autoloop",
+  "worktreeIdentity": "/private/tmp/autoloop",
+  "lifecycleIdentity": {
+    "admissionId": "82cab55fac12bf0be48032f9e8bd618906af26e2e70cd7cfe70bdbf9f0fc403c",
+    "bindingDigest": "ba4354f4ffdf7676250f683c8b46986e13be32134704c5501d636448122dc0cc",
+    "sourceAuthorityDigest": "34d5f0b07e8ae3c3a0e5e18c5b17d9e357c5b954b0cb755b0a250c506a3e4f1c",
+    "outDir": "/private/tmp/autoloop/docs/pi-graph-output/cbm-live-integration-1",
+    "baselineContentDigest": "203ee0e89c197a330918fa1153f7529428ba8998a613d8d0762f9c7d0d779dee"
+  }
+}

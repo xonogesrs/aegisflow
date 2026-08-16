@@ -1,0 +1,45 @@
+{
+  "schema": "autoloop.cbm-live-integration.dogfood-evidence/v1",
+  "cardId": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
+  "commit": "251d9ae",
+  "chain": [
+    { "step": "authority v3 + frozen admission (HIGH: external review + memory_retrieval_allowed=true)", "status": "PASS", "artifacts": ["cbm-live-integration-1-authority.json", "admission.json"] },
+    { "step": "production dispatch -> runAdmittedGraph injected the memory provider automatically (A3)", "status": "PASS", "evidence": "runner received opts.memory.provider; provider retrieval returned AVAILABLE (governed)" },
+    { "step": "formal verification runner (17 suites, 188 tests, serial; mutation set == spec)", "status": "PASS" },
+    { "step": "closeout -> bundle -> auto-delivery to ~/Desktop/AutoLoop-Review/Current/ (NO reviewSurfaceDir override)", "status": "PASS", "surface": "Current/review-bundle.txt + delivery.json + evidence.json", "bundleIdentity": "feb69523e7e0fe4f93726364488ad2c4d16727d47664f3247449b54b3e121d2d" },
+    { "step": "ensureCurrentReviewJob", "status": "PASS", "job": "AUTOLOOP-CBM-LIVE-INTEGRATION-1.g0001", "state": "REQUIRED" },
+    { "step": "terminal REVIEW_PENDING (no verdict minted; job not ACCEPTED; Current/ untouched after publication)", "status": "PASS" },
+    { "step": "governed population: CBM-4 runGraphWriteback under the exact execution repository identity", "status": "PASS", "accepted": 6, "records": "1 EXECUTION + 5 CODE, all REVIEWED, tree-bound (8bc33e49...)" },
+    { "step": "CLI query proof (A10/A2): AVAILABLE, repository-bound selection, excludedSummary.repository=2 (foreign records isolated)", "status": "PASS" },
+    { "step": "real read-only scout on-demand query (A11): CLI executed by scout (AVAILABLE w/ records); sandboxed kernel hit WAL-open CANTOPEN on retries — environment limitation, store verified healthy (parity true)", "status": "PASS", "note": "see benchmark observation B-1" }
+  ],
+  "final": {
+    "terminal": "REVIEW_PENDING",
+    "reviewJob": "AUTOLOOP-CBM-LIVE-INTEGRATION-1.g0001",
+    "reviewJobState": "REQUIRED",
+    "bundleIdentity": "feb69523e7e0fe4f93726364488ad2c4d16727d47664f3247449b54b3e121d2d",
+    "bundleSha256": "ae2f31b8f44f3d0d3f72478fe8d472772be61ac4e94081bb2f0b7c81fb411081",
+    "surface": "~/Desktop/AutoLoop-Review/Current/",
+    "verdictMinted": false
+  },
+  "identityAgreement": {
+    "currentBundle": "feb69523e7e0fe4f93726364488ad2c4d16727d47664f3247449b54b3e121d2d",
+    "currentSha256": "ae2f31b8f44f3d0d3f72478fe8d472772be61ac4e94081bb2f0b7c81fb411081",
+    "closeoutState": "feb69523e7e0fe4f93726364488ad2c4d16727d47664f3247449b54b3e121d2d / ae2f31b8f44f3d0d3f72478fe8d472772be61ac4e94081bb2f0b7c81fb411081",
+    "deliveryRecord": "feb69523e7e0fe4f93726364488ad2c4d16727d47664f3247449b54b3e121d2d / ae2f31b8f44f3d0d3f72478fe8d472772be61ac4e94081bb2f0b7c81fb411081",
+    "surfaceEmptyBefore": true,
+    "reviewSurfaceDirOverride": false
+  },
+  "benchmark": {
+    "queriesIssued": 8,
+    "filesSurfaced": ["src/admission/admission-gate.mjs", "scripts/autoloop-memory-query.mjs", "test/memory/test-cbm-live-query-cli.mjs", "test/admission/test-admission-memory-provider.mjs", "package.json"],
+    "incorrectOrStaleResults": 0,
+    "sourceReadsStillRequired": ["review-lifecycle ownership/ACCEPTED mint/out_dir resolution — no records for non-changed modules"],
+    "grepsAvoided": ["path/symbol queries replaced grep for the card's own changed files"],
+    "observations": [
+      "B-1: OMP scout sandbox (node_repl kernel, restricted filesystem policy) cannot create WAL sidecars -> SQLite CANTOPEN on memory.db from inside the sandbox; store itself verified healthy from normal processes (journal parity true). Documented environment constraint for future executor integration; CLI itself is read-only (A12).",
+      "B-2: --path with a non-existent path still returns path-less records (EXECUTION has no scope.path; eligibility only filters records that HAVE a path) — documented CLI semantics, not a leakage.",
+      "B-3: lifecycle-module facts (ensureCurrentReviewJob owner, ACCEPTED mint, out_dir resolution) are NOT in memory (modules not in the card's changed set) — CBM returned honest empty; source reads still required. Confirms the card's expectation that CBM does not replace proof-of-negative source verification."
+    ]
+  }
+}

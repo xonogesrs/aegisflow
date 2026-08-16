@@ -1,0 +1,215 @@
+{
+  "schema": "autoloop.task-admission/v1",
+  "schema_version": 1,
+  "task_id": "AUTOLOOP-CBM-LIVE-INTEGRATION-1-TASK",
+  "classifier_version": "1.0.0",
+  "size": "M",
+  "risk": "HIGH",
+  "profile": "HIGH",
+  "size_details": {
+    "size": "M",
+    "total_score": 10,
+    "under_classified": false,
+    "dimensions": {
+      "affected_files": {
+        "score": 3,
+        "reasons": [
+          "multi-file"
+        ]
+      },
+      "affected_subsystems": {
+        "score": 3,
+        "reasons": [
+          "multi-subsystem"
+        ]
+      },
+      "dependency_depth": {
+        "score": 0,
+        "reasons": [
+          "none"
+        ]
+      },
+      "ambiguity": {
+        "score": 0,
+        "reasons": [
+          "exact text"
+        ]
+      },
+      "expected_execution_steps": {
+        "score": 0,
+        "reasons": [
+          "one"
+        ]
+      },
+      "verification_burden": {
+        "score": 2,
+        "reasons": [
+          "verify"
+        ]
+      },
+      "external_dependencies": {
+        "score": 2,
+        "reasons": [
+          "network"
+        ]
+      },
+      "concurrency_potential": {
+        "score": 0,
+        "reasons": [
+          "none"
+        ]
+      },
+      "statefulness": {
+        "score": 0,
+        "reasons": [
+          "stateless"
+        ]
+      },
+      "rollback_complexity": {
+        "score": 0,
+        "reasons": [
+          "revert"
+        ]
+      }
+    },
+    "tierRange": "10..15"
+  },
+  "risk_details": {
+    "risk": "HIGH",
+    "signals": [
+      {
+        "signal_id": "RS.NETWORK_REMOTE",
+        "class": "HIGH",
+        "triggered": true,
+        "reason": "remote fetch"
+      }
+    ],
+    "escalation_log": [
+      ">=1 HIGH signal -> HIGH (1)"
+    ],
+    "strict_reviewer_routing": true
+  },
+  "reasons": [
+    "size=M (score 10)",
+    "risk=HIGH (1 triggered signals)",
+    "profile=HIGH"
+  ],
+  "capabilities": {
+    "required": [
+      "CAP.CHECKPOINT_RESUME",
+      "CAP.COLIMA_ISOLATION",
+      "CAP.DURABLE_EXECUTION",
+      "CAP.EXTERNAL_REVIEW_DELIVERY",
+      "CAP.INDEPENDENT_REVIEW",
+      "CAP.READONLY_SUBAGENT",
+      "CAP.REVIEW_BUNDLE",
+      "CAP.TASK_DECOMPOSITION",
+      "CAP.WORKTREE_ISOLATION",
+      "CAP.WRITER_SUBAGENT"
+    ],
+    "allowed": [
+      "CAP.MEMORY_RETRIEVAL"
+    ],
+    "denied": [
+      "CAP.BOUNDED_REPAIR",
+      "CAP.C2D_ATOMIC_STATE",
+      "CAP.CLOSEOUT_STATE",
+      "CAP.DIRECT_EXECUTION",
+      "CAP.EVIDENCE_GENERATION",
+      "CAP.GRAPH_SCHEDULER",
+      "CAP.LIFECYCLE_GOVERNANCE",
+      "CAP.MEMORY_WRITEBACK",
+      "CAP.PI_TRANSPORT",
+      "CAP.RISK_NORMALIZATION",
+      "CAP.SECRET_SECURITY",
+      "CAP.SINGLE_WRITER_LEASE",
+      "CAP.TELEMETRY"
+    ]
+  },
+  "lifecycle_profile": {
+    "direct_execution_allowed": false,
+    "decomposition_required": true,
+    "decomposition_depth_bound": 32,
+    "research_first_required": true,
+    "readonly_exploration_required": true,
+    "subagent_required": true,
+    "writer_allowed": true
+  },
+  "isolation_policy": "colima",
+  "durability_policy": "durable_resume",
+  "memory_policy": {
+    "retrieval_allowed": true,
+    "writeback_allowed": false
+  },
+  "review_policy": {
+    "strength": "external",
+    "independent_review_required": true,
+    "external_review_required": true,
+    "strict_reviewer_routing": true
+  },
+  "repair_budget": 1,
+  "evidence_policy": "persistent",
+  "human_gates": [
+    "controller_pre_execution",
+    "controller_closeout"
+  ],
+  "review_surface_policy": {
+    "authoritative_single_surface": true,
+    "chain": "linear",
+    "generation_policy": [
+      "supersede_previous",
+      "preserve_history",
+      "self_contained_chain",
+      "no_chat_dependence",
+      "revalidate_before_delivery"
+    ]
+  },
+  "authority_binding": {
+    "authority_record_digest": "34d5f0b07e8ae3c3a0e5e18c5b17d9e357c5b954b0cb755b0a250c506a3e4f1c",
+    "subset_of_lifecycle_authorization": true
+  },
+  "fail_closed": true,
+  "mutation_scope": [
+    "scripts/autoloop-memory-query.mjs",
+    "src/admission/admission-gate.mjs",
+    "test/memory/test-cbm-live-query-cli.mjs",
+    "test/admission/test-admission-memory-provider.mjs",
+    "package.json",
+    "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-card-spec.md",
+    "docs/pi-graph-output/cbm-live-integration-1/"
+  ],
+  "tool_permissions": [
+    "READ_ONLY",
+    "SCRATCH_WRITE"
+  ],
+  "extensions": {
+    "review_closeout": {
+      "schema": "autoloop.review-closeout/v1",
+      "card_id": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
+      "card_title": "CBM Live Integration: Harness Query Surface + Production Provider Wiring",
+      "card_type": "implementation",
+      "out_dir": "docs/pi-graph-output/cbm-live-integration-1",
+      "spec_id": "AUTOLOOP-CBM-LIVE-INTEGRATION-1",
+      "spec_path": "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-card-spec.md",
+      "spec_digest": "2c85ec1ac88fc10a66ef2186d7198e218048580ef7f8e92fa1e46d5cd24bbb37",
+      "repository": "xonogesrs/autoloop",
+      "worktree": "/private/tmp/autoloop",
+      "branch": "governance/decomp-opt1-design-freeze",
+      "base": "d36d016771570b71e28cb93fa2f23f654b873856",
+      "base_head": "d36d016771570b71e28cb93fa2f23f654b873856",
+      "authorized_scope": [
+        "scripts/autoloop-memory-query.mjs",
+        "src/admission/admission-gate.mjs",
+        "test/memory/test-cbm-live-query-cli.mjs",
+        "test/admission/test-admission-memory-provider.mjs",
+        "package.json",
+        "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-card-spec.md",
+        "docs/pi-graph-output/cbm-live-integration-1/"
+      ],
+      "bundle_path": "docs/pi-graph-output/cbm-live-integration-1/cbm-live-integration-1-bundle.txt",
+      "source_authority_digest": "34d5f0b07e8ae3c3a0e5e18c5b17d9e357c5b954b0cb755b0a250c506a3e4f1c"
+    }
+  },
+  "decision_time": "2026-08-16T13:45:45.095Z",
+  "admission_id": "82cab55fac12bf0be48032f9e8bd618906af26e2e70cd7cfe70bdbf9f0fc403c"
+}
