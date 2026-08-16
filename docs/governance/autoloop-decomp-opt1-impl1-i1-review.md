@@ -107,11 +107,15 @@ Suite state after fix: `test-decomposition-manifest` 16/16, `test-durable-execut
 
 ```text
 VERDICT:
-<reviewer fills in: PASS / AUTOLOOP_DECOMP_OPT1_IMPL1_I1_DECOMPOSITION_MANIFEST_IMPLEMENTED_AND_VERIFIED
- or HOLD with findings>
+PASS / AUTOLOOP_DECOMP_OPT1_IMPL1_I1_DECOMPOSITION_MANIFEST_IMPLEMENTED_AND_VERIFIED
+
+FINDINGS:
+I1 original HOLD findings A/B/C and targeted I1-R1.5 finding are closed.
+No remaining blocking finding in I1 scope.
+
+CONDITIONS FOR I2:
+I1 is frozen at governance/decomp-opt1-impl1 @ cad7e6a1f42f436e931d27c45bfcc9f07588ed47.
+Any later change to I1 manifest identity, persistence, resume binding, or
+crash semantics requires explicit re-open/re-review.
 ```
 
-```text
-CONDITIONS FOR I2:
-<reviewer fills in — gate to I2 (child execution packet)>
-```
