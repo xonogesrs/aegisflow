@@ -30,7 +30,8 @@ import { validateAdmission, assertAdmissionFrozen, deriveAdmissionId } from "./a
 import { createBudgetEnforcement } from "../budget/enforcement.mjs";
 import { attachBudgetResult } from "../budget/graph-wiring.mjs";
 import { digestOf } from "../canonical-digest.mjs";
-import { resolveReviewCloseout, prepareReviewLifecycle, completeReviewLifecycle } from "../governance/review-lifecycle.mjs";
+import { resolveReviewCloseout, prepareReviewLifecycle, completeReviewLifecycle, ensureCurrentReviewJob } from "../governance/review-lifecycle.mjs";
+import { readCloseoutState } from "../governance/closeout-state.mjs";
 
 export const PRODUCTION_GATE_HOLDS = Object.freeze({
   ADMISSION_REQUIRED: "ADMISSION_REQUIRED",
@@ -305,14 +306,22 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
   // ledger MUST agree; divergence is a HOLD, never a warning-only event.
   let finalResult = attachBudgetResult(result, enforcement);
 
-  // ── REVART-LC1-B1 — mandatory completion trigger. At implementation PASS,
-  // automatically run the existing state-driven closeout against the
+  // ── REVART-LC1-B1/B2 — mandatory completion trigger. At implementation
+  // PASS, automatically run the existing state-driven closeout against the
   // bootstrapped state (bundle generation/validation/delivery stay owned by
-  // review-bundle). Terminal remap (B0 I11): bundle/delivery PASS with review
-  // outstanding is REVIEW_PENDING — a review-required run NEVER returns
-  // terminal PASS from here; only an accepted authoritative review (the
-  // Controller acceptance path) yields PASS. HOLD / AWAITING_BUNDLE_DELIVERY
-  // propagate fail-closed — never a successful terminal without artifacts.
+  // review-bundle), then materialize the governed review job. The terminal
+  // is decided from the PERSISTED closeout state (B0 I11 / B2-6): a card
+  // whose closeout is APPLIED+PASS with review outstanding is REVIEW_PENDING
+  // — a review-required run NEVER returns terminal PASS from here; only an
+  // accepted authoritative review (Controller acceptance) yields PASS. On a
+  // re-entry where the closeout is already APPLIED+PASS, mutation of the
+  // lifecycle's OWN governance-domain outputs (bundle/job artifacts) is not
+  // re-opened — the run resumes to REVIEW_PENDING and ensures the job;
+  // implementation mutation OUTSIDE the governance domain is caught by the
+  // job's candidate-drift verification (REVIEW_JOB_CANDIDATE_DRIFT → HOLD).
+  // A genuinely failed closeout (HOLD / AWAITING_BUNDLE_DELIVERY with the
+  // state NOT APPLIED+PASS) propagates fail-closed — never a successful
+  // terminal without artifacts.
   if (lifecycle.active && finalResult.final === "PASS") {
     const outcome = await completeReviewLifecycle({
       admission,
@@ -322,14 +331,60 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
       surfaceDir: reviewSurfaceDir,
     });
     const closeout = { applied: true, ...outcome };
-    const f = outcome.final;
-    if (f === "HOLD" || f === "AWAITING_BUNDLE_DELIVERY") {
-      finalResult = { ...finalResult, final: f, holdCode: outcome.holdCode ?? null, reason: outcome.reason ?? null, closeout };
-    } else if (f === "PASS") {
-      finalResult = { ...finalResult, final: "PASS", holdCode: null, reason: null, closeout };
+    const stateAfter = readCloseoutState(outcome.statePath);
+    const st = stateAfter.ok ? stateAfter.state : null;
+    const appliedPass = st?.closeout?.status === "APPLIED" && st?.closeout?.final === "PASS";
+    let terminal;
+    let jobRes = null;
+    if (appliedPass) {
+      const status = st.closeout?.externalReviewStatus ?? "AWAITING_EXTERNAL_REVIEW";
+      if (status === "PASS") {
+        terminal = { final: "PASS", holdCode: null, reason: null };
+      } else {
+        terminal = { final: "REVIEW_PENDING", holdCode: null, reason: null };
+        jobRes = await ensureCurrentReviewJob({
+          admission,
+          binding: lifecycle.binding,
+          statePath: outcome.statePath,
+          repoRoot: prepared.repoRoot,
+        });
+      }
     } else {
-      finalResult = { ...finalResult, final: "REVIEW_PENDING", holdCode: null, reason: null, closeout };
+      const f = outcome.final;
+      if (f === "HOLD" || f === "AWAITING_BUNDLE_DELIVERY") {
+        terminal = { final: f, holdCode: outcome.holdCode ?? null, reason: outcome.reason ?? null };
+      } else {
+        terminal = { final: f === "PASS" ? "PASS" : "REVIEW_PENDING", holdCode: null, reason: null };
+      }
     }
+    if (jobRes && !jobRes.ok) {
+      // REVIEW_PENDING without a governed job is not a clean terminal.
+      return {
+        ...finalResult,
+        final: "HOLD",
+        holdCode: jobRes.holdCode,
+        reason: jobRes.reason,
+        closeout,
+        reviewJob: { ok: false, holdCode: jobRes.holdCode },
+      };
+    }
+    finalResult = {
+      ...finalResult,
+      ...terminal,
+      closeout,
+      ...(jobRes?.ok
+        ? { reviewJob: {
+            ok: true,
+            created: jobRes.created,
+            reused: jobRes.reused,
+            jobId: jobRes.job.jobId,
+            generation: jobRes.job.generation,
+            state: jobRes.job.state,
+            path: jobRes.path,
+            root: jobRes.root,
+          } }
+        : {}),
+    };
   }
   return finalResult;
 }

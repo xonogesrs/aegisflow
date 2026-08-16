@@ -29,6 +29,18 @@
     },
     "specId": { "type": "string", "minLength": 1 },
     "specDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "lifecycleIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["admissionId", "bindingDigest", "sourceAuthorityDigest", "outDir", "baselineContentDigest"],
+      "properties": {
+        "admissionId": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "bindingDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "sourceAuthorityDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "outDir": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "baselineContentDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
     "reviewRound": { "type": "integer", "minimum": 1 },
     "repairRound": { "type": "integer", "minimum": 0 },
     "priorJobId": { "type": "string", "minLength": 1, "maxLength": 256 },

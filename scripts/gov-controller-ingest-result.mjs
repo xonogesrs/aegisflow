@@ -24,8 +24,10 @@ import { bundleDigestFromFile } from "../src/governance/review-context.mjs";
 import { sha256Text } from "../src/evidence/run-evidence-store.mjs";
 import { validateExternalReviewResult, externalReviewResultPath, RESULT_ARTIFACT_SCHEMA } from "../src/governance/external-review.mjs";
 import { readReviewHistory, deriveRoundContext } from "../src/governance/review-history.mjs";
-import { acceptReviewJob, reviewJobRoot } from "../src/governance/review-job.mjs";
+import { acceptReviewJob, reviewJobRoot, readReviewJob } from "../src/governance/review-job.mjs";
 import { deriveReviewJobContext } from "../src/governance/review-job-context.mjs";
+import { gitTopLevel, validateJobLifecycleIdentityForIngest } from "../src/governance/review-lifecycle.mjs";
+import { readCloseoutState, closeoutStatePath } from "../src/governance/closeout-state.mjs";
 import { GOV_HOLD } from "../src/governance/holds.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -39,8 +41,6 @@ const { flags } = parseArgs(process.argv.slice(2));
 // artifacts. The reviewer never invokes this.
 if (flags.acceptReviewJob) {
   const rjCard = flags.acceptReviewJob;
-  const root = flags.piGraphOutput ? resolve(flags.piGraphOutput) : undefined;
-  const opts = root ? { root } : {};
   const implementer = flags.implementer || flags.agent || "";
   const rjReviewer = flags.reviewerIdentity || "";
   const rjAuth = flags.authorizationSource || "";
@@ -52,9 +52,53 @@ if (flags.acceptReviewJob) {
   // normalize the staged set, then hand the recomputed facts to acceptance.
   const cwd = process.cwd();
   const gitRunner = (args) => git(args, cwd);
+  let record;
+  try {
+    record = loadRecord(flags);
+  } catch (e) {
+    console.error(GOV_HOLD.EXTERNAL_REVIEW_RESULT_INVALID);
+    console.error(`  - authority: ${e?.code ?? e?.name ?? "error"}: ${e?.message ?? e}`);
+    process.exit(1);
+  }
+  // B2-2/B2-5 (REVART-LC1): for a v3 governed card, the review job root is
+  // derived from the authority-bound closeout out_dir (resolved against the
+  // authoritative worktree) — NEVER from process.cwd(). The persisted job's
+  // lifecycle identity chain is independently validated against the authority
+  // record + the bootstrapped closeout-state before any acceptance. Legacy
+  // v2 cards keep the manual chain (--pi-graph-output override or cwd root).
+  let opts = {};
+  if (record.closeout_metadata?.out_dir && record.worktree) {
+    const repoRoot = gitTopLevel(record.worktree);
+    if (!repoRoot) {
+      console.error(GOV_HOLD.EXTERNAL_REVIEW_RESULT_INVALID);
+      console.error("  - REVIEW_JOB_ROOT_BINDING_DRIFT: cannot resolve git top-level of authority worktree");
+      process.exit(1);
+    }
+    const outDir = resolve(repoRoot, record.closeout_metadata.out_dir);
+    opts = { root: dirname(outDir) };
+    const job = readReviewJob(rjCard, opts);
+    if (!job.ok) {
+      console.error(GOV_HOLD.EXTERNAL_REVIEW_RESULT_INVALID);
+      console.error(`  - REVIEW_JOB_STATE_ABSENT: no governed review job at authority-bound root ${opts.root} (${job.code})`);
+      process.exit(1);
+    }
+    const st = readCloseoutState(closeoutStatePath(outDir));
+    if (!st.ok) {
+      console.error(GOV_HOLD.EXTERNAL_REVIEW_RESULT_INVALID);
+      console.error(`  - REVIEW_JOB_BINDING_DRIFT: closeout-state unreadable at ${outDir}: ${st.errors.join(";")}`);
+      process.exit(1);
+    }
+    const chain = validateJobLifecycleIdentityForIngest({ job: job.job, record, state: st.state, repoRoot });
+    if (!chain.ok) {
+      console.error(GOV_HOLD.EXTERNAL_REVIEW_RESULT_INVALID);
+      console.error(`  - REVIEW_JOB_BINDING_DRIFT: job lifecycle identity drift [${chain.drift.join(",")}]`);
+      process.exit(1);
+    }
+  } else if (flags.piGraphOutput) {
+    opts = { root: resolve(flags.piGraphOutput) };
+  }
   let recomputed;
   try {
-    const record = loadRecord(flags);
     const authority = record.lifecycle_authorization ?? record;
     const repository = record.repository ?? "";
     const base = record.base || authority.base || "main";

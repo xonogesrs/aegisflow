@@ -359,11 +359,16 @@ export async function executeSequentially({ plan = null } = {}) {
     // independent|external) may only yield an accepted verdict when its
     // canonical card carries an ACCEPTED, non-superseded review job. Console
     // PASS has zero authority.
+    // REVART-LC1-B2: the consumer gate must read the review job at the
+    // authority-bound root the runtime materialized it at (result.reviewJob
+    // carries it) — never fall back to a cwd-derived default.
+    const jobRoot = result?.reviewJob?.root ?? null;
     const reviewGate = assertReviewArtifactEnforced({
       admission: task.admission,
       cardId: task.cardId ?? null,
       candidateIdentity: task.liveReviewBinding?.candidateIdentity ?? null,
       specDigest: task.liveReviewBinding?.specDigest ?? null,
+      opts: jobRoot ? { root: jobRoot } : {},
     });
     if (!reviewGate.ok) {
       results.push({ taskId: task.taskId, dispatched: true, result, reviewArtifactEnforced: false, holdCode: reviewGate.holdCode, reason: reviewGate.reason });

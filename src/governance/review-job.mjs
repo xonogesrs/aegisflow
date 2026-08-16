@@ -160,6 +160,7 @@ export function createReviewJob({
   priorFindingsDigest,
   priorVerdictDigest,
   supersedes,
+  lifecycleIdentity,
   requiredArtifacts = [
     { role: "findings", required: true, writeMode: "exclusive-create" },
     { role: "verdict", required: true, writeMode: "exclusive-create" },
@@ -181,6 +182,9 @@ export function createReviewJob({
   };
   if (repoIdentity !== undefined) job.repoIdentity = repoIdentity;
   if (worktreeIdentity !== undefined) job.worktreeIdentity = worktreeIdentity;
+  // REVART-LC1-B2: governed jobs carry the frozen lifecycle identity chain
+  // (admission_id / binding digest / authority digest / out_dir / baseline).
+  if (lifecycleIdentity !== undefined) job.lifecycleIdentity = lifecycleIdentity;
   if (priorJobId !== undefined) job.priorJobId = priorJobId;
   if (priorFindingsDigest !== undefined) job.priorFindingsDigest = priorFindingsDigest;
   if (priorVerdictDigest !== undefined) job.priorVerdictDigest = priorVerdictDigest;
@@ -238,6 +242,7 @@ export function createSuccessorReviewJob({
   repairRound = 0,
   repoIdentity,
   worktreeIdentity,
+  lifecycleIdentity,
 } = {}, opts = {}) {
   const current = readReviewJob(cardId, opts);
   if (!current.ok) return current;
@@ -304,6 +309,11 @@ export function createSuccessorReviewJob({
   if (pred.verdictDigest !== undefined) successor.priorVerdictDigest = pred.verdictDigest;
   if (repoIdentity !== undefined) successor.repoIdentity = repoIdentity;
   if (worktreeIdentity !== undefined) successor.worktreeIdentity = worktreeIdentity;
+  // Successor keeps the SAME governed lifecycle identity (same admission
+  // chain unless the card was re-admitted — re-admission produces a new
+  // binding digest and a fresh lineage decision upstream).
+  if (lifecycleIdentity !== undefined) successor.lifecycleIdentity = lifecycleIdentity;
+  else if (pred.lifecycleIdentity !== undefined) successor.lifecycleIdentity = pred.lifecycleIdentity;
 
   const errors = validateAgainstSchema(REVIEW_JOB_SCHEMA, successor, "review-job");
   if (errors.length > 0) {

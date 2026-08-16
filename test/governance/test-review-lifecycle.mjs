@@ -161,7 +161,7 @@ test("resume: interrupted delivery re-attempts with the SAME deterministic bundl
   assert.equal(st.state.reviewCloseout.admissionId, admission.admission_id);
 });
 
-test("negative: re-entry after APPLIED+PASS with a mutated working tree -> HOLD (RB2R1 working_tree_mutated)", async () => {
+test("negative: re-entry after APPLIED+PASS with an IMPLEMENTATION-domain mutation -> HOLD (REVIEW_JOB_CANDIDATE_DRIFT)", async () => {
   const repo = makeGitRepo("reentry"); cleanups.push(repo);
   const { binding } = projectBinding(repo);
   const admission = makeReviewRequiredAdmission({ binding });
@@ -169,17 +169,20 @@ test("negative: re-entry after APPLIED+PASS with a mutated working tree -> HOLD 
   const calls = [];
   const r1 = await runAdmittedGraph({ admission, runner: makeSpyRunner(calls), reviewSurfaceDir: surface });
   assert.equal(r1.final, "REVIEW_PENDING");
+  assert.equal(r1.reviewJob.ok, true, "B2: pending review materializes exactly one governed job");
 
-  // The bundle bound FINAL_DIRTY_DIGEST at generation; an uncommitted
-  // post-closeout mutation must fail closed on re-entry — never silent
-  // continuation (RB2R1 BLOCKER 3).
+  // B2 semantics: governance-domain outputs (bundle/job artifacts) do not
+  // re-open a completed closeout — re-entry resumes to REVIEW_PENDING and
+  // reuses the job. An IMPLEMENTATION-domain mutation (outside
+  // docs/pi-graph-output) after the job bound its candidate MUST fail closed
+  // via candidate drift — never silent continuation.
   const repoRoot = gitTopLevel(repo);
-  writeFileSync(join(repoRoot, OUT_DIR_REL, "post-closeout-tamper.txt"), "x\n", "utf8");
+  writeFileSync(join(repoRoot, "post-closeout-tamper.txt"), "x\n", "utf8");
   const calls2 = [];
   const r = await runAdmittedGraph({ admission, runner: makeSpyRunner(calls2), reviewSurfaceDir: surface });
   assert.equal(r.final, "HOLD");
-  assert.equal(r.holdCode, "REVIEW_BUNDLE_IDENTITY_MISMATCH");
-  assert.ok(r.reason.includes("working_tree_mutated"), r.reason);
+  assert.equal(r.holdCode, "REVIEW_JOB_CANDIDATE_DRIFT");
+  assert.ok(r.reason.includes("changed since job creation"), r.reason);
 });
 
 test("drift: tampered persisted task identity -> HOLD / CLOSEOUT_BOOTSTRAP_BINDING_DRIFT before dispatch", async () => {
