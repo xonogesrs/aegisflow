@@ -29,6 +29,7 @@ import { digestOf } from "../canonical-digest.mjs";
 import { deriveExecutorRuntime } from "../admission/policy-projection.mjs";
 import { deriveLifecycleEligibleTransitions } from "../lifecycle-runner.mjs";
 import { runOptimizer } from "./optimizer.mjs";
+import { assertReviewArtifactEnforced } from "../governance/review-artifact-gate.mjs";
 import {
   CONTROL_PLANE_SCHEMA,
   CONTROL_PLANE_VERSION,
@@ -186,6 +187,8 @@ export function coordinate({ tasks = [], globalBudget = null, telemetryEvents = 
       runnerOpts: t?.runnerOpts ?? null,
       lifecycleState: t?.lifecycleState ?? null,
       repairAttempts: Number.isFinite(t?.repairAttempts) ? t.repairAttempts : 0,
+      cardId: t?.cardId ?? null, // canonical review unit (resolved from the authority record)
+      liveReviewBinding: t?.liveReviewBinding ?? null, // derived via deriveLiveReviewBinding (authoritative), never caller-invented
       decision: null,
     };
   });
@@ -252,6 +255,8 @@ export function coordinate({ tasks = [], globalBudget = null, telemetryEvents = 
         graph: t.graph,
         runnerOpts: t.runnerOpts,
         decision: t.decision,
+        cardId: t.cardId,
+        liveReviewBinding: t.liveReviewBinding,
         taskAllocation,
       };
     }),
@@ -348,7 +353,24 @@ export async function executeSequentially({ plan = null } = {}) {
       budget: { allocation: task.taskAllocation ?? null },
       ...forward,
     });
-    results.push({ taskId: task.taskId, dispatched: true, result });
+
+    // ── REVIEW-ROUTING-R1: mandatory review-artifact enforcement at the
+    // verdict-acceptance owner. A review-required task (review_policy.strength
+    // independent|external) may only yield an accepted verdict when its
+    // canonical card carries an ACCEPTED, non-superseded review job. Console
+    // PASS has zero authority.
+    const reviewGate = assertReviewArtifactEnforced({
+      admission: task.admission,
+      cardId: task.cardId ?? null,
+      candidateIdentity: task.liveReviewBinding?.candidateIdentity ?? null,
+      specDigest: task.liveReviewBinding?.specDigest ?? null,
+    });
+    if (!reviewGate.ok) {
+      results.push({ taskId: task.taskId, dispatched: true, result, reviewArtifactEnforced: false, holdCode: reviewGate.holdCode, reason: reviewGate.reason });
+      continue;
+    }
+
+    results.push({ taskId: task.taskId, dispatched: true, result, reviewArtifactEnforced: reviewGate.reviewRequired });
   }
   return { ok: true, results };
 }
