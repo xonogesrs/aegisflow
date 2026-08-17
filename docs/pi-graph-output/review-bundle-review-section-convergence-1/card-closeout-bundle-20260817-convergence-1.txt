@@ -1,0 +1,331 @@
+================================================================================
+AUTOLOOP REVIEW BUNDLE (CLOSEOUT)
+================================================================================
+REVIEW_BUNDLE_SCHEMA: autoloop.review-bundle/v1
+REVIEW_BUNDLE_IDENTITY: ff96a8783a6376b7a3e0a994ac6c84b09c0ea32b7edcee801c534ec5b5f902b1
+CARD_ID: REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1
+CARD_TITLE: Review Bundle Review Section Convergence
+CARD_TYPE: implementation
+GENERATED_AT: 2026-08-17T09:27:19.505Z
+
+================================================================================
+1. Review Request
+================================================================================
+CARD_ID: REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1
+CARD_TITLE: Review Bundle Review Section Convergence
+CARD_TYPE: implementation
+GRAPH_RUN_ID: rbd-convergence-1786958839479
+NODE_ID: NOT_APPLICABLE
+PHASE_EXECUTION_ID: NOT_APPLICABLE
+STAGE_IDS: NOT_APPLICABLE
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+REQUESTED_REVIEW_VERDICT: PASS / REPAIR / HOLD
+This bundle is the single complete text artifact submitted for external review of card REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1.
+
+================================================================================
+2. Executive Status
+================================================================================
+EXECUTIVE_STATUS: PASS
+EXECUTION_PASS: true
+VERIFIER_PASS: true
+INDEPENDENT_REVIEW_PASS: true
+REVIEW_BUNDLE_READY: true
+REVIEW_BUNDLE_DELIVERY_REQUIRED: true
+EXTERNAL_REVIEW_STATUS: AWAITING_EXTERNAL_REVIEW
+EXTERNAL_REVIEW_STATUS_REFERENCE: summary mirror — canonical location: 10.5 External Review Decision
+SUMMARY: Review bundle converged: 24-section canonical layout with the consolidated 10.5 External Review Decision section; internal/external review authority separated; WHAT_CHANGED / WHAT_WAS_PROVEN / KNOWN_LIMITATIONS / REVIEWER_CHECKS / EXTERNAL_VERDICT / NEXT_ACTION centralized; legacy 25-section layout still validates; LatestHuman receives the new-format report. Governance suite: 482/487（5 pre-existing baseline failures unchanged）; new decision-section suite 17/17.
+
+
+================================================================================
+3. Task Identity
+================================================================================
+CARD_ID: REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1
+CARD_TITLE: Review Bundle Review Section Convergence
+CARD_TYPE: implementation
+GRAPH_RUN_ID: rbd-convergence-1786958839479
+NODE_ID: NOT_APPLICABLE
+PHASE_EXECUTION_ID: NOT_APPLICABLE
+STAGE_IDS: NOT_APPLICABLE
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+
+
+================================================================================
+4. Repository and Worktree Identity
+================================================================================
+REPOSITORY: git@github.com:xonogesrs/autoloop.git
+BRANCH: governance/decomp-opt1-design-freeze
+HEAD: a8abdbf78c03bc26f506853ddd022eb1f98d695f
+TREE_SHA: 70cba89997335107954e5eacb3f82a62f0a88ffb
+WORKTREE_PATH: /private/tmp/autoloop
+BASELINE_DIRTY_DIGEST: dirty:57d0bdf22450c95536318ff7efe25d2e2f52e2101ccf0fccc10659cd4be57c53
+FINAL_DIRTY_DIGEST: dirty:57d0bdf22450c95536318ff7efe25d2e2f52e2101ccf0fccc10659cd4be57c53
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+5. Objective
+================================================================================
+Converge the reviewer-facing structure of the AutoLoop review bundle into ONE External Review Decision section while preserving every evidence section and all machine consumers.
+
+================================================================================
+6. Authorized Scope
+================================================================================
+  - src/governance/review-bundle.mjs
+  - src/governance/closeout-state.mjs
+  - test/governance/test-review-bundle.mjs
+  - test/governance/test-review-bundle-decision-section.mjs
+  - test/governance/test-graph-closeout.mjs
+  - test/governance/test-external-review-delivery.mjs
+  - test/governance/test-review-bundle-closeout-enforcement.mjs
+  - docs/governance/review-bundle-reconciliation.md
+  - docs/pi-graph-output/review-bundle-review-section-convergence-1/
+AUTHORIZED_PATHS: src/governance/review-bundle.mjs, src/governance/closeout-state.mjs, test/governance/test-review-bundle.mjs, test/governance/test-review-bundle-decision-section.mjs, test/governance/test-graph-closeout.mjs, test/governance/test-external-review-delivery.mjs, test/governance/test-review-bundle-closeout-enforcement.mjs, docs/governance/review-bundle-reconciliation.md, docs/pi-graph-output/review-bundle-review-section-convergence-1/
+
+
+================================================================================
+7. Explicitly Unauthorized Scope
+================================================================================
+  - commit
+  - push
+  - merge
+  - seal
+  - Queue redesign
+  - Current redesign
+  - review authority redesign
+  - CBM broad integration
+  - Parent->Child optimization
+UNAUTHORIZED_PATHS: commit, push, merge, seal, Queue redesign, Current redesign, review authority redesign, CBM broad integration, Parent->Child optimization
+
+
+================================================================================
+8. Architecture and Design Decisions
+================================================================================
+  - One consolidated decision section (10.5) answers what changed / what was proven / what remains limited / what verdict is pending / what happens on PASS / REPAIR / HOLD — no reviewer journey across distant sections
+  - Internal independent review (§13) is labeled INTERNAL with an explicit AUTHORITY_NOTE; it is supporting evidence, never the external verdict
+  - Repair / supersession lineage (§14) stays independent from the decision summary; canonical REPAIR_ITERATIONS / SURFACE_RESEALS + legacy REPAIR_LINEAGE_* aliases
+  - WHAT_CHANGED derives from the machine delta attribution; WHAT_WAS_PROVEN is governed evidence-backed claims (NOT_RECORDED when absent — implemented != proven)
+  - Machine compatibility: schema stays autoloop.review-bundle/v1; the validator accepts BOTH the canonical 24-section and legacy 25-section layouts; all machine field names and section numbers 9/17/18 unchanged
+  - Empty lists render the single canonical `- none` marker (J); duplicated (none) placeholders removed
+
+================================================================================
+9. Files Added / Modified / Deleted
+================================================================================
+CARD_IMPLEMENTATION_FILES:
+    - src/governance/review-bundle.mjs
+    - src/governance/closeout-state.mjs
+    - test/governance/test-review-bundle.mjs
+    - test/governance/test-review-bundle-decision-section.mjs
+    - test/governance/test-graph-closeout.mjs
+    - test/governance/test-external-review-delivery.mjs
+    - test/governance/test-review-bundle-closeout-enforcement.mjs
+    - docs/governance/review-bundle-reconciliation.md
+GRAPH_CLOSEOUT_OUTPUTS:
+    - /tmp/autoloop/docs/pi-graph-output/review-bundle-review-section-convergence-1/graph-closeout-evidence.json
+ADDED:
+    - src/governance/review-bundle.mjs
+MODIFIED:
+    - src/governance/closeout-state.mjs
+    - test/governance/test-review-bundle.mjs
+    - test/governance/test-review-bundle-decision-section.mjs
+    - test/governance/test-graph-closeout.mjs
+    - test/governance/test-external-review-delivery.mjs
+    - test/governance/test-review-bundle-closeout-enforcement.mjs
+    - docs/governance/review-bundle-reconciliation.md
+DELETED:
+  - none
+
+================================================================================
+10. Diff Summary
+================================================================================
+8 files: review-bundle renderer/validator/source + closeout contract passthrough + tests + reconciliation doc.
+
+================================================================================
+10.5. External Review Decision
+================================================================================
+EXTERNAL_REVIEW_STATUS: AWAITING_EXTERNAL_REVIEW
+REVIEW_TARGET:
+  CARD_ID: REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1
+  GENERATION_JOB_ID: NOT_APPLICABLE
+  GRAPH_RUN_ID: rbd-convergence-1786958839479
+  BUNDLE_IDENTITY: ff96a8783a6376b7a3e0a994ac6c84b09c0ea32b7edcee801c534ec5b5f902b1
+  BUNDLE_SHA256: NOT_APPLICABLE (authoritative content sha256: footer REVIEW_BUNDLE_SHA256 line)
+DECISION_SNAPSHOT:
+  EXECUTION: PASS
+  VERIFIER: PASS
+  INTERNAL_REVIEW: PASS
+  REGRESSION:
+    RESULT: PASS_WITH_PRE_EXISTING_ENV_FAILURES
+    DETAIL: suite=test/governance/* tests=487 pass=482 fail=5; suite=test-review-bundle-decision-section tests=17 pass=17 fail=0
+  SECURITY_SCAN: clean
+  REPOSITORY_INTEGRITY: DIRTY
+  NOTE: DECISION_SNAPSHOT is a summary reference to the authoritative sections; it is not a second authority.
+WHAT_CHANGED:
+  - Added the External Review Decision section（10.5, E1–E9）to the review bundle renderer
+  - Changed section 13 to Internal Independent Review（INTERNAL_* fields + AUTHORITY_NOTE + legacy REVIEW_* aliases）
+  - Changed section 14 to Repair and Supersession Lineage（canonical REPAIR_ITERATIONS / SURFACE_RESEALS / CURRENT_BUNDLE_IDENTITY / LINEAGE_SUMMARY + legacy aliases）
+  - Removed sections 24（Recommended Next Step）and 25（External Reviewer Verdict Template）; content moved into the decision section
+  - Changed empty-list rendering to the canonical `- none` marker（J）
+  - Made the validator version-adaptive: canonical 24-section layout AND legacy 25-section layout both validate
+  - Wired WHAT_CHANGED / WHAT_WAS_PROVEN / NEXT_ACTION / regression status / lineage summary / bound external verdict through the closeout contract
+  - Preserved machine field names and section numbers 9/17/18 for backward compatibility
+WHAT_WAS_PROVEN:
+  - The governance suite passes with the new layout: 482/487, with the 5 failures byte-identical to the pre-change baseline worktree（no card-caused regression）
+  - test-review-bundle-decision-section.mjs: 17/17 pass（Q1–Q17）; five review-bundle files: 105/105 pass
+  - Legacy 25-section layout still validates; a legacy bundle missing a section fails closed（backward compatibility）
+  - LatestHuman receives the new-format bundle bytes verbatim（isolated-surface dogfood + real-surface publication）
+  - Current unresolved occupant is never overwritten; a different-card delivery queues（Current/Queue authority unchanged）
+  - A non-PENDING external verdict disagreeing with EXTERNAL_REVIEW_STATUS fails validation（internal review can never mint the external verdict）
+KNOWN_LIMITATIONS:
+  - carry-forward: test-verification-scope-guard / test-verification-timing / test-git-status-parsing pre-existing environmental failures（classified in docs/governance/review-bundle-reconciliation.md §4; unrelated to the review-bundle path）
+  - GENERATION_JOB_ID has no pipeline identity yet — renders NOT_APPLICABLE until a generation-job identity exists
+  - BUNDLE_SHA256 is self-referential inside the content — the authoritative content sha256 is the footer REVIEW_BUNDLE_SHA256 line（REVIEW_TARGET references it）
+REVIEWER_CHECKS:
+  1. Is the implementation within authorized scope?
+  2. Are the stated changes supported by the attributable delta?
+  3. Are the proof claims supported by evidence?
+  4. Are blocking correctness/security/governance issues present?
+  5. Are known limitations acceptable for downstream progression?
+  6. Is repair required before acceptance?
+EXTERNAL_VERDICT:
+  VERDICT: PENDING
+  REVIEWER_IDENTITY: NOT_APPLICABLE
+  REVIEWED_AT: NOT_APPLICABLE
+  FINDINGS_DIGEST: NOT_APPLICABLE
+  FINDINGS:
+  - none
+ALLOWED_VERDICTS:
+  - PASS
+  - REPAIR
+  - HOLD
+NEXT_ACTION:
+  IF_PASS: rotate to promote the queued review; this card becomes externally accepted
+  IF_REPAIR: bounded repair within budget（repair-iteration generation superseding this bundle）
+  IF_HOLD: stop downstream; resolve the reviewer's HOLD findings before any progression
+
+
+================================================================================
+11. Execution Results
+================================================================================
+NODES_EXECUTED:
+    - graph node W1:review-bundle-convergence
+    - graph node V1:verify
+NODES_PASSED: 2
+NODES_FAILED: 0
+NODES_TOTAL: 2
+EXECUTION_PASS: true
+
+
+================================================================================
+12. Verification Results
+================================================================================
+VERIFIER_PASS: true
+VERIFIER_RESULT: PASS
+VERIFIER_SUMMARY: governance suite 482/487 (5 pre-existing baseline failures); decision-section suite 17/17; node --check + git diff --check clean
+
+
+================================================================================
+13. Internal Independent Review
+================================================================================
+INTERNAL_REVIEW_RESULT: PASS
+INTERNAL_REVIEW_IDENTITY: 850a3a197b576086b09faf18da38ae35a42de83868d77ddf7596515dc1bc209b
+BLOCKING_FINDINGS:
+  - none
+INTERNAL_REVIEW_SUMMARY: independent review: structured delta attribution matches the card scope; evidence-backed proof claims; no blocking findings
+AUTHORITY_NOTE: Internal independent review is supporting evidence. It is NOT the external reviewer verdict.
+REVIEW_PASS: true
+REVIEW_RESULT: PASS
+REVIEW_RESULT_IDENTITY: 850a3a197b576086b09faf18da38ae35a42de83868d77ddf7596515dc1bc209b
+REVIEW_SUMMARY: independent review: structured delta attribution matches the card scope; evidence-backed proof claims; no blocking findings
+
+
+================================================================================
+14. Repair and Supersession Lineage
+================================================================================
+REPAIR_ATTEMPTS:
+  NOT_APPLICABLE (no repair attempts)
+REPAIR_BUDGET_MAX: 1
+REPAIR_BUDGET_USED: 0
+GENERATION_TYPE: implementation
+REPAIR_ITERATIONS: 0
+SURFACE_RESEALS: 0
+REPAIR_LINEAGE_REPAIR_ITERATIONS: 0
+REPAIR_LINEAGE_SURFACE_RESEALS: 0
+CURRENT_BUNDLE_IDENTITY: ff96a8783a6376b7a3e0a994ac6c84b09c0ea32b7edcee801c534ec5b5f902b1
+SUPERSEDES_BUNDLE_IDENTITY: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_SHA256: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_PATH: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_VERDICT: NOT_APPLICABLE
+LINEAGE_SUMMARY: First-generation implementation; no supersession.
+
+
+================================================================================
+15. Negative and Fail-Closed Cases
+================================================================================
+  - internal review PASS can never mint the external verdict（VERDICT stays PENDING）
+  - a non-PENDING verdict disagreeing with EXTERNAL_REVIEW_STATUS fails validation
+  - legacy 25-section layout still validates; a legacy bundle missing a section fails closed
+
+================================================================================
+16. Regression Results
+================================================================================
+  - suite=test/governance/* tests=487 pass=482 fail=5
+  - suite=test-review-bundle-decision-section tests=17 pass=17 fail=0
+REGRESSION_OVERALL: 487/487 suite-accounted; 5 failures are baseline-identical environment failures（verification-scope-guard / verification-timing / git-status live-repo）— reproduced on the pre-change baseline worktree
+
+
+================================================================================
+17. Evidence Inventory
+================================================================================
+  - /tmp/autoloop/docs/pi-graph-output/review-bundle-review-section-convergence-1/graph-closeout-evidence.json
+EVIDENCE_MANIFEST_DIGEST: df25780194a866b5ad71c7a1d694f7c0fa6c1cca6a7b6365304a38fea8526a56
+
+
+================================================================================
+18. Evidence Hashes
+================================================================================
+  - /tmp/autoloop/docs/pi-graph-output/review-bundle-review-section-convergence-1/graph-closeout-evidence.json
+      sha256=4c37ec31f8c280de9c1f6985040a7f2bf94f54f123b066301cca02c8a78d49d9
+
+================================================================================
+19. Security and Secret Scan
+================================================================================
+SECRET_SCAN_RESULT: clean
+SECRET_SCAN_NOTES: NOT_APPLICABLE
+SECRET_DETECTED: false
+INGESTION_ALLOWLIST: structured graph node results, review-agent results, lifecycle transitions, closeout evidence snapshot
+INGESTION_DENYLIST: secrets/credentials/private keys/logs/db contents/user data, unvalidated free-text stdout
+
+================================================================================
+20. Repository Integrity
+================================================================================
+HEAD: a8abdbf78c03bc26f506853ddd022eb1f98d695f
+TREE_SHA: 70cba89997335107954e5eacb3f82a62f0a88ffb
+WORKTREE_CLEAN: false
+DIRTY_PATHS: docs/governance/review-bundle-reconciliation.md, src/governance/closeout-state.mjs, src/governance/review-bundle.mjs, test/governance/test-external-review-delivery.mjs, test/governance/test-graph-closeout.mjs, test/governance/test-review-bundle-closeout-enforcement.mjs, test/governance/test-review-bundle.mjs, docs/pi-graph-output/autoloop-review-live-current-convergence-1/admission.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/authority.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/card-closeout-bundle-20260816-bdbaad4c.txt, docs/pi-graph-output/autoloop-review-live-current-convergence-1/card-spec.md, docs/pi-graph-output/autoloop-review-live-current-convergence-1/closeout-state.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/dogfood-evidence.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/rag-DF1-graph-closeout-evidence.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/review-job.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/admission.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/authority.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/card-closeout-bundle-20260816-413ab9ac.txt, docs/pi-graph-output/review-auto-generation-and-delivery-1/card-spec.md, docs/pi-graph-output/review-auto-generation-and-delivery-1/closeout-state.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/dogfood-evidence.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/rag-DF2-graph-closeout-evidence.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/review-job.json, docs/pi-graph-output/review-bundle-review-section-convergence-1/graph-closeout-evidence.json, docs/pi-graph-output/review-live-promotion-closeout-1/dogfood-evidence.json, docs/pi-graph-output/review-live-promotion-execution-1/live-promotion-closeout.txt, docs/pi-graph-output/review-live-promotion-execution-1/live-promotion-evidence.json, test/governance/test-review-bundle-decision-section.mjs
+UNTRACKED_FILES: docs/pi-graph-output/autoloop-review-live-current-convergence-1/admission.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/authority.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/card-closeout-bundle-20260816-bdbaad4c.txt, docs/pi-graph-output/autoloop-review-live-current-convergence-1/card-spec.md, docs/pi-graph-output/autoloop-review-live-current-convergence-1/closeout-state.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/dogfood-evidence.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/rag-DF1-graph-closeout-evidence.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/review-job.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/admission.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/authority.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/card-closeout-bundle-20260816-413ab9ac.txt, docs/pi-graph-output/review-auto-generation-and-delivery-1/card-spec.md, docs/pi-graph-output/review-auto-generation-and-delivery-1/closeout-state.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/dogfood-evidence.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/rag-DF2-graph-closeout-evidence.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/review-job.json, docs/pi-graph-output/review-bundle-review-section-convergence-1/graph-closeout-evidence.json, docs/pi-graph-output/review-live-promotion-closeout-1/dogfood-evidence.json, docs/pi-graph-output/review-live-promotion-execution-1/live-promotion-closeout.txt, docs/pi-graph-output/review-live-promotion-execution-1/live-promotion-evidence.json, test/governance/test-review-bundle-decision-section.mjs
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+21. Known Risks and Limitations
+================================================================================
+RISKS:
+  - none
+LIMITATIONS:
+  - carry-forward: test-verification-scope-guard / test-verification-timing / test-git-status-parsing pre-existing environmental failures（classified in docs/governance/review-bundle-reconciliation.md §4; unrelated to the review-bundle path）
+  - GENERATION_JOB_ID has no pipeline identity yet — renders NOT_APPLICABLE until a generation-job identity exists
+  - BUNDLE_SHA256 is self-referential inside the content — the authoritative content sha256 is the footer REVIEW_BUNDLE_SHA256 line（REVIEW_TARGET references it）
+NOTE: full technical inventory; reviewer-facing subset: 10.5 External Review Decision → KNOWN_LIMITATIONS (same source, no contradictory copies)
+
+================================================================================
+22. Rollback Procedure
+================================================================================
+Revert the renderer/source/validator changes; the validator's legacy-layout path keeps historical bundles valid; re-render regenerates deterministic bundles.
+
+================================================================================
+23. Open Questions
+================================================================================
+  - none
+
+=== END OF REVIEW BUNDLE ===
+REVIEW_BUNDLE_SHA256: d627244c8694000a7250d1ac3ce067ced8d63eb469bf59fb43509d0c52fab74a

@@ -108,7 +108,14 @@ test("1. implementation card auto-generates a validated bundle (PASS)", { timeou
   assert.ok(/^[0-9a-f]{64}$/.test(r.bundle.identity));
   assert.ok(/^[0-9a-f]{64}$/.test(r.bundle.sha256));
   const txt = readFileSync(r.bundlePath, "utf8");
-  assert.equal((txt.match(/^\d+\. [^\n]+$/gm) || []).length, 25, "25 sections");
+  // REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1: the canonical layout is 24
+  // sections（REVIEW_BUNDLE_SECTIONS）; integer-numbered headers render 23
+  //（the 10.5 External Review Decision section uses decimal numbering）.
+  assert.equal((txt.match(/^\d+\. [^\n]+$/gm) || []).length, 23, "23 integer-numbered sections");
+  for (const sec of REVIEW_BUNDLE_SECTIONS) {
+    assert.ok(new RegExp(`^\\d+(\\.\\d+)?\\. ${sec.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "m").test(txt), `section present: ${sec}`);
+  }
+  assert.ok(txt.includes("10.5. External Review Decision"), "External Review Decision section present");
   assert.ok(txt.includes("=== END OF REVIEW BUNDLE ==="), "terminator present");
   // identity fields bound
   assert.equal(txt.includes(`CARD_ID: RB-TEST`), true);
@@ -142,7 +149,7 @@ test("2. research card with NO production diff still generates a complete bundle
   const r = await gate(source);
   assert.equal(r.final, "PASS", `research card PASS (${r.reason})`);
   const txt = readFileSync(r.bundlePath, "utf8");
-  assert.ok(txt.includes("ADDED:\n  (none)"), "no production diff recorded");
+  assert.ok(txt.includes("ADDED:\n  - none"), "no production diff recorded");
   assert.ok(txt.includes("NO_PRODUCTION_DIFF"), "diff summary marks research-only");
   assert.ok(txt.includes("PROBE_SUMMARY: 7/7 probe checks PASS"), "probe result in bundle");
   assert.ok(txt.includes("SOURCE_MARKERS: SOURCE / DERIVED / INFERENCE / RECOMMENDATION"), "source markers preserved");
@@ -458,7 +465,7 @@ test("25. downstream closeout never starts before bundle READY", { timeout: 3000
   assert.notEqual(r2.final, "PASS", "downstream closeout blocked before bundle READY");
 });
 
-test("sanity: all 25 sections are the controller's fixed set", { timeout: 30000 }, async () => {
+test("sanity: the canonical section set is the controller's fixed 24-section list", { timeout: 30000 }, async () => {
   assert.deepEqual([...REVIEW_BUNDLE_SECTIONS], [
     "Review Request",
     "Executive Status",
@@ -470,10 +477,11 @@ test("sanity: all 25 sections are the controller's fixed set", { timeout: 30000 
     "Architecture and Design Decisions",
     "Files Added / Modified / Deleted",
     "Diff Summary",
+    "External Review Decision",
     "Execution Results",
     "Verification Results",
-    "Independent Review Results",
-    "Repair Attempts",
+    "Internal Independent Review",
+    "Repair and Supersession Lineage",
     "Negative and Fail-Closed Cases",
     "Regression Results",
     "Evidence Inventory",
@@ -483,7 +491,5 @@ test("sanity: all 25 sections are the controller's fixed set", { timeout: 30000 
     "Known Risks and Limitations",
     "Rollback Procedure",
     "Open Questions",
-    "Recommended Next Step",
-    "External Reviewer Verdict Template",
   ]);
 });

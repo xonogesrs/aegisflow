@@ -24,6 +24,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, w
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   runStateDrivenCloseout,
   runMandatoryGraphCloseout,
@@ -50,7 +51,10 @@ import {
   readCloseoutState,
 } from "../../src/governance/closeout-state.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+// REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1: resolve the repo root from the
+// test file location（portable across checkouts）so the spawned production
+// CLI exercises the SAME src the tests import（never a stale sibling copy）.
+const REPO_A = fileURLToPath(new URL("../..", import.meta.url)).replace(/\/+$/, "");
 const ROOT = `${tmpdir()}/rb2r1-enforce-${process.pid}`;
 const OUT = join(ROOT, "out");
 const surface = (n) => join(ROOT, `surface-${n}`);

@@ -1,0 +1,25 @@
+{
+  "schema": "autoloop.review-bundle.graph-closeout-evidence/v1",
+  "cardId": "REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1",
+  "generatedAt": "2026-08-17T09:27:19.475Z",
+  "verification": {
+    "governanceSuite": {
+      "tests": 487,
+      "pass": 482,
+      "fail": 5,
+      "note": "5 pre-existing baseline failures（verification-scope-guard / verification-timing / git-status live-repo）— identical on the pre-change baseline worktree"
+    },
+    "decisionSectionSuite": {
+      "tests": 17,
+      "pass": 17,
+      "fail": 0
+    },
+    "reviewBundleFiles": {
+      "tests": 105,
+      "pass": 105,
+      "fail": 0
+    },
+    "nodeCheck": "ok",
+    "diffCheck": "ok"
+  }
+}

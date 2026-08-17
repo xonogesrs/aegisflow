@@ -73,7 +73,48 @@ import { assertColimaAllClaims } from "./colima-scope-gate.mjs";
 export const REVIEW_BUNDLE_SCHEMA = "autoloop.review-bundle/v1";
 export const REVIEW_BUNDLE_SOURCE_SCHEMA = "autoloop.review-bundle.source/v1";
 export const REVIEW_BUNDLE_TERMINATOR = "=== END OF REVIEW BUNDLE ===";
+
+// REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1 — canonical reviewer-first
+// section set. The External Review Decision section（10.5, decimal numbering
+// per the 1.5 / 5.5 precedent）consolidates the reviewer decision context:
+// status, target, decision snapshot, WHAT_CHANGED / WHAT_WAS_PROVEN /
+// KNOWN_LIMITATIONS, reviewer checks, the external verdict and the
+// PASS / REPAIR / HOLD next actions. §24 Recommended Next Step and §25
+// External Reviewer Verdict Template are REMOVED（their content moved into
+// the decision section）; §13/§14 are renamed to make the internal review
+// authority and the repair/supersession lineage unambiguous.
 export const REVIEW_BUNDLE_SECTIONS = Object.freeze([
+  "Review Request",
+  "Executive Status",
+  "Task Identity",
+  "Repository and Worktree Identity",
+  "Objective",
+  "Authorized Scope",
+  "Explicitly Unauthorized Scope",
+  "Architecture and Design Decisions",
+  "Files Added / Modified / Deleted",
+  "Diff Summary",
+  "External Review Decision",
+  "Execution Results",
+  "Verification Results",
+  "Internal Independent Review",
+  "Repair and Supersession Lineage",
+  "Negative and Fail-Closed Cases",
+  "Regression Results",
+  "Evidence Inventory",
+  "Evidence Hashes",
+  "Security and Secret Scan",
+  "Repository Integrity",
+  "Known Risks and Limitations",
+  "Rollback Procedure",
+  "Open Questions",
+]);
+
+// Legacy pre-convergence section set（generated before this card）. The
+// validator accepts BOTH layouts（see validateReviewBundle）so historical
+// evidence bundles keep validating（backward compatibility; schema stays
+// autoloop.review-bundle/v1）.
+export const REVIEW_BUNDLE_SECTIONS_LEGACY = Object.freeze([
   "Review Request",
   "Executive Status",
   "Task Identity",
@@ -526,7 +567,7 @@ export function parseDeltaPaths(text) {
   const paths = [];
   for (const l of block.split("\n")) {
     const m = l.match(/^\s{4}-\s+(.+)$/);
-    if (m && m[1] !== "(none)") paths.push(m[1].trim());
+    if (m && m[1] !== "(none)" && m[1] !== "none") paths.push(m[1].trim());
   }
   return paths;
 }
@@ -539,7 +580,7 @@ export function parseResealTouchedPaths(text) {
   const paths = [];
   for (const l of block.split("\n")) {
     const m = l.match(/^\s+- (.+)$/);
-    if (m && m[1] !== "(none)") paths.push(m[1].trim());
+    if (m && m[1] !== "(none)" && m[1] !== "none") paths.push(m[1].trim());
   }
   return paths;
 }
@@ -1975,13 +2016,168 @@ const rule = "==================================================================
 const section = (n, title, body) =>
   `${rule}${n}. ${title}\n${rule}${body === undefined || body === null || body === "" ? "NOT_APPLICABLE" : String(body)}\n\n`;
 
-const lines = (items, prefix = "  - ") => (Array.isArray(items) && items.length ? items.map((i) => `${prefix}${i}`).join("\n") : "  (none)");
+// REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1（J）: deterministic empty-list
+// rendering. Every empty list renders the single canonical marker
+// `  - none`（never `(none)` / repeated placeholders）. Parsers MUST skip the
+// literal `none` entry（see parseDeltaPaths / parseResealTouchedPaths and the
+// validator's evidence-ref loops）.
+const lines = (items, prefix = "  - ") => (Array.isArray(items) && items.length ? items.map((i) => `${prefix}${i}`).join("\n") : "  - none");
 
 function renderStatusLine(name, value) {
   return `${name}: ${value === undefined || value === null || value === "" ? "NOT_APPLICABLE" : String(value)}\n`;
 }
 
-function renderSource(source) {
+// ---------------------------------------------------------------------------
+// REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1 — External Review Decision
+// helpers（section 10.5）. All fields are derived from STRUCTURED source
+// state（never LLM/free-text guessing）; WHAT_CHANGED / WHAT_WAS_PROVEN come
+// from the governed closeout contract or are derived from the machine delta
+//（section 9 attribution）. Nothing here mints an external verdict: the
+// verdict derives ONLY from the authoritative external-review status.
+// ---------------------------------------------------------------------------
+
+/**
+ * WHAT_CHANGED（E4）: the card-attributable delta, derived from the machine
+ * inventory（delta kinds / file lists）when the governed contract does not
+ * supply explicit claims. Never claims pre-existing work; never repeats the
+ * full diff; a no-source card renders the explicit "No source implementation
+ * changes." marker（L2）plus any actual closeout outputs.
+ */
+function deriveWhatChanged(source) {
+  const out = [];
+  const kinds = source.inventory?.deltaKinds ?? [];
+  for (const k of kinds) {
+    if (k?.kind === "ADDED") out.push(`Added ${k.path}`);
+    else if (k.kind === "MODIFIED") out.push(`Changed ${k.path}`);
+    else if (k.kind === "DELETED") out.push(`Deleted ${k.path}`);
+  }
+  if (out.length === 0) {
+    const files = source.files ?? {};
+    for (const p of files.added ?? []) out.push(`Added ${p}`);
+    for (const p of files.modified ?? []) out.push(`Changed ${p}`);
+    for (const p of files.deleted ?? []) out.push(`Deleted ${p}`);
+  }
+  if (out.length === 0) {
+    out.push("No source implementation changes.");
+    for (const p of source.files?.closeoutOutputs ?? []) out.push(`Produced closeout output: ${p}`);
+  }
+  return out;
+}
+
+/**
+ * LINEAGE_SUMMARY（F）: deterministic derivation from the structured lineage
+ * state（generation type + supersede binding + cumulative counts）unless the
+ * governed contract supplies an explicit summary. Never fabricates a lineage.
+ */
+function lineageSummaryText(source) {
+  if (typeof source.lineageSummary === "string" && source.lineageSummary.length > 0) return source.lineageSummary;
+  const rl = source.repairLineage ?? {};
+  const sup = source.externalReview?.supersedes ?? null;
+  const gt = rl.generationType ?? (sup ? "repair-iteration" : "implementation");
+  const supId = sup?.reviewBundleIdentity ? sup.reviewBundleIdentity.slice(0, 8) : "unknown";
+  if (gt === "surface-reseal") {
+    return `Surface reseal; supersedes bundle ${supId}; cumulative repair iterations ${rl.repairIterations ?? 0}, surface reseals ${rl.surfaceReseals ?? 0}.`;
+  }
+  if (gt === "repair-iteration") {
+    return `Bounded repair iteration (cumulative ${rl.repairIterations ?? 0}); supersedes bundle ${supId}.`;
+  }
+  return sup
+    ? `Implementation generation superseding bundle ${supId}.`
+    : "First-generation implementation; no supersession.";
+}
+
+/**
+ * Parse BLOCKING_FINDINGS from bundle text in BOTH canonical forms（J）:
+ *   BLOCKING_FINDINGS:\n  - one\n  - two      （block list; `none` = empty）
+ *   BLOCKING_FINDINGS: one | two | []        （legacy single-line form）
+ * Returns the non-empty findings array（[] when none / absent）.
+ */
+export function parseBlockingFindings(text) {
+  const src = String(text ?? "");
+  // legacy single-line form（`[ \t]+` never crosses newlines, so the block
+  // form below is not swallowed）.
+  const single = src.match(/^BLOCKING_FINDINGS:[ \t]+(.+)$/m)?.[1]?.trim();
+  if (single !== undefined && single !== "") {
+    if (single === "[]" || single === "none" || single === "NOT_APPLICABLE") return [];
+    return single.split(" | ").map((s) => s.trim()).filter(Boolean);
+  }
+  // block form: lines after `BLOCKING_FINDINGS:` until the next field line
+  const block = src.split(/^BLOCKING_FINDINGS:[ \t]*$/m)[1]?.split(/\n(?=[A-Z][A-Z0-9_]*:)/)[0] ?? "";
+  const out = [];
+  for (const l of block.split("\n")) {
+    const m = l.match(/^\s+-\s+(.+)$/);
+    if (m && m[1] !== "none") out.push(m[1].trim());
+  }
+  return out;
+}
+
+/** E3 — DECISION_SNAPSHOT.REGRESSION.RESULT: governed regressionStatus when
+ *  recorded, else machine-derived from the structured regression rows
+ * （PASS when every suite has fail === 0, FAIL otherwise, NOT_APPLICABLE
+ *  when no rows）. Never simplifies a bounded/pre-existing failure to PASS. */
+function regressionSnapshotResult(source) {
+  if (typeof source.regressionStatus === "string" && source.regressionStatus.length > 0) return source.regressionStatus;
+  const rows = Array.isArray(source.regression) ? source.regression : [];
+  if (rows.length === 0) return "NOT_APPLICABLE";
+  return rows.every((r) => Number(r.fail ?? r.failed ?? 0) === 0) ? "PASS" : "FAIL";
+}
+
+/** E3 — DECISION_SNAPSHOT.REGRESSION.DETAIL: per-suite machine accounting or
+ *  the governed regressionSummary. */
+function regressionSnapshotDetail(source) {
+  const rows = Array.isArray(source.regression) ? source.regression : [];
+  const detail = rows.map((r) => `suite=${r.suite} tests=${r.tests} pass=${r.pass ?? r.passed} fail=${r.fail ?? r.failed}`).join("; ");
+  if (detail) return detail;
+  return source.regressionSummary ?? "NOT_APPLICABLE";
+}
+
+const REVIEWER_CHECKS_STATIC = [
+  "1. Is the implementation within authorized scope?",
+  "2. Are the stated changes supported by the attributable delta?",
+  "3. Are the proof claims supported by evidence?",
+  "4. Are blocking correctness/security/governance issues present?",
+  "5. Are known limitations acceptable for downstream progression?",
+  "6. Is repair required before acceptance?",
+];
+
+/** E8 — EXTERNAL_VERDICT + ALLOWED_VERDICTS. VERDICT defaults to PENDING;
+ *  it becomes PASS / REPAIR / HOLD ONLY from the authoritative external-review
+ *  status（never from the internal review result）. */
+function renderExternalVerdict(source) {
+  const ev = source.externalReview ?? {};
+  const bound = ev.verdict && typeof ev.verdict === "object" ? ev.verdict : null;
+  const statusVerdict = isValidExternalReviewVerdict(ev.status) ? ev.status : null;
+  const verdict = bound && isValidExternalReviewVerdict(bound.verdict) ? bound.verdict : (statusVerdict ?? "PENDING");
+  const findings = Array.isArray(bound?.findings) ? bound.findings : [];
+  return (
+    "EXTERNAL_VERDICT:\n" +
+    `  VERDICT: ${verdict}\n` +
+    `  REVIEWER_IDENTITY: ${bound?.reviewerIdentity ?? "NOT_APPLICABLE"}\n` +
+    `  REVIEWED_AT: ${bound?.reviewedAt ?? "NOT_APPLICABLE"}\n` +
+    `  FINDINGS_DIGEST: ${bound?.findingsDigest ?? "NOT_APPLICABLE"}\n` +
+    `  FINDINGS:\n${lines(findings, "    - ")}\n` +
+    "ALLOWED_VERDICTS:\n" +
+    "  - PASS\n" +
+    "  - REPAIR\n" +
+    "  - HOLD\n"
+  );
+}
+
+/** E9 — NEXT_ACTION colocated with the verdict. Values come from the governed
+ *  lifecycle context（closeout.nextActions）; IF_PASS falls back to the
+ *  legacy recommendedNextStep. NOT_SPECIFIED when the lifecycle does not know. */
+function renderNextAction(source) {
+  const na = source.nextActions && typeof source.nextActions === "object" && !Array.isArray(source.nextActions) ? source.nextActions : {};
+  const v = (x) => (x === undefined || x === null || x === "" ? "NOT_SPECIFIED" : String(x));
+  return (
+    "NEXT_ACTION:\n" +
+    `  IF_PASS: ${v(na.pass ?? source.recommendedNextStep)}\n` +
+    `  IF_REPAIR: ${v(na.repair)}\n` +
+    `  IF_HOLD: ${v(na.hold)}\n`
+  );
+}
+
+function renderSource(source, { bundleIdentity = null } = {}) {
   const repo = source.repo || {};
   const integrity = source.repoIntegrity || {};
   const exec = source.execution || {};
@@ -2028,6 +2224,7 @@ function renderSource(source) {
     renderStatusLine("REVIEW_BUNDLE_READY", source.bundleReady ?? "NOT_APPLICABLE") +
     renderStatusLine("REVIEW_BUNDLE_DELIVERY_REQUIRED", source.externalReview?.deliveryRequired ?? "NOT_APPLICABLE") +
     renderStatusLine("EXTERNAL_REVIEW_STATUS", source.externalReview?.status ?? "NOT_APPLICABLE") +
+    "EXTERNAL_REVIEW_STATUS_REFERENCE: summary mirror — canonical location: 10.5 External Review Decision\n" +
     renderStatusLine("SUMMARY", source.executiveSummary ?? "NOT_APPLICABLE")));
 
   s.push(section(3, "Task Identity",
@@ -2153,6 +2350,57 @@ function renderSource(source) {
 
   s.push(section(10, "Diff Summary", source.diffSummary ?? "NOT_APPLICABLE"));
 
+  // REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1 — the single consolidated
+  // reviewer decision section. Reviewer-first placement（K）: after identity /
+  // executive summary / objective / scope / files / diff, BEFORE the detailed
+  // execution and evidence sections. It ANSWERS（M）: what card is this,
+  // what changed, what was proven, what remains limited, what verdict is
+  // pending, and what happens on PASS / REPAIR / HOLD — without sending the
+  // reviewer across distant sections.
+  s.push(section(10.5, "External Review Decision",
+    // E1 — canonical location for EXTERNAL_REVIEW_STATUS（G1; §2 keeps only
+    // the annotated summary mirror）.
+    renderStatusLine("EXTERNAL_REVIEW_STATUS", source.externalReview?.status ?? "NOT_APPLICABLE") +
+    // E2 — review target identity（NOT_APPLICABLE for identity types the
+    // generation pipeline does not carry; never invented）. BUNDLE_SHA256 is
+    // self-referential inside the content, so the authoritative content
+    // sha256 is declared as the footer REVIEW_BUNDLE_SHA256 line.
+    "REVIEW_TARGET:\n" +
+    `  CARD_ID: ${source.task?.cardId ?? "NOT_APPLICABLE"}\n` +
+    `  GENERATION_JOB_ID: ${source.generationJobId ?? "NOT_APPLICABLE"}\n` +
+    `  GRAPH_RUN_ID: ${source.graph?.graphRunId ?? "NOT_APPLICABLE"}\n` +
+    `  BUNDLE_IDENTITY: ${bundleIdentity ?? "NOT_APPLICABLE"}\n` +
+    "  BUNDLE_SHA256: NOT_APPLICABLE (authoritative content sha256: footer REVIEW_BUNDLE_SHA256 line)\n" +
+    // E3 — summary reference to authoritative results; never a second
+    // authority. Regression rows are machine-derived; a governed
+    // regressionStatus（e.g. PASS_WITH_PRE_EXISTING_ENV_FAILURES）overrides
+    // the derivation when the lifecycle records it.
+    "DECISION_SNAPSHOT:\n" +
+    `  EXECUTION: ${exec.pass === true ? "PASS" : exec.pass === false ? "FAIL" : "NOT_APPLICABLE"}\n` +
+    `  VERIFIER: ${source.verifier?.pass === true ? "PASS" : source.verifier?.pass === false ? "FAIL" : (source.verifier?.result ?? "NOT_APPLICABLE")}\n` +
+    `  INTERNAL_REVIEW: ${review.pass === true ? "PASS" : review.pass === false ? "FAIL" : (review.result ?? "NOT_APPLICABLE")}\n` +
+    `  REGRESSION:\n    RESULT: ${regressionSnapshotResult(source)}\n` +
+    `    DETAIL: ${regressionSnapshotDetail(source)}\n` +
+    `  SECURITY_SCAN: ${source.security?.secretScanResult ?? "NOT_APPLICABLE"}\n` +
+    `  REPOSITORY_INTEGRITY: ${integrity.worktreeClean === true ? "CLEAN" : integrity.worktreeClean === false ? "DIRTY" : "NOT_APPLICABLE"}\n` +
+    "  NOTE: DECISION_SNAPSHOT is a summary reference to the authoritative sections; it is not a second authority.\n" +
+    // E4 — WHAT_CHANGED（structured delta attribution / governed contract）.
+    "WHAT_CHANGED:\n" + lines(source.whatChanged ?? deriveWhatChanged(source), "  - ") + "\n" +
+    // E5 — WHAT_WAS_PROVEN（evidence-backed claims from the governed
+    // contract; NOT_RECORDED when none were supplied — implemented != proven;
+    // an explicit empty list renders the canonical `- none`）.
+    "WHAT_WAS_PROVEN:\n" + (Array.isArray(source.whatWasProven) ? lines(source.whatWasProven, "  - ") : "  - NOT_RECORDED") + "\n" +
+    // E6 — reviewer-facing known limitations（J canonical `- none`; the full
+    // technical inventory stays in §21, rendered from the same source array）.
+    "KNOWN_LIMITATIONS:\n" + lines(source.limitations, "  - ") + "\n" +
+    // E7 — the fixed reviewer decision checklist（navigation aid, not a gate）.
+    "REVIEWER_CHECKS:\n" + REVIEWER_CHECKS_STATIC.map((c) => `  ${c}`).join("\n") + "\n" +
+    // E8 — the external verdict（PENDING unless an authoritative external
+    // verdict exists; internal review can never mint it）.
+    renderExternalVerdict(source) +
+    // E9 — colocated next actions per verdict.
+    renderNextAction(source)));
+
   s.push(section(11, "Execution Results",
     // TA-2R: section 11 counts GRAPH NODES（execution surface）, never the
     // regression suites（section 16）. Two conflicting TESTS_* surfaces were
@@ -2175,29 +2423,48 @@ function renderSource(source) {
     renderStatusLine("VERIFIER_RESULT", source.verifier?.result) +
     renderStatusLine("VERIFIER_SUMMARY", source.verifier?.summary)));
 
-  s.push(section(13, "Independent Review Results",
+  // REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1（D）: the internal independent
+  // review is labeled INTERNAL and carries an explicit authority note — it is
+  // supporting evidence, NOT the external reviewer verdict. The legacy
+  // REVIEW_PASS / REVIEW_RESULT / REVIEW_RESULT_IDENTITY fields remain as
+  // compatibility aliases（same values）.
+  s.push(section(13, "Internal Independent Review",
+    renderStatusLine("INTERNAL_REVIEW_RESULT", review.result) +
+    renderStatusLine("INTERNAL_REVIEW_IDENTITY", review.reviewResultIdentity) +
+    "BLOCKING_FINDINGS:\n" + lines(review.blockingFindings, "  - ") + "\n" +
+    renderStatusLine("INTERNAL_REVIEW_SUMMARY", review.summary) +
+    "AUTHORITY_NOTE: Internal independent review is supporting evidence. It is NOT the external reviewer verdict.\n" +
     renderStatusLine("REVIEW_PASS", review.pass) +
     renderStatusLine("REVIEW_RESULT", review.result) +
     renderStatusLine("REVIEW_RESULT_IDENTITY", review.reviewResultIdentity) +
-    renderStatusLine("BLOCKING_FINDINGS", Array.isArray(review.blockingFindings) && review.blockingFindings.length ? review.blockingFindings.join(" | ") : "[]") +
     renderStatusLine("REVIEW_SUMMARY", review.summary)));
 
-  s.push(section(14, "Repair Attempts",
-    (Array.isArray(source.repairAttempts) && source.repairAttempts.length
+  // REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1（F）: repair / supersession
+  // lineage is its own section — machine fields（budget, generation type,
+  // cumulative iterations / reseals, current + superseded bundle identity,
+  // lineage summary）stay independent from the external decision summary.
+  // Legacy REPAIR_LINEAGE_* names are rendered as compatibility aliases of
+  // the canonical REPAIR_ITERATIONS / SURFACE_RESEALS（same values）.
+  s.push(section(14, "Repair and Supersession Lineage",
+    "REPAIR_ATTEMPTS:\n" + (Array.isArray(source.repairAttempts) && source.repairAttempts.length
       ? source.repairAttempts.map((a) => `  - attempt=${a.attempt} taskType=${a.taskType ?? "NOT_APPLICABLE"} status=${a.status ?? "NOT_APPLICABLE"} resultIdentity=${a.resultIdentity ?? "NOT_APPLICABLE"}`).join("\n")
       : "  NOT_APPLICABLE (no repair attempts)") + "\n" +
     renderStatusLine("REPAIR_BUDGET_MAX", source.repairBudget?.maxAttempts) +
     renderStatusLine("REPAIR_BUDGET_USED", source.repairBudget?.used) +
     renderStatusLine("GENERATION_TYPE", source.repairLineage?.generationType) +
+    renderStatusLine("REPAIR_ITERATIONS", source.repairLineage?.repairIterations) +
+    renderStatusLine("SURFACE_RESEALS", source.repairLineage?.surfaceReseals) +
     renderStatusLine("REPAIR_LINEAGE_REPAIR_ITERATIONS", source.repairLineage?.repairIterations) +
     renderStatusLine("REPAIR_LINEAGE_SURFACE_RESEALS", source.repairLineage?.surfaceReseals) +
     (Array.isArray(source.repairLineage?.resealTouchedPaths) && source.repairLineage.resealTouchedPaths.length
       ? `RESEAL_TOUCHED_PATHS:\n${lines(source.repairLineage.resealTouchedPaths, "    - ")}\n`
       : "") +
+    renderStatusLine("CURRENT_BUNDLE_IDENTITY", bundleIdentity) +
     renderStatusLine("SUPERSEDES_BUNDLE_IDENTITY", source.externalReview?.supersedes?.reviewBundleIdentity) +
     renderStatusLine("SUPERSEDES_BUNDLE_SHA256", source.externalReview?.supersedes?.reviewBundleSha256) +
     renderStatusLine("SUPERSEDES_BUNDLE_PATH", source.externalReview?.supersedes?.bundlePath) +
-    renderStatusLine("SUPERSEDES_BUNDLE_VERDICT", source.externalReview?.supersedes?.verdict)));
+    renderStatusLine("SUPERSEDES_BUNDLE_VERDICT", source.externalReview?.supersedes?.verdict) +
+    renderStatusLine("LINEAGE_SUMMARY", lineageSummaryText(source))));
 
   s.push(section(15, "Negative and Fail-Closed Cases", lines(source.negativeCases, "  - ")));
 
@@ -2233,22 +2500,18 @@ function renderSource(source) {
     renderStatusLine("UNTRACKED_FILES", Array.isArray(integrity.untrackedFiles) && integrity.untrackedFiles.length ? integrity.untrackedFiles.join(", ") : "[]") +
     renderStatusLine("REMOTE", integrity.remote)));
 
-  s.push(section(21, "Known Risks and Limitations", lines(source.risks, "  - ") + "\n" + lines(source.limitations, "  - ")));
+  // REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1（G4）: the complete technical
+  // inventory stays here; the reviewer-facing subset is centralized in
+  // §10.5 KNOWN_LIMITATIONS — both render from the SAME source array
+  // （reuse, never contradictory copies）.
+  s.push(section(21, "Known Risks and Limitations",
+    "RISKS:\n" + lines(source.risks, "  - ") + "\n" +
+    "LIMITATIONS:\n" + lines(source.limitations, "  - ") + "\n" +
+    "NOTE: full technical inventory; reviewer-facing subset: 10.5 External Review Decision → KNOWN_LIMITATIONS (same source, no contradictory copies)"));
 
   s.push(section(22, "Rollback Procedure", source.rollbackProcedure ?? "NOT_APPLICABLE"));
 
   s.push(section(23, "Open Questions", lines(source.openQuestions, "  - ")));
-
-  s.push(section(24, "Recommended Next Step", source.recommendedNextStep ?? "NOT_APPLICABLE"));
-
-  s.push(section(25, "External Reviewer Verdict Template",
-    "VERDICT: PASS / REPAIR / HOLD\n" +
-    "REVIEWER_IDENTITY: <reviewer>\n" +
-    "REVIEWED_AT: <date>\n" +
-    "FINDINGS_DIGEST: <sha256>\n" +
-    "NEXT_ACTION_IF_PASS: <next card>\n" +
-    "NEXT_ACTION_IF_REPAIR: <bounded repair within budget>\n" +
-    "NEXT_ACTION_IF_HOLD: <stop downstream>\n"));
 
   // Research-card extension（kept as part of section 17/18? no — separate block
   // appended to Evidence + a dedicated research note in Executive Status）:
@@ -2333,12 +2596,19 @@ export function renderReviewBundle(source, { generatedAt = new Date().toISOStrin
     ? v.replaceAll("{DELTA_PATHS_COUNT}", deltaCount).replaceAll("{BASELINE_PATHS_COUNT}", baselineCount)
     : v);
   const bodySource2 = { ...bodySource };
-  for (const field of ["objective", "executiveSummary", "designDecisions", "negativeCases", "risks", "limitations", "openQuestions", "recommendedNextStep", "regressionSummary", "rollbackProcedure"]) {
+  for (const field of ["objective", "executiveSummary", "designDecisions", "negativeCases", "risks", "limitations", "openQuestions", "recommendedNextStep", "regressionSummary", "rollbackProcedure", "whatChanged", "whatWasProven"]) {
     if (typeof bodySource2[field] === "string") bodySource2[field] = substitute(bodySource2[field]);
     else if (Array.isArray(bodySource2[field])) bodySource2[field] = bodySource2[field].map(substitute);
   }
+  if (bodySource2.nextActions && typeof bodySource2.nextActions === "object" && !Array.isArray(bodySource2.nextActions)) {
+    bodySource2.nextActions = {
+      pass: substitute(bodySource2.nextActions.pass),
+      repair: substitute(bodySource2.nextActions.repair),
+      hold: substitute(bodySource2.nextActions.hold),
+    };
+  }
 
-  const content = renderHeader({ identity, sha256: null, source, generatedAt }) + renderSource(bodySource2) + `${REVIEW_BUNDLE_TERMINATOR}\n`;
+  const content = renderHeader({ identity, sha256: null, source, generatedAt }) + renderSource(bodySource2, { bundleIdentity: identity }) + `${REVIEW_BUNDLE_TERMINATOR}\n`;
   // TA-2R（finding 3 / NEG18）: complete-bundle fail-closed template scan — a
   // residual `${...}` / placeholder literal makes the bundle INVALID before it
   // is ever written（the closeout gate re-runs the scan on the written file
@@ -2412,10 +2682,18 @@ export function validateReviewBundle(bundlePath, {
   // schema
   const schemaLine = linesArr.find((l) => l.startsWith("REVIEW_BUNDLE_SCHEMA:"));
   if (!schemaLine || !schemaLine.includes(REVIEW_BUNDLE_SCHEMA)) fail(REVIEW_BUNDLE_HOLDS.INVALID, "schema_version_missing_or_wrong");
-  // all required sections present（in order）
+  // all required sections present（in order）. REVIEW-BUNDLE-REVIEW-SECTION-
+  // CONVERGENCE-1（H）: the validator accepts BOTH the canonical layout
+  //（with the 10.5 External Review Decision section）and the legacy layout
+  //（historical evidence bundles）, selected deterministically by the presence
+  // of the decision-section header. Decimal section numbers（1.5 / 5.5 / 10.5）
+  // are matched by the extended header regex. Schema stays
+  // autoloop.review-bundle/v1（additive + compatibility preserved）.
+  const headerRe = (sec) => new RegExp(`^\\d+(?:\\.\\d+)?\\. ${sec.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "m");
+  const requiredSections = headerRe("External Review Decision").test(text) ? REVIEW_BUNDLE_SECTIONS : REVIEW_BUNDLE_SECTIONS_LEGACY;
   let idx = 0;
-  for (const sec of REVIEW_BUNDLE_SECTIONS) {
-    const re = new RegExp(`^\\d+\\. ${sec.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "m");
+  for (const sec of requiredSections) {
+    const re = headerRe(sec);
     const m = text.match(re);
     if (!m) fail(REVIEW_BUNDLE_HOLDS.INVALID, `section_missing:${sec}`);
     else {
@@ -2471,7 +2749,7 @@ export function validateReviewBundle(bundlePath, {
   const invSection = text.split("17. Evidence Inventory")[1]?.split("18. Evidence Hashes")[0] ?? "";
   for (const l of invSection.split("\n")) {
     const m = l.match(/^\s+-\s+(.+)$/);
-    if (m && m[1] !== "(none)") {
+    if (m && m[1] !== "(none)" && m[1] !== "none") {
       const p = m[1].trim();
       if (p.includes(":") || p === "sha256=") continue;
       if (!existsSync(p)) fail(REVIEW_BUNDLE_HOLDS.INVALID, `evidence_ref_missing:${p}`);
@@ -2481,7 +2759,7 @@ export function validateReviewBundle(bundlePath, {
   let curPath = null;
   for (const l of hashSection.split("\n")) {
     const pathM = l.match(/^\s+-\s+(.+)$/);
-    if (pathM && pathM[1] !== "(none)") { curPath = pathM[1].trim(); continue; }
+    if (pathM && pathM[1] !== "(none)" && pathM[1] !== "none") { curPath = pathM[1].trim(); continue; }
     const hashM = l.match(/^\s+sha256=([0-9a-f]{64})$/) ?? l.match(/^\s+sha256=([0-9a-f]{64})/);
     if (hashM && curPath) {
       if (!existsSync(curPath)) continue; // already reported above
@@ -2492,16 +2770,36 @@ export function validateReviewBundle(bundlePath, {
 
   // PASS bundle must not carry blocking findings; HOLD/FAIL must not claim PASS
   const execStatus = line("EXECUTIVE_STATUS");
-  const blocking = line("BLOCKING_FINDINGS");
+  const blockingFindings = parseBlockingFindings(text);
   const reviewPass = line("REVIEW_PASS");
   if (execStatus === "PASS") {
-    if (blocking && blocking !== "[]" && blocking !== "NOT_APPLICABLE") fail(REVIEW_BUNDLE_HOLDS.INVALID, "pass_bundle_with_blocking_findings");
+    if (blockingFindings.length > 0) fail(REVIEW_BUNDLE_HOLDS.INVALID, "pass_bundle_with_blocking_findings");
     if (reviewPass !== "true") fail(REVIEW_BUNDLE_HOLDS.INVALID, "pass_bundle_without_review_pass");
     const reviewResult = line("REVIEW_RESULT");
     if (reviewResult !== "PASS") fail(REVIEW_BUNDLE_HOLDS.INVALID, "pass_bundle_with_nonpass_review_result");
   } else if (execStatus === "HOLD" || execStatus === "REPAIR") {
     const bundleReady = line("REVIEW_BUNDLE_READY");
     if (bundleReady === "true") fail(REVIEW_BUNDLE_HOLDS.INVALID, "hold_bundle_masquerading_as_final_pass");
+  }
+
+  // REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1（E1/E8/D）— decision-section
+  // authority separation:
+  //   - EXTERNAL_REVIEW_STATUS must be a valid status;
+  //   - a non-PENDING EXTERNAL_VERDICT must agree with the status（the
+  //     verdict is minted only from the authoritative status — the internal
+  //     review result can never fabricate it）;
+  //   - INTERNAL_REVIEW_RESULT must be a valid internal result value.
+  const extStatus = line("EXTERNAL_REVIEW_STATUS");
+  if (extStatus && extStatus !== "NOT_APPLICABLE" && !isValidExternalReviewStatus(extStatus)) {
+    fail(REVIEW_BUNDLE_HOLDS.INVALID, `external_review_status_invalid:${extStatus}`);
+  }
+  const extVerdict = text.match(/^\s{2}VERDICT: (PENDING|PASS|REPAIR|HOLD)$/m)?.[1] ?? null;
+  if (extVerdict && extVerdict !== "PENDING" && extStatus && extStatus !== "NOT_APPLICABLE" && extStatus !== extVerdict) {
+    fail(REVIEW_BUNDLE_HOLDS.INVALID, `external_verdict_status_mismatch:${extVerdict}!=${extStatus}`);
+  }
+  const internalReviewResult = line("INTERNAL_REVIEW_RESULT");
+  if (internalReviewResult && !["PASS", "HOLD", "REPAIR", "NOT_APPLICABLE"].includes(internalReviewResult)) {
+    fail(REVIEW_BUNDLE_HOLDS.INVALID, `internal_review_result_invalid:${internalReviewResult}`);
   }
 
   // repair budget invariant（RB-1G repair）: REPAIR_BUDGET_USED is the number
@@ -3506,11 +3804,26 @@ export function buildGraphCloseoutSource({ graphResult, closeout, repoPath = nul
     },
     // RB-1G: the bundle source carries the external review delivery contract
     //（delivery required + current status at generation + supersede binding）.
+    // REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1: the bound external verdict
+    //（structured closeout record）travels too — the decision section renders
+    // PENDING unless this authoritative verdict exists（E8）.
     externalReview: {
       deliveryRequired: closeout?.requiresReview === true,
       status: closeout?.externalReviewStatus ?? "AWAITING_EXTERNAL_REVIEW",
       supersedes: closeout?.supersedes ?? null,
+      verdict: closeout?.externalReviewVerdict ?? null,
     },
+    // REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1: governed decision-context
+    // fields（data provenance I — never free-text guessed）; the renderer
+    // derives WHAT_CHANGED from the machine delta when the contract does not
+    // supply explicit claims, and renders NOT_RECORDED for WHAT_WAS_PROVEN
+    // when none were supplied.
+    whatChanged: Array.isArray(closeout?.whatChanged) ? closeout.whatChanged.slice() : null,
+    whatWasProven: Array.isArray(closeout?.whatWasProven) ? closeout.whatWasProven.slice() : null,
+    nextActions: closeout?.nextActions ?? null,
+    regressionStatus: closeout?.regressionStatus ?? null,
+    lineageSummary: closeout?.lineageSummary ?? null,
+    generationJobId: closeout?.generationJobId ?? null,
     negativeCases: Array.isArray(closeout?.negativeCases) ? closeout.negativeCases.slice() : [],
     regression: Array.isArray(closeout?.regression) ? closeout.regression.slice() : [],
     // TA-3: the structured budget enforcement result（envelope + ledger +

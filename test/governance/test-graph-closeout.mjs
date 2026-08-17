@@ -252,7 +252,10 @@ function assertBundle(r, { cardType } = {}) {
   assert.equal(r.holdCode, null);
   assert.ok(r.bundlePath && existsSync(r.bundlePath), "bundle file written");
   const txt = readFileSync(r.bundlePath, "utf8");
-  assert.equal((txt.match(/^\d+\. [^\n]+$/gm) || []).length, 25, "25 sections");
+  // REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1: 23 integer-numbered headers
+  //（the 10.5 External Review Decision section is decimal-numbered）.
+  assert.equal((txt.match(/^\d+\. [^\n]+$/gm) || []).length, 23, "23 integer-numbered sections");
+  assert.ok(txt.includes("10.5. External Review Decision"), "External Review Decision section present");
   assert.ok(txt.includes("=== END OF REVIEW BUNDLE ==="), "terminator");
   if (cardType) assert.ok(txt.includes(`CARD_TYPE: ${cardType}`), `card type ${cardType}`);
   const v = validateReviewBundle(r.bundlePath, { authorizedDir: OUT });
@@ -278,8 +281,8 @@ test("2. research card with ZERO production diff still auto-generates a complete
   const r = await run(researchGraph, { closeout: { cardType: "research", diffSummary: "NO_PRODUCTION_DIFF (research card)" } });
   const txt = assertBundle(r, { cardType: "research" });
   assert.ok(txt.includes("NO_PRODUCTION_DIFF"), "research diff summary");
-  assert.ok(txt.includes("ADDED:\n  (none)"), "no added files");
-  assert.ok(txt.includes("MODIFIED:\n  (none)"), "no modified files");
+  assert.ok(txt.includes("ADDED:\n  - none"), "no added files");
+  assert.ok(txt.includes("MODIFIED:\n  - none"), "no modified files");
   assert.ok(txt.includes("REVIEW_PASS: true"), "per-node reviewer verdicts recorded as review PASS");
 });
 

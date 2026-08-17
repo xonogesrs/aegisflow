@@ -369,6 +369,25 @@ export function materializeCloseoutContract(state) {
     rollbackProcedure: state.rollbackProcedure ?? null,
     openQuestions: Array.isArray(state.openQuestions) ? state.openQuestions.slice() : [],
     recommendedNextStep: state.recommendedNextStep ?? null,
+    // REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1: governed decision-context
+    // passthrough（WHAT_CHANGED / WHAT_WAS_PROVEN / NEXT_ACTION /
+    // regression status / lineage summary / generation job id / bound
+    // external verdict）. All optional; absent fields keep the renderer's
+    // deterministic defaults（delta derivation / NOT_RECORDED /
+    // NOT_SPECIFIED / NOT_APPLICABLE）.
+    whatChanged: Array.isArray(state.whatChanged) ? state.whatChanged.slice() : null,
+    whatWasProven: Array.isArray(state.whatWasProven) ? state.whatWasProven.slice() : null,
+    nextActions: state.nextActions && typeof state.nextActions === "object" && !Array.isArray(state.nextActions)
+      ? {
+          pass: state.nextActions.pass ?? null,
+          repair: state.nextActions.repair ?? null,
+          hold: state.nextActions.hold ?? null,
+        }
+      : null,
+    regressionStatus: state.regressionStatus ?? null,
+    lineageSummary: state.lineageSummary ?? null,
+    generationJobId: state.generationJobId ?? null,
+    externalReviewVerdict: state.externalReviewVerdict ?? null,
   };
   return { ok: true, errors: [], contract };
 }

@@ -474,7 +474,8 @@ test("10. automatic bundle generation + validation regression intact", { timeout
   assert.equal(r.final, "PASS", `gate PASS (${r.reason})`);
   assert.ok(r.bundlePath && existsSync(r.bundlePath));
   const txt = readFileSync(r.bundlePath, "utf8");
-  assert.equal((txt.match(/^\d+\. [^\n]+$/gm) || []).length, 25, "25 sections");
+  assert.equal((txt.match(/^\d+\. [^\n]+$/gm) || []).length, 23, "23 integer-numbered sections");
+  assert.ok(txt.includes("10.5. External Review Decision"), "External Review Decision section present");
   assert.ok(txt.includes("=== END OF REVIEW BUNDLE ==="), "terminator");
   const v = validateReviewBundle(r.bundlePath, { authorizedDir: OUT2 });
   assert.equal(v.ok, true, `bundle validates (${v.errors.join(";")})`);
