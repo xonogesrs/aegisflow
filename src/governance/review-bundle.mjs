@@ -1124,25 +1124,33 @@ export function promoteNextPendingReview({ surfaceDir = null, archiveDir = null 
 /**
  * Startup reconciliation（T13）: if Current is empty and the pending queue is
  * non-empty, promote the oldest pending review. Idempotent; safe on every
- * restart / delivery entry.
+ * restart / delivery entry. An optional caller-held `lock` is honored（the
+ * ingest entrypoint holds the surface lock across apply → rotate → promote）.
  */
-export function reconcileReviewQueue({ surfaceDir = null, archiveDir = null } = {}) {
+export function reconcileReviewQueue({ surfaceDir = null, archiveDir = null, lock = null } = {}) {
   const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
+  if (lock) {
+    return reconcileReviewQueueLocked({ dir, archiveDir, lock });
+  }
   const ownLock = acquireExternalReviewSurfaceLock(dir);
   if (!ownLock.ok) return { ok: false, reason: ownLock.reason ?? "surface_busy", promoted: null };
   try {
-    const qr = readReviewQueue(dir);
-    if (!qr.ok) return { ok: false, reason: `queue_hold:${qr.holdCode}:${qr.reason ?? ""}`, promoted: null };
-    const q = qr.queue;
-    const pending = oldestPending(q, dir);
-    if (!pending) return { ok: true, promoted: null, reason: "none_pending" };
-    if (existsSync(dir) && readdirSync(dir).filter((f) => !f.startsWith(".")).length > 0) {
-      return { ok: true, promoted: null, reason: "current_occupied" };
-    }
-    return promoteNextPendingReviewLocked({ surfaceDir: dir, archiveDir, lock: ownLock, queue: q });
+    return reconcileReviewQueueLocked({ dir, archiveDir, lock: ownLock });
   } finally {
     releaseExternalReviewSurfaceLock({ lockPath: ownLock.lockPath, token: ownLock.token });
   }
+}
+
+function reconcileReviewQueueLocked({ dir, archiveDir, lock }) {
+  const qr = readReviewQueue(dir);
+  if (!qr.ok) return { ok: false, reason: `queue_hold:${qr.holdCode}:${qr.reason ?? ""}`, promoted: null };
+  const q = qr.queue;
+  const pending = oldestPending(q, dir);
+  if (!pending) return { ok: true, promoted: null, reason: "none_pending" };
+  if (existsSync(dir) && readdirSync(dir).filter((f) => !f.startsWith(".")).length > 0) {
+    return { ok: true, promoted: null, reason: "current_occupied" };
+  }
+  return promoteNextPendingReviewLocked({ surfaceDir: dir, archiveDir, lock, queue: q });
 }
 
 /**

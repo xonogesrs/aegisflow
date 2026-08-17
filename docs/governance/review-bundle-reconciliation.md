@@ -199,6 +199,95 @@ LEGACY_TEMPLATE_SECTION_REMOVED      = YES（§25 External Reviewer Verdict
 RECOMMENDED_NEXT_STEP_DUPLICATION_REMOVED = YES（§24 → §10.5 NEXT_ACTION）
 ```
 
+## 6. EXTERNAL-REVIEW-VERDICT-HANDOFF-1 — verdict ingestion + Current advancement
+
+**The gap this closes:** after the external reviewer reads the Current bundle
+and gives PASS / REPAIR / HOLD, AutoLoop had no production ingress that
+receives the verdict, binds it to the LIVE Current, applies it through the
+existing authority and advances the lifecycle. Verdict application was an
+operator path（`--apply-verdict` on an explicit record path, no packet, no
+Current re-read, no lifecycle action）— the reviewer's PASS left Current
+stuck at `AWAITING_EXTERNAL_REVIEW` and the queue frozen.
+
+**Single production ingress（F）:**
+
+```text
+node scripts/gov-closeout-bundle.mjs --ingest-verdict <verdict-packet.json>
+    [--surface <dir>] [--archive <dir>] [--agent <identity>]
+```
+
+**Verdict packet（D）— `autoloop.external-review-verdict/v1`:**
+
+```json
+{
+  "schema": "autoloop.external-review-verdict/v1",
+  "cardId": "...",
+  "bundleIdentity": "<hex64>",
+  "bundleSha256": "<hex64>",
+  "verdict": "PASS | REPAIR | HOLD",
+  "reviewerIdentity": "external-reviewer:...",
+  "reviewedAt": "<ISO8601>",
+  "findingsDigest": "<hex64 — sha256 of the canonical findings list>",
+  "findings": ["..."] | ["none"]
+}
+```
+
+`findingsDigest` is deterministic（sha256 over the recursive-canonical
+findings list; `["none"]` when empty）and recomputed at ingest — a stale or
+forged digest is rejected.
+
+**Ingest contract（E/F/G/H/I）:**
+
+- re-reads the LIVE Current delivery record and bundle bytes;
+- strict binding: packet `CARD_ID` / `BUNDLE_IDENTITY` / `BUNDLE_SHA256` must
+  equal Current's（content sha recomputed from the actual bytes — a record
+  that diverges from disk fails closed）;
+- applies via `applyExternalReviewVerdict`（the existing authority — never
+  bypassed; `acceptReviewJob` untouched; Queue / LatestHuman / internal
+  review / bundle EXECUTIVE_STATUS can never mint a verdict）;
+- **PASS** → archive Current → rotate → promote the oldest eligible QUEUED
+  review（bytes verbatim, never regenerated; LatestHuman untouched）; empty
+  Queue → Current archived and left empty（legal）;
+- **REPAIR** → verdict recorded; Current stays in its authoritative position;
+  the repair generation supersedes through the existing sanctioned seam;
+  NO unrelated promotion;
+- **HOLD** → verdict recorded; Current stays; no rotate / promote;
+  downstream closeout stays blocked.
+
+**Idempotency + crash recovery（J/K/L）:** identical-packet re-sends are a
+resume — the state machine continues from the last durable step（apply →
+archive → rotate → promote → evidence）; a replay after completion returns
+`IDEMPOTENT`（verified against the archive record — never a second
+archive/rotate/promote）; a DIFFERENT verdict on the same bundle fails closed
+（`CONFLICTING_EXTERNAL_VERDICT` — no silent overwrite, no correction
+mechanism exists）. L1: packet durable, apply missing → resume applies.
+L2: applied, rotation missing → resume rotates. L3: archived, promotion
+missing → reconcile promotes the oldest eligible. L4: promoted, evidence
+missing → write the missing evidence only.
+
+**Hold codes:** `EXTERNAL_VERDICT_PACKET_INVALID`,
+`EXTERNAL_VERDICT_CURRENT_IDENTITY_MISMATCH`,
+`CONFLICTING_EXTERNAL_VERDICT`,
+`EXTERNAL_VERDICT_APPLIED_BUT_ROTATION_FAILED`,
+`QUEUED_REVIEW_PROMOTION_FAILED`,
+`EXTERNAL_VERDICT_HANDOFF_DID_NOT_ADVANCE_CURRENT`,
+`REVIEW_AUTHORITY_INVARIANT_REGRESSED`.
+
+**Process telemetry（U）:**
+
+```text
+CHAT_OR_EXTERNAL_PASS_WITHOUT_LIFECYCLE_HANDOFF_BEFORE = YES
+    （documented incident: rld2 — TA-2R PASS never applied; Current stuck
+     AWAITING_EXTERNAL_REVIEW; Archive had no PASS entry）
+MANUAL_CURRENT_ROTATION_REQUIRED_BEFORE               = YES
+    （gov-external-review-surface.mjs --rotate was an operator manual step）
+EXTERNAL_VERDICT_HANDOFF_AUTOMATED_AFTER              = YES
+CURRENT_ADVANCEMENT_AFTER_EXTERNAL_PASS               = AUTOMATIC
+DUPLICATE_MANUAL_REVIEW_STATE_SYNC_REMOVED            = YES
+    （reviewer never touches Current / Queue / Archive / review-job.json —
+     human work is: review → verdict packet）
+```
+
 ## 4. Unrelated pre-existing failures (classified, out of scope)
 
 - `test/governance/test-git-status-parsing.mjs` — live-repo package.json

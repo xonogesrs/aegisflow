@@ -64,6 +64,7 @@ import {
   deriveAuthoritativeCloseoutStage,
 } from "../src/governance/review-bundle.mjs";
 import { readCloseoutState } from "../src/governance/closeout-state.mjs";
+import { ingestExternalVerdict, VERDICT_HANDOFF_IDEMPOTENT } from "../src/governance/external-verdict-ingest.mjs";
 import { readReviewJob, findingsPath, verdictPath } from "../src/governance/review-job.mjs";
 import { sha256Text } from "../src/evidence/run-evidence-store.mjs";
 import { readFileSync as _readFileSync } from "node:fs";
@@ -75,12 +76,13 @@ function arg(name, fallback) {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 }
 
-const mode = process.argv.includes("--enumerate-review-job") ? "enumerate-review-job" : process.argv.includes("--generate") ? "generate" : process.argv.includes("--validate") ? "validate" : process.argv.includes("--record-delivery-attempt") ? "record-delivery-attempt" : process.argv.includes("--apply-verdict") ? "apply-verdict" : process.argv.includes("--state-driven-closeout") ? "state-driven-closeout" : process.argv.includes("--final-closeout") ? "final-closeout" : null;
+const mode = process.argv.includes("--enumerate-review-job") ? "enumerate-review-job" : process.argv.includes("--generate") ? "generate" : process.argv.includes("--validate") ? "validate" : process.argv.includes("--record-delivery-attempt") ? "record-delivery-attempt" : process.argv.includes("--apply-verdict") ? "apply-verdict" : process.argv.includes("--ingest-verdict") ? "ingest-verdict" : process.argv.includes("--state-driven-closeout") ? "state-driven-closeout" : process.argv.includes("--final-closeout") ? "final-closeout" : null;
 if (!mode) {
   console.error("usage: node scripts/gov-closeout-bundle.mjs --generate <source.json> --repo <path> --out <dir> [--timeout-ms 30000] [--file <name>]");
   console.error("       node scripts/gov-closeout-bundle.mjs --validate <bundle.txt> --context <ctx.json> [--authorized-dir <dir>]");
   console.error("       node scripts/gov-closeout-bundle.mjs --record-delivery-attempt <bundle.txt> --out <dir> [--card <id>] [--method <m>] [--attempted-at <ISO>]");
   console.error("       node scripts/gov-closeout-bundle.mjs --apply-verdict <delivery-record.json> --verdict PASS|REPAIR|HOLD --reviewer <identity> [--reviewed-at <ISO>] [--agent <identity>] [--findings-digest <sha256>]");
+  console.error("       node scripts/gov-closeout-bundle.mjs --ingest-verdict <verdict-packet.json> [--surface <dir>] [--archive <dir>] [--agent <identity>]");
   console.error("       node scripts/gov-closeout-bundle.mjs --state-driven-closeout <closeout-state.json> [--graph-evidence <evidence.json>] [--repo <path>] [--out <dir>] [--surface <dir>]");
   console.error("       node scripts/gov-closeout-bundle.mjs --final-closeout <closeout-state.json> [--repo <path>] [--out <dir>] [--surface <dir>] [--agent <identity>]");
   process.exit(2);
@@ -298,6 +300,53 @@ if (mode === "apply-verdict") {
   console.log(`externalReviewComplete: ${guard.complete}`);
   if (guard.holdCode) console.log(`holdCode: ${guard.holdCode}`);
   process.exit(guard.complete ? 0 : 1);
+}
+
+// ingest-verdict mode（EXTERNAL-REVIEW-VERDICT-HANDOFF-1）: THE production
+// ingress for the external reviewer's verdict. Reads an
+// autoloop.external-review-verdict/v1 packet, re-reads the LIVE Current
+// surface, strictly binds cardId + bundle identity + content sha, validates
+// the findings digest, applies the verdict through applyExternalReviewVerdict
+//（the existing authority）, then executes the verdict lifecycle:
+//   PASS   → archive Current → rotate → promote the oldest eligible queued
+//            review（bytes verbatim; LatestHuman untouched）
+//   REPAIR → record the verdict; Current stays（repair supersession runs
+//            through the existing sanctioned seam; no unrelated promotion）
+//   HOLD   → record the verdict; Current stays; no rotate / promote;
+//            downstream closeout stays blocked
+// Identical-packet re-sends are idempotent / crash-resume safe（continue
+// apply → archive → rotate → promote → evidence）; a different verdict on the
+// same bundle fails closed（CONFLICTING_EXTERNAL_VERDICT）.
+if (mode === "ingest-verdict") {
+  const packetPath = arg("--ingest-verdict", null);
+  const surface = arg("--surface", null);
+  const archive = arg("--archive", null);
+  const agent = arg("--agent", null);
+  if (!packetPath || !existsSync(packetPath)) {
+    console.error("usage: node scripts/gov-closeout-bundle.mjs --ingest-verdict <verdict-packet.json> [--surface <dir>] [--archive <dir>] [--agent <identity>]");
+    process.exit(2);
+  }
+  const r = await ingestExternalVerdict({ packetPath, surfaceDir: surface ?? null, archiveDir: archive ?? null, agentIdentity: agent ?? null });
+  if (!r.ok) {
+    console.error(`verdict_ingest_rejected: ${(r.errors ?? []).join(";")}`);
+    if (r.result) {
+      if (r.result.currentBefore) console.log(`current_before: card=${r.result.currentBefore.cardId} identity=${String(r.result.currentBefore.bundleIdentity ?? "").slice(0, 8)}`);
+      if (r.result.previousArchiveRecord) console.log(`previous_record: ${r.result.previousArchiveRecord.fileName ?? r.result.previousArchiveRecord.entry?.cardId ?? "archive"}`);
+    }
+    process.exit(1);
+  }
+  const res = r.result ?? {};
+  console.log(`verdict_ingest: ${r.code} status=${res.status ?? "?"}`);
+  if (res.currentBefore) console.log(`current_before: card=${res.currentBefore.cardId} identity=${String(res.currentBefore.bundleIdentity ?? "").slice(0, 8)} sha256=${String(res.currentBefore.bundleSha256 ?? "").slice(0, 8)}`);
+  if (Array.isArray(res.archived)) {
+    for (const a of res.archived) console.log(`archived: ${a}`);
+  }
+  if (res.promoted) {
+    console.log(`promoted: card=${res.promoted.cardId} identity=${String(res.promoted.bundleIdentity ?? "").slice(0, 8)} sha256=${String(res.promoted.bundleSha256 ?? "").slice(0, 8)}`);
+  }
+  if (res.currentAfter) console.log(`current_after: card=${res.currentAfter.cardId} identity=${String(res.currentAfter.bundleIdentity ?? "").slice(0, 8)} sha256=${String(res.currentAfter.bundleSha256 ?? "").slice(0, 8)}`);
+  if (res.note) console.log(`note: ${res.note}`);
+  process.exit(0);
 }
 
 // final-closeout mode（RB2R1）: the PRODUCTION final-closeout / commit / seal
