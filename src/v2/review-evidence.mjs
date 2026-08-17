@@ -172,7 +172,13 @@ export function buildReviewEvidenceBundle({
 
   // ── Objective facts（system-observed）─────────────────────────────────
   const sortedChanged = [...observedChangedPaths].sort();
-  const gitFacts = taskCard?.repositoryRoot ? gitHeadTree(taskCard.repositoryRoot) : { head: null, tree: null };
+  // DECOMP-OPT1-PC1: the frozen F3A snapshot（verified by the per-child
+  // guard）replaces the per-child `rev-parse HEAD`/`HEAD^{tree}` re-read;
+  // without inheritance the legacy observation runs unchanged.
+  const inherited = taskCard?.inheritedBaseline;
+  const gitFacts = inherited
+    ? { head: inherited.head, tree: inherited.tree ?? inherited.head }
+    : (taskCard?.repositoryRoot ? gitHeadTree(taskCard.repositoryRoot) : { head: null, tree: null });
   const bundle = {
     format_version: REVIEW_EVIDENCE_FORMAT_VERSION,
     execution_identity: {

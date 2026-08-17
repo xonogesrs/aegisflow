@@ -37,6 +37,7 @@ import {
 } from "./checkpoint-bridge.mjs";
 import { runColimaGraph } from "../runtime/colima-graph-runner.mjs";
 import { cleanupStale } from "../runtime/colima-runtime.mjs";
+import { buildDurableInheritanceConfig, verifyInheritanceManifestArtifact } from "./durable-execution.mjs";
 import {
   prepareOwnedScratchRoot,
   getScratchAuthorityToken,
@@ -742,12 +743,25 @@ export async function runDurableGraph(opts = {}) {
       closeout, closeoutGate, closeoutSourceBuilder, closeoutEvidenceWriter,
       memory, telemetry, writeback,
       admission,
+      // DECOMP-OPT1-PC1: parent→child inheritance（frozen fingerprints）.
+      inheritance: buildDurableInheritanceConfig({ hooks, run }),
       durable: { executionAttempt: 1, recoveryGeneration: 0, resumed: false, replayOf: null, recovered: false, duplicateSuppressed: 0 },
       preserveInstance,
       budget,
     });
   } catch (e) {
     return terminateGraphRun(run, "HOLD", `GRAPH_EXCEPTION:${e?.code || e?.name || "unknown"}`);
+  }
+
+  // DECOMP-OPT1-PC1: persist the frozen inheritance manifest（secret-scanned
+  // artifact; resume re-verifies identity §K）. Evidence-write failure is
+  // journaled via the existing terminal path（never a silent skip）.
+  if (run.graphResult?.inheritance?.manifest) {
+    try {
+      store.writeArtifact("decomposition-inheritance.json", run.graphResult.inheritance.manifest);
+    } catch (e) {
+      return terminateGraphRun(run, "HOLD", `INHERITANCE_MANIFEST_PERSISTENCE_FAILED:${e?.code || e?.name || "unknown"}`);
+    }
   }
 
   // TA-3: persist the budget ledger checkpoint（evidence; the graph outcome is
@@ -934,6 +948,7 @@ export async function resumeDurableGraph({
 
   // ── Validation（any failure => HOLD / RESUME_FINGERPRINT_MISMATCH）──
   let expectedFp = null;
+  let resumedInheritanceManifest = null;
   let irPhaseIds = new Set();
   let frozen = null;
   try {
@@ -1031,6 +1046,16 @@ export async function resumeDurableGraph({
     if (!reconstructedIr && buildDagFingerprint(ir) !== snapshot.dag_sha256) {
       throw new DurableGraphHoldError("RESUME_FINGERPRINT_MISMATCH", "DAG fingerprint mismatch");
     }
+    // DECOMP-OPT1-PC1 §K — persisted inheritance manifest must re-derive to
+    // the SAME digest from frozen run inputs（identity drift fails closed）.
+    resumedInheritanceManifest = verifyInheritanceManifestArtifact({
+      execDir,
+      snapshot,
+      ir,
+      repoRoot,
+      executionId,
+      readJson: (d, r) => readJsonSafe(d, r),
+    });
     for (const id of snapshot.completed_phase_ids || []) {
       if (!snapshot.phase_result_hashes || typeof snapshot.phase_result_hashes[id] !== "string") {
         throw new DurableGraphHoldError("RESUME_FINGERPRINT_MISMATCH", `completed phase ${id} missing result hash`);
@@ -1226,6 +1251,13 @@ export async function resumeDurableGraph({
       closeout, closeoutGate, closeoutSourceBuilder, closeoutEvidenceWriter,
       memory, telemetry, writeback,
       admission,
+      // DECOMP-OPT1-PC1: resume reuses the verified frozen manifest（identity
+      // drift already failed closed above）.
+      inheritance: (() => {
+        const cfg = buildDurableInheritanceConfig({ hooks, run });
+        if (cfg && resumedInheritanceManifest) cfg.prebuiltManifest = resumedInheritanceManifest;
+        return cfg;
+      })(),
       durable: { executionAttempt: attempt, recoveryGeneration: gen, resumed: true, replayOf: executionId, recovered, duplicateSuppressed },
       preserveInstance,
       budget,

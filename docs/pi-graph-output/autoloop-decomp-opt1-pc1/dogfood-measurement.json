@@ -1,0 +1,112 @@
+{
+  "fixture": {
+    "cwd": "/var/folders/xz/z021trgs0n16709lm9s9pcc40000gn/T/decomp-opt1-df-sFdGas"
+  },
+  "baseline": {
+    "final": "PASS",
+    "gitTotal": 87,
+    "byCategory": {
+      "identity": 39,
+      "captureChanged": 45,
+      "verification": 3,
+      "perPath": 0,
+      "other": 0
+    }
+  },
+  "after": {
+    "final": "PASS",
+    "gitTotal": 52,
+    "byCategory": {
+      "identity": 6,
+      "captureChanged": 45,
+      "verification": 1,
+      "perPath": 0,
+      "other": 0
+    },
+    "inheritance": {
+      "manifestIdentity": "decompInherit_1be3e265ad5538fe",
+      "parentFactsObservedOnce": 9,
+      "inheritedFactCount": 27,
+      "reuseCount": 27,
+      "revalidateCount": 0,
+      "recomputeCount": 0,
+      "childPacketCount": 3,
+      "duplicateContextReconstructionAvoided": 3,
+      "duplicateVerificationAvoided": 2,
+      "identityObservationsPerChild": {
+        "frozen": 0,
+        "guard": 3
+      }
+    }
+  },
+  "delta": {
+    "gitTotal": 35,
+    "pctReduction": 40.2,
+    "byCategory": {
+      "identity": {
+        "before": 39,
+        "after": 6,
+        "delta": 33
+      },
+      "captureChanged": {
+        "before": 45,
+        "after": 45,
+        "delta": 0
+      },
+      "verification": {
+        "before": 3,
+        "after": 1,
+        "delta": 2
+      },
+      "perPath": {
+        "before": 0,
+        "after": 0,
+        "delta": 0
+      },
+      "other": {
+        "before": 0,
+        "after": 0,
+        "delta": 0
+      }
+    }
+  },
+  "cbmDogfood": {
+    "r1": {
+      "final": "PASS",
+      "writebackGap": false,
+      "writebackGapReason": null,
+      "missCount": 1,
+      "queryCount": 1,
+      "parentFactsObservedOnce": 9
+    },
+    "r2": {
+      "final": "PASS",
+      "hitCount": 1,
+      "factsReused": 9,
+      "parentFactsObservedOnce": 0,
+      "sameManifest": true
+    },
+    "r3": {
+      "final": "PASS",
+      "staleCount": 1,
+      "hitCount": 0,
+      "missCount": 0,
+      "writebackGap": false,
+      "writebackGapReason": null,
+      "queryCount": 1,
+      "sameManifest": false,
+      "invalidationTriggerCount": 0
+    },
+    "r4": {
+      "final": "PASS",
+      "staleCount": 0,
+      "hitCount": 1,
+      "missCount": 0,
+      "queryCount": 1,
+      "reuseCount": 27,
+      "inheritedFactCount": 27,
+      "inheritanceHoldCount": 0,
+      "manifestSameAsR3": true
+    }
+  }
+}

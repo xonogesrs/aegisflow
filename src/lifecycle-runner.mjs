@@ -327,7 +327,7 @@ export async function runLifecycle({
       taskCard,
       attempt,
       scopeCheck: scopeCheck ?? { ok: true, violations: [], delta: [] },
-      baseline: taskCard.repositoryRoot ? collectGitBaseline(taskCard.repositoryRoot) : null,
+      baseline: taskCard.inheritedBaseline ?? (taskCard.repositoryRoot ? collectGitBaseline(taskCard.repositoryRoot) : null),
       testRun: Array.isArray(taskCard.verificationCommand)
         ? await runVerificationCommand({
             command: taskCard.verificationCommand,

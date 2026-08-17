@@ -1,0 +1,243 @@
+================================================================================
+AUTOLOOP-DECOMP-OPT1-PC1 — CARD CLOSEOUT
+PARENT_TO_CHILD_CONTEXT_AND_EVIDENCE_INHERITANCE_CONVERGED
+================================================================================
+Date:      2026-08-17
+Repo:      /tmp/autoloop @ e68a382 (working tree)
+Baseline:  governance/decomp-opt1-design-freeze (DECOMP-OPT1 design inventory
+           frozen at docs/governance/autoloop-decomp-opt1-design-inventory.md)
+Scope:     DECOMP-OPT1-PC1 implementation card — parent→child context &
+           evidence inheritance + CBM-first retrieval + real A/B/C dogfood.
+
+--------------------------------------------------------------------------------
+1. WHAT WAS BUILT
+--------------------------------------------------------------------------------
+Single authoritative Parent/Run inheritance artifact + deterministic child
+inheritance, per the frozen design (§8 A+B+D+E) extended with CBM-first
+retrieval (card §C/§S).
+
+New modules:
+  src/v2/decomposition-inheritance.mjs          — pure core: manifest build/
+    verify（content-addressed, deterministic digest, wall-clock excluded）,
+    fact taxonomy F1–F6, three-way disposition engine（REUSE/REVALIDATE/
+    RECOMPUTE + HOLD）, per-fact invalidation evaluation, Child Execution
+    Packet builder, F3A/F3B baseline projection, per-child F3A guard
+    （single `git rev-parse HEAD`）, telemetry shapes.
+  src/memory/inheritance-cbm.mjs                — CBM-first retrieval: governed
+    write-back of the manifest through the EXISTING write-back gate
+    （UNVERIFIED, writer origin — no self-promotion）, deterministic
+    tree-bound query（HIT/STALE/CONFLICT/CORRUPT/MISS）, per-child evidence-
+    ref resolution.
+
+Wired (opt-in `inheritance` on runExecutionOrchestrator; durable +
+production paths enable it by default):
+  src/v2/execution-orchestrator.mjs             — manifest resolved ONCE per
+    run（CBM-first: HIT → reuse by identity; else bounded source build）;
+    per child: F3A guard → dispositions → packet → taskCard.inheritedBaseline
+    → verification layering（read-only phases skip the redundant process）;
+    telemetry in result.inheritance.
+  src/lifecycle-runner.mjs                      — evidence builder consumes the
+    inherited baseline instead of re-collecting 9 git observations/child.
+  src/v2/harness-evidence.mjs                   — guard command recorded;
+    repository_baseline carries the explicit inheritance marker
+    （no_per_child_freshness_claim — R1-C）.
+  src/v2/review-evidence.mjs                    — F3A head/tree by reference
+    （drops 2 git spawns/child; gate semantics unchanged）.
+  src/v2/system-delta.mjs                       — F3A by reference for the
+    shared-repository path; isolated writer worktrees still observe their
+    own identity（child-local, MFRESH）.
+  src/v2/durable-execution.mjs                  — orchestrator inheritance
+    config（frozen inputFingerprint + repo fingerprint）; manifest persisted
+    as durable artifact; resume re-derives + compares digest
+    （DECOMPOSITION_INHERITANCE_IDENTITY_DRIFT fail-closed）; verified
+    manifest reused on resume.
+  src/v2/durable-graph.mjs                      — same for the production
+    graph path（run + resume）.
+  src/runtime/colima-graph-runner.mjs           — forwards `inheritance`,
+    exposes result.inheritance.
+
+--------------------------------------------------------------------------------
+2. BEFORE / AFTER MEASUREMENT（§N — same fixture, same instrumentation）
+--------------------------------------------------------------------------------
+Fixture: real git repo; Parent decomposed into A（read-only analysis）/
+B（writer, dep A）/ C（read-only verification, dep A+B）; production pipeline
+modules（runProductionPipeline + runExecutionOrchestrator）+ production-
+mirroring hooks（verificationCommand git status --porcelain, model identity）;
+git-subprocess counter preload（node --require）.
+
+Metric (3 children)                       BEFORE   AFTER   DELTA   % REDUCTION
+--------------------------------------------------------------------------------
+git subprocess spawns (total)                87       52      35      40.2%
+  — repository identity observation          39        6      33      84.6%
+    (was 13/child: HEAD 3×, tree 3×, branch/upstream/ahead/behind/
+     remote/toplevel 1×; now 1 guard/child + 3 probe once/run)
+  — captureChangedPaths（child-local MFRESH） 45       45       0       0%
+  — verification command runs                 3        1       2      66.7%
+    (read-only A/C skip; writer B keeps the mandatory gate)
+Decomposition adapter calls                    1        1       0       0%
+Executor + reviewer calls                    3+3      3+3      0       0%
+--------------------------------------------------------------------------------
+Reference: the 5-child baseline probe（docs/pi-graph-output/
+autoloop-decomp-opt1-pc1/baseline-5child.json）: 179 git spawns total,
+identity 90（18/child）, captureChanged 75, verification 5 — matches the
+design-inventory §5 cost baseline.
+
+--------------------------------------------------------------------------------
+3. REQUIRED PROCESS TELEMETRY（§O — from the dogfood run, inheritance path）
+--------------------------------------------------------------------------------
+PARENT_FACTS_OBSERVED_ONCE .............. 9（once per run, not per child）
+INHERITED_FACT_COUNT ................... 27（9 facts × 3 children）
+REUSE_COUNT ............................ 27（every disposition resolved to
+                                            REUSE under stable identity）
+REVALIDATE_COUNT ....................... 0（no drift in the normal case）
+RECOMPUTE_COUNT ........................ 0
+DUPLICATE_CONTEXT_RECONSTRUCTION_AVOIDED  3（one packet per child, no
+                                            parent re-read / re-discovery）
+DUPLICATE_EVIDENCE_GENERATION_AVOIDED  .. evidence refs inherited by
+                                            identity; zero re-generation of
+                                            immutable parent evidence
+DUPLICATE_VERIFICATION_AVOIDED .......... 2（read-only A/C skipped）
+CBM_HIT_RATE ........................... r2: hit 1/1；r4: hit 1/1（tree-
+                                            bound; see §5）
+BOUNDED_FALLBACK_COUNT .................. 1（r1 initial miss → one bounded
+                                            source build; no unbounded scan）
+INVALIDATION_TRIGGER_COUNT .............. r3 stale detected at manifest
+                                            resolution（staleCount=1）;
+                                            in-run guard HOLD exercised by
+                                            the Q drift test
+INHERITANCE_HOLD_COUNT .................. 0 in dogfood（fail-closed HOLD
+                                            paths proven by tests）
+CBM_WRITEBACK_GAP ...................... false（manifest record written
+                                            through the governed gate）
+
+--------------------------------------------------------------------------------
+4. ACCEPTANCE DOGFOOD（§P / §Q / §R / §S — real A/B/C runs, PASS all）
+--------------------------------------------------------------------------------
+r1  normal      build manifest once + write-back to CBM (no gap)      PASS
+r2  CBM hit     same parent/repo/tree → CBM reuse by identity;
+                factsReused=9, parentFactsObservedOnce=0, same manifest  PASS
+r3  drift       inherited dependency committed（tree changed）→ CBM
+                STALE detected → fresh manifest rebuilt（sameManifest=
+                false — stale manifest NEVER silently reused）          PASS
+r4  irrelevant  unrelated file dirtied（no commit）→ CBM HIT, manifest
+                preserved, 27/27 REUSE, 0 holds                        PASS
+Q   in-run      executor commits mid-run → next child's F3A guard fails
+                closed（INHERITED_CONTEXT_FRESHNESS_UNPROVEN, HOLD, no
+                silent reuse）— covered by test-inheritance-orchestrator  PASS
+CBM answers: known parent context（manifest identity）, known dependency
+（tree drift → stale）, prior evidence location（per-child evidence refs）,
+repository identity（F3A）— all identity-verified before reuse.
+
+--------------------------------------------------------------------------------
+5. REGRESSION（§U — all items, offline）
+--------------------------------------------------------------------------------
+ 1 manifest deterministic identity ........ unit U-1/U-1b（same inputs →
+   same sha; wall-clock excluded; any input change → new sha）
+ 2 REUSE .................................. unit U-2 + integration P/R
+ 3 REVALIDATE ............................. unit U-3/U-4b（file digest
+   changed → REVALIDATE; time-sensitive → REVALIDATE）
+ 4 RECOMPUTE .............................. unit U-4（run-boundary drift）
+ 5 relevant drift invalidation ............. unit U-5 + dogfood r3（stale）
+ 6 irrelevant drift preservation ........... unit U-5/U-6 + dogfood r4
+ 7 corrupt manifest fail closed ............ unit U-7/U-7b + U-10 tamper→
+   resume rejected（DECOMPOSITION_INHERITANCE_IDENTITY_DRIFT）
+ 8 missing evidence fail closed ............ unit U-8（STALE_EVIDENCE_REUSED）
+ 9 child scope containment ................. unit U-9（packet scope derived
+   from IR phase + parent; mutationAuthority never inherited; task-card
+   hard gates unchanged and still run per child — orchestrator T9/T10/T11)
+10 resume/restart .......................... U-10（artifact persisted +
+    verified; tamper rejects; verified manifest reused on resume）
+11 multiple children same manifest ......... integration U-11 + dogfood r2/r4
+12 superseded parent ....................... unit U-12
+13 CBM hit ................................. integration S-CBM-HIT + dogfood r2/r4
+14 CBM miss bounded fallback ............... integration S-CBM-MISS + dogfood r1
+15 existing decomposition tests ............ test:v2 448/452（4 failures
+    pre-existing on clean HEAD e68a382: 33/C4Q-12/C4S-9 sentinel vs
+    SECRET_PATTERNS; DE-2 subagent durable) — none introduced by this card
+16 lifecycle/review regressions ............ test:c2 44/44; memory suites
+    226/226; governance 497/502（clean tree: 496/502 — this card fixes one
+    order-dependent governance test）; npm run check clean
+New tests: test/v2/test-decomposition-inheritance.mjs（14）+
+test/v2/test-inheritance-orchestrator.mjs（8）= 22 passing.
+
+--------------------------------------------------------------------------------
+6. WORKFLOW SUBTRACTION（§V — removed only where a replacement exists）
+--------------------------------------------------------------------------------
+WORKFLOW_SUBTRACTION_CANDIDATES:
+  - repeated repo identity re-observation per child（13 git spawns/child
+    across S12/S13/S14 → 1 guard/child） — replaced by F3A guard + frozen
+    manifest reference（R1-C）.
+  - repeated parent spec reread / context reconstruction per child
+    （buildPhaseTaskCard re-derivation RC1/RC8） — replaced by Child
+    Execution Packet bound to the manifest digest（containment re-checks
+    still per child）.
+  - repeated immutable evidence regeneration — evidence inherited by
+    reference（sha256 identity）; nothing immutable is re-generated.
+  - repeated run identity reconstruction — run identity frozen in the
+    manifest; resume re-derives + compares digest（no new world view）.
+  - repeated dependency discovery — dependency facts（F5）are manifest-
+    bound; drift detected via CBM tree binding / guard.
+  - redundant read-only verification process（RC6） — verification layering:
+    writer/verification-flagged phases only.
+NOT removed: child-local scope baseline, post-mutation capture, system
+delta, harness evidence child-local block, review bundle, executor/reviewer
+calls, journal/checkpoint writes, containment checks（MFRESH by design）.
+
+--------------------------------------------------------------------------------
+7. CBM MATERIAL USE（§S — not just metrics）
+--------------------------------------------------------------------------------
+CBM answered real retrieval questions with verified identities:
+  - "known parent context" — manifest record（repository + parentCardId +
+    tree-bound）→ HIT → reuse without rebuild（dogfood r2/r4）.
+  - "known dependency / drift" — tree binding → STALE on committed
+    dependency change → rebuild（dogfood r3）.
+  - "known evidence location" — per-child evidence-ref records resolved by
+    scope path（queryChildEvidenceRefs）.
+  - "known repository identity" — F3A digest verification before reuse.
+CBM_HIT_COUNT = 0 was never observed; the write-back path works through the
+governed gate（origin=writer, UNVERIFIED, evidence-ref=manifestSha256）.
+A pre-existing query-classification defect（two CURRENT records for
+different trees misread as CONFLICT）was fixed（tree-bound freshness）.
+
+--------------------------------------------------------------------------------
+8. FAILURE CONDITIONS（§T — none triggered; all proven fail-closed）
+--------------------------------------------------------------------------------
+PARENT_CHILD_INHERITANCE_AUTHORITY_AMBIGUOUS .... not triggered（authority
+  derives from IR phase + parent scope; packet never widens）
+INHERITED_CONTEXT_FRESHNESS_UNPROVEN ............ guard HOLD path proven
+  （integration Q; unit U-4）
+CHILD_SCOPE_EXPANDED_BY_INHERITANCE ............. not triggered（U-9）
+STALE_EVIDENCE_REUSED ........................... not triggered（U-8;
+  dogfood r3 refuses stale reuse）
+DECOMPOSITION_INHERITANCE_IDENTITY_DRIFT ........ resume tamper rejection
+  proven（U-10）
+OPTIMIZATION_DID_NOT_REDUCE_DUPLICATE_WORK ...... not triggered（−40.2%
+  git spawns, −84.6% identity observations, verification 3→1）
+CBM_RETRIEVAL_CAUSED_UNBOUNDED_FALLBACK ......... not triggered（miss →
+  exactly one bounded source build; boundedFallbackCount recorded）
+
+--------------------------------------------------------------------------------
+9. DESIGN DELTA vs FROZEN INVENTORY
+--------------------------------------------------------------------------------
+The frozen design inventory excluded CBM（"no CBM dependency"）. This card
+（DECOMP-OPT1-PC1）explicitly requires CBM-first retrieval（§C/§S）; the
+implementation adds the CBM layer WITHOUT weakening any frozen authority:
+retrieval is identity-verified, write-back goes through the existing
+governed gate, and a live/CBM conflict resolves to the live authority with
+the CBM record surfaced. Everything else follows the frozen §7/§8 contract
+（manifest + packet + F3A binding + verification layering + disposition
+recording + telemetry）.
+
+--------------------------------------------------------------------------------
+10. COMMIT / PUSH（§X）
+--------------------------------------------------------------------------------
+COMMIT = scoped commit allowed（8 modified + 4 new files + this closeout
+bundle + dogfood artifacts）
+PUSH   = NO
+SEAL   = NO
+Unrelated review-workflow evidence（docs/pi-graph-output/*-convergence-*,
+review-live-promotion-*）NOT included.
+
+--------------------------------------------------------------------------------
+VERDICT: PASS / PARENT_TO_CHILD_CONTEXT_AND_EVIDENCE_INHERITANCE_CONVERGED
+--------------------------------------------------------------------------------

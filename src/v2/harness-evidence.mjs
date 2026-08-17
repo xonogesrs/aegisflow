@@ -305,7 +305,14 @@ export function buildHarnessOwnedEvidence({
   const attemptId = `${phaseId}-attempt-${Number.isInteger(attempt) ? attempt : 0}`;
 
   const commandRecords = [];
-  commandRecords.push({ command: "git rev-parse HEAD && git rev-parse HEAD^{tree} && git branch --show-current", status: "ok", exit_code: 0 });
+  // DECOMP-OPT1-PC1: when the repository baseline is inherited from the
+  // frozen run snapshot, the recorded observation is the F3A per-child guard
+  //（single `git rev-parse HEAD`）— never a fabricated full re-observation.
+  commandRecords.push({
+    command: baseline?.__inheritance?.guard_command ?? "git rev-parse HEAD && git rev-parse HEAD^{tree} && git branch --show-current",
+    status: "ok",
+    exit_code: 0,
+  });
   if (testRun && testRun.ok) {
     commandRecords.push({
       command: Array.isArray(taskCard.verificationCommand) ? taskCard.verificationCommand.join(" ") : "verification command",
@@ -346,6 +353,11 @@ export function buildHarnessOwnedEvidence({
       expected_worktree_state: "clean",
       permitted_dirty_paths: [],
       captured_at: baseline.captured_at ?? startedAt,
+      // DECOMP-OPT1-PC1: inherited run-level snapshot marker — makes the
+      // freshness claim explicit and machine-checkable（F3A by digest; F3B
+      // never claimed fresh per child, R1-C）. The schema validator accepts
+      // the extra block（repository_baseline shape is required-fields-only）.
+      ...(baseline.__inheritance ? { inheritance: baseline.__inheritance } : {}),
     },
     initial_integrity: baseline.tree ?? baseline.head,
     final_integrity: baseline.tree ?? baseline.head,

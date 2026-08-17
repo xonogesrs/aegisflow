@@ -247,13 +247,27 @@ export function buildSystemObservedDelta({ executionId, taskCard, scopeCheck, li
 
   // ── Gate 2: baseline presence（fail-closed; never fabricate）────────
   if (!repoRoot) return err(SYSTEM_DELTA_ERRORS.GENERATION_FAILED, "repository root unavailable");
-  const head = gitRun(repoRoot, ["rev-parse", "HEAD"]);
-  const tree = gitRun(repoRoot, ["rev-parse", "HEAD^{tree}"]);
-  if (!head.ok || !head.stdout.trim()) {
-    return err(SYSTEM_DELTA_ERRORS.GENERATION_FAILED, "repository baseline (HEAD) unavailable");
+  // DECOMP-OPT1-PC1: for the shared-repository path（delta root == canonical
+  // repo root）the frozen F3A snapshot（verified by the per-child guard）
+  // supplies the baseline identity — no per-child rev-parse re-read. An
+  // isolated writer worktree（repoRoot != canonical root）keeps observing its
+  // own identity（child-local, MFRESH）.
+  const inherited = taskCard?.inheritedBaseline;
+  const sharedRepo = repoRoot === taskCard?.repositoryRoot;
+  let baselineHead;
+  let baselineTree;
+  if (sharedRepo && inherited && typeof inherited.head === "string" && inherited.head.length > 0) {
+    baselineHead = inherited.head;
+    baselineTree = (typeof inherited.tree === "string" && inherited.tree.length > 0) ? inherited.tree : inherited.head;
+  } else {
+    const head = gitRun(repoRoot, ["rev-parse", "HEAD"]);
+    const tree = gitRun(repoRoot, ["rev-parse", "HEAD^{tree}"]);
+    if (!head.ok || !head.stdout.trim()) {
+      return err(SYSTEM_DELTA_ERRORS.GENERATION_FAILED, "repository baseline (HEAD) unavailable");
+    }
+    baselineHead = head.stdout.trim();
+    baselineTree = (tree.ok && tree.stdout.trim()) ? tree.stdout.trim() : baselineHead;
   }
-  const baselineHead = head.stdout.trim();
-  const baselineTree = (tree.ok && tree.stdout.trim()) ? tree.stdout.trim() : baselineHead;
 
   // ── Gate 3: scope delta presence（the formal scope-gate result）─────
   if (!scopeCheck || !Array.isArray(scopeCheck.delta)) {

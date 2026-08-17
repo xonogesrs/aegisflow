@@ -142,6 +142,9 @@ export async function runColimaGraph({
   closeoutSourceBuilder,
   closeoutEvidenceWriter,
   memory = null,
+  // DECOMP-OPT1-PC1（forwarded to runExecutionOrchestrator）: parent→child
+  // inheritance config — durable layers supply the frozen fingerprints.
+  inheritance = null,
   // COST-1 passive telemetry observer（OPT-IN）. Runs AFTER the graph result
   // + closeout gate are final; failures are swallowed and degrade to a
   // telemetry.availability event — they NEVER change task semantics.
@@ -324,6 +327,7 @@ export async function runColimaGraph({
     initialState,
     executorAdapterFactory: execFactory,
     reviewerAdapterFactory: revFactory,
+    inheritance,
     hooks: {
       expectedExecutorModel: "colima-container",
       expectedExecutorProvider: "colima-container",
@@ -588,6 +592,9 @@ export async function runColimaGraph({
     join: joinOrder,
     nodeResults: order.map((id) => nodeResults.get(id)).filter(Boolean),
     transitions: orchestratorResult.transitions,
+    // DECOMP-OPT1-PC1: frozen inheritance manifest + disposition telemetry
+    //（null when inheritance disabled）.
+    inheritance: orchestratorResult.inheritance ?? null,
     // DE-2: recovery provenance（provided by the durable wrapper; null on a
     // fresh non-resumed run）.
     recovery: durable ?? null,

@@ -36,6 +36,85 @@ import { runExecutionOrchestrator } from "./execution-orchestrator.mjs";
 import { runProductionPipeline } from "./production-pipeline.mjs";
 import { requiresWriterLease } from "./runner.mjs";
 import { assertValidEvidenceRoot } from "../evidence/run-evidence-store.mjs";
+import {
+  buildInheritanceManifest,
+  verifyManifestIntegrity,
+  probeRepositoryIdentity,
+  mergeFingerprintIntoRepositoryIdentity,
+} from "./decomposition-inheritance.mjs";
+
+/**
+ * DECOMP-OPT1-PC1 — derive the orchestrator inheritance config from the
+ * durable run（frozen input/repo fingerprints ⇒ deterministic manifest）.
+ * `hooks.inheritance.enabled === false` is the explicit kill-switch.
+ */
+export function buildDurableInheritanceConfig({ hooks = {}, run, specFileDigests = null }) {
+  const ih = hooks?.inheritance;
+  if (ih && ih.enabled === false) return null;
+  return {
+    enabled: true,
+    parentCardId: ih?.parentCardId ?? run.executionId,
+    parentGeneration: ih?.parentGeneration ?? 1,
+    inputFingerprint: run.inputFingerprint,
+    repositoryIdentity: run.repoFingerprint ?? null,
+    authorityRefs: ih?.authorityRefs ?? undefined,
+    contractRefs: ih?.contractRefs ?? undefined,
+    dependencyRefs: ih?.dependencyRefs ?? undefined,
+    evidenceRefs: ih?.evidenceRefs ?? undefined,
+    specFilePaths: ih?.specFilePaths ?? undefined,
+    specFileDigests: specFileDigests ?? undefined,
+    prebuiltManifest: ih?.prebuiltManifest ?? undefined,
+    cbm: ih?.cbm ?? null,
+  };
+}
+
+/**
+ * DECOMP-OPT1-PC1 — resume verification: the persisted inheritance manifest
+ * artifact must (a) pass self-integrity and (b) re-derive to the SAME digest
+ * from the frozen run inputs（identity drift ⇒ fail closed, §K）. Returns the
+ * verified manifest（to be reused by the resumed orchestrator）or null when
+ * the run produced no artifact（pre-inheritance runs）.
+ */
+export function verifyInheritanceManifestArtifact({ execDir, snapshot, ir, repoRoot, executionId, readJson }) {
+  const artifactPath = join(execDir, "artifacts", "decomposition-inheritance.json");
+  if (!existsSync(artifactPath)) return null;
+  const ih = readJson(execDir, "artifacts/decomposition-inheritance.json");
+  const iv = verifyManifestIntegrity(ih);
+  if (!iv.ok) {
+    throw new DurableHoldError("DECOMPOSITION_INHERITANCE_IDENTITY_DRIFT", `inheritance manifest artifact failed integrity: ${iv.reason}`);
+  }
+  const probe = probeRepositoryIdentity(repoRoot);
+  if (!probe.ok) {
+    throw new DurableHoldError("DECOMPOSITION_INHERITANCE_IDENTITY_DRIFT", `F3A probe failed on resume: ${probe.reason}`);
+  }
+  const repositoryIdentity = mergeFingerprintIntoRepositoryIdentity(snapshot?.repository_fingerprint ?? null, probe.identity);
+  const specFileDigests = (ih.facts || [])
+    .filter((f) => Array.isArray(f.filePaths) && f.filePaths.length > 0)
+    .map((f) => ({ path: f.filePaths[0], sha256: f.value ?? null }));
+  const rebuilt = buildInheritanceManifest({
+    parentCardId: ih.parentCardId,
+    parentGeneration: ih.parentGeneration,
+    graphRunId: executionId,
+    repositoryIdentity,
+    inputFingerprint: snapshot.input_fingerprint,
+    irSha: snapshot.decomposition_ir_sha256,
+    dagSha: snapshot.dag_sha256,
+    phaseIds: (ir.phases || []).map((p) => p.phase_id),
+    authorityRefs: ih.authorityRefs ?? [],
+    contractRefs: ih.contractRefs ?? [],
+    dependencyRefs: ih.dependencyRefs ?? [],
+    evidenceRefs: ih.evidenceRefs ?? [],
+    specFileDigests,
+    createdAt: ih.createdAt,
+  });
+  if (rebuilt.manifestSha256 !== ih.manifestSha256) {
+    throw new DurableHoldError(
+      "DECOMPOSITION_INHERITANCE_IDENTITY_DRIFT",
+      `resume re-derivation digest mismatch: ${rebuilt.manifestSha256.slice(0, 12)}… != ${ih.manifestSha256.slice(0, 12)}…`
+    );
+  }
+  return ih;
+}
 
 export const DURABLE_FORMAT_VERSION = "1.0.0";
 
@@ -754,9 +833,21 @@ async function runDurableInner({
       signal,
       initialState: run.resumeInitialState,
       hooks: orchestratorHooks,
+      inheritance: buildDurableInheritanceConfig({ hooks, run }),
     });
   } catch (e) {
     return terminateDurableRun(run, { final: "HOLD", reason: `ORCHESTRATION_EXCEPTION:${e?.code || e?.name || "unknown"}`, ir: pipeline.ir });
+  }
+
+  // DECOMP-OPT1-PC1: persist the frozen inheritance manifest（secret-scanned
+  // artifact; resume re-verifies identity §K）. A persistence failure fails
+  // the run closed（evidence-write authority — never a silent skip）.
+  if (run.orchestration?.inheritance?.manifest) {
+    try {
+      run.store.writeArtifact("decomposition-inheritance.json", run.orchestration.inheritance.manifest);
+    } catch (e) {
+      return terminateDurableRun(run, { final: "HOLD", reason: `INHERITANCE_MANIFEST_PERSISTENCE_FAILED:${e?.code || e?.name || "unknown"}`, ir: pipeline.ir });
+    }
   }
 
   if (run.orchestration.final === "PASS") {
@@ -986,6 +1077,7 @@ export async function resumeAutoLoopInternal({
   // ── Validation（any failure → HOLD / RESUME_FINGERPRINT_MISMATCH）──
   let ir = null;
   let expectedFp = null;
+  let verifiedInheritanceManifest = null;
   try {
     // (format major + journal chain/head alignment were validated in the
     // read-only pre-gate above; the remaining fingerprint checks follow.)
@@ -1060,6 +1152,18 @@ export async function resumeAutoLoopInternal({
     if (!snapshot.active_phase && (snapshot.writer_lease_holder || snapshot.writer_phase_active)) {
       throw new DurableHoldError("RESUME_FINGERPRINT_MISMATCH", "stale writer lease remnant without an active phase");
     }
+
+    // 7c. DECOMP-OPT1-PC1 §K — the persisted inheritance manifest must
+    // re-derive to the SAME digest from the frozen run inputs. Identity
+    // drift（tampered / corrupt / superseded）fails closed.
+    verifiedInheritanceManifest = verifyInheritanceManifestArtifact({
+      execDir,
+      snapshot,
+      ir,
+      repoRoot,
+      executionId,
+      readJson: (d, r) => readJsonSafe(d, r),
+    });
 
 
     // 8. phase set must exactly match the IR（no unknown / no missing phases）
@@ -1172,6 +1276,10 @@ export async function resumeAutoLoopInternal({
   run.resumeInitialState = initialState;
 
   const orchestratorHooks = run.buildOrchestratorHooks(ir);
+  const inheritanceConfig = buildDurableInheritanceConfig({ hooks, run });
+  if (inheritanceConfig && verifiedInheritanceManifest) {
+    inheritanceConfig.prebuiltManifest = verifiedInheritanceManifest;
+  }
   try {
     run.orchestration = await runExecutionOrchestrator({
       ir,
@@ -1186,6 +1294,7 @@ export async function resumeAutoLoopInternal({
       signal,
       initialState,
       hooks: orchestratorHooks,
+      inheritance: inheritanceConfig,
     });
   } catch (e) {
     return terminateDurableRun(run, { final: "HOLD", reason: `ORCHESTRATION_EXCEPTION:${e?.code || e?.name || "unknown"}`, ir });
