@@ -1,69 +1,61 @@
 // src/governance/external-verdict-ingest.mjs
 //
-// EXTERNAL-REVIEW-VERDICT-HANDOFF-1 — the single production ingress for the
-// external reviewer's verdict on the CURRENT review.
+// CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1 — the single production
+// ingress for the external reviewer's verdict, bound to the DURABLE LEDGER.
 //
-//   Current A → external reviewer PASS / REPAIR / HOLD → verdict packet
-//   → ingestExternalVerdict
-//     → strict live-Current binding（cardId + bundle identity + content sha）
-//     → applyExternalReviewVerdict（the authoritative receipt）
-//     → PASS:    archive Current → rotate → promote the oldest eligible
-//                queued review（bytes verbatim, never regenerated）
-//     → REPAIR:  record the verdict; Current stays in its authoritative
-//                position（the repair generation supersedes through the
-//                existing sanctioned seam — never promotes an unrelated
-//                queued review）
-//     → HOLD:    record the verdict; Current stays; no rotate / promote;
-//                downstream closeout stays blocked
+//   A completes -> Current = A -> B completes -> Current = B -> reviewer
+//   PASSes A -> verdict packet -> ingestExternalVerdict
+//     → exact LEDGER lookup（cardId + bundleIdentity + bundleSha256; card H）
+//       — the reviewed card does NOT need to be Current（card G）;
+//     → verdict applied to the ledger entry（identity-bound receipt）;
+//     → PASS: entry -> REVIEWED, bundle archived（from the immutable ledger
+//       artifact）; Current untouched（card I — verdict lifecycle never
+//       controls the presentation pointer）;
+//     → REPAIR: entry -> REPAIR（supersession seam follows）;
+//     → HOLD: entry -> HOLD; downstream closeout stays blocked.
 //
-// Authority model（C）: the external reviewer is the verdict source; the
+// Authority model: the external reviewer is the verdict source; the
 // Controller validates and applies. Queue / LatestHuman / internal
 // independent review / bundle EXECUTIVE_STATUS can never mint a verdict.
 // `acceptReviewJob`（the internal review-job ACCEPTED mint）is untouched.
 //
-// Idempotency + crash recovery（J/L）: re-running with the SAME packet is a
-// resume — the state machine continues from wherever the previous run
-// stopped（apply → archive → rotate → promote → evidence）. A replay after
-// the lifecycle completed returns IDEMPOTENT / NO_DUPLICATE_TRANSITION
-//（verified against the archive record — never a second archive/rotate/
-// promote）. A DIFFERENT verdict on the same bundle fails closed
+// Idempotency + crash recovery: re-running with the SAME packet is a resume —
+// the state machine continues from wherever the previous run stopped
+//（apply → archive）. A replay after the lifecycle completed returns
+// IDEMPOTENT / NO_DUPLICATE_TRANSITION（verified against the ledger entry
+// verdict and the archive record — never a second apply/archive）. A
+// DIFFERENT verdict on the same bundle fails closed
 //（CONFLICTING_EXTERNAL_VERDICT）unless it is the identical packet.
 //
 // The reviewer never touches queue.json / Current / Archive / review-job.json
-// by hand（M）— human work is: review → verdict packet.
+// by hand — human work is: review → verdict packet.
 
-import { existsSync, readdirSync, readFileSync, writeFileSync, copyFileSync, mkdirSync } from "node:fs";
-import { join, resolve, dirname } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import {
-  applyExternalReviewVerdict,
   readExternalReviewDeliveryRecord,
-  writeExternalReviewDeliveryRecord,
   rotateExternalReviewSurface,
-  reconcileReviewQueue,
   acquireExternalReviewSurfaceLock,
   releaseExternalReviewSurfaceLock,
   externalReviewSurfaceDir,
   externalReviewArchiveDir,
-  bundleContentSha256,
   recursiveCanonicalJson,
   sha256Hex,
   EXTERNAL_REVIEW_VERDICTS,
 } from "./review-bundle.mjs";
-import { readReviewQueue, findEntryByIdentity } from "./review-queue.mjs";
+import { readReviewQueue, findEntry, findEntryByIdentity, ensureQueueMigrated, presentedEntry, writeReviewQueue } from "./review-queue.mjs";
 
 export const EXTERNAL_VERDICT_PACKET_SCHEMA = "autoloop.external-review-verdict/v1";
 
 export const EXTERNAL_VERDICT_HANDOFF_HOLDS = Object.freeze({
   PACKET_INVALID: "EXTERNAL_VERDICT_PACKET_INVALID",
-  CURRENT_IDENTITY_MISMATCH: "EXTERNAL_VERDICT_CURRENT_IDENTITY_MISMATCH",
+  LEDGER_TARGET_NOT_FOUND: "REVIEW_LEDGER_TARGET_NOT_FOUND",
+  IDENTITY_MISMATCH: "REVIEW_VERDICT_IDENTITY_MISMATCH",
   CONFLICTING: "CONFLICTING_EXTERNAL_VERDICT",
   APPLIED_BUT_ROTATION_FAILED: "EXTERNAL_VERDICT_APPLIED_BUT_ROTATION_FAILED",
-  PROMOTION_FAILED: "QUEUED_REVIEW_PROMOTION_FAILED",
-  DID_NOT_ADVANCE: "EXTERNAL_VERDICT_HANDOFF_DID_NOT_ADVANCE_CURRENT",
   AUTHORITY_REGRESSED: "REVIEW_AUTHORITY_INVARIANT_REGRESSED",
 });
 
-/** Idempotent replay of the identical packet（lifecycle already complete）. */
 export const VERDICT_HANDOFF_IDEMPOTENT = "IDEMPOTENT";
 /** Same verdict already applied to the CURRENT bundle; lifecycle continued. */
 export const VERDICT_HANDOFF_NO_DUPLICATE_TRANSITION = "NO_DUPLICATE_TRANSITION";
@@ -179,18 +171,19 @@ function resolveAlreadyDecided({ packet, surfaceDir, archiveDir }) {
 }
 
 /**
- * Single production ingress（F）: read verdict → schema validate → re-read
- * live Current → strict identity bind（E）→ findings digest validate → apply
- * via applyExternalReviewVerdict（the existing authority）→ verdict-specific
- * lifecycle action（G/H/I）.
+ * Single production ingress: read verdict → schema validate → exact DURABLE
+ * LEDGER lookup（cardId + bundleIdentity + bundleSha256; card H）→ apply to
+ * the ledger entry → verdict-specific lifecycle（PASS archive / REPAIR /
+ * HOLD）. The verdict NEVER requires the target to be Current（card G）and
+ * NEVER changes the presentation pointer（card I）.
  *
- * Crash-resume safe（L）: identical-packet re-runs continue from the last
- * durable step（apply → archive → rotate → promote → evidence）.
+ * Crash-resume safe: identical-packet re-runs continue from the last durable
+ * step（apply → archive）.
  *
  * @param {object} opts — { packet?, packetPath?, surfaceDir?, archiveDir?,
  *   agentIdentity? }
  * @returns {{ ok, code, errors, result }}
- *   result: { status, packet, currentBefore, archived, promoted,
+ *   result: { status, packet, currentBefore, archived, promoted:null,
  *             currentAfter, previousArchiveRecord? }
  */
 export async function ingestExternalVerdict({ packet = null, packetPath = null, surfaceDir = null, archiveDir = null, agentIdentity = null } = {}) {
@@ -212,111 +205,91 @@ export async function ingestExternalVerdict({ packet = null, packetPath = null, 
     return { ok: false, code: EXTERNAL_VERDICT_HANDOFF_HOLDS.AUTHORITY_REGRESSED, errors: [`${EXTERNAL_VERDICT_HANDOFF_HOLDS.AUTHORITY_REGRESSED}:${lock.reason ?? "surface_busy"}`], result: null };
   }
   try {
-    // ── E. strict binding against the LIVE Current ──────────────────────
-    const deliveryPath = join(dir, "delivery.json");
-    const rec = existsSync(deliveryPath) ? readExternalReviewDeliveryRecord(deliveryPath) : { ok: false, errors: ["delivery_record_missing"], state: null, cardId: null };
-    const currentBefore = rec.ok
-      ? { cardId: rec.cardId, bundleIdentity: rec.state.delivery?.reviewBundleIdentity ?? null, bundleSha256: rec.state.delivery?.reviewBundleSha256 ?? null, status: rec.state.externalReviewStatus ?? null }
-      : null;
-
-    let boundToCurrent = false;
-    if (rec.ok) {
-      const sameCard = rec.cardId === packet.cardId;
-      const sameIdentity = rec.state.delivery?.reviewBundleIdentity === packet.bundleIdentity;
-      const sameSha = rec.state.delivery?.reviewBundleSha256 === packet.bundleSha256;
-      // belt-and-braces: the record's sha must match the ACTUAL Current
-      // bundle bytes（recomputed — never trusted from the record alone）.
-      let byteSha = null;
-      const bundlePath = join(dir, "review-bundle.txt");
-      if (existsSync(bundlePath)) byteSha = bundleContentSha256(bundlePath);
-      const bytesMatch = byteSha !== null && byteSha === packet.bundleSha256;
-      boundToCurrent = sameCard && sameIdentity && sameSha && bytesMatch;
-      if (!sameCard || !sameIdentity || !sameSha || !bytesMatch) {
-        const detail = [
-          sameCard ? null : `card:${rec.cardId}!=${packet.cardId}`,
-          sameIdentity ? null : `identity:${String(rec.state.delivery?.reviewBundleIdentity ?? "?").slice(0, 8)}!=${packet.bundleIdentity.slice(0, 8)}`,
-          sameSha ? null : `sha:${String(rec.state.delivery?.reviewBundleSha256 ?? "?").slice(0, 8)}!=${packet.bundleSha256.slice(0, 8)}`,
-          bytesMatch ? null : "record_sha_vs_bytes_diverged",
-        ].filter(Boolean).join(";");
-        // already decided elsewhere（archive / queue）→ idempotent or conflict
-        const decided = resolveAlreadyDecided({ packet, surfaceDir: dir, archiveDir: arch });
-        if (decided) {
-          if (decided.code === VERDICT_HANDOFF_IDEMPOTENT) {
-            // L3: archive done but promotion may not have run — reconcile
-            //（promote the oldest eligible queued review when Current is
-            // empty; no-op otherwise）.
-            const rec2 = reconcileReviewQueue({ surfaceDir: dir, archiveDir: arch, lock });
-            return {
-              ok: true,
-              code: VERDICT_HANDOFF_IDEMPOTENT,
-              errors: [],
-              result: { status: "idempotent", packet, currentBefore, archived: [], promoted: rec2.promoted ?? null, currentAfter: null, previousArchiveRecord: decided.evidence },
-            };
-          }
-          return { ok: false, code: decided.code, errors: [`${decided.code}:${decided.reason ?? "already_decided"}`], result: { packet, currentBefore, previousArchiveRecord: decided.evidence } };
-        }
-        return { ok: false, code: EXTERNAL_VERDICT_HANDOFF_HOLDS.CURRENT_IDENTITY_MISMATCH, errors: [`${EXTERNAL_VERDICT_HANDOFF_HOLDS.CURRENT_IDENTITY_MISMATCH}:${detail}`], result: { packet, currentBefore } };
-      }
-    } else {
+    const migrated = ensureQueueMigrated(dir);
+    if (!migrated.ok) {
+      return { ok: false, code: EXTERNAL_VERDICT_HANDOFF_HOLDS.LEDGER_TARGET_NOT_FOUND, errors: [`${EXTERNAL_VERDICT_HANDOFF_HOLDS.LEDGER_TARGET_NOT_FOUND}:queue_hold:${migrated.reason ?? ""}`], result: { packet, currentBefore: null } };
+    }
+    const queue = migrated.queue;
+    const currentBefore = presentedInfo(queue, dir);
+    const entry = findEntry(queue, packet.cardId, dir);
+    if (!entry) {
+      // already decided elsewhere（archive / queue verdict）→ idempotent/conflict
       const decided = resolveAlreadyDecided({ packet, surfaceDir: dir, archiveDir: arch });
       if (decided) {
         if (decided.code === VERDICT_HANDOFF_IDEMPOTENT) {
-          const rec2 = reconcileReviewQueue({ surfaceDir: dir, archiveDir: arch, lock });
-          return { ok: true, code: VERDICT_HANDOFF_IDEMPOTENT, errors: [], result: { status: "idempotent", packet, currentBefore: null, archived: [], promoted: rec2.promoted ?? null, currentAfter: null, previousArchiveRecord: decided.evidence } };
+          return { ok: true, code: VERDICT_HANDOFF_IDEMPOTENT, errors: [], result: { status: "idempotent", packet, currentBefore, archived: [], promoted: null, currentAfter: currentBefore, previousArchiveRecord: decided.evidence } };
         }
-        return { ok: false, code: decided.code, errors: [`${decided.code}:${decided.reason ?? "already_decided"}`], result: { packet, currentBefore: null, previousArchiveRecord: decided.evidence } };
+        return { ok: false, code: decided.code, errors: [`${decided.code}:${decided.reason ?? "already_decided"}`], result: { packet, currentBefore, previousArchiveRecord: decided.evidence } };
       }
-      return { ok: false, code: EXTERNAL_VERDICT_HANDOFF_HOLDS.CURRENT_IDENTITY_MISMATCH, errors: [`${EXTERNAL_VERDICT_HANDOFF_HOLDS.CURRENT_IDENTITY_MISMATCH}:no_current_delivery_record`], result: { packet, currentBefore: null } };
+      return { ok: false, code: EXTERNAL_VERDICT_HANDOFF_HOLDS.LEDGER_TARGET_NOT_FOUND, errors: [`${EXTERNAL_VERDICT_HANDOFF_HOLDS.LEDGER_TARGET_NOT_FOUND}:no_ledger_entry:${packet.cardId}`], result: { packet, currentBefore } };
+    }
+    // exact identity binding（card H）— no guessing.
+    if (entry.bundleIdentity !== packet.bundleIdentity || entry.bundleSha256 !== packet.bundleSha256) {
+      const detail = [
+        entry.bundleIdentity !== packet.bundleIdentity ? `identity:${entry.bundleIdentity.slice(0, 8)}!=${packet.bundleIdentity.slice(0, 8)}` : null,
+        entry.bundleSha256 !== packet.bundleSha256 ? `sha:${entry.bundleSha256.slice(0, 8)}!=${packet.bundleSha256.slice(0, 8)}` : null,
+      ].filter(Boolean).join(";");
+      const decided = resolveAlreadyDecided({ packet, surfaceDir: dir, archiveDir: arch });
+      if (decided) {
+        if (decided.code === VERDICT_HANDOFF_IDEMPOTENT) {
+          return { ok: true, code: VERDICT_HANDOFF_IDEMPOTENT, errors: [], result: { status: "idempotent", packet, currentBefore, archived: [], promoted: null, currentAfter: currentBefore, previousArchiveRecord: decided.evidence } };
+        }
+        return { ok: false, code: decided.code, errors: [`${decided.code}:${decided.reason ?? "already_decided"}`], result: { packet, currentBefore, previousArchiveRecord: decided.evidence } };
+      }
+      return { ok: false, code: EXTERNAL_VERDICT_HANDOFF_HOLDS.IDENTITY_MISMATCH, errors: [`${EXTERNAL_VERDICT_HANDOFF_HOLDS.IDENTITY_MISMATCH}:${detail}`], result: { packet, currentBefore } };
     }
 
-    // ── already applied to the CURRENT bundle（L1/L2 resume）─────────────
-    const existing = rec.state.verdict ?? null;
-    if (existing && existing.bundleIdentity === packet.bundleIdentity) {
-      if (existing.verdict === packet.verdict && (existing.findingsDigest ?? null) === packet.findingsDigest) {
-        // same verdict already applied — continue the lifecycle without
-        // re-applying（apply is durable; never mint twice）.
-        return finishLifecycle({ packet, dir, arch, lock, alreadyApplied: true, currentBefore });
+    // ── already applied to this ledger generation（resume paths）─────────
+    if (entry.verdict && entry.verdict.bundleIdentity === packet.bundleIdentity) {
+      if (entry.verdict.verdict === packet.verdict && (entry.verdict.findingsDigest ?? null) === packet.findingsDigest) {
+        return finishLifecycle({ packet, dir, arch, lock, alreadyApplied: true, currentBefore, queue });
       }
       return {
         ok: false,
         code: EXTERNAL_VERDICT_HANDOFF_HOLDS.CONFLICTING,
-        errors: [`${EXTERNAL_VERDICT_HANDOFF_HOLDS.CONFLICTING}:verdict ${existing.verdict} already applied to bundle ${packet.bundleIdentity.slice(0, 8)}`],
+        errors: [`${EXTERNAL_VERDICT_HANDOFF_HOLDS.CONFLICTING}:verdict ${entry.verdict.verdict} already applied to bundle ${packet.bundleIdentity.slice(0, 8)}`],
         result: { packet, currentBefore },
       };
     }
 
-    // ── apply through the existing authority（never bypassed）────────────
-    const applied = applyExternalReviewVerdict(rec.state, {
+    // ── apply to the durable ledger entry（authority first — a crash before
+    // the archive loses nothing; resume completes the archive）───────────
+    entry.verdict = {
       verdict: packet.verdict,
-      bundleIdentity: packet.bundleIdentity,
-      bundleSha256: packet.bundleSha256,
       reviewerIdentity: packet.reviewerIdentity,
       reviewedAt: packet.reviewedAt,
-      agentIdentity: agentIdentity ?? null,
+      bundleIdentity: packet.bundleIdentity,
+      bundleSha256: packet.bundleSha256,
       findingsDigest: packet.findingsDigest,
-    });
-    if (!applied.ok) {
-      return { ok: false, code: EXTERNAL_VERDICT_HANDOFF_HOLDS.PACKET_INVALID, errors: applied.errors.map((e) => `${EXTERNAL_VERDICT_HANDOFF_HOLDS.PACKET_INVALID}:${e}`), result: { packet, currentBefore } };
+    };
+    entry.state = packet.verdict === "PASS" ? "REVIEWED" : packet.verdict; // REVIEWED | REPAIR | HOLD
+    entry.updatedAt = new Date().toISOString();
+    const wq = writeReviewQueue(queue, { surfaceDir: dir });
+    if (!wq.ok) {
+      return { ok: false, code: EXTERNAL_VERDICT_HANDOFF_HOLDS.APPLIED_BUT_ROTATION_FAILED, errors: [`ledger_write_failed:${wq.reason}`], result: { packet, currentBefore } };
     }
-    const written = writeExternalReviewDeliveryRecord({ outDir: dir, state: applied.state, cardId: rec.cardId, fileName: "delivery.json" });
-    if (!written.ok) {
-      return { ok: false, code: EXTERNAL_VERDICT_HANDOFF_HOLDS.APPLIED_BUT_ROTATION_FAILED, errors: [`record_write_failed:${written.reason}`], result: { packet, currentBefore } };
-    }
-    return finishLifecycle({ packet, dir, arch, lock, alreadyApplied: false, currentBefore });
+    return finishLifecycle({ packet, dir, arch, lock, alreadyApplied: false, currentBefore, queue });
   } finally {
     releaseExternalReviewSurfaceLock({ lockPath: lock.lockPath, token: lock.token });
   }
 }
 
-/** Verdict-specific lifecycle（G PASS / H REPAIR / I HOLD）after the verdict
- *  is durably applied to the Current delivery record. */
-function finishLifecycle({ packet, dir, arch, lock, alreadyApplied, currentBefore }) {
+/** The presented ledger entry summary（presentation is never verdict authority）. */
+function presentedInfo(queue, dir) {
+  const e = presentedEntry(queue, dir);
+  return e ? { cardId: e.cardId, bundleIdentity: e.bundleIdentity, bundleSha256: e.bundleSha256, state: e.state } : null;
+}
+
+/** Verdict-specific lifecycle（PASS archive / REPAIR / HOLD）after the
+ *  verdict is durably applied to the LEDGER entry. Verdict lifecycle never
+ *  controls the presentation pointer（card I）: Current stays exactly as it
+ *  was; PASS additionally archives the reviewed bundle from the immutable
+ *  ledger artifact（card I — never from Current files）. */
+function finishLifecycle({ packet, dir, arch, lock, alreadyApplied, currentBefore, queue }) {
   const code = alreadyApplied ? VERDICT_HANDOFF_NO_DUPLICATE_TRANSITION : "APPLIED";
   if (packet.verdict !== "PASS") {
-    // REPAIR / HOLD: the record is the durable state; Current stays in its
-    // authoritative position; no rotate, no promote（repair supersession
-    // runs through the existing sanctioned seam）. Downstream closeout stays
-    // blocked（cardExternalReviewStatus / final-closeout gate）.
+    // REPAIR / HOLD: the ledger entry is the durable state; Current untouched;
+    // no archive（repair supersession runs through the sanctioned seam）.
     return {
       ok: true,
       code,
@@ -329,12 +302,25 @@ function finishLifecycle({ packet, dir, arch, lock, alreadyApplied, currentBefor
         promoted: null,
         currentAfter: currentBefore,
         alreadyApplied,
-        note: packet.verdict === "REPAIR" ? "verdict recorded; repair generation supersedes through the sanctioned seam" : "verdict recorded; Current stays; downstream blocked",
+        note: packet.verdict === "REPAIR" ? "verdict recorded on ledger; repair generation supersedes through the sanctioned seam" : "verdict recorded on ledger; Current unchanged; downstream blocked",
       },
     };
   }
 
-  // ── PASS: archive Current → rotate → promote the oldest eligible ─────
+  // ── PASS: archive the reviewed bundle from the immutable ledger artifact
+  //（rotateExternalReviewSurface re-resolves the SAME ledger entry — the
+  // verdict fields already applied are preserved）. Idempotent resume: a
+  // completed archive is detected by the ledger state + archive record. ──
+  const archivedAlready = (queue?.entries ?? []).find((e) => e.cardId === packet.cardId)?.state === "REVIEWED"
+    && findArchivedRecord(arch, packet.bundleIdentity) !== null;
+  if (archivedAlready) {
+    return {
+      ok: true,
+      code,
+      errors: [],
+      result: { status: "PASS", packet, currentBefore, archived: [], promoted: null, currentAfter: currentBefore, alreadyApplied, note: "PASS already archived; ledger + archive complete" },
+    };
+  }
   const rot = rotateExternalReviewSurface({
     surfaceDir: dir,
     archiveDir: arch,
@@ -348,75 +334,22 @@ function finishLifecycle({ packet, dir, arch, lock, alreadyApplied, currentBefor
       ok: false,
       code: EXTERNAL_VERDICT_HANDOFF_HOLDS.APPLIED_BUT_ROTATION_FAILED,
       errors: [`${EXTERNAL_VERDICT_HANDOFF_HOLDS.APPLIED_BUT_ROTATION_FAILED}:${rot.reason}`],
-      result: { status: "PASS_APPLIED", packet, currentBefore, archived: rot.archived ?? [], promoted: null, currentAfter: null },
-    };
-  }
-
-  // verify the promotion（P5/P6）: promoted bundle bytes are verbatim — the
-  // Current identity/sha must equal the promoted queue entry's.
-  let promoted = rot.promoted ?? null;
-  const currentAfter = { cardId: null, bundleIdentity: null, bundleSha256: null };
-  const deliveryPath = join(dir, "delivery.json");
-  const afterRec = existsSync(deliveryPath) ? readExternalReviewDeliveryRecord(deliveryPath) : { ok: false };
-  if (afterRec.ok) {
-    currentAfter.cardId = afterRec.cardId;
-    currentAfter.bundleIdentity = afterRec.state.delivery?.reviewBundleIdentity ?? null;
-    currentAfter.bundleSha256 = afterRec.state.delivery?.reviewBundleSha256 ?? null;
-  }
-  if (promoted) {
-    const sameIdentity = currentAfter.bundleIdentity === promoted.bundleIdentity;
-    const sameSha = currentAfter.bundleSha256 === promoted.bundleSha256;
-    const bundlePath = join(dir, "review-bundle.txt");
-    const bytesMatch = existsSync(bundlePath) && bundleContentSha256(bundlePath) === promoted.bundleSha256;
-    if (!sameIdentity || !sameSha || !bytesMatch) {
-      return {
-        ok: false,
-        code: EXTERNAL_VERDICT_HANDOFF_HOLDS.DID_NOT_ADVANCE,
-        errors: [`${EXTERNAL_VERDICT_HANDOFF_HOLDS.DID_NOT_ADVANCE}:promoted_identity_mismatch`],
-        result: { status: "PASS", packet, currentBefore, archived: rot.archived ?? [], promoted, currentAfter },
-      };
-    }
-    // L4: write the missing promotion evidence only（idempotent; the trio is
-    // otherwise complete）.
-    if (promoted.evidencePath && existsSync(promoted.evidencePath) && !existsSync(join(dir, "evidence.json"))) {
-      try {
-        copyFileSync(promoted.evidencePath, join(dir, "evidence.json"));
-      } catch { /* best effort — the bundle + delivery record are authoritative */ }
-    }
-    return {
-      ok: true,
-      code,
-      errors: [],
-      result: {
-        status: "PASS",
-        packet,
-        currentBefore,
-        archived: rot.archived ?? [],
-        promoted,
-        currentAfter,
-        alreadyApplied,
-      },
-    };
-  }
-  // no promotion: legal only when nothing is pending（PASS with empty Queue）
-  const qr = readReviewQueue(dir);
-  let pendingExists = false;
-  if (qr.ok) {
-    const entries = (qr.queue.entries ?? []).filter((e) => e.state === "QUEUED" && e.surfaceDir === resolve(dir));
-    pendingExists = entries.length > 0;
-  }
-  if (pendingExists) {
-    return {
-      ok: false,
-      code: EXTERNAL_VERDICT_HANDOFF_HOLDS.PROMOTION_FAILED,
-      errors: [`${EXTERNAL_VERDICT_HANDOFF_HOLDS.PROMOTION_FAILED}:${rot.promotionReason ?? "pending_review_not_promoted"}`],
-      result: { status: "PASS", packet, currentBefore, archived: rot.archived ?? [], promoted: null, currentAfter },
+      result: { status: "PASS_APPLIED", packet, currentBefore, archived: rot.archived ?? [], promoted: null, currentAfter: currentBefore },
     };
   }
   return {
     ok: true,
     code,
     errors: [],
-    result: { status: "PASS", packet, currentBefore, archived: rot.archived ?? [], promoted: null, currentAfter, alreadyApplied, note: "PASS with empty Queue: Current archived and left empty（legal）" },
+    result: {
+      status: "PASS",
+      packet,
+      currentBefore,
+      archived: rot.archived ?? [],
+      promoted: null,
+      currentAfter: currentBefore,
+      alreadyApplied,
+      note: "verdict recorded on ledger; bundle archived; Current unchanged（presentation independent of verdicts）",
+    },
   };
 }

@@ -1,20 +1,43 @@
 // src/governance/review-queue.mjs
 //
-// REVART-LC1-REVIEW-QUEUE-AUTOMATIC-HANDOFF-REPAIR — pending-review queue
-// authority.
+// CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1 — durable review LEDGER /
+// queue authority, strictly separated from the Current/ presentation surface.
 //
-// The canonical review surface（Current/）is a SINGLE slot: exactly one card
-// awaits action, fail-closed. Additional formal reviews must NOT be lost or
-// overwritten while that slot is occupied — they wait in a durable pending
-// queue and promote to Current automatically once the occupant is resolved
-// and rotated.
+// Presentation semantics（top-level invariant）:
+//   Current/ = the LATEST COMPLETED formal review bundle. A task completion
+//   ALWAYS publishes its review to Current immediately — a verdict on a
+//   previous review, the queue contents, or any other review's state never
+//   gates publication. Verdict lifecycle NEVER controls the presentation
+//   pointer.
 //
-// Authority separation（this module owns ONLY the queue projection）:
-//   - the review bundle + delivery/verdict record stay AUTHORITATIVE in
-//     Current/delivery.json + Archive/（immutable lineage）;
+// Authority separation:
+//   - THIS module owns the durable REVIEW LEDGER（queue.json）: ordering,
+//     pending states, verdict states, supersession, archive eligibility.
+//     It does NOT decide what Current/ displays.
+//   - the presentation pointer is the independent `isLatestPresented` flag
+//     （+ queue.currentEntryId mirror）on the ledger entry whose bundle is
+//     currently published to Current/. state == "CURRENT" does NOT exist:
+//     presentation is a pointer, never a review-authority state.
+//   - the review bundle + delivery/verdict record stay immutable in the
+//     card's outDir + Archive/（lineage）;
 //   - review-job ACCEPTED stays the sole acceptance mint（review-job.mjs）;
-//   - THIS module is the single writer/owner of the pending-queue projection
-//     and the Latest pointer — navigation, never verdict authority.
+//   - THIS module is the single writer/owner of the ledger projection and
+//     the Latest pointer — navigation, never verdict authority.
+//
+// Ledger entry states（PENDING REVIEWED REPAIR HOLD ARCHIVED）:
+//   PENDING   — awaiting external review verdict（durable; never lost when a
+//               newer review overwrites Current/）
+//   REVIEWED  — PASS verdict applied, bound to bundleIdentity + bundleSha256;
+//               bundle archived（terminal for the generation）
+//   REPAIR    — REPAIR verdict applied（rework pending; supersession follows）
+//   HOLD      — HOLD verdict applied, or conflicting identity（holdReason）
+//   ARCHIVED  — legacy terminal state（migration keeps it）
+// `isLatestPresented` on the entry marks the bundle CURRENTLY published to
+// Current/ — the only presentation fact in the ledger.
+//
+// Legacy states（pre-card）are accepted on read and deterministically
+// migrated: QUEUED -> PENDING, CURRENT -> PENDING, RESOLVED -> ARCHIVED,
+// HOLD -> HOLD, ARCHIVED -> ARCHIVED（see migrateReviewQueue）.
 //
 // Durable queue file（env-overridable for tests / CI isolation）:
 //   AUTOLOOP_REVIEW_QUEUE  default  ~/Desktop/AutoLoop-Review/Queue/queue.json
@@ -25,8 +48,8 @@
 //   cardId
 //   surfaceDir       = the review surface this entry is bound to（queue file
 //                      may co-locate several surfaces under one root; every
-//                      transition/promotion is surface-scoped so a shared
-//                      queue file can never leak a review across surfaces）
+//                      transition is surface-scoped so a shared queue file
+//                      can never leak a review across surfaces）
 //   generation       = review-job generation（g0001…）when known, else null
 //   jobId            = cardId.gNNNN when known, else null
 //   bundleIdentity   = reviewBundleIdentity of the CURRENT generation
@@ -37,12 +60,13 @@
 //                       bundlePath } of the superseded generation
 //   supersededBy     = { identity, entryId } when a later generation replaced
 //                       this one
-//   order            = monotonic FIFO order（never reused）
+//   order            = monotonic completion/publication order（never reused）
 //   enqueuedAt       = ISO（persisted before Latest update — crash-safe）
-//   deliveredAt      = ISO when promoted to Current
-//   state            = QUEUED | CURRENT | RESOLVED | ARCHIVED | HOLD
-//   verdict          = { verdict, bundleIdentity, bundleSha256, reviewedAt }
-//                      reference when resolved（authority stays in Archive/）
+//   deliveredAt      = ISO when last published to Current
+//   state            = PENDING | REVIEWED | REPAIR | HOLD | ARCHIVED
+//   isLatestPresented = true ONLY for the entry whose bundle is on Current/
+//   verdict          = { verdict, bundleIdentity, bundleSha256, reviewedAt,
+//                        findingsDigest } when resolved（identity-bound）
 //   holdReason       = string when HOLD
 //
 // Latest pointer file（navigation ONLY — "what is the newest formal review
@@ -62,7 +86,12 @@ import { scanForSecrets } from "../evidence/run-evidence-store.mjs";
 export const REVIEW_QUEUE_SCHEMA = "autoloop.review-queue/v1";
 export const REVIEW_QUEUE_LATEST_SCHEMA = "autoloop.review-queue-latest/v1";
 
-export const QUEUE_STATES = Object.freeze(["QUEUED", "CURRENT", "RESOLVED", "ARCHIVED", "HOLD"]);
+export const QUEUE_STATES = Object.freeze(["PENDING", "REVIEWED", "REPAIR", "HOLD", "ARCHIVED"]);
+
+// Pre-CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1 states, accepted on
+// read（so existing ledger files stay readable）and remapped deterministically
+// by migrateReviewQueue（never discarded）.
+export const QUEUE_STATES_LEGACY = Object.freeze(["QUEUED", "CURRENT", "RESOLVED"]);
 
 export const QUEUE_HOLDS = Object.freeze({
   CORRUPT: "REVIEW_QUEUE_CORRUPT",
@@ -113,10 +142,16 @@ export function isValidQueueRecord(q) {
     if (typeof e.bundleIdentity !== "string" || !/^[0-9a-f]{64}$/.test(e.bundleIdentity)) return false;
     if (typeof e.bundleSha256 !== "string" || !/^[0-9a-f]{64}$/.test(e.bundleSha256)) return false;
     if (typeof e.bundlePath !== "string" || !e.bundlePath) return false;
-    if (!QUEUE_STATES.includes(e.state)) return false;
+    if (!QUEUE_STATES.includes(e.state) && !QUEUE_STATES_LEGACY.includes(e.state)) return false;
     if (typeof e.order !== "number" || e.order < 1) return false;
   }
   return true;
+}
+
+/** True when the queue file still uses pre-card states（needs migration）. */
+export function queueNeedsMigration(queue) {
+  if (!queue) return false;
+  return (queue.entries ?? []).some((e) => QUEUE_STATES_LEGACY.includes(e.state) || typeof e.isLatestPresented !== "boolean");
 }
 
 /**
@@ -136,7 +171,7 @@ export function readReviewQueue(surfaceDir = null) {
   if (!isValidQueueRecord(raw)) {
     return { ok: false, holdCode: QUEUE_HOLDS.CORRUPT, reason: "REVIEW_QUEUE_CORRUPT:invalid_schema", path, present: true };
   }
-  return { ok: true, queue: raw, path, present: true };
+  return { ok: true, queue: raw, path, present: true, legacy: queueNeedsMigration(raw) };
 }
 
 /**
@@ -176,15 +211,44 @@ export function findEntryByIdentity(queue, bundleIdentity) {
 }
 
 /** Surface-scoped pending selection: only entries bound to THIS surface are
- *  eligible for promotion（a shared queue file can never leak a review
- *  across surfaces）.
+ *  eligible for review-ordering navigation（a shared queue file can never
+ *  leak a review across surfaces）. NAVIGATION metadata only（card J）— it
+ *  never controls Current publication.
  */
 export function oldestPending(queue, surfaceDir = null) {
   const scope = surfaceDir ? resolve(surfaceDir) : null;
-  const pend = (queue.entries ?? []).filter((e) => e.state === "QUEUED" && (!scope || e.surfaceDir === scope));
+  const pend = (queue.entries ?? []).filter((e) => e.state === "PENDING" && (!scope || e.surfaceDir === scope));
   if (pend.length === 0) return null;
   pend.sort((a, b) => a.order - b.order);
   return pend[0];
+}
+
+/** All PENDING（unresolved）entries for a surface, ordered by order. */
+export function pendingEntries(queue, surfaceDir = null) {
+  const scope = surfaceDir ? resolve(surfaceDir) : null;
+  return (queue.entries ?? [])
+    .filter((e) => e.state === "PENDING" && (!scope || e.surfaceDir === scope))
+    .sort((a, b) => a.order - b.order);
+}
+
+/** The ledger entry whose bundle is currently published to Current/（the
+ *  presentation pointer）, or null when nothing is presented.
+ */
+export function presentedEntry(queue, surfaceDir = null) {
+  const scope = surfaceDir ? resolve(surfaceDir) : null;
+  return (queue.entries ?? []).find((e) => e.isLatestPresented === true && (!scope || e.surfaceDir === scope)) ?? null;
+}
+
+/** Newest eligible formal review for a surface by completion/publication
+ *  order（migration / recovery pointer; presentation semantics）. "Eligible"
+ *  = the immutable bundle artifact still exists.
+ */
+export function newestEligibleEntry(queue, surfaceDir = null) {
+  const scope = surfaceDir ? resolve(surfaceDir) : null;
+  const es = (queue.entries ?? []).filter((e) => !scope || e.surfaceDir === scope);
+  if (es.length === 0) return null;
+  es.sort((a, b) => b.order - a.order);
+  return es[0] ?? null;
 }
 
 export function newestEntry(queue, surfaceDir = null) {
@@ -251,6 +315,10 @@ export function upsertQueueEntry(queue, {
     // supersede in place — position preserved; the obsolete generation is
     // never an independent queue entry. `supersedes` references the replaced
     // generation（the binding the incoming bundle explicitly supersedes）.
+    // The replaced generation's verdict（if any）is preserved inside the
+    // supersession record; the entry itself becomes a PENDING review for the
+    // NEW generation（a superseding generation always awaits fresh review）.
+    const oldVerdict = existing.verdict ?? null;
     existing.bundleIdentity = bundleIdentity;
     existing.bundleSha256 = bundleSha256;
     existing.bundlePath = bundlePath;
@@ -258,7 +326,15 @@ export function upsertQueueEntry(queue, {
     existing.generation = generation ?? existing.generation ?? null;
     existing.jobId = jobId ?? existing.jobId ?? null;
     existing.supersededBy = existing.supersededBy ?? null;
-    existing.supersedes = sup ? { reviewBundleIdentity: sup.reviewBundleIdentity, reviewBundleSha256: sup.reviewBundleSha256, bundlePath: sup.bundlePath ?? null } : null;
+    existing.supersedes = sup ? {
+      reviewBundleIdentity: sup.reviewBundleIdentity,
+      reviewBundleSha256: sup.reviewBundleSha256,
+      bundlePath: sup.bundlePath ?? null,
+      verdict: oldVerdict?.verdict ?? null,
+    } : null;
+    existing.state = "PENDING";
+    existing.verdict = null;
+    existing.holdReason = null;
     existing.updatedAt = now;
     return { ok: true, code: "superseded", entry: existing, queue };
   }
@@ -277,7 +353,8 @@ export function upsertQueueEntry(queue, {
     order: queue.nextOrder,
     enqueuedAt: now,
     deliveredAt: null,
-    state: "QUEUED",
+    state: "PENDING",
+    isLatestPresented: false,
     verdict: null,
     holdReason: null,
     updatedAt: now,
@@ -299,22 +376,142 @@ export function markEntryState(queue, cardId, state, { deliveredAt = null, verdi
   return { ok: true, entry: e, queue };
 }
 
-export function markCurrent(queue, cardId, { deliveredAt = null, now = new Date().toISOString(), surfaceDir = null } = {}) {
-  const r = markEntryState(queue, cardId, "CURRENT", { deliveredAt, now, surfaceDir });
-  if (r.ok) queue.currentEntryId = cardId;
-  return r;
+/**
+ * Mark ONE entry as the current presentation（isLatestPresented = true）and
+ * clear the flag on every other entry of the same surface. `currentEntryId`
+ * mirrors the pointer for backward compatibility. Presentation NEVER derives
+ * from a review-authority state — this pointer is the ONLY presentation fact.
+ */
+export function markPresented(queue, cardId, { deliveredAt = null, now = new Date().toISOString(), surfaceDir = null } = {}) {
+  const scope = surfaceDir ? resolve(surfaceDir) : null;
+  const e = findEntry(queue, cardId, scope);
+  if (!e) return { ok: false, reason: `entry_missing:${cardId}`, queue };
+  for (const other of queue.entries ?? []) {
+    if (other === e) continue;
+    if (scope && other.surfaceDir !== scope) continue;
+    if (other.isLatestPresented) other.isLatestPresented = false;
+  }
+  e.isLatestPresented = true;
+  e.updatedAt = now;
+  if (deliveredAt) e.deliveredAt = deliveredAt;
+  queue.currentEntryId = cardId;
+  return { ok: true, entry: e, queue };
+}
+
+/** Clear the presentation pointer for a surface（no entry presented）. */
+export function markUnpresented(queue, { now = new Date().toISOString(), surfaceDir = null } = {}) {
+  const scope = surfaceDir ? resolve(surfaceDir) : null;
+  for (const e of queue.entries ?? []) {
+    if (scope && e.surfaceDir !== scope) continue;
+    if (e.isLatestPresented) {
+      e.isLatestPresented = false;
+      e.updatedAt = now;
+    }
+  }
+  if (queue.currentEntryId) {
+    const cur = scope ? findEntry(queue, queue.currentEntryId, scope) : (queue.entries ?? []).find((en) => en.entryId === queue.currentEntryId);
+    if (!cur) queue.currentEntryId = null;
+  }
+  return { ok: true, queue };
 }
 
 export function markArchived(queue, cardId, { now = new Date().toISOString(), surfaceDir = null } = {}) {
-  const r = markEntryState(queue, cardId, "ARCHIVED", { now, surfaceDir });
-  if (r.ok && queue.currentEntryId === cardId) queue.currentEntryId = null;
-  return r;
+  // ARCHIVED is a terminal LEDGER state — it never clears the presentation
+  // pointer（verdict lifecycle must not control Current/; card I）.
+  return markEntryState(queue, cardId, "ARCHIVED", { now, surfaceDir });
 }
 
 export function markHold(queue, cardId, reason, { now = new Date().toISOString(), surfaceDir = null } = {}) {
   const r = markEntryState(queue, cardId, "HOLD", { now, surfaceDir });
   if (r.ok) r.entry.holdReason = reason ?? r.entry.holdReason ?? null;
   return r;
+}
+
+// ── Deterministic migration（CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1
+// ── card M）───────────────────────────────────────────────────────────────
+//
+// Existing live ledgers carry ARCHIVED / CURRENT / QUEUED（+ RESOLVED）.
+// Migration NEVER discards data:
+//   old CURRENT  -> PENDING（presentation pointer lost its meaning; the entry
+//                   is an unresolved review awaiting a verdict）
+//   old QUEUED   -> PENDING
+//   old RESOLVED -> ARCHIVED（terminal）
+//   old ARCHIVED -> ARCHIVED
+//   old HOLD     -> HOLD
+//   isLatestPresented = true ONLY for the entry the old `currentEntryId`
+//                   pointed at; otherwise the newest eligible entry by
+//                   completion/publication order（card M）.
+// Bundle identity / sha / verdict / order / supersession are preserved
+// verbatim — nothing is regenerated.
+
+const LEGACY_TO_STATE = Object.freeze({
+  QUEUED: "PENDING",
+  CURRENT: "PENDING",
+  RESOLVED: "ARCHIVED",
+  ARCHIVED: "ARCHIVED",
+  HOLD: "HOLD",
+});
+
+/**
+ * Deterministic in-memory state migration. Returns { ok, queue, migrated }.
+ * Idempotent — a fully migrated queue migrates nothing.
+ */
+export function migrateReviewQueue(queue) {
+  if (!queue || !Array.isArray(queue.entries)) {
+    return { ok: false, reason: "queue_absent_or_invalid", queue: null, migrated: 0 };
+  }
+  let migrated = 0;
+  for (const e of queue.entries) {
+    if (QUEUE_STATES_LEGACY.includes(e.state)) {
+      e.state = LEGACY_TO_STATE[e.state] ?? "PENDING";
+      migrated += 1;
+    }
+    if (typeof e.isLatestPresented !== "boolean") {
+      e.isLatestPresented = false;
+      migrated += 1;
+    }
+  }
+  if (queue.currentEntryId) {
+    const cur = queue.entries.find((e) => e.entryId === queue.currentEntryId);
+    if (cur) {
+      for (const e of queue.entries) e.isLatestPresented = e === cur;
+      cur.isLatestPresented = true;
+    } else {
+      queue.currentEntryId = null;
+    }
+  } else {
+    // no recorded presentation pointer -> derive deterministically by
+    // completion/publication order（card M）: clear any stale flags first.
+    for (const e of queue.entries) e.isLatestPresented = false;
+  }
+  // presentation pointer: when nothing is marked presented, the newest
+  // eligible entry by completion/publication order is presented.
+  const presented = queue.entries.filter((e) => e.isLatestPresented === true);
+  if (presented.length === 0) {
+    const newest = queue.entries.filter((e) => existsSync(e.bundlePath)).sort((a, b) => b.order - a.order)[0] ?? null;
+    if (newest) {
+      newest.isLatestPresented = true;
+      queue.currentEntryId = newest.entryId;
+    } else {
+      queue.currentEntryId = null;
+    }
+  }
+  return { ok: true, queue, migrated };
+}
+
+/**
+ * Read + migrate + persist when the queue file still uses legacy states.
+ * Idempotent; safe on every restart / write path（crash-safe migration）.
+ */
+export function ensureQueueMigrated(surfaceDir = null) {
+  const qr = readReviewQueue(surfaceDir ?? null);
+  if (!qr.ok) return { ok: false, holdCode: qr.holdCode, reason: qr.reason, queue: null, migrated: false };
+  if (!qr.legacy) return { ok: true, queue: qr.queue, migrated: false, path: qr.path };
+  const m = migrateReviewQueue(qr.queue);
+  if (!m.ok) return { ok: false, reason: m.reason, queue: null, migrated: false };
+  const w = writeReviewQueue(m.queue, { surfaceDir: surfaceDir ?? null });
+  if (!w.ok) return { ok: false, holdCode: w.holdCode, reason: w.reason, queue: null, migrated: false };
+  return { ok: true, queue: m.queue, migrated: true, path: qr.path };
 }
 
 // ── Latest pointer（navigation only; NEVER verdict authority）─────────────
@@ -382,14 +579,15 @@ export function reviewQueueStatus(surfaceDir = null) {
   const latest = readLatestPointer(surfaceDir);
   const scope = surfaceDir ? resolve(surfaceDir) : null;
   const scoped = (r.queue.entries ?? []).filter((e) => !scope || e.surfaceDir === scope);
-  const current = (r.queue.currentEntryId ? (findEntry(r.queue, r.queue.currentEntryId) ?? null) : null);
+  const current = presentedEntry(r.queue, scope);
   return {
     ok: true,
     queue: r.queue,
-    current: current && (!scope || current.surfaceDir === scope) ? current : null,
-    pending: scoped.filter((e) => e.state === "QUEUED").sort((a, b) => a.order - b.order),
-    archived: scoped.filter((e) => e.state === "ARCHIVED" || e.state === "RESOLVED"),
-    held: scoped.filter((e) => e.state === "HOLD"),
+    current,
+    pending: scoped.filter((e) => e.state === "PENDING").sort((a, b) => a.order - b.order),
+    archived: scoped.filter((e) => e.state === "REVIEWED" || e.state === "ARCHIVED"),
+    reviewed: scoped.filter((e) => e.state === "REVIEWED"),
+    held: scoped.filter((e) => e.state === "HOLD" || e.state === "REPAIR"),
     latest: latest.ok ? latest.latest : null,
     latestError: latest.ok ? null : latest.reason,
     path: r.path,

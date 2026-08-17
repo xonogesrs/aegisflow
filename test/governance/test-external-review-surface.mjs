@@ -195,9 +195,9 @@ test("2. surface write failure -> AWAITING_BUNDLE_DELIVERY（never a delivered c
   assert.equal(externalReviewComplete(r.externalReview), false);
 });
 
-// ── 3. rotate PASS -> flat Archive + Current cleared ───────────────────────
+// ── 3. rotate PASS -> flat Archive; presentation unchanged ─────────────────
 
-test("3. rotate PASS archives the trio with flat naming and clears Current/", { timeout: 30000 }, async () => {
+test("3. rotate PASS archives the trio with flat naming; Current presentation unchanged", { timeout: 30000 }, async () => {
   const r = await run(3);
   const dir = surface(3);
   assert.ok(existsSync(join(dir, "review-bundle.txt")), "surface populated");
@@ -206,20 +206,31 @@ test("3. rotate PASS archives the trio with flat naming and clears Current/", { 
     identity: r.externalReview.delivery.reviewBundleIdentity, verdict: "PASS", dateStr: "20260807",
   });
   assert.equal(rot.ok, true, `rotate ok (${rot.reason})`);
-  assert.equal(rot.archived.length, 3, "all three surface files archived");
+  assert.equal(rot.archived.length, 3, "bundle + evidence + delivery record archived");
   const id8 = r.externalReview.delivery.reviewBundleIdentity.slice(0, 8);
   for (const kind of ["review-bundle.txt", "delivery.json", "evidence.json"]) {
     assert.ok(rot.archived.some((p) => p.endsWith(`20260807-RB-1H-TEST-3-${id8}-PASS-${kind}`)), `archived ${kind}`);
   }
-  assert.equal(rot.cleared, true, "Current/ cleared after rotate");
-  assert.ok(!existsSync(join(dir, "review-bundle.txt")), "no residual bundle");
+  // CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1: the verdict lifecycle
+  // never controls the presentation pointer — Current keeps the bundle.
+  assert.equal(rot.cleared, false, "Current/ presentation unchanged by the verdict");
+  assert.ok(existsSync(join(dir, "review-bundle.txt")), "bundle still presented on Current");
   const bundleArchive = rot.archived.find((p) => p.endsWith("review-bundle.txt"));
   assert.equal(shaFile(bundleArchive), shaFile(r.bundlePath), "archived bundle bytes preserved");
+  // the ledger entry is REVIEWED with the identity-bound PASS verdict
+  const { reviewQueueStatus } = await import("../../src/governance/review-queue.mjs");
+  const st = reviewQueueStatus(dir);
+  assert.equal(st.ok, true);
+  const entry = st.queue.entries.find((e) => e.cardId === "RB-1H-TEST-3");
+  assert.ok(entry, "ledger entry exists");
+  assert.equal(entry.state, "REVIEWED", "entry REVIEWED");
+  assert.equal(entry.verdict?.verdict, "PASS");
+  assert.equal(entry.verdict?.bundleIdentity, r.externalReview.delivery.reviewBundleIdentity, "verdict identity-bound");
 });
 
-// ── 4. rotate REPAIR -> old archived; new repair bundle replaces Current ───
+// ── 4. rotate REPAIR -> old generation archived; repair bundle publishes ───
 
-test("4. rotate REPAIR archives the old card; the repair bundle becomes Current/", { timeout: 30000 }, async () => {
+test("4. rotate REPAIR archives the old generation; the repair bundle becomes Current/", { timeout: 30000 }, async () => {
   const r = await run(4);
   const dir = surface(4);
   const oldIdentity = r.externalReview.delivery.reviewBundleIdentity;
@@ -232,8 +243,9 @@ test("4. rotate REPAIR archives the old card; the repair bundle becomes Current/
   assert.equal(applied.ok, true);
   const rot = rotateExternalReviewSurface({ surfaceDir: dir, archiveDir: ARCHIVE, cardId: "RB-1H-TEST-4", identity: oldIdentity, verdict: "REPAIR", dateStr: "20260807" });
   assert.equal(rot.ok, true);
-  assert.ok(!existsSync(join(dir, "review-bundle.txt")), "old card removed from Current/");
-  // repair generation delivers the superseding bundle to Current/
+  // the REPAIR verdict does not change the presentation
+  assert.ok(existsSync(join(dir, "review-bundle.txt")), "Current presentation unchanged by the REPAIR verdict");
+  // repair generation delivers the superseding bundle to Current
   const repair = await run(4, { closeout: { cardId: "RB-1H-TEST-4", cardType: "repair", supersedes: buildSupersedeRecord(applied.state) } });
   assert.equal(repair.final, "PASS");
   assert.notEqual(repair.externalReview.delivery.reviewBundleIdentity, oldIdentity, "new identity");
@@ -241,7 +253,7 @@ test("4. rotate REPAIR archives the old card; the repair bundle becomes Current/
   assert.equal(shaFile(join(dir, "review-bundle.txt")), shaFile(repair.bundlePath), "Current holds the NEW bundle");
   const rec = readExternalReviewDeliveryRecord(join(dir, "delivery.json"));
   assert.equal(rec.ok, true);
-  assert.equal(rec.state.supersedes.reviewBundleIdentity, oldIdentity, "Current delivery.json supersedes the archived REPAIR card");
+  assert.equal(rec.state.supersedes.reviewBundleIdentity, oldIdentity, "Current delivery.json supersedes the archived REPAIR generation");
   const oldArchive = rot.archived.find((p) => p.endsWith("review-bundle.txt"));
   assert.equal(shaFile(oldArchive), shaFile(oldPath), "archived old bundle preserved");
 });
@@ -266,13 +278,13 @@ test("5. standalone surface delivery for a bundle generated before the conventio
 
 // ── 6. rotate HOLD on abandonment ──────────────────────────────────────────
 
-test("6. rotate HOLD archives a held card on abandonment", { timeout: 30000 }, async () => {
+test("6. rotate HOLD archives a held card; Current presentation unchanged", { timeout: 30000 }, async () => {
   const r = await run(6);
   const dir = surface(6);
   const rot = rotateExternalReviewSurface({ surfaceDir: dir, archiveDir: ARCHIVE, cardId: "RB-1H-TEST-6", identity: r.externalReview.delivery.reviewBundleIdentity, verdict: "HOLD", dateStr: "20260807" });
   assert.equal(rot.ok, true);
   assert.ok(rot.archived.some((p) => p.includes("-HOLD-")), "HOLD card archived");
-  assert.equal(rot.cleared, true, "Current/ cleared");
+  assert.equal(rot.cleared, false, "Current/ presentation unchanged by the HOLD verdict");
   const bundleArchive = rot.archived.find((p) => p.endsWith("review-bundle.txt"));
   const v = validateReviewBundle(bundleArchive, { authorizedDir: ARCHIVE });
   assert.equal(v.ok, true, `archived bundle still valid (${v.errors.join(";")})`);
@@ -303,32 +315,37 @@ test("7. concurrent delivery -> only ONE succeeds（surface_busy; never mutual o
   assert.ok(existsSync(join(dir, "review-bundle.txt")), "trio published after release");
 });
 
-// ── 8. occupied surface -> second card QUEUED, first trio untouched ────────
+// ── 8. occupied surface -> second card PUBLISHES; first stays durable ──────
 
-test("8. occupied surface -> second card QUEUED（REVART-LC1）; first trio untouched", { timeout: 30000 }, async () => {
+test("8. occupied surface -> second card PUBLISHES to Current; first card stays durable PENDING in the ledger", { timeout: 30000 }, async () => {
   const r = await run(8);
   const dir = surface(8);
-  const firstSha = shaFile(join(dir, "review-bundle.txt"));
   // a genuinely DIFFERENT card（different cardId -> different bundle identity）
-  // delivers while the first is un-rotated: it must QUEUE, never overwrite
+  // delivers while the first is unresolved: it PUBLISHES to Current（card D1:
+  // completion -> Current = that card; presentation is never gated on a
+  // verdict）, and the first card stays durable PENDING in the ledger.
   const r2 = await run(8, { closeout: { cardId: "RB-1H-TEST-8B", surfaceDir: dir } });
   assert.notEqual(r2.bundle.identity, r.externalReview.delivery.reviewBundleIdentity, "second card has a different identity");
   const { state } = stateFor(r2.bundlePath, "RB-1H-TEST-8B");
   const d = deliverToExternalReviewSurface({ bundlePath: r2.bundlePath, state, source: { task: { cardId: "RB-1H-TEST-8B" }, evidence: [] }, surfaceDir: dir });
-  assert.equal(d.attempted, true, "occupied delivery is a SUCCESS（queued）");
-  assert.equal(d.queued, true, "queued behind the occupant（T2: legitimate queued review is not a failure）");
-  assert.equal(d.method, "external-review-queue", "queue delivery method");
-  // the FIRST trio is untouched — reviewer still sees the original card
-  assert.equal(shaFile(join(dir, "review-bundle.txt")), firstSha, "first bundle bytes unchanged");
+  assert.equal(d.attempted, true, "occupied delivery is a SUCCESS（publish-always）");
+  assert.equal(d.queued, undefined, "not queued — every completion publishes to Current");
+  // Current NOW presents the second card
   const rec = readExternalReviewDeliveryRecord(join(dir, "delivery.json"));
-  assert.equal(rec.cardId, "RB-1H-TEST-8", "delivery.json still the first card");
-  // the second card is durably queued（Q state, one entry only）
+  assert.equal(rec.cardId, "RB-1H-TEST-8B", "delivery.json now the second card");
+  assert.equal(shaFile(join(dir, "review-bundle.txt")), shaFile(r2.bundlePath), "Current holds the second bundle");
+  // the FIRST card is durable in the ledger as PENDING（card B2/C: Current
+  // overwrite != review state loss）
   const { reviewQueueStatus } = await import("../../src/governance/review-queue.mjs");
   const st = reviewQueueStatus(dir);
   assert.equal(st.ok, true);
-  const entry = st.queue.entries.find((e) => e.cardId === "RB-1H-TEST-8B");
-  assert.ok(entry, "queued entry exists");
-  assert.equal(entry.state, "QUEUED");
+  const first = st.queue.entries.find((e) => e.cardId === "RB-1H-TEST-8");
+  assert.ok(first, "first card still has a ledger entry");
+  assert.equal(first.state, "PENDING", "first card remains an unresolved pending review");
+  assert.equal(first.isLatestPresented, false, "first card no longer presented");
+  const second = st.queue.entries.find((e) => e.cardId === "RB-1H-TEST-8B");
+  assert.ok(second, "second card ledger entry exists");
+  assert.equal(second.isLatestPresented, true, "second card presented");
   assert.equal(st.queue.entries.filter((e) => e.cardId === "RB-1H-TEST-8B").length, 1, "one entry only");
 });
 

@@ -29,7 +29,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { scanForSecrets, sha256Text } from "../evidence/run-evidence-store.mjs";
@@ -41,10 +41,11 @@ import {
   readReviewQueue,
   writeReviewQueue,
   upsertQueueEntry,
-  oldestPending,
-  markCurrent,
-  markArchived,
+  presentedEntry,
+  newestEligibleEntry,
+  markPresented,
   markHold,
+  ensureQueueMigrated,
   writeLatestPointer,
   readLatestPointer,
   reviewQueueStatus,
@@ -897,164 +898,86 @@ export function deliverToExternalReviewSurface({ bundlePath, state, source = {},
   const token = ownLock.token;
   const lockPath = ownLock.lockPath;
   try {
-    const queueLoad = loadQueueOrHold(qSurface);
-    if (queueLoad.hold) {
-      return { attempted: false, reason: queueLoad.reason, surfaceDir: dir, hold: true };
+    // crash-safe migration of any legacy queue file before any write
+    const migrated = ensureQueueMigrated(qSurface);
+    if (!migrated.ok) {
+      return { attempted: false, reason: `queue_hold:${migrated.reason ?? "queue_unreadable"}`, surfaceDir: dir, hold: true };
     }
-    let queue = queueLoad.queue;
+    let queue = migrated.queue;
     const cardId = (source.task?.cardId ?? bundleCardIdentity(bundlePath).cardId ?? "UNKNOWN-CARD");
 
-    // ── occupancy gate（bounded re-check: an auto-rotation may promote a
-    // pending review, so the occupancy state can change once）──
-    mkdirSync(dir, { recursive: true });
-    let occupancyGuard = 0;
-    for (;;) {
-      if (++occupancyGuard > 2) {
-        return { attempted: false, reason: "surface_occupied:rotation_loop", surfaceDir: dir };
-      }
-      const occupied = readdirSync(dir).filter((f) => !f.startsWith("."));
-      if (occupied.length === 0) {
-        // ── Current empty: publish directly; entry becomes CURRENT（T1）──
-        publishTrioToSurface({ dir, parent, token, bundlePath, state, source, cardId });
-        const up = upsertQueueEntry(queue, {
-          surfaceDir: dir,
-          cardId, generation, jobId,
-          bundleIdentity: state?.delivery?.reviewBundleIdentity ?? null,
-          bundleSha256: state?.delivery?.reviewBundleSha256 ?? null,
-          bundlePath,
-          evidencePath: Array.isArray(source.evidence) && source.evidence[0]?.path ? source.evidence[0].path : null,
-          supersedes: state?.supersedes ?? null,
-        });
-        const mk = up.code === "conflict" ? markHold(up.queue, cardId, "conflicting_identity", { surfaceDir: dir }) : markCurrent(up.queue, cardId, { deliveredAt: new Date().toISOString(), surfaceDir: dir });
-        const wq = writeReviewQueue(mk.queue, { surfaceDir: qSurface });
-        const latestErr = up.code === "conflict" ? null : touchLatest(up.entry, qSurface);
-        return {
-          attempted: true, method: "external-review-surface", attemptedAt: new Date().toISOString(), surfaceDir: dir,
-          files: ["review-bundle.txt", "delivery.json"], entryId: cardId,
-          latestError: latestErr, queueWrite: wq.ok,
-          humanReportError: publishHumanForBundle({ dir, bundlePath, state, source, generation, jobId }),
-          queuedConflict: up.code === "conflict" ? true : undefined,
-        };
-      }
-      const occDelivery = join(dir, "delivery.json");
-      const occRec = existsSync(occDelivery) ? readExternalReviewDeliveryRecord(occDelivery) : { ok: false, errors: ["surface_delivery_record_missing"] };
-      if (occRec.ok && occRec.state?.delivery?.reviewBundleIdentity && state?.delivery?.reviewBundleIdentity
-          && occRec.state.delivery.reviewBundleIdentity === state.delivery.reviewBundleIdentity
-          && occRec.state.delivery.reviewBundleSha256 === state.delivery.reviewBundleSha256) {
-        // idempotent re-delivery of the CURRENT occupant（T7: one entry only）.
-        const up = upsertQueueEntry(queue, {
-          surfaceDir: dir,
-          cardId,
-          generation,
-          jobId,
-          bundleIdentity: state.delivery.reviewBundleIdentity,
-          bundleSha256: state.delivery.reviewBundleSha256,
-          bundlePath,
-          evidencePath: Array.isArray(source.evidence) && source.evidence[0]?.path ? source.evidence[0].path : null,
-          supersedes: state.supersedes ?? null,
-        });
-        if (up.code === "enqueued" || up.code === "superseded") {
-          const mk = markCurrent(up.queue, cardId, { deliveredAt: new Date().toISOString(), surfaceDir: dir });
-          writeReviewQueue(mk.queue, { surfaceDir: qSurface });
-        } else if (up.code !== "idempotent") {
-          writeReviewQueue(up.queue, { surfaceDir: qSurface });
-        }
-        return { attempted: true, method: "external-review-surface", idempotent: true, attemptedAt: new Date().toISOString(), surfaceDir: dir, files: ["review-bundle.txt", "delivery.json"], humanReportError: publishHumanForBundle({ dir, bundlePath, state, source, generation, jobId }) };
-      }
-      const resolved = occRec.ok
-        && occRec.state?.verdict
-        && typeof occRec.state.verdict.bundleIdentity === "string"
-        && occRec.state.verdict.bundleIdentity === occRec.state.delivery?.reviewBundleIdentity
-        && EXTERNAL_REVIEW_VERDICTS.includes(occRec.state.externalReviewStatus);
-      if (resolved) {
-        // R7 auto-rotation — the resolved occupant is archived under the same
-        // lock; rotateExternalReviewSurface promotes the next pending review
-        //（Phase 3）. Loop back: the occupancy state may have changed.
-        const rot = rotateExternalReviewSurface({
-          surfaceDir: dir,
-          cardId: occRec.cardId ?? "CARD",
-          identity: occRec.state.delivery?.reviewBundleIdentity ?? "unknown",
-          verdict: occRec.state.externalReviewStatus,
-          lock: ownLock,
-        });
-        if (!rot.ok) {
-          return { attempted: false, reason: `surface_occupied:auto_rotate_failed:${rot.reason}`, surfaceDir: dir };
-        }
-        queue = rot.queue ?? queue;
-        continue;
-      }
-      // UNRESOLVED occupant — never overwritten.
-      // Same card + different identity:
-      //   sanctioned reseal（supersedes the occupant's generation）-> Current
-      //   updates in place（Phase 5 T10）; no queue duplicate.
-      const occCard = occRec.cardId ?? "unknown";
-      const occIdentity = occRec.state?.delivery?.reviewBundleIdentity ?? null;
-      const sup = state?.supersedes ?? null;
-      const sanctionedReseal = cardId === occCard
-        && occIdentity
-        && sup
-        && sup.reviewBundleIdentity === occIdentity;
-      if (sanctionedReseal) {
-        const up = upsertQueueEntry(queue, {
-          surfaceDir: dir,
-          cardId,
-          generation,
-          jobId,
-          bundleIdentity: state.delivery?.reviewBundleIdentity ?? null,
-          bundleSha256: state.delivery?.reviewBundleSha256 ?? null,
-          bundlePath,
-          evidencePath: Array.isArray(source.evidence) && source.evidence[0]?.path ? source.evidence[0].path : null,
-          supersedes: sup,
-        });
-        publishTrioToSurface({ dir, parent, token, bundlePath, state, source, cardId });
-        const mk = markCurrent(up.queue, cardId, { deliveredAt: new Date().toISOString(), surfaceDir: dir });
-        const wq = writeReviewQueue(mk.queue, { surfaceDir: qSurface });
-        const latestErr = touchLatest(up.entry, qSurface);
-        return {
-          attempted: true, method: "external-review-surface", resealed: true, attemptedAt: new Date().toISOString(),
-          surfaceDir: dir, entryId: cardId, latestError: latestErr, queueWrite: wq.ok,
-          humanReportError: publishHumanForBundle({ dir, bundlePath, state, source, generation, jobId }),
-        };
-      }
-      if (cardId === occCard) {
-        // same card, different identity, NOT a sanctioned reseal -> HOLD.
-        const up = upsertQueueEntry(queue, {
-          surfaceDir: dir,
-          cardId, generation, jobId,
-          bundleIdentity: state?.delivery?.reviewBundleIdentity ?? "0".repeat(64),
-          bundleSha256: state?.delivery?.reviewBundleSha256 ?? "0".repeat(64),
-          bundlePath,
-          evidencePath: null,
-          supersedes: sup,
-        });
-        const wq = writeReviewQueue(up.queue, { surfaceDir: qSurface });
-        return { attempted: false, reason: `queue_hold:conflicting_identity:${occIdentity ?? "unknown"}`, surfaceDir: dir, hold: true, entryId: cardId, queueWrite: wq.ok };
-      }
-      // different card -> enqueue behind the occupant（T2: legitimate queued
-      // review is SUCCESS, never surface_occupied failure）.
-      const stale = currentCardId && typeof currentCardId === "string" && occCard !== currentCardId;
-      const up = upsertQueueEntry(queue, {
-          surfaceDir: dir,
-        cardId, generation, jobId,
-        bundleIdentity: state.delivery?.reviewBundleIdentity ?? null,
-        bundleSha256: state.delivery?.reviewBundleSha256 ?? null,
-        bundlePath,
-        evidencePath: Array.isArray(source.evidence) && source.evidence[0]?.path ? source.evidence[0].path : null,
-        supersedes: sup,
-      });
-      if (up.code === "conflict") {
-        const wq = writeReviewQueue(up.queue, { surfaceDir: qSurface });
-        return { attempted: false, reason: `queue_hold:conflicting_identity`, surfaceDir: dir, hold: true, entryId: up.entry.cardId, queueWrite: wq.ok };
-      }
-      const wq = writeReviewQueue(up.queue, { surfaceDir: qSurface });
-      const latestErr = touchLatest(up.entry, qSurface);
+    // presentation snapshot BEFORE the upsert: an in-place supersession
+    // mutates the entry object, so the "already presented" comparison must
+    // use the pre-upsert generation identity.
+    const presentedBefore = presentedEntry(queue, dir);
+    const presentedIdentity = presentedBefore?.bundleIdentity ?? null;
+    const presentedOrder = presentedBefore?.order ?? -1;
+
+    // ── 1. durable ledger upsert（authority FIRST — a crash before the
+    // publication loses nothing; reconciliation republishes the newest）──
+    const up = upsertQueueEntry(queue, {
+      surfaceDir: dir,
+      cardId, generation, jobId,
+      bundleIdentity: state?.delivery?.reviewBundleIdentity ?? null,
+      bundleSha256: state?.delivery?.reviewBundleSha256 ?? null,
+      bundlePath,
+      evidencePath: Array.isArray(source.evidence) && source.evidence[0]?.path ? source.evidence[0].path : null,
+      supersedes: state?.supersedes ?? null,
+    });
+    if (up.code === "conflict") {
+      // same card, conflicting identity, no valid supersession -> HOLD
+      //（fail-closed; never publishes over an ambiguous lineage）.
+      const mk = markHold(up.queue, cardId, "conflicting_identity", { surfaceDir: dir });
+      const wq = writeReviewQueue(mk.queue, { surfaceDir: qSurface });
+      return { attempted: false, reason: `queue_hold:conflicting_identity:${String(state?.delivery?.reviewBundleIdentity ?? "unknown").slice(0, 8)}`, surfaceDir: dir, hold: true, entryId: cardId, queueWrite: wq.ok };
+    }
+    queue = up.queue;
+    const entry = up.entry;
+
+    // ── 2. publication decision（deterministic; N3 single-writer ordering /
+    // N4 stale-replay protection）──
+    //   - fresh completion（new monotonic order）ALWAYS publishes to Current
+    //     （card D1: A completes -> Current = A, whatever the previous card）;
+    //   - the identical generation already presented -> idempotent no-op;
+    //   - an OLDER completion replay（order < presented order）NEVER
+    //     regresses Current（N4）— the review stays durable in the ledger.
+    const incomingIdentity = state?.delivery?.reviewBundleIdentity ?? null;
+    if (presentedBefore && presentedBefore.entryId === entry.entryId && presentedIdentity === incomingIdentity) {
+      // already-presented identical generation: nothing to publish.
+      const wq = writeReviewQueue(queue, { surfaceDir: qSurface });
+      const latestErr = touchLatest(entry, qSurface);
       return {
-        attempted: true, queued: true, method: "external-review-queue", attemptedAt: new Date().toISOString(),
-        surfaceDir: dir, entryId: up.entry.cardId, order: up.entry.order,
-        latestError: latestErr, queueWrite: wq.ok, staleCard: stale || undefined,
+        attempted: true, method: "external-review-surface", idempotent: true, attemptedAt: new Date().toISOString(),
+        surfaceDir: dir, files: ["review-bundle.txt", "delivery.json"], entryId: cardId,
+        latestError: latestErr, queueWrite: wq.ok,
         humanReportError: publishHumanForBundle({ dir, bundlePath, state, source, generation, jobId }),
       };
     }
+    if (presentedBefore && entry.order < presentedOrder) {
+      // stale older completion replay — do NOT regress the presentation.
+      const wq = writeReviewQueue(queue, { surfaceDir: qSurface });
+      const latestErr = touchLatest(entry, qSurface);
+      return {
+        attempted: true, queued: true, staleReplay: true, method: "external-review-queue", attemptedAt: new Date().toISOString(),
+        surfaceDir: dir, entryId: entry.entryId, order: entry.order,
+        latestError: latestErr, queueWrite: wq.ok,
+        humanReportError: null, // an old completion replay must not regress LatestHuman
+      };
+    }
+
+    // ── 3. publish to Current（overwrite whatever occupies the slot —
+    // Current is a PRESENTATION slot, never a review-authority lock; card C）──
+    mkdirSync(dir, { recursive: true });
+    publishTrioToSurface({ dir, parent, token, bundlePath, state, source, cardId });
+    const mk = markPresented(queue, cardId, { deliveredAt: new Date().toISOString(), surfaceDir: dir });
+    const wq = writeReviewQueue(mk.queue, { surfaceDir: qSurface });
+    const latestErr = touchLatest(entry, qSurface);
+    return {
+      attempted: true, method: "external-review-surface", attemptedAt: new Date().toISOString(), surfaceDir: dir,
+      files: ["review-bundle.txt", "delivery.json"], entryId: cardId,
+      latestError: latestErr, queueWrite: wq.ok,
+      humanReportError: publishHumanForBundle({ dir, bundlePath, state, source, generation, jobId }),
+    };
   } catch (e) {
     return { attempted: false, reason: `surface_delivery_failed:${String(e?.message ?? e).slice(0, 200)}`, surfaceDir: dir };
   } finally {
@@ -1070,88 +993,90 @@ export function deliverToExternalReviewSurface({ bundlePath, state, source = {},
 }
 
 /**
- * Promote the oldest eligible pending review to Current（Phase 3）. Caller
- * MUST hold the surface lock. Deterministic ordering: lowest queue order
- * first. Never regenerates/reseals — the queue entry's immutable bundle
- * bytes are copied verbatim to the Current trio.
+ * CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1 — "promotion" is replaced
+ * by presentation recovery. A task completion always publishes its review
+ * directly to Current; there is no queue-front promotion. This recovery seam
+ * re-publishes the NEWEST eligible formal review（by completion/publication
+ * order）when a crash left Current stale or empty（card N1/N2）— never an
+ * older review（N4）; bundle bytes are copied verbatim, never regenerated.
+ * Caller MUST hold the surface lock.
  */
 export function promoteNextPendingReviewLocked({ surfaceDir, archiveDir = null, lock = null, queue = null }) {
   const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
-  const parent = dirname(dir);
   const q = queue ?? loadQueueOrHold(dir).queue;
   if (!q) return { ok: false, reason: "queue_hold", promoted: null, queue: q };
-  const pending = oldestPending(q, dir);
-  if (!pending) return { ok: true, reason: "none_pending", promoted: null, queue: q };
-  if (existsSync(dir) && readdirSync(dir).filter((f) => !f.startsWith(".")).length > 0) {
-    return { ok: false, reason: "current_occupied", promoted: null, queue: q };
+  const newest = newestEligibleEntry(q, dir);
+  if (!newest) return { ok: true, reason: "none_eligible", promoted: null, queue: q };
+  const presented = presentedEntry(q, dir);
+  if (presented && presented.entryId === newest.entryId && presented.bundleIdentity === newest.bundleIdentity) {
+    // already presented in the ledger — but the SURFACE trio must actually be
+    // there（crash between ledger persist and publish; card N1）. Republish
+    // when the presentation files are missing or stale.
+    const bundlePath = join(dir, "review-bundle.txt");
+    const deliveryPath = join(dir, "delivery.json");
+    const trioPresent = existsSync(bundlePath) && existsSync(deliveryPath)
+      && readExternalReviewDeliveryRecord(deliveryPath).ok
+      && bundleContentSha256(bundlePath) === newest.bundleSha256;
+    if (trioPresent) {
+      return { ok: true, reason: "already_current", promoted: null, queue: q };
+    }
   }
-  const token = lock?.token ?? `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   mkdirSync(dir, { recursive: true });
   const state = buildExternalReviewState({
-    bundle: { identity: pending.bundleIdentity, sha256: pending.bundleSha256 },
-    bundlePath: pending.bundlePath,
-    supersedes: pending.supersedes ?? null,
+    bundle: { identity: newest.bundleIdentity, sha256: newest.bundleSha256 },
+    bundlePath: newest.bundlePath,
+    deliveryAttempted: true,
+    deliveryMethod: "external-review-surface",
   });
-  const record = recordDeliveryAttempt(state, { method: "external-review-surface", attemptedAt: new Date().toISOString() });
-  const source = {
-    task: { cardId: pending.cardId },
-    evidence: pending.evidencePath ? [{ path: pending.evidencePath, sha256: "0".repeat(64) }] : [],
-  };
-  publishTrioToSurface({ dir, parent, token, bundlePath: pending.bundlePath, state: record, source, cardId: pending.cardId });
-  const deliveredAt = new Date().toISOString();
-  const mk = markCurrent(q, pending.cardId, { deliveredAt, surfaceDir: dir });
-  mk.entry.deliveredAt = deliveredAt;
+  publishTrioToSurface({
+    dir,
+    parent: dirname(dir),
+    token: lock?.token ?? `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    bundlePath: newest.bundlePath,
+    state,
+    source: { task: { cardId: newest.cardId }, evidence: newest.evidencePath ? [{ path: newest.evidencePath, sha256: "0".repeat(64) }] : [] },
+    cardId: newest.cardId,
+  });
+  const mk = markPresented(q, newest.cardId, { deliveredAt: new Date().toISOString(), surfaceDir: dir });
   writeReviewQueue(mk.queue, { surfaceDir: dir });
-  return { ok: true, promoted: mk.entry, queue: mk.queue, archived: [] };
+  return { ok: true, promoted: mk.entry, queue: mk.queue };
 }
 
 /**
- * Public promotion entry（CLI / recovery / tests）: acquire the surface lock,
- * promote the oldest pending review if Current is empty. Idempotent — safe to
- * re-run after a crash mid-promotion（T12/T13）.
+ * Public presentation-recovery entry（CLI / recovery / tests）: acquire the
+ * surface lock, ensure the NEWEST eligible review is presented. Idempotent —
+ * safe to re-run after a crash mid-publication（card N1/N2）.
  */
 export function promoteNextPendingReview({ surfaceDir = null, archiveDir = null } = {}) {
   const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
   const ownLock = acquireExternalReviewSurfaceLock(dir);
   if (!ownLock.ok) return { ok: false, reason: ownLock.reason ?? "surface_busy", promoted: null };
   try {
-    return promoteNextPendingReviewLocked({ surfaceDir: dir, archiveDir, lock: ownLock });
+    const migrated = ensureQueueMigrated(dir);
+    if (!migrated.ok) return { ok: false, reason: migrated.reason ?? "queue_hold", promoted: null };
+    return promoteNextPendingReviewLocked({ surfaceDir: dir, archiveDir, lock: ownLock, queue: migrated.queue });
   } finally {
     releaseExternalReviewSurfaceLock({ lockPath: ownLock.lockPath, token: ownLock.token });
   }
 }
 
 /**
- * Startup reconciliation（T13）: if Current is empty and the pending queue is
- * non-empty, promote the oldest pending review. Idempotent; safe on every
+ * Startup reconciliation（card N1/N2）: ensure the newest eligible formal
+ * review is presented on Current（crash between ledger persist and
+ * publication, or a partially replaced trio）. Idempotent; safe on every
  * restart / delivery entry. An optional caller-held `lock` is honored（the
- * ingest entrypoint holds the surface lock across apply → rotate → promote）.
+ * ingest entrypoint holds the surface lock across apply → archive）.
  */
 export function reconcileReviewQueue({ surfaceDir = null, archiveDir = null, lock = null } = {}) {
   const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
   if (lock) {
-    return reconcileReviewQueueLocked({ dir, archiveDir, lock });
+    const migrated = ensureQueueMigrated(dir);
+    if (!migrated.ok) return { ok: false, reason: migrated.reason ?? "queue_hold", promoted: null };
+    return promoteNextPendingReviewLocked({ surfaceDir: dir, archiveDir, lock, queue: migrated.queue });
   }
-  const ownLock = acquireExternalReviewSurfaceLock(dir);
-  if (!ownLock.ok) return { ok: false, reason: ownLock.reason ?? "surface_busy", promoted: null };
-  try {
-    return reconcileReviewQueueLocked({ dir, archiveDir, lock: ownLock });
-  } finally {
-    releaseExternalReviewSurfaceLock({ lockPath: ownLock.lockPath, token: ownLock.token });
-  }
+  return promoteNextPendingReview({ surfaceDir: dir, archiveDir });
 }
 
-function reconcileReviewQueueLocked({ dir, archiveDir, lock }) {
-  const qr = readReviewQueue(dir);
-  if (!qr.ok) return { ok: false, reason: `queue_hold:${qr.holdCode}:${qr.reason ?? ""}`, promoted: null };
-  const q = qr.queue;
-  const pending = oldestPending(q, dir);
-  if (!pending) return { ok: true, promoted: null, reason: "none_pending" };
-  if (existsSync(dir) && readdirSync(dir).filter((f) => !f.startsWith(".")).length > 0) {
-    return { ok: true, promoted: null, reason: "current_occupied" };
-  }
-  return promoteNextPendingReviewLocked({ surfaceDir: dir, archiveDir, lock, queue: q });
-}
 
 /**
  * Latest navigation pointer（Phase 4）: "what is the newest formal review
@@ -1164,282 +1089,117 @@ export function latestReviewPointer({ surfaceDir = null } = {}) {
 }
 
 /**
- * Rotate the current surface into the flat Archive/ after a verdict:
- *   Archive/<YYYYMMDD>-<CARD>-<identity8>-<VERDICT>-<kind>（kind = the
- *   original file name: review-bundle.txt / delivery.json / evidence.json）
- * then clear Current/. `verdict` defaults to PENDING when the card was
- * superseded before an external verdict. Runs under the same single-owner
- * lock（never races a concurrent publish）. Returns the archived paths.
- */
-/**
- * Rotate the current surface into the flat Archive/ after a verdict:
- *   Archive/<YYYYMMDD>-<CARD>-<identity8>-<VERDICT>-<kind>（kind = the
- * original file name: review-bundle.txt / delivery.json / evidence.json）
- * then clear Current/. `verdict` defaults to PENDING when the card was
- * superseded before an external verdict. Runs under the same single-owner
- * lock（never races a concurrent publish）. Returns the archived paths.
- *
- * REVART-LC1（this card）— rotation is the promotion seam（Phase 3）: after
- * archiving + clearing Current, the queue entry for the rotated card is
- * marked ARCHIVED and the oldest eligible pending review is promoted to
- * Current（deterministic order; bundle bytes copied verbatim, never
- * regenerated）. Returns { ok, archived, cleared, promoted|null, queue }.
+ * CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1 — apply an external-review
+ * verdict to the DURABLE LEDGER and archive the reviewed bundle. Verdict
+ * lifecycle NEVER controls the presentation pointer（card I）:
+ *   - the target is resolved by exact ledger entry（cardId + bundleIdentity;
+ *     card H）— the reviewed card does NOT need to be Current;
+ *   - PASS -> ledger state REVIEWED（verdict identity-bound）;
+ *     REPAIR -> REPAIR; HOLD -> HOLD;
+ *   - the reviewed bundle is archived to the flat Archive/ from the
+ *     IMMUTABLE ledger artifact（card I: Current files untouched）;
+ *   - no rotation of Current, no promotion, no presentation change.
+ * Runs under the same single-owner lock（never races a concurrent publish）.
+ * Returns { ok, archived, cleared:false, promoted:null, queue }.
  */
 export function rotateExternalReviewSurface({ surfaceDir = null, archiveDir = null, cardId = "CARD", identity = "unknown", verdict = "PENDING", dateStr = null, lock = null } = {}) {
   const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
   const arch = resolve(archiveDir ?? externalReviewArchiveDir());
-  const prefix = dateStr ?? new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const label = `${prefix}-${cardId}-${String(identity).slice(0, 8)}-${verdict}`;
+  if (!EXTERNAL_REVIEW_VERDICTS.includes(verdict)) {
+    return { ok: false, reason: `invalid_verdict:${verdict}`, archived: [] };
+  }
   const ownLock = lock ?? acquireExternalReviewSurfaceLock(dir);
   if (!ownLock.ok) {
     return { ok: false, reason: ownLock.reason ?? "surface_busy", archived: [] };
   }
-  const archived = [];
   try {
-    if (existsSync(dir)) {
-      mkdirSync(arch, { recursive: true });
-      for (const name of ["review-bundle.txt", "delivery.json", "evidence.json"]) {
-        const src = join(dir, name);
-        if (!existsSync(src)) continue;
-        const dest = join(arch, `${label}-${name}`);
-        renameSync(src, dest);
-        archived.push(dest);
-      }
-      // stray tmp files（dot-prefixed）are temp — removable, never archived
-      for (const f of readdirSync(dir)) {
-        if (f.startsWith(".")) { try { rmSync(join(dir, f), { force: true }); } catch { /* best effort */ } }
-      }
+    const migrated = ensureQueueMigrated(dir);
+    if (!migrated.ok) return { ok: false, reason: migrated.reason ?? "queue_hold", archived: [] };
+    const q = migrated.queue;
+    const entry = findEntry(q, cardId, dir);
+    if (!entry) {
+      return { ok: false, reason: `REVIEW_LEDGER_TARGET_NOT_FOUND:no_ledger_entry:${cardId}`, archived: [] };
     }
-    const cleared = !existsSync(dir) || readdirSync(dir).filter((f) => !f.startsWith(".")).length === 0;
-    // ── queue bookkeeping + promotion（Phase 3）──────────────────────────
-    let queue = null;
-    const qr = readReviewQueue(dir);
-    if (qr.ok) {
-      queue = qr.queue;
-      // the rotated occupant（if tracked）is now ARCHIVED（terminal）.
-      const occ = findEntry(queue, cardId, dir) ?? (queue.entries ?? []).find((e) => e.state === "CURRENT" && e.surfaceDir === dir);
-      if (occ) {
-        const mark = occ.state === "CURRENT"
-          ? markArchived(queue, occ.cardId, { surfaceDir: dir })
-          : { ok: true, queue };
-        queue = mark.queue;
-        if (EXTERNAL_REVIEW_VERDICTS.includes(verdict) && occ.state === "CURRENT") {
-          const v = queue.entries.find((e) => e.cardId === occ.cardId && e.surfaceDir === dir);
-          if (v) {
-            v.verdict = { verdict, bundleIdentity: identity, bundleSha256: null, reviewedAt: new Date().toISOString() };
-            v.state = "ARCHIVED";
-            v.updatedAt = new Date().toISOString();
-          }
-        }
-        writeReviewQueue(queue, { surfaceDir: dir });
-      }
-      // promote the next pending review（Current is now empty; FIFO oldest
-      // eligible first）.
-      const promote = promoteNextPendingReviewLocked({ surfaceDir: dir, archiveDir: arch, lock: ownLock, queue });
-      if (promote.ok && promote.promoted) {
-        queue = promote.queue;
-        return { ok: true, archived, cleared: true, promoted: promote.promoted, queue };
-      }
+    if (identity !== "unknown" && entry.bundleIdentity !== identity) {
+      return { ok: false, reason: `REVIEW_VERDICT_IDENTITY_MISMATCH:${String(entry.bundleIdentity ?? "").slice(0, 8)}!=${String(identity).slice(0, 8)}`, archived: [] };
     }
-    return { ok: true, archived, cleared, promoted: null, queue, promotionReason: qr.ok ? null : `queue_hold:${qr.holdCode ?? "corrupt"}` };
+    // apply the verdict to the durable ledger entry（identity-bound）.
+    const now = new Date().toISOString();
+    entry.verdict = {
+      verdict,
+      bundleIdentity: entry.bundleIdentity,
+      bundleSha256: entry.bundleSha256,
+      reviewerIdentity: entry.verdict?.reviewerIdentity ?? null,
+      reviewedAt: entry.verdict?.reviewedAt ?? now,
+      findingsDigest: entry.verdict?.findingsDigest ?? null,
+    };
+    entry.state = verdict === "PASS" ? "REVIEWED" : verdict; // REVIEWED | REPAIR | HOLD
+    entry.updatedAt = now;
+    const wq = writeReviewQueue(q, { surfaceDir: dir });
+    if (!wq.ok) return { ok: false, reason: `queue_write_failed:${wq.reason}`, archived: [] };
+    const archived = archiveReviewedBundle({ entry, arch, verdict, dateStr });
+    return { ok: true, archived, cleared: false, promoted: null, queue: q, verdict };
   } catch (e) {
-    return { ok: false, reason: `surface_rotate_failed:${String(e?.message ?? e).slice(0, 200)}`, archived };
+    return { ok: false, reason: `surface_rotate_failed:${String(e?.message ?? e).slice(0, 200)}`, archived: [] };
   } finally {
     // Release only a lock WE acquired. A caller that passed its own lock
-    //（R7 auto-rotation inside deliverToExternalReviewSurface）owns release.
+    // owns release.
     if (!lock) {
       releaseExternalReviewSurfaceLock({ lockPath: ownLock.lockPath, token: ownLock.token });
     }
   }
 }
 
-// ---------------------------------------------------------------------------
-// Recursive canonical JSON（CBM-1 fix）— NEVER the shallow replacer form.
-// ---------------------------------------------------------------------------
-
 /**
- * R5 — artifact-level proof that the required bundle currently exists on the
- * configured Current/ surface with a matching delivery record. The writer's
- * own "delivery attempted" claim is never the proof: the surface files are
- * re-read and the bundle identity + SHA-256 are recomputed independently.
- * Used by runCloseoutGate so that an AWAITING_EXTERNAL_REVIEW state can only
- * accompany a truly present artifact（fail-closed）.
+ * Copy a reviewed bundle's immutable artifacts（bundle + evidence + delivery
+ * record derived from the ledger entry）into the flat Archive/ under
+ * Archive/<YYYYMMDD>-<CARD>-<identity8>-<VERDICT>-<kind>. Verdict lifecycle
+ * never touches Current/ files（card I）.
  */
-export function verifyExternalReviewSurface({ surfaceDir = null, expected = {} } = {}) {
-  const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
-  const errors = [];
-  const bundlePath = join(dir, "review-bundle.txt");
-  const deliveryPath = join(dir, "delivery.json");
-
-  if (!existsSync(bundlePath)) {
-    errors.push("surface_bundle_missing");
-  } else {
-    const raw = readFileSync(bundlePath, "utf8");
-    const ident = raw.match(/^REVIEW_BUNDLE_IDENTITY: ([0-9a-f]{64})$/m)?.[1] ?? null;
-    if (expected.identity && ident !== expected.identity) {
-      errors.push(`surface_bundle_identity_mismatch:${ident ? ident.slice(0, 8) : "none"}!=${expected.identity.slice(0, 8)}`);
-    }
-    const linesArr = raw.split("\n");
-    const shaLineIdx = [...linesArr].reverse().findIndex((l) => l.trim().startsWith("REVIEW_BUNDLE_SHA256:"));
-    const statedSha = shaLineIdx >= 0 ? linesArr[linesArr.length - 1 - shaLineIdx].split(":")[1]?.trim() : null;
-    const contentOnly = shaLineIdx >= 0 ? linesArr.slice(0, linesArr.length - 1 - shaLineIdx).join("\n") + "\n" : raw;
-    const actualSha = sha256Hex(contentOnly);
-    if (expected.sha256 && statedSha !== expected.sha256) {
-      errors.push("surface_bundle_sha_mismatch");
-    }
-    if (expected.sha256 && actualSha !== expected.sha256) {
-      errors.push("surface_bundle_sha_recompute_mismatch");
-    }
+function archiveReviewedBundle({ entry, arch, verdict, dateStr }) {
+  const prefix = dateStr ?? new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const label = `${prefix}-${entry.cardId}-${String(entry.bundleIdentity).slice(0, 8)}-${verdict}`;
+  const archived = [];
+  mkdirSync(arch, { recursive: true });
+  const src = entry.bundlePath && existsSync(entry.bundlePath) ? entry.bundlePath : null;
+  if (src) {
+    const dest = join(arch, `${label}-review-bundle.txt`);
+    copyFileSync(src, dest);
+    archived.push(dest);
   }
-
-  if (!existsSync(deliveryPath)) {
-    errors.push("surface_delivery_record_missing");
-  } else {
-    const rec = readExternalReviewDeliveryRecord(deliveryPath);
-    if (!rec.ok) {
-      errors.push(`surface_delivery_record_invalid:${rec.errors.join(";")}`);
-    } else {
-      if (expected.identity && rec.state?.delivery?.reviewBundleIdentity !== expected.identity) {
-        errors.push("surface_delivery_identity_mismatch");
-      }
-      if (expected.sha256 && rec.state?.delivery?.reviewBundleSha256 !== expected.sha256) {
-        errors.push("surface_delivery_sha_mismatch");
-      }
-      if (expected.cardId && rec.cardId && rec.cardId !== expected.cardId) {
-        errors.push(`surface_delivery_card_mismatch:${rec.cardId}`);
-      }
-      if (rec.state?.externalReviewStatus === EXTERNAL_REVIEW_STATUSES[1]) {
-        errors.push("surface_delivery_blocked");
-      }
-    }
+  if (entry.evidencePath && existsSync(entry.evidencePath)) {
+    const dest = join(arch, `${label}-evidence.json`);
+    copyFileSync(entry.evidencePath, dest);
+    archived.push(dest);
   }
-
-  return { ok: errors.length === 0, errors, surfaceDir: dir };
-}
-
-// ---------------------------------------------------------------------------
-// RLD2 repair — identity-verified delivery SELECTION（delivery is a verified
-// dereference of authoritative state, never a filesystem discovery）.
-// ---------------------------------------------------------------------------
-
-/** Recompute a bundle's CONTENT sha256（the footer REVIEW_BUNDLE_SHA256 line
- *  is excluded — mirrors the validator's recompute）. */
-export function bundleContentSha256(bundlePath) {
-  const raw = readFileSync(bundlePath, "utf8");
-  const linesArr = raw.split("\n");
-  const shaLineIdx = [...linesArr].reverse().findIndex((l) => l.trim().startsWith("REVIEW_BUNDLE_SHA256:"));
-  const contentOnly = shaLineIdx >= 0 ? linesArr.slice(0, linesArr.length - 1 - shaLineIdx).join("\n") + "\n" : raw;
-  return sha256Hex(contentOnly);
-}
-
-/** Parse CARD_ID + REVIEW_BUNDLE_IDENTITY from a bundle text（for identity
- *  verification — never used to SELECT）. */
-export function bundleCardIdentity(bundlePath) {
-  const raw = readFileSync(bundlePath, "utf8");
-  return {
-    cardId: raw.match(/^CARD_ID:\s*(.+)$/m)?.[1]?.trim() ?? null,
-    identity: raw.match(/^REVIEW_BUNDLE_IDENTITY:\s*([0-9a-f]{64})$/m)?.[1] ?? null,
-  };
-}
-
-/**
- * RLD2 — the AUTHORITATIVE delivery selector. "The current review bundle" is
- * a VERIFIED DEREFERENCE of the surface + delivery record against the
- * controller's CURRENT CARD — never a filename / mtime / newest-file
- * discovery. Fail-closed outcomes:
- *   NO_NEW_REVIEW_BUNDLE             — no awaiting-review bundle exists for
- *                                      the current card; a stale generation is
- *                                      NEVER substituted
- *   STALE_CARD_IDENTITY              — the surface holds a DIFFERENT card's
- *                                      generation
- *   STALE_GENERATION_ALREADY_REVIEWED — the current card's generation was
- *                                      already externally reviewed（PASS
- *                                      bound）— never re-delivered as a new
- *                                      generation
- *   SURFACE_SHA_MISMATCH             — the bundle file's content sha does not
- *                                      match the delivery record
- *   SURFACE_RECORD_INVALID           — the delivery record is unreadable /
- *                                      malformed / missing
- *
- * @param {object} opts — { surfaceDir, currentCardId, cachedPath? };
- *   cachedPath models a stale attachment/export cache: the file is verified
- *   by identity + sha（rejected when stale）instead of being trusted.
- * @returns {{ ok: true, bundle: { path, identity, sha256, cardId, status,
- *           verdict, supersedes } } | { ok: false, holdCode, reason }}
- */
-export function currentReviewDelivery({ surfaceDir = null, currentCardId = null, cachedPath = null } = {}) {
-  const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
-  if (!currentCardId || typeof currentCardId !== "string" || currentCardId.length === 0) {
-    return { ok: false, holdCode: "NO_NEW_REVIEW_BUNDLE", reason: "currentReviewDelivery requires the controller's current card id" };
-  }
-  if (cachedPath) {
-    // A cached/exported path is verified by IDENTITY, never trusted by path.
-    if (!existsSync(cachedPath)) {
-      return { ok: false, holdCode: "NO_NEW_REVIEW_BUNDLE", reason: `cached path ${cachedPath} missing — a stale generation is never substituted` };
-    }
-    const ci = bundleCardIdentity(cachedPath);
-    if (!ci.cardId || ci.cardId !== currentCardId) {
-      return { ok: false, holdCode: "STALE_CARD_IDENTITY", reason: `cached bundle CARD_ID ${String(ci.cardId)} != current card ${currentCardId}` };
-    }
-    // When the surface still holds the authoritative record, the cached
-    // artifact must MATCH it（delivery source identity == authoritative
-    // source identity — NEG-RLD3）. A divergent cached source is stale.
-    const deliveryPath = join(dir, "delivery.json");
-    if (existsSync(deliveryPath)) {
-      const rec = readExternalReviewDeliveryRecord(deliveryPath);
-      if (rec.ok && rec.state?.delivery?.reviewBundleIdentity && ci.identity && ci.identity !== rec.state.delivery.reviewBundleIdentity) {
-        return { ok: false, holdCode: "STALE_CARD_IDENTITY", reason: `cached bundle identity ${String(ci.identity).slice(0, 8)} diverges from authoritative surface identity ${String(rec.state.delivery.reviewBundleIdentity).slice(0, 8)}` };
-      }
-    }
-    return {
-      ok: true,
-      bundle: { path: cachedPath, identity: ci.identity, sha256: bundleContentSha256(cachedPath), cardId: ci.cardId, status: null, verdict: null, supersedes: null },
-      source: "cached-path-verified",
-    };
-  }
-  const deliveryPath = join(dir, "delivery.json");
-  if (!existsSync(deliveryPath)) {
-    return { ok: false, holdCode: "NO_NEW_REVIEW_BUNDLE", reason: `no delivery record on the surface for current card ${currentCardId} — no new review bundle` };
-  }
-  const rec = readExternalReviewDeliveryRecord(deliveryPath);
-  if (!rec.ok) {
-    return { ok: false, holdCode: "SURFACE_RECORD_INVALID", reason: `surface delivery record invalid: ${rec.errors.join("; ")}` };
-  }
-  if (rec.cardId && rec.cardId !== currentCardId) {
-    return { ok: false, holdCode: "STALE_CARD_IDENTITY", reason: `surface holds card ${rec.cardId} (identity ${String(rec.state?.delivery?.reviewBundleIdentity ?? "").slice(0, 8)}) != current card ${currentCardId}` };
-  }
-  // An already-externally-reviewed COMPLETE generation is never re-delivered
-  // as a new generation（unless explicitly requested by identity — out of the
-  // automatic path）.
-  if (externalReviewComplete(rec.state)) {
-    return { ok: false, holdCode: "STALE_GENERATION_ALREADY_REVIEWED", reason: `generation ${String(rec.state.delivery?.reviewBundleIdentity ?? "").slice(0, 8)} of ${currentCardId} was already externally reviewed (PASS) — never re-delivered as a new generation` };
-  }
-  const bundlePath = join(dir, "review-bundle.txt");
-  if (!existsSync(bundlePath)) {
-    return { ok: false, holdCode: "NO_NEW_REVIEW_BUNDLE", reason: `surface holds a delivery record but no review-bundle.txt — no new review bundle` };
-  }
-  const ci = bundleCardIdentity(bundlePath);
-  if (ci.cardId && ci.cardId !== currentCardId) {
-    return { ok: false, holdCode: "STALE_CARD_IDENTITY", reason: `surface bundle CARD_ID ${ci.cardId} != current card ${currentCardId}` };
-  }
-  const actualSha = bundleContentSha256(bundlePath);
-  const recordSha = rec.state?.delivery?.reviewBundleSha256 ?? null;
-  if (recordSha && actualSha !== recordSha) {
-    return { ok: false, holdCode: "SURFACE_SHA_MISMATCH", reason: `surface bundle content sha ${actualSha.slice(0, 12)} != delivery record sha ${recordSha.slice(0, 12)}` };
-  }
-  return {
-    ok: true,
-    bundle: {
-      path: bundlePath,
-      identity: ci.identity ?? rec.state?.delivery?.reviewBundleIdentity ?? null,
-      sha256: actualSha,
-      cardId: ci.cardId ?? rec.cardId ?? null,
-      status: rec.state?.externalReviewStatus ?? null,
-      verdict: rec.state?.verdict?.verdict ?? null,
-      supersedes: rec.state?.supersedes ?? null,
+  const recordState = {
+    reviewBundleGenerated: true,
+    reviewBundleValidated: true,
+    reviewBundleDeliveryRequired: true,
+    externalReviewStatus: verdict,
+    externalReviewStatusReason: `verdict ${verdict} bound to reviewBundleIdentity=${entry.bundleIdentity}; archived from the durable ledger（presentation independent）`,
+    delivery: {
+      required: true,
+      attempted: true,
+      method: "external-review-surface",
+      attemptedAt: entry.deliveredAt ?? entry.enqueuedAt ?? null,
+      bundlePath: entry.bundlePath ?? null,
+      reviewBundleIdentity: entry.bundleIdentity,
+      reviewBundleSha256: entry.bundleSha256,
     },
-    source: "surface-verified",
+    verdict: {
+      verdict,
+      reviewerIdentity: entry.verdict?.reviewerIdentity ?? null,
+      reviewedAt: entry.verdict?.reviewedAt ?? null,
+      bundleIdentity: entry.bundleIdentity,
+      bundleSha256: entry.bundleSha256,
+      findingsDigest: entry.verdict?.findingsDigest ?? null,
+    },
+    supersedes: entry.supersedes ?? null,
   };
+  const wr = writeExternalReviewDeliveryRecord({ outDir: arch, state: recordState, cardId: entry.cardId, fileName: `${label}-delivery.json` });
+  if (wr.ok) archived.push(wr.path);
+  return archived;
 }
 
 
@@ -1462,7 +1222,184 @@ export function sha256Hex(text) {
   return createHash("sha256").update(String(text)).digest("hex");
 }
 
-// ---------------------------------------------------------------------------
+/**
+ * CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1 — artifact-level proof that
+ * the required review bundle is DURABLY PRESENT for external review. The
+ * durable proof is the LEDGER entry（cardId + identity + sha）— Current/ is a
+ * presentation slot and may legitimately hold a NEWER review（card D1）. When
+ * the expected card IS the presented one, the surface trio is additionally
+ * re-verified（identity + recomputed SHA + delivery record）so an
+ * AWAITING_EXTERNAL_REVIEW state can only accompany a truly present bundle.
+ * Used by runCloseoutGate（fail-closed）. The writer's own "delivery
+ * attempted" claim is never the proof.
+ */
+export function verifyExternalReviewSurface({ surfaceDir = null, expected = {} } = {}) {
+  const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
+  const errors = [];
+  const qr = readReviewQueue(dir);
+  if (!qr.ok) {
+    errors.push(`review_ledger_unreadable:${qr.holdCode ?? "corrupt"}`);
+    return { ok: false, errors, surfaceDir: dir };
+  }
+  const entry = expected.cardId
+    ? findEntry(qr.queue, expected.cardId, dir)
+    : (expected.identity ? (qr.queue.entries ?? []).find((e) => e.surfaceDir === resolve(dir) && e.bundleIdentity === expected.identity) : null);
+  if (!entry) {
+    errors.push("review_ledger_entry_missing");
+    return { ok: false, errors, surfaceDir: dir };
+  }
+  if (expected.identity && entry.bundleIdentity !== expected.identity) {
+    errors.push(`review_ledger_identity_mismatch:${entry.bundleIdentity.slice(0, 8)}!=${expected.identity.slice(0, 8)}`);
+  }
+  if (expected.sha256 && entry.bundleSha256 !== expected.sha256) {
+    errors.push(`review_ledger_sha_mismatch:${entry.bundleSha256.slice(0, 8)}!=${expected.sha256.slice(0, 8)}`);
+  }
+  // surface-level strict trio check ONLY for the presented entry.
+  const presented = presentedEntry(qr.queue, dir);
+  if (presented && presented.entryId === entry.entryId) {
+    const bundlePath = join(dir, "review-bundle.txt");
+    const deliveryPath = join(dir, "delivery.json");
+    if (!existsSync(bundlePath)) {
+      errors.push("surface_bundle_missing");
+    } else {
+      const raw = readFileSync(bundlePath, "utf8");
+      const ident = raw.match(/^REVIEW_BUNDLE_IDENTITY: ([0-9a-f]{64})$/m)?.[1] ?? null;
+      if (expected.identity && ident !== expected.identity) {
+        errors.push(`surface_bundle_identity_mismatch:${ident ? ident.slice(0, 8) : "none"}!=${expected.identity.slice(0, 8)}`);
+      }
+      if (expected.sha256 && bundleContentSha256(bundlePath) !== expected.sha256) {
+        errors.push("surface_bundle_sha_recompute_mismatch");
+      }
+    }
+    if (!existsSync(deliveryPath)) {
+      errors.push("surface_delivery_record_missing");
+    } else {
+      const rec = readExternalReviewDeliveryRecord(deliveryPath);
+      if (!rec.ok) {
+        errors.push(`surface_delivery_record_invalid:${rec.errors.join(";")}`);
+      } else {
+        if (expected.identity && rec.state?.delivery?.reviewBundleIdentity !== expected.identity) {
+          errors.push("surface_delivery_identity_mismatch");
+        }
+        if (expected.sha256 && rec.state?.delivery?.reviewBundleSha256 !== expected.sha256) {
+          errors.push("surface_delivery_sha_mismatch");
+        }
+        if (expected.cardId && rec.cardId && rec.cardId !== expected.cardId) {
+          errors.push(`surface_delivery_card_mismatch:${rec.cardId}`);
+        }
+        if (rec.state?.externalReviewStatus === EXTERNAL_REVIEW_STATUSES[1]) {
+          errors.push("surface_delivery_blocked");
+        }
+      }
+    }
+  }
+  return { ok: errors.length === 0, errors, surfaceDir: dir };
+}
+
+/**
+ * CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1 — the AUTHORITATIVE
+ * delivery selector. "The current review bundle for card X" is a VERIFIED
+ * DEREFERENCE of the DURABLE LEDGER（queue.json entry by cardId — identity +
+ * cryptographic content sha）, never a filesystem discovery and never the
+ * Current/ presentation slot（which may legitimately hold a NEWER review）.
+ * Fail-closed outcomes:
+ *   NO_NEW_REVIEW_BUNDLE               — no ledger entry for the card
+ *   STALE_CARD_IDENTITY                — cached/derived bundle card mismatch
+ *   STALE_GENERATION_ALREADY_REVIEWED  — the card's generation already has a
+ *                                        terminal PASS verdict（never
+ *                                        re-delivered as a new generation）
+ *   SURFACE_SHA_MISMATCH               — bundle content sha does not match
+ *                                        the ledger entry
+ *   SURFACE_RECORD_INVALID             — ledger unreadable / artifact missing
+ *
+ * @param {object} opts — { surfaceDir, currentCardId, cachedPath? };
+ *   cachedPath models a stale attachment/export cache: the file is verified
+ *   by identity + sha（rejected when stale）instead of being trusted.
+ * @returns {{ ok: true, bundle: { path, identity, sha256, cardId, status,
+ *           verdict, supersedes } } | { ok: false, holdCode, reason }}
+ */
+export function currentReviewDelivery({ surfaceDir = null, currentCardId = null, cachedPath = null } = {}) {
+  const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
+  if (!currentCardId || typeof currentCardId !== "string" || currentCardId.length === 0) {
+    return { ok: false, holdCode: "NO_NEW_REVIEW_BUNDLE", reason: "currentReviewDelivery requires the controller's current card id" };
+  }
+  const qr = readReviewQueue(dir);
+  if (!qr.ok) {
+    return { ok: false, holdCode: "SURFACE_RECORD_INVALID", reason: `review_ledger_unreadable:${qr.holdCode ?? "corrupt"}`, surfaceDir: dir };
+  }
+  const entry = findEntry(qr.queue, currentCardId, dir);
+  if (!entry) {
+    return { ok: false, holdCode: "NO_NEW_REVIEW_BUNDLE", reason: `no review ledger entry for current card ${currentCardId} — no new review bundle`, surfaceDir: dir };
+  }
+  if (entry.state === "REVIEWED" || (entry.verdict && entry.verdict.verdict === "PASS")) {
+    return { ok: false, holdCode: "STALE_GENERATION_ALREADY_REVIEWED", reason: `generation ${entry.bundleIdentity.slice(0, 8)} of ${currentCardId} was already externally reviewed (PASS) — never re-delivered as a new generation`, surfaceDir: dir };
+  }
+  const bundlePath = entry.bundlePath;
+  if (!bundlePath || !existsSync(bundlePath)) {
+    return { ok: false, holdCode: "SURFACE_RECORD_INVALID", reason: `ledger bundle artifact missing: ${bundlePath ?? "(none)"}`, surfaceDir: dir };
+  }
+  const ci = bundleCardIdentity(bundlePath);
+  if (ci.cardId && ci.cardId !== currentCardId) {
+    return { ok: false, holdCode: "STALE_CARD_IDENTITY", reason: `ledger bundle CARD_ID ${ci.cardId} != current card ${currentCardId}`, surfaceDir: dir };
+  }
+  if (ci.identity && ci.identity !== entry.bundleIdentity) {
+    return { ok: false, holdCode: "SURFACE_SHA_MISMATCH", reason: `ledger bundle identity ${ci.identity.slice(0, 8)} != ledger entry ${entry.bundleIdentity.slice(0, 8)}`, surfaceDir: dir };
+  }
+  const actualSha = bundleContentSha256(bundlePath);
+  if (actualSha !== entry.bundleSha256) {
+    return { ok: false, holdCode: "SURFACE_SHA_MISMATCH", reason: `ledger bundle content sha ${actualSha.slice(0, 8)} != ledger entry ${entry.bundleSha256.slice(0, 8)}`, surfaceDir: dir };
+  }
+  if (cachedPath) {
+    if (!existsSync(cachedPath)) {
+      return { ok: false, holdCode: "SURFACE_RECORD_INVALID", reason: "cached_path_missing", surfaceDir: dir };
+    }
+    const cc = bundleCardIdentity(cachedPath);
+    if (!cc.cardId || cc.cardId !== currentCardId) {
+      return { ok: false, holdCode: "STALE_CARD_IDENTITY", reason: `cached bundle CARD_ID ${String(cc.cardId)} != current card ${currentCardId}`, surfaceDir: dir };
+    }
+    if (cc.identity && cc.identity !== entry.bundleIdentity) {
+      return { ok: false, holdCode: "STALE_CARD_IDENTITY", reason: `cached bundle identity ${cc.identity.slice(0, 8)} != ledger identity ${entry.bundleIdentity.slice(0, 8)}`, surfaceDir: dir };
+    }
+    if (bundleContentSha256(cachedPath) !== entry.bundleSha256) {
+      return { ok: false, holdCode: "SURFACE_SHA_MISMATCH", reason: "cached bundle content sha != ledger entry sha", surfaceDir: dir };
+    }
+  }
+  return {
+    ok: true,
+    bundle: {
+      path: bundlePath,
+      identity: entry.bundleIdentity,
+      sha256: entry.bundleSha256,
+      cardId: entry.cardId,
+      status: entry.state === "PENDING" ? "AWAITING_EXTERNAL_REVIEW" : (entry.verdict?.verdict ?? entry.state),
+      verdict: entry.verdict ?? null,
+      supersedes: entry.supersedes ?? null,
+    },
+    source: "ledger",
+    surfaceDir: dir,
+  };
+}
+
+/** Recompute a bundle's CONTENT sha256（the footer REVIEW_BUNDLE_SHA256 line
+ *  is excluded — mirrors the validator's recompute）. */
+export function bundleContentSha256(bundlePath) {
+  const raw = readFileSync(bundlePath, "utf8");
+  const linesArr = raw.split("\n");
+  const shaLineIdx = [...linesArr].reverse().findIndex((l) => l.trim().startsWith("REVIEW_BUNDLE_SHA256:"));
+  const contentOnly = shaLineIdx >= 0 ? linesArr.slice(0, linesArr.length - 1 - shaLineIdx).join("\n") + "\n" : raw;
+  return sha256Hex(contentOnly);
+}
+
+/** Parse CARD_ID + REVIEW_BUNDLE_IDENTITY from a bundle text（for identity
+ *  verification — never used to SELECT）. */
+export function bundleCardIdentity(bundlePath) {
+  const raw = readFileSync(bundlePath, "utf8");
+  return {
+    cardId: raw.match(/^CARD_ID:\s*(.+)$/m)?.[1]?.trim() ?? null,
+    identity: raw.match(/^REVIEW_BUNDLE_IDENTITY:\s*([0-9a-f]{64})$/m)?.[1] ?? null,
+  };
+}
+
 // Repo facts（git-derived, authoritative — never trusted from the source）.
 // ---------------------------------------------------------------------------
 
@@ -4126,18 +4063,55 @@ export function verifyAppliedCloseoutBundle({ outDir = null, closeout = null, ca
 }
 
 /**
- * RB2R2 — resolve the AUTHORITATIVE external-review record for a card's
- * canonical bundle. The authority record is the persisted
- * autoloop.external-review-delivery/v2 record on the FIXED review surface
- * （Current/delivery.json）— the canonical reviewer-facing durable surface.
- * There is NO fallback source and NO caller-supplied record parameter:
- *   - a missing / unreadable / malformed surface record is FAIL-CLOSED;
- *   - a card-mismatched / bundle-mismatched surface record is FAIL-CLOSED;
- *   - outDir external-review-delivery-*.json files are SENDER-SIDE evidence
- *     only and are NEVER authority（canonical surface only）.
+ * CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1 — resolve the AUTHORITATIVE
+ * external-review record for a card's canonical bundle. The authority record
+ * is the DURABLE REVIEW LEDGER entry（queue.json）— Current/delivery.json is
+ * a presentation projection that may legitimately hold a NEWER review, so it
+ * is NEVER the verdict authority（card G/H: verdict binds ledger identity,
+ * not Current）. The ledger entry carries the identity-bound verdict + state.
+ * Fail-closed:
+ *   - no ledger entry / unreadable ledger      -> NOT_COMPLETE
+ *   - card/identity mismatch vs the ledger     -> STALE_BUNDLE
+ * Fallback: for cards with no ledger entry, the canonical surface record is
+ * consulted（legacy surfaces / never-queued cards）— still fail-closed.
  */
 export function resolveAuthoritativeExternalReviewRecord({ cardId = null, bundleIdentity = null, surfaceDir = null } = {}) {
   const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
+  const qr = readReviewQueue(dir);
+  if (qr.ok) {
+    const entry = cardId
+      ? findEntry(qr.queue, cardId, dir)
+      : (bundleIdentity ? (qr.queue.entries ?? []).find((e) => e.surfaceDir === resolve(dir) && e.bundleIdentity === bundleIdentity) : null);
+    if (entry) {
+      if (bundleIdentity && entry.bundleIdentity !== bundleIdentity) {
+        return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.STALE_BUNDLE, reason: `EXTERNAL_REVIEW_STALE_BUNDLE:ledger_identity_mismatch:${String(entry.bundleIdentity ?? "").slice(0, 8)}!=${bundleIdentity.slice(0, 8)}`, record: null };
+      }
+      const status = entry.verdict?.verdict ?? (entry.state === "PENDING" ? "AWAITING_EXTERNAL_REVIEW" : entry.state);
+      const record = {
+        cardId: entry.cardId,
+        state: {
+          reviewBundleGenerated: true,
+          reviewBundleValidated: true,
+          reviewBundleDeliveryRequired: true,
+          externalReviewStatus: status,
+          externalReviewStatusReason: entry.holdReason ?? null,
+          delivery: {
+            required: true,
+            attempted: true,
+            method: "external-review-surface",
+            attemptedAt: entry.deliveredAt ?? null,
+            bundlePath: entry.bundlePath ?? null,
+            reviewBundleIdentity: entry.bundleIdentity,
+            reviewBundleSha256: entry.bundleSha256,
+          },
+          verdict: entry.verdict ?? null,
+          supersedes: entry.supersedes ?? null,
+        },
+      };
+      return { ok: true, record, source: "ledger" };
+    }
+  }
+  // fallback: the canonical surface record（legacy / never-queued cards）.
   const deliveryPath = join(dir, "delivery.json");
   if (!existsSync(deliveryPath)) {
     return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.NOT_COMPLETE, reason: "EXTERNAL_REVIEW_NOT_COMPLETE:surface_delivery_record_missing", record: null };

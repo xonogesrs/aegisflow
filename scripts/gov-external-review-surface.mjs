@@ -45,12 +45,21 @@
 //       never verdict authority）.
 //
 //   --promote
-//       Promote the oldest eligible pending review to Current（idempotent;
-//       recovery after a crash between archive and promotion）.
+//       Presentation recovery: ensure the NEWEST eligible formal review is
+//       published to Current（idempotent; recovery after a crash between
+//       ledger persist and publication）. NEVER an older review（stale
+//       replay cannot regress Current）.
 //
 //   --reconcile
-//       Startup reconciliation: if Current/ is empty and the queue is
-//       non-empty, promote the next pending review（idempotent）.
+//       Startup reconciliation: same as --promote（crash-safe recovery on
+//       every restart; card N1/N2）.
+//
+//   --migrate
+//       Deterministic ledger migration（card M）: remap legacy states
+//       （QUEUED/CURRENT/RESOLVED -> PENDING/ARCHIVED）, add the
+//       isLatestPresented presentation pointer, then publish the newest
+//       eligible formal review to Current. Preserves identity / sha /
+//       verdict / order / supersession — never regenerates bundles.
 //
 // Local-only, deterministic, no network. Never commits/pushes/seals.
 
@@ -74,6 +83,9 @@ import {
 import {
   reviewQueueStatus,
   reviewQueueDir,
+  readReviewQueue,
+  migrateReviewQueue,
+  writeReviewQueue,
 } from "../src/governance/review-queue.mjs";
 import {
   publishHumanReport,
@@ -97,18 +109,20 @@ const mode = process.argv.includes("--status") ? "status"
           : process.argv.includes("--latest") ? "latest"
             : process.argv.includes("--promote") ? "promote"
               : process.argv.includes("--reconcile") ? "reconcile"
-                : process.argv.includes("--human-latest") ? "human-latest"
-                  : process.argv.includes("--human-publish") ? "human-publish" : null;
+                : process.argv.includes("--migrate") ? "migrate"
+                  : process.argv.includes("--human-latest") ? "human-latest"
+                    : process.argv.includes("--human-publish") ? "human-publish" : null;
 
 if (!mode) {
   console.error("usage: node scripts/gov-external-review-surface.mjs --status");
-  console.error("       node scripts/gov-external-review-surface.mjs --deliver <bundle.txt> [--evidence <evidence.json>] [--card <id>] [--method <m>] [--attempted-at <ISO>] [--force] [--current-card <id>]");
-  console.error("       node scripts/gov-external-review-surface.mjs --rotate --verdict PASS|REPAIR|HOLD [--card <id>] [--identity <hex>] [--date <YYYYMMDD>]");
+  console.error("       node scripts/gov-external-review-surface.mjs --deliver <bundle.txt> [--evidence <evidence.json>] [--card <id>] [--method <m>] [--attempted-at <ISO>] [--force] [--current-card <id>] [--identity <hex64>] [--sha256 <hex64>]");
+  console.error("       node scripts/gov-external-review-surface.mjs --rotate --verdict PASS|REPAIR|HOLD --card <id> --identity <hex> [--date <YYYYMMDD>]");
   console.error("       node scripts/gov-external-review-surface.mjs --export-for-card <cardId> [--cached-path <bundle.txt>]");
   console.error("       node scripts/gov-external-review-surface.mjs --queue");
   console.error("       node scripts/gov-external-review-surface.mjs --latest");
   console.error("       node scripts/gov-external-review-surface.mjs --promote");
   console.error("       node scripts/gov-external-review-surface.mjs --reconcile");
+  console.error("       node scripts/gov-external-review-surface.mjs --migrate");
   console.error("       node scripts/gov-external-review-surface.mjs --human-latest");
   console.error("       node scripts/gov-external-review-surface.mjs --human-publish <report.txt> --card <id> [--report-type operator-closeout|formal-review-bundle] [--identity <hex>] [--job <id>] [--requires-external-review true|false] [--current-review-state <s>] [--created-at <ISO>] [--published-at <ISO>] [--force]");
   process.exit(2);
@@ -229,8 +243,36 @@ if (mode === "promote" || mode === "reconcile") {
   if (r.promoted) {
     console.log(`promoted=${r.promoted.cardId} identity=${r.promoted.bundleIdentity.slice(0, 8)} deliveredAt=${r.promoted.deliveredAt}`);
   } else {
-    console.log(`promoted=(none) reason=${r.reason ?? "none_pending"}`);
+    console.log(`promoted=(none) reason=${r.reason ?? "already_current"}`);
   }
+  process.exit(0);
+}
+
+if (mode === "migrate") {
+  const qr = readReviewQueue(SURFACE);
+  if (!qr.ok) {
+    console.error(`migrate_failed: ${qr.reason}`);
+    process.exit(1);
+  }
+  const m = migrateReviewQueue(qr.queue);
+  if (!m.ok) {
+    console.error(`migrate_failed: ${m.reason}`);
+    process.exit(1);
+  }
+  const w = writeReviewQueue(m.queue, { surfaceDir: SURFACE });
+  if (!w.ok) {
+    console.error(`migrate_failed: ${w.reason}`);
+    process.exit(1);
+  }
+  console.log(`migrated=${m.migrated} entries=${m.queue.entries.length}`);
+  // publish the newest eligible formal review to Current（card M presentation
+  // pointer; recovery-safe）.
+  const rec = reconcileReviewQueue({ surfaceDir: SURFACE });
+  if (!rec.ok) {
+    console.error(`migrate_publish_failed: ${rec.reason}`);
+    process.exit(1);
+  }
+  console.log(`presented=${rec.promoted ? `${rec.promoted.cardId} ${rec.promoted.bundleIdentity.slice(0, 8)}` : "(none)"}`);
   process.exit(0);
 }
 
@@ -332,13 +374,23 @@ if (mode === "deliver") {
     console.error(`deliver_forced valid=false（validator: ${check.errors.join(";")}）`);
   }
   const txt = readFileSync(bp, "utf8");
-  const identity = txt.match(/^REVIEW_BUNDLE_IDENTITY: ([0-9a-f]{64})$/m)?.[1] ?? null;
+  let identity = txt.match(/^REVIEW_BUNDLE_IDENTITY: ([0-9a-f]{64})$/m)?.[1] ?? null;
   const shaLines = txt.split("\n");
   const shaLine = [...shaLines].reverse().find((l) => l.startsWith("REVIEW_BUNDLE_SHA256:"));
-  const sha = shaLine ? shaLine.split(":")[1]?.trim() : null;
+  let sha = shaLine ? shaLine.split(":")[1]?.trim() : null;
+  // forced（transition）delivery of a pre-convention bundle that carries no
+  // identity footer: the operator supplies the content identities explicitly
+  //（deterministic; e.g. sha256 of the bundle bytes）. Never guessed.
   if (!identity || !sha) {
-    console.error("deliver_blocked: bundle identity/sha256 unreadable");
-    process.exit(1);
+    const idArg = arg("--identity", null);
+    const shaArg = arg("--sha256", null);
+    const hex64 = /^[0-9a-f]{64}$/;
+    if (!force || !idArg || !shaArg || !hex64.test(idArg) || !hex64.test(shaArg)) {
+      console.error("deliver_blocked: bundle identity/sha256 unreadable — supply --force --identity <hex64> --sha256 <hex64> for a pre-convention bundle");
+      process.exit(1);
+    }
+    identity = identity ?? idArg;
+    sha = sha ?? shaArg;
   }
   const parsedSup = supersedesFromBundleText(txt);
   if (parsedSup.error) {
@@ -392,11 +444,11 @@ if (mode === "deliver") {
 
 if (mode === "rotate") {
   const verdict = arg("--verdict", null);
-  const card = arg("--card", "CARD");
-  const identity = arg("--identity", "unknown");
+  const card = arg("--card", null);
+  const identity = arg("--identity", null);
   const dateStr = arg("--date", null);
-  if (!verdict || !["PASS", "REPAIR", "HOLD", "PENDING", "SUPERSEDED"].includes(verdict)) {
-    console.error("usage: node scripts/gov-external-review-surface.mjs --rotate --verdict PASS|REPAIR|HOLD [--card <id>] [--identity <hex>] [--date <YYYYMMDD>]");
+  if (!verdict || !["PASS", "REPAIR", "HOLD"].includes(verdict) || !card || !identity) {
+    console.error("usage: node scripts/gov-external-review-surface.mjs --rotate --verdict PASS|REPAIR|HOLD --card <id> --identity <hex> [--date <YYYYMMDD>]");
     process.exit(2);
   }
   const r = rotateExternalReviewSurface({ surfaceDir: SURFACE, cardId: card, identity, verdict, dateStr });
@@ -404,12 +456,8 @@ if (mode === "rotate") {
     console.error(`rotate_failed: ${r.reason}`);
     process.exit(1);
   }
-  console.log(`rotated=${r.archived.length} cleared=${r.cleared}`);
+  console.log(`rotated=${r.archived.length} verdict=${verdict}`);
   for (const p of r.archived) console.log(`  archive: ${p}`);
-  if (r.promoted) {
-    console.log(`promoted=${r.promoted.cardId} identity=${r.promoted.bundleIdentity.slice(0, 8)} deliveredAt=${r.promoted.deliveredAt}`);
-  } else {
-    console.log(`promoted=(none)${r.promotionReason ? ` (${r.promotionReason})` : ""}`);
-  }
+  console.log("note: verdict applied to the durable ledger entry; Current unchanged (presentation independent of verdicts)");
   process.exit(0);
 }

@@ -1,0 +1,49 @@
+{
+  "schema": "autoloop.dogfood-evidence/v1",
+  "cardId": "CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1",
+  "runAt": "2026-08-17T11:20:00.000Z",
+  "verdict": "PASS",
+  "holdCode": null,
+  "holdReason": null,
+  "acceptance": {
+    "A_CURRENT_IDENTITY": "2d2931e4357385f6cc2afcd6207f9423adcedbb741e033834cb97aab6abafff2",
+    "B_CURRENT_IDENTITY": "b662e883789b88069403666f8cf4dd8f47fb3a0d183ac8f29148bc4e1d62dd5c",
+    "C_CURRENT_IDENTITY": "eb52c80442ef172f2169d823e3d11521e2daff072bc6524ed2aa3b58e926b0e9",
+    "A_TO_B_CHANGED": "YES",
+    "B_TO_C_CHANGED": "YES",
+    "NO_VERDICT_REQUIRED_FOR_CURRENT_ADVANCEMENT": "YES",
+    "PC1_PRESENTED_WITHOUT_OLD_PASS": "YES"
+  },
+  "dogfood": {
+    "A": { "cardId": "AUTOLOOP-REVART-LC1-B2", "identity": "2d2931e4357385f6cc2afcd6207f9423adcedbb741e033834cb97aab6abafff2", "bundle": "docs/pi-graph-output/revart-lc1-b2/card-closeout-bundle-20260816-2d2931e4.txt", "completionOrder": 6 },
+    "B": { "cardId": "RBD-LIFECYCLE-DOGFOOD", "identity": "b662e883789b88069403666f8cf4dd8f47fb3a0d183ac8f29148bc4e1d62dd5c", "bundle": "docs/pi-graph-output/review-bundle-review-section-convergence-1/dogfood/dogfood-no-source-bundle.txt", "completionOrder": 7 },
+    "C": { "cardId": "RBD-RESEAL-DOGFOOD", "identity": "eb52c80442ef172f2169d823e3d11521e2daff072bc6524ed2aa3b58e926b0e9", "bundle": "docs/pi-graph-output/review-bundle-review-section-convergence-1/dogfood/dogfood-reseal-lineage-bundle.txt", "completionOrder": 8 },
+    "D": { "cardId": "PARENT_TO_CHILD_CONTEXT_AND_EVIDENCE_INHERITANCE_CONVERGED", "identity": "fa0fd10b8f582a2a694e64062272ddfe9dfaf1d242c8d788e3f4c7c9f0409f71", "bundle": "docs/pi-graph-output/autoloop-decomp-opt1-pc1/card-closeout-bundle-20260817-decomp-opt1-pc1.txt", "completionOrder": 9, "deliverySeam": "--force --identity/--sha256 (pre-convention closeout)" }
+  },
+  "lifecycleObservations": [
+    { "step": 1, "op": "A completes (no verdicts anywhere)", "result": "Current = A (2d2931e4) immediately" },
+    { "step": 2, "op": "B completes while A PENDING", "result": "Current = B (b662e883); A stayed durable PENDING in the ledger; A_TO_B_CHANGED=YES" },
+    { "step": 3, "op": "C completes while A/B PENDING", "result": "Current = C (eb52c804); A/B stayed PENDING; B_TO_C_CHANGED=YES; NO_VERDICT_REQUIRED_FOR_CURRENT_ADVANCEMENT=YES" },
+    { "step": 4, "op": "PASS A via ledger verdict (--rotate, identity-bound)", "result": "A -> REVIEWED + archived (2 files); Current unchanged (C)" },
+    { "step": 5, "op": "PASS B via ledger verdict", "result": "B -> REVIEWED + archived; Current unchanged (C)" },
+    { "step": 6, "op": "D = PC1 completes (forced pre-convention delivery)", "result": "Current = PARENT_TO_CHILD_CONTEXT_AND_EVIDENCE_INHERITANCE_CONVERGED (fa0fd10b) — byte-identical to the PC1 closeout bundle; no old review PASS required" }
+  ],
+  "ledgerFinalState": {
+    "PENDING": ["RBD-RESEAL-DOGFOOD (order 8)", "PARENT_TO_CHILD_CONTEXT_AND_EVIDENCE_INHERITANCE_CONVERGED (order 9, presented)"],
+    "REVIEWED": ["AUTOLOOP-REVART-LC1-B2 (PASS)", "RBD-LIFECYCLE-DOGFOOD (PASS)"],
+    "ARCHIVED": ["AUTOLOOP-CBM-LIVE-INTEGRATION-1", "AUTOLOOP-REVIEW-LIVE-CURRENT-CONVERGENCE-1", "REVIEW-AUTO-GENERATION-AND-DELIVERY-1", "REPORT_B", "REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1"],
+    "presented": "PARENT_TO_CHILD_CONTEXT_AND_EVIDENCE_INHERITANCE_CONVERGED (isLatestPresented=true)"
+  },
+  "migration": {
+    "op": "node scripts/gov-external-review-surface.mjs --migrate",
+    "entriesMigrated": 5,
+    "mapping": "QUEUED->PENDING, CURRENT->PENDING, RESOLVED->ARCHIVED, ARCHIVED->ARCHIVED",
+    "presentedAfter": "REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1 ff96a878 (newest eligible by completion/publication order)",
+    "preserved": "bundle identity, sha, verdict, order, supersession — no bundles regenerated"
+  },
+  "verification": {
+    "governanceSuite": { "tests": 502, "pass": 494, "fail": 8, "baselineParity": true },
+    "fullSuite": { "tests": 1922, "pass": 1875, "fail": 47, "baselineFail": 65, "newFailures": 0 },
+    "newAcceptanceSuite": { "file": "test/governance/test-current-latest-presentation-semantics.mjs", "tests": 17, "pass": 17, "fail": 0 }
+  }
+}

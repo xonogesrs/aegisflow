@@ -44,6 +44,7 @@ import {
   parseRepairLineage,
   supersedesFromBundleText,
   deliverToExternalReviewSurface,
+  readExternalReviewDeliveryRecord,
 } from "../../src/governance/review-bundle.mjs";
 import { humanReportTextPath } from "../../src/governance/human-report.mjs";
 
@@ -481,7 +482,7 @@ test("Q14. LatestHuman receives the new-format report bytes verbatim", { timeout
 
 // ── Q15 — Current/Queue authority regression（R）───────────────────────────
 
-test("Q15. Current/Queue authority unchanged: unresolved occupant never overwritten; queued deliveries stay queued", { timeout: 30000 }, async () => {
+test("Q15. Current/Queue presentation semantics: a new completion PUBLISHES over an unresolved occupant; the old review stays durable PENDING", { timeout: 30000 }, async () => {
   const surfA = join(ROOT, "q15-current");
   mkdirSync(surfA, { recursive: true });
   const evA = evFile("q15-a.json", JSON.stringify({ a: 1 }));
@@ -493,9 +494,9 @@ test("Q15. Current/Queue authority unchanged: unresolved occupant never overwrit
   });
   const ra = await gate(sourceA, { surfaceDir: surfA });
   assert.equal(ra.final, "PASS", "A delivered");
-  const currentBundle = readFileSync(join(surfA, "review-bundle.txt"), "utf8");
   assert.ok(existsSync(join(surfA, "delivery.json")), "Current/delivery.json present");
-  // B is a DIFFERENT card -> queued behind the unresolved occupant, never an overwrite
+  // B is a DIFFERENT card -> PUBLISHES to Current（card D1: completion ->
+  // Current = that card; no verdict gate）; A stays durable PENDING.
   const evB = evFile("q15-b.json", JSON.stringify({ b: 1 }));
   const sourceB = mkSource({
     task: { cardId: "RBD-Q15B", cardTitle: "Queue B", cardType: "implementation" },
@@ -504,12 +505,17 @@ test("Q15. Current/Queue authority unchanged: unresolved occupant never overwrit
     evidence: [{ path: evB, sha256: shaFile(evB) }],
   });
   const rb = await gate(sourceB, { surfaceDir: surfA });
-  assert.equal(rb.final, "PASS", "B delivery is a SUCCESS（queued, not surface_occupied failure）");
-  assert.equal(readFileSync(join(surfA, "review-bundle.txt"), "utf8"), currentBundle, "unresolved Current occupant byte-identical");
+  assert.equal(rb.final, "PASS", "B delivery is a SUCCESS（published）");
+  const rec = readExternalReviewDeliveryRecord(join(surfA, "delivery.json"));
+  assert.equal(rec.state.delivery.reviewBundleIdentity, rb.bundle.identity, "Current presents B");
   const queuePath = join(dirname(surfA), "Queue", "queue.json");
-  assert.ok(existsSync(queuePath), "queue persisted");
+  assert.ok(existsSync(queuePath), "ledger persisted");
   const queue = JSON.parse(readFileSync(queuePath, "utf8"));
-  assert.ok(JSON.stringify(queue).includes("RBD-Q15B"), "B recorded as pending in the queue");
+  assert.ok(JSON.stringify(queue).includes("RBD-Q15B"), "B recorded in the ledger");
+  const aEntry = queue.entries.find((e) => e.cardId === "RBD-Q15A");
+  assert.ok(aEntry, "A ledger entry exists");
+  assert.equal(aEntry.state, "PENDING", "A remains an unresolved pending review");
+  assert.equal(aEntry.isLatestPresented, false, "A not presented");
 });
 
 // ── Q16 — review generation regression ────────────────────────────────────

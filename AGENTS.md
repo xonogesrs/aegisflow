@@ -25,10 +25,13 @@ When you need to know AutoLoop state, read the structured authoritative
 source directly. Do not answer a state question by grepping the filesystem
 for a status string.
 
-- "Is a card AWAITING_EXTERNAL_REVIEW / what's its current review status?"
-  → read `src/governance/review-bundle.mjs`'s `currentSurfaceReviewStatus()`
-  (surface = `~/Desktop/AutoLoop-Review/Current/delivery.json`, or read that
-  file directly — it holds at most one card at a time).
+- "Is a card AWAITING_EXTERNAL_REVIEW / what's its review status?"
+  → resolve the DURABLE LEDGER entry: `src/governance/review-queue.mjs`
+  `readReviewQueue()` + `findEntry`（or
+  `src/governance/review-bundle.mjs` `resolveAuthoritativeExternalReviewRecord`
+  — ledger-first）. The Current/ delivery record is a PRESENTATION projection
+  that may hold a NEWER card; it is never the verdict authority for an
+  arbitrary card.
 - "What's a card's closeout state / requiresReview / evidence?"
   → read `src/governance/closeout-state.mjs`'s `readCloseoutState()` against
   that card's own `outDir`.
@@ -36,17 +39,25 @@ for a status string.
   equivalent module under `src/governance/`, `src/admission/`, or
   `src/budget/` — read the module, don't grep for its output.
 
-## Review routing (REVART-LC1 — pending queue + automatic handoff)
+## Review routing (CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1)
 
-Three mechanically distinct questions, three distinct authoritative surfaces
+Mechanically distinct questions, distinct authoritative surfaces
 （`scripts/gov-external-review-surface.mjs --status` prints all of them）:
 
-- **"What review needs action NOW?"** → `~/Desktop/AutoLoop-Review/Current/`
-  (`delivery.json` holds the single occupant awaiting a verdict; an
-  unresolved occupant is never overwritten).
-- **"What other reviews are waiting?"** → the pending queue:
-  `~/Desktop/AutoLoop-Review/Queue/queue.json`（`--queue`）— every additional
-  unresolved review, durable, FIFO-ordered.
+- **"What is the LATEST COMPLETED formal review?"** →
+  `~/Desktop/AutoLoop-Review/Current/` — the presentation surface. A task
+  completion ALWAYS publishes its review to Current immediately; no verdict
+  on any previous review is required, and an unresolved review NEVER blocks
+  publication（publish-always）. The latest published entry carries
+  `isLatestPresented: true` in the ledger.
+- **"What reviews are unresolved / what is the review order?"** → the durable
+  review LEDGER: `~/Desktop/AutoLoop-Review/Queue/queue.json`（`--queue`）—
+  every review（PENDING awaiting verdict, REVIEWED/REPAIR/HOLD verdicts,
+  ARCHIVED legacy）with ordering, supersession lineage and the presentation
+  pointer. Verdicts bind the LEDGER entry by cardId + bundleIdentity +
+  bundleSha256（`--rotate --verdict PASS|REPAIR|HOLD --card <id>
+  --identity <hex>`）— the reviewed card does NOT need to be Current, and a
+  verdict NEVER changes Current.
 - **"What is the NEWEST formal review generated?"** → the Latest pointer:
   `~/Desktop/AutoLoop-Review/Queue/latest.json`（`--latest`）— navigation
   ONLY, never verdict authority.
@@ -54,16 +65,17 @@ Three mechanically distinct questions, three distinct authoritative surfaces
   report?"** → the Latest Human Report:
   `~/Desktop/AutoLoop-Review/LatestHuman/latest-report.txt` +
   `latest-report.json`（`--human-latest`）— the newest completed work report
-  （formal review bundle OR operator closeout）. LATEST != CURRENT: Current
-  may hold an unresolved review while the human report already reflects newer
-  completed work. Never use `Current/` as a generic "latest report" lookup.
+  （formal review bundle OR operator closeout）. LATEST_HUMAN != CURRENT:
+  operator closeouts update LatestHuman and never touch Current; Current is
+  the newest completed FORMAL review only.
 
-Promotion: when the Current occupant reaches a terminal verdict and is
-rotated, the oldest eligible pending review auto-promotes to Current
-（`rotateExternalReviewSurface`; recovery entry `--promote` / `--reconcile`）.
-The harness `~/Desktop/AutoLoop-Review/Latest/review.txt` remains the
-execution-review domain（Domain A）— do not conflate it with the review-queue
-Latest pointer or the Latest Human Report.
+Recovery: after a crash（ledger persisted but Current publish lost）,
+`--promote` / `--reconcile` re-publish the NEWEST eligible formal review to
+Current（never an older one）. `--migrate` deterministically migrates legacy
+ledger states（QUEUED/CURRENT/RESOLVED -> PENDING/ARCHIVED）and publishes the
+newest eligible review. The harness `~/Desktop/AutoLoop-Review/Latest/
+review.txt` remains the execution-review domain（Domain A）— do not conflate
+it with the review-queue Latest pointer or the Latest Human Report.
 
 ## Verification scope (hard rule)
 

@@ -42,6 +42,7 @@ import {
   writeExternalReviewDeliveryRecord,
   readExternalReviewDeliveryRecord,
 } from "../../src/governance/review-bundle.mjs";
+import { readReviewQueue, writeReviewQueue, findEntry } from "../../src/governance/review-queue.mjs";
 import {
   CLOSEOUT_STATE_SCHEMA,
   CLOSEOUT_STAGES,
@@ -145,6 +146,19 @@ function applyVerdictToSurface(surfaceDir, input) {
     ...input,
   });
   const written = writeExternalReviewDeliveryRecord({ outDir: surfaceDir, state: applied.state, cardId: rec.cardId, fileName: "delivery.json" });
+  // CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1: the DURABLE LEDGER entry
+  // is the authoritative review record — the surface delivery record is a
+  // presentation projection. Apply the same verdict to the ledger entry so
+  // the final closeout gate resolves authority from the ledger.
+  const qr = readReviewQueue(surfaceDir);
+  assert.equal(qr.ok, true, `ledger readable (${qr.reason ?? ""})`);
+  const entry = findEntry(qr.queue, rec.cardId, surfaceDir);
+  assert.ok(entry, `ledger entry exists for ${rec.cardId}`);
+  entry.verdict = applied.state.verdict;
+  entry.state = applied.state.verdict.verdict === "PASS" ? "REVIEWED" : applied.state.verdict.verdict;
+  entry.updatedAt = new Date().toISOString();
+  const wq = writeReviewQueue(qr.queue, { surfaceDir });
+  assert.equal(wq.ok, true, `ledger write ok (${wq.reason ?? ""})`);
   return { rec, applied, written };
 }
 
@@ -410,6 +424,12 @@ test("O. missing reviewer identity in authoritative record → rejected", { time
   forgedState.externalReviewStatus = "PASS";
   forgedState.verdict = { verdict: "PASS", reviewerIdentity: null, reviewedAt: "2026-08-15T00:00:00.000Z", bundleIdentity: state.closeout.bundleIdentity, bundleSha256: state.closeout.bundleSha256 };
   writeExternalReviewDeliveryRecord({ outDir: dir, state: forgedState, cardId, fileName: "delivery.json" });
+  // the authoritative LEDGER entry carries the same forged verdict fields
+  const qr = readReviewQueue(dir);
+  const entry = findEntry(qr.queue, cardId, dir);
+  entry.verdict = forgedState.verdict;
+  entry.state = "REVIEWED";
+  writeReviewQueue(qr.queue, { surfaceDir: dir });
   const r = assertFinalCardCloseout({ closeout: state.closeout, outDir, cardId, surfaceDir: dir, agentIdentity: stateFor(cardId).agentIdentity });
   assert.equal(r.ok, false);
   assert.equal(r.holdCode, "EXTERNAL_REVIEW_INVALID_VERDICT", `reviewer required (${r.holdCode})`);
@@ -427,6 +447,12 @@ test("P. missing reviewedAt in authoritative record → rejected", { timeout: 30
   forgedState.externalReviewStatus = "PASS";
   forgedState.verdict = { verdict: "PASS", reviewerIdentity: "external-reviewer", reviewedAt: null, bundleIdentity: state.closeout.bundleIdentity, bundleSha256: state.closeout.bundleSha256 };
   writeExternalReviewDeliveryRecord({ outDir: dir, state: forgedState, cardId, fileName: "delivery.json" });
+  // the authoritative LEDGER entry carries the same forged verdict fields
+  const qr = readReviewQueue(dir);
+  const entry = findEntry(qr.queue, cardId, dir);
+  entry.verdict = forgedState.verdict;
+  entry.state = "REVIEWED";
+  writeReviewQueue(qr.queue, { surfaceDir: dir });
   const r = assertFinalCardCloseout({ closeout: state.closeout, outDir, cardId, surfaceDir: dir, agentIdentity: stateFor(cardId).agentIdentity });
   assert.equal(r.ok, false);
   assert.equal(r.holdCode, "EXTERNAL_REVIEW_INVALID_VERDICT", `reviewedAt required (${r.holdCode})`);

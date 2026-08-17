@@ -27,7 +27,7 @@ import {
   currentReviewDelivery,
   REVIEW_BUNDLE_SOURCE_SCHEMA,
 } from "../../src/governance/review-bundle.mjs";
-import { reviewQueueStatus } from "../../src/governance/review-queue.mjs";
+import { reviewQueueStatus, readReviewQueue, writeReviewQueue, findEntry } from "../../src/governance/review-queue.mjs";
 
 let seq = 0;
 function freshSurface() {
@@ -85,10 +85,21 @@ function publish(surfaceDir, bundle) {
 }
 
 function applyPass(surfaceDir, reviewer = "external-reviewer") {
+  // CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1: the DURABLE LEDGER entry
+  // is the authoritative review record; apply the verdict there (and keep the
+  // surface delivery record in sync for the presented trio).
   const rec = readExternalReviewDeliveryRecord(join(surfaceDir, "delivery.json"));
   assert.equal(rec.ok, true, JSON.stringify(rec.errors));
   const applied = applyExternalReviewVerdict(rec.state, { verdict: "PASS", bundleIdentity: rec.state.delivery.reviewBundleIdentity, bundleSha256: rec.state.delivery.reviewBundleSha256, reviewerIdentity: reviewer, reviewedAt: "2026-08-09T01:00:00.000Z" });
   assert.equal(applied.ok, true, JSON.stringify(applied.errors));
+  const q = readReviewQueue(surfaceDir);
+  assert.equal(q.ok, true);
+  const entry = findEntry(q.queue, rec.cardId, surfaceDir);
+  assert.ok(entry, `ledger entry exists for ${rec.cardId}`);
+  entry.verdict = applied.state.verdict;
+  entry.state = "REVIEWED";
+  entry.updatedAt = new Date().toISOString();
+  writeReviewQueue(q.queue, { surfaceDir });
   return writeExternalReviewDeliveryRecord({ outDir: surfaceDir, state: applied.state, cardId: rec.cardId, fileName: "delivery.json" });
 }
 
@@ -102,38 +113,42 @@ test("NEG-RLD1: no new bundle -> NO_NEW_REVIEW_BUNDLE (never fallback to old COM
   } finally { rmSync(ctx.root, { recursive: true, force: true }); }
 });
 
-test("NEG-RLD2: Current card != bundle CARD_ID -> STALE_CARD_IDENTITY (the incident)", () => {
+test("NEG-RLD2: the reviewed card has no review -> NO_NEW_REVIEW_BUNDLE (never substitute another card; the incident)", () => {
   const ctx = freshSurface();
   try {
     const a = mintBundle("AUTOLOOP-TA2", "Task A", ctx.bundles);
-    publish(ctx.surface, a); // TA-2 generation occupies the surface (unresolved — verdict never applied)
+    publish(ctx.surface, a); // TA-2 generation is presented (unresolved — verdict never applied)
+    // The controller asks for TA-3's review: TA-3 has NO ledger entry -> the
+    // export MUST NOT substitute TA-2（the RLD2 incident）. The selector is
+    // ledger-bound, never a surface/newest-file discovery.
     const r = currentReviewDelivery({ surfaceDir: ctx.surface, currentCardId: "AUTOLOOP-TA3" });
     assert.equal(r.ok, false);
-    assert.equal(r.holdCode, "STALE_CARD_IDENTITY");
-    assert.ok(r.reason.includes("AUTOLOOP-TA2"), r.reason);
+    assert.equal(r.holdCode, "NO_NEW_REVIEW_BUNDLE");
+    assert.ok(!r.bundle, "no bundle may be returned");
   } finally { rmSync(ctx.root, { recursive: true, force: true }); }
 });
 
-test("NEG-RLD3: Current identity != delivery source identity -> fail closed", () => {
+test("NEG-RLD3: cached path points to a DIFFERENT card's bundle -> STALE_CARD_IDENTITY (fail closed)", () => {
   const ctx = freshSurface();
   try {
-    const a = mintBundle("AUTOLOOP-TA2", "Task A", ctx.bundles);
+    const a = mintBundle("AUTOLOOP-TA3", "Current Card", ctx.bundles);
     publish(ctx.surface, a);
     // the export uses a cached path to a DIFFERENT card's bundle
-    const b = mintBundle("AUTOLOOP-TA3", "Task B", ctx.bundles);
+    const b = mintBundle("AUTOLOOP-TA2", "Task A", ctx.bundles);
     const r = currentReviewDelivery({ surfaceDir: ctx.surface, currentCardId: "AUTOLOOP-TA3", cachedPath: b.path });
     assert.equal(r.ok, false);
     assert.equal(r.holdCode, "STALE_CARD_IDENTITY"); // card identity mismatch
   } finally { rmSync(ctx.root, { recursive: true, force: true }); }
 });
 
-test("NEG-RLD4: copy/export SHA change -> SURFACE_SHA_MISMATCH (fail closed)", () => {
+test("NEG-RLD4: exported artifact SHA change -> SURFACE_SHA_MISMATCH (fail closed)", () => {
   const ctx = freshSurface();
   try {
     const a = mintBundle("AUTOLOOP-TA3", "Current Card", ctx.bundles);
     publish(ctx.surface, a);
-    // tamper the surface bundle AFTER the delivery record was written
-    const bp = join(ctx.surface, "review-bundle.txt");
+    // tamper the DURABLE LEDGER artifact（the file the verified selector
+    // dereferences — never a trust-input path）
+    const bp = a.path;
     const text = readFileSync(bp, "utf8");
     writeFileSync(bp, text.replace("RLD2 test bundle", "RLD2 TAMPERED bundle"), "utf8");
     const r = currentReviewDelivery({ surfaceDir: ctx.surface, currentCardId: "AUTOLOOP-TA3" });
@@ -163,7 +178,8 @@ test("NEG-RLD6: card B not closed out -> never deliver card A", () => {
     // Card B has NO bundle; the delivery must not return card A
     const r = currentReviewDelivery({ surfaceDir: ctx.surface, currentCardId: "AUTOLOOP-TA3" });
     assert.equal(r.ok, false);
-    assert.equal(r.holdCode, "STALE_CARD_IDENTITY");
+    assert.equal(r.holdCode, "NO_NEW_REVIEW_BUNDLE");
+    assert.ok(!r.bundle, "never card A");
   } finally { rmSync(ctx.root, { recursive: true, force: true }); }
 });
 
@@ -182,11 +198,13 @@ test("NEG-RLD7: crash/resume must not roll back to the previous authoritative ge
   } finally { rmSync(ctx.root, { recursive: true, force: true }); }
 });
 
-test("NEG-RLD8: stale cached path points to old bundle -> identity check rejects", () => {
+test("NEG-RLD8: stale cached path points to the old card's bundle -> identity check rejects", () => {
   const ctx = freshSurface();
   try {
     const a = mintBundle("AUTOLOOP-TA2", "Task A", ctx.bundles);
-    publish(ctx.surface, a);
+    const c = mintBundle("AUTOLOOP-TA3", "Current Card", ctx.bundles);
+    publish(ctx.surface, c);
+    // the cached path is a stale attachment of the OTHER card's bundle
     const r = currentReviewDelivery({ surfaceDir: ctx.surface, currentCardId: "AUTOLOOP-TA3", cachedPath: a.path });
     assert.equal(r.ok, false);
     assert.equal(r.holdCode, "STALE_CARD_IDENTITY");
@@ -210,16 +228,16 @@ test("NEG-RLD9: partial rotation -> fail closed, no fallback", () => {
   } finally { rmSync(ctx.root, { recursive: true, force: true }); }
 });
 
-test("NEG-RLD10: delivery receipt vs actual delivered SHA mismatch -> fail closed", () => {
+test("NEG-RLD10: ledger record sha vs actual artifact sha divergence -> fail closed", () => {
   const ctx = freshSurface();
   try {
     const a = mintBundle("AUTOLOOP-TA3", "Current Card", ctx.bundles);
     publish(ctx.surface, a);
-    // rewrite the delivery record claiming a DIFFERENT sha than the file
-    const rec = readExternalReviewDeliveryRecord(join(ctx.surface, "delivery.json"));
-    const forged = structuredClone(rec.state);
-    forged.delivery.reviewBundleSha256 = "0".repeat(64);
-    writeExternalReviewDeliveryRecord({ outDir: ctx.surface, state: forged, cardId: rec.cardId, fileName: "delivery.json" });
+    // rewrite the LEDGER entry claiming a DIFFERENT sha than the artifact
+    const q = readReviewQueue(ctx.surface);
+    const entry = findEntry(q.queue, "AUTOLOOP-TA3", ctx.surface);
+    entry.bundleSha256 = "0".repeat(64);
+    writeReviewQueue(q.queue, { surfaceDir: ctx.surface });
     const r = currentReviewDelivery({ surfaceDir: ctx.surface, currentCardId: "AUTOLOOP-TA3" });
     assert.equal(r.ok, false);
     assert.equal(r.holdCode, "SURFACE_SHA_MISMATCH");
@@ -269,21 +287,22 @@ test("positive: publish is card-identity guarded (delivery_card_id_mismatch)", (
   } finally { rmSync(ctx.root, { recursive: true, force: true }); }
 });
 
-test("positive: occupied-by-different-card QUEUES（REVART-LC1）; never overwrites the occupant", () => {
+test("positive: occupied-by-different-card PUBLISHES to Current（publish-always）; old card stays durable PENDING", () => {
   const ctx = freshSurface();
   try {
     const a = mintBundle("AUTOLOOP-TA2", "Task A", ctx.bundles);
     publish(ctx.surface, a);
     const b = mintBundle("AUTOLOOP-TA3", "Current Card", ctx.bundles);
     const r = deliverToExternalReviewSurface({ bundlePath: b.path, state: buildExternalReviewState({ bundle: { identity: b.identity, sha256: b.sha256 }, bundlePath: b.path, deliveryAttempted: true, deliveryMethod: "external-review-surface", attemptedAt: "2026-08-09T00:00:00.000Z" }), source: { task: { cardId: b.cardId } }, outDir: ctx.surface, surfaceDir: ctx.surface, currentCardId: "AUTOLOOP-TA3" });
-    assert.equal(r.attempted, true, "different-card delivery is a SUCCESS（queued）");
-    assert.equal(r.queued, true, "queued behind the occupant（T2）");
-    // the occupant trio is untouched — the controller's current card is the
-    // surface occupant, NOT the queued bundle（identity guard held）
+    assert.equal(r.attempted, true, "different-card delivery is a SUCCESS（published）");
+    assert.equal(r.queued, undefined, "never queued — every completion publishes to Current");
+    // Current presents the NEWEST completion (TA3)
     const rec = readExternalReviewDeliveryRecord(join(ctx.surface, "delivery.json"));
-    assert.equal(rec.cardId, "AUTOLOOP-TA2", "surface occupant unchanged");
+    assert.equal(rec.cardId, "AUTOLOOP-TA3", "surface presents TA3");
+    // TA2 stays durable PENDING in the ledger（card B2/C）
     const st = reviewQueueStatus(ctx.surface);
     assert.equal(st.ok, true);
-    assert.equal(st.pending.some((e) => e.cardId === "AUTOLOOP-TA3"), true, "queued entry exists");
+    assert.equal(st.pending.some((e) => e.cardId === "AUTOLOOP-TA2"), true, "TA2 remains pending");
+    assert.equal(st.queue.entries.find((e) => e.cardId === "AUTOLOOP-TA2").isLatestPresented, false, "TA2 not presented");
   } finally { rmSync(ctx.root, { recursive: true, force: true }); }
 });

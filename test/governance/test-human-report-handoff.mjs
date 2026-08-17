@@ -157,7 +157,7 @@ test("N1. formal review delivery updates Latest Human Report", () => {
 
 // ── 2. QUEUED review still updates Latest ─────────────────────────────────
 
-test("N2. queued formal review still updates Latest Human Report", () => {
+test("N2. a new completion（published to Current）updates Latest Human Report", () => {
   const ctx = freshRoot();
   try {
     const a = mintBundle("HRH-N2A", "Task A", ctx.bundles);
@@ -165,32 +165,41 @@ test("N2. queued formal review still updates Latest Human Report", () => {
     assert.equal(deliver(ctx, a).attempted, true);
     const d2 = deliver(ctx, b);
     assert.equal(d2.attempted, true, JSON.stringify(d2));
-    assert.equal(d2.queued, true, "B must queue behind the unresolved A");
+    assert.equal(d2.queued, undefined, "B publishes（publish-always）");
     assert.equal(d2.humanReportError, null, JSON.stringify(d2.humanReportError));
     const latest = humanLatest(ctx);
-    assert.equal(latest.cardId, "HRH-N2B", "Latest = newest generated review (B), not the Current occupant (A)");
+    assert.equal(latest.cardId, "HRH-N2B", "Latest = newest generated review (B)");
     assert.equal(latest.reportIdentity, b.identity);
     const st = reviewQueueStatus(ctx.surface);
-    assert.equal(st.pending.length, 1, "B sits in the queue");
-    assert.equal(st.pending[0].cardId, "HRH-N2B");
+    assert.equal(st.pending.length, 2, "A and B unresolved");
+    assert.equal(st.current?.cardId, "HRH-N2B", "B presented");
   } finally { rmSync(ctx.root, { recursive: true, force: true }); }
 });
 
 // ── 3. Unresolved Current remains unchanged ───────────────────────────────
 
-test("N3. unresolved Current authority is untouched by Latest publication", () => {
+test("N3. Latest Human publication never disturbs Current", () => {
   const ctx = freshRoot();
   try {
     const a = mintBundle("HRH-N3A", "Task A", ctx.bundles);
-    const b = mintBundle("HRH-N3B", "Task B", ctx.bundles);
     assert.equal(deliver(ctx, a).attempted, true);
     const aShaBefore = shaFile(join(ctx.surface, "review-bundle.txt"));
-    assert.equal(deliver(ctx, b).queued, true);
+    // a Latest Human publication（operator closeout）must not touch Current
+    const reportPath = writeOperatorReport(ctx, "HRH-N3C", "REPORT C — operator closeout\n");
+    const pub = publishHumanReport({
+      cardId: "HRH-N3C",
+      reportType: "operator-closeout",
+      sourcePath: reportPath,
+      requiresExternalReview: false,
+      surfaceDir: ctx.surface,
+    });
+    assert.equal(pub.ok, true, JSON.stringify(pub));
     const occ = surfaceOccupant(ctx);
-    assert.equal(occ.cardId, "HRH-N3A", "Current occupant unchanged");
+    assert.equal(occ.cardId, "HRH-N3A", "Current occupant unchanged by Latest publication");
     assert.equal(occ.state.externalReviewStatus, "AWAITING_EXTERNAL_REVIEW");
     assert.equal(shaFile(join(ctx.surface, "review-bundle.txt")), aShaBefore, "Current bundle bytes unchanged");
     assert.equal(occ.state.delivery.reviewBundleIdentity, a.identity);
+    assert.equal(humanLatest(ctx).cardId, "HRH-N3C", "Latest = operator closeout");
   } finally { rmSync(ctx.root, { recursive: true, force: true }); }
 });
 
@@ -316,7 +325,7 @@ test("N7d. tampered bytes fail closed on read", () => {
 
 // ── 8. delivery + queue regression（smoke inside this suite）───────────────
 
-test("N8. formal delivery still honors Current/Queue semantics", () => {
+test("N8. formal delivery publishes to Current; Latest Human = newest completion", () => {
   const ctx = freshRoot();
   try {
     const a = mintBundle("HRH-N8A", "Task A", ctx.bundles);
@@ -325,18 +334,18 @@ test("N8. formal delivery still honors Current/Queue semantics", () => {
     const d1 = deliver(ctx, a);
     assert.equal(d1.attempted, true);
     assert.equal(d1.queued, undefined);
-    assert.equal(deliver(ctx, b).queued, true);
+    assert.equal(deliver(ctx, b).attempted, true, "B publishes over unresolved A");
     assert.equal(deliver(ctx, b).attempted, true, "idempotent re-delivery of B");
-    assert.equal(deliver(ctx, c).queued, true);
+    assert.equal(deliver(ctx, c).attempted, true, "C publishes");
     const st = reviewQueueStatus(ctx.surface);
-    assert.equal(st.pending.length, 2, "B and C pending");
+    assert.equal(st.pending.length, 3, "A/B/C unresolved");
     const latest = readLatestPointer(ctx.surface);
     assert.ok(latest.ok, "queue Latest pointer still navigates");
-    assert.equal(latest.latest.cardId, "HRH-N8C", "queue Latest pointer = newest formal review (unchanged semantics)");
+    assert.equal(latest.latest.cardId, "HRH-N8C", "queue Latest pointer = newest formal review");
     const occ = surfaceOccupant(ctx);
-    assert.equal(occ.cardId, "HRH-N8A");
+    assert.equal(occ.cardId, "HRH-N8C", "Current = newest completion");
     const human = humanLatest(ctx);
-    assert.equal(human.cardId, "HRH-N8C", "Latest Human = C while Current = A");
+    assert.equal(human.cardId, "HRH-N8C", "Latest Human = C");
   } finally { rmSync(ctx.root, { recursive: true, force: true }); }
 });
 
@@ -370,22 +379,23 @@ test("N9/N10. A→B→C live sequence: Latest follows work, Current preserved, u
     const idA = latest.reportIdentity;
     const shaA = latest.sha256;
 
-    // G3 Run B while Current unresolved（simulate: formal bundle B queued）
+    // G3 Run B: a formal review completes while the previous card is
+    // unresolved — it PUBLISHES to Current（publish-always）; Latest Human = B
     const cur = mintBundle("REPORT_CURRENT", "Unresolved Current A", ctx.bundles);
     assert.equal(deliver(ctx, cur).attempted, true, "Current occupied by unresolved review");
     const bBundle = mintBundle("REPORT_B", "Task B (formal)", ctx.bundles);
     const dB = deliver(ctx, bBundle, { jobId: "REPORT_B.g0001" });
     assert.equal(dB.attempted, true, JSON.stringify(dB));
-    assert.equal(dB.queued, true, "B queues behind unresolved Current");
+    assert.equal(dB.queued, undefined, "B publishes（publish-always; no verdict gate）");
     latest = humanLatest(ctx);
-    assert.equal(latest.cardId, "REPORT_B", "G3: Latest = B while Current untouched");
+    assert.equal(latest.cardId, "REPORT_B", "G3: Latest = B");
     assert.equal(latest.reportIdentity, bBundle.identity);
     const idB = latest.reportIdentity;
     const shaB = latest.sha256;
     const occ = surfaceOccupant(ctx);
-    assert.equal(occ.cardId, "REPORT_CURRENT", "G3: Current authority unchanged");
+    assert.equal(occ.cardId, "REPORT_B", "G3: Current = B（newest completion）");
     const st = reviewQueueStatus(ctx.surface);
-    assert.equal(st.pending[0]?.cardId, "REPORT_B", "B formally queued");
+    assert.equal(st.pending.some((e) => e.cardId === "REPORT_CURRENT"), true, "previous card stays durable PENDING");
 
     // G4 Run C — non-review operator closeout
     const reportC = writeOperatorReport(ctx, "REPORT_C", "=== REPORT C ===\nCLOSEOUT-COMPLETE: C (EXTERNAL_REVIEW_REQUIRED=NO)\n");
@@ -425,9 +435,9 @@ test("N9/N10. A→B→C live sequence: Latest follows work, Current preserved, u
     assert.ok(userView.text.includes("REPORT C"), "report bytes are C's");
     assert.notEqual(userView.report.reportIdentity, "413ab9acdef5171caaeecc55a22875ba870dfbed0f7913c0d04fbb7b126c4138");
 
-    // I. invariants: Current untouched, queue intact
-    assert.equal(surfaceOccupant(ctx).cardId, "REPORT_CURRENT");
-    assert.equal(shaFile(join(ctx.surface, "review-bundle.txt")), shaFile(cur.path), "Current bundle bytes untouched");
-    assert.equal(st.pending.length, 1);
+    // I. invariants: Current presents the newest completion; ledger intact
+    assert.equal(surfaceOccupant(ctx).cardId, "REPORT_B");
+    assert.equal(shaFile(join(ctx.surface, "review-bundle.txt")), shaFile(bBundle.path), "Current bundle bytes = newest formal review");
+    assert.equal(st.pending.length, 2, "REPORT_CURRENT + REPORT_B unresolved");
   } finally { rmSync(ctx.root, { recursive: true, force: true }); }
 });

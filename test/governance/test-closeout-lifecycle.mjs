@@ -36,6 +36,7 @@ import {
   writeExternalReviewDeliveryRecord,
   readExternalReviewDeliveryRecord,
   deliverToExternalReviewSurface,
+  rotateExternalReviewSurface,
 } from "../../src/governance/review-bundle.mjs";
 import {
   CLOSEOUT_STATE_SCHEMA,
@@ -236,30 +237,35 @@ test("T4. surface write failure -> top-level final !== PASS（no closeout comple
 
 // ── T5: occupied surface → QUEUED（REVART-LC1）, no overwrite ─────────────
 
-test("T5. occupied Current/（unresolved card）-> second card QUEUED; first trio untouched", { timeout: 30000 }, async () => {
+test("T5. occupied Current/（unresolved card）-> second card PUBLISHES; first card stays durable PENDING", { timeout: 30000 }, async () => {
   const cardIdA = "LC-T5A";
   const cardIdB = "LC-T5B";
   const dir = surface("t5");
   const ra = await drive(cardIdA, { surfaceDir: dir });
   assert.equal(ra.final, "PASS");
-  const firstSha = shaFile(join(dir, "review-bundle.txt"));
-  // card B delivers while A is un-rotated and unresolved: B must QUEUE —
-  // a legitimate queued review is a SUCCESS, not a surface_occupied failure
+  const aIdentity = ra.bundle.identity;
+  // card B delivers while A is unresolved: B PUBLISHES to Current（card D1:
+  // completion -> Current = that card; presentation never gated on a verdict）
   const rb = await drive(cardIdB, { surfaceDir: dir });
-  assert.equal(rb.final, "PASS", `queued delivery keeps the gate PASS (got ${rb.final})`);
-  assert.equal(rb.externalReview.externalReviewStatus, "AWAITING_EXTERNAL_REVIEW", "queued review is awaiting review");
-  assert.equal(rb.externalReview.delivery.method, "external-review-queue", "queued delivery method");
-  // old artifact untouched
-  assert.equal(shaFile(join(dir, "review-bundle.txt")), firstSha, "first card's bundle bytes unchanged");
+  assert.equal(rb.final, "PASS", `publish-always keeps the gate PASS (got ${rb.final})`);
+  assert.equal(rb.externalReview.externalReviewStatus, "AWAITING_EXTERNAL_REVIEW", "B awaiting review");
+  assert.equal(rb.externalReview.delivery.method, "external-review-surface", "B published to Current");
+  // Current presents the NEWEST completion
+  assert.equal(shaFile(join(dir, "review-bundle.txt")), shaFile(rb.bundlePath), "Current holds B's bundle bytes");
   const rec = readExternalReviewDeliveryRecord(join(dir, "delivery.json"));
-  assert.equal(rec.state.delivery.reviewBundleIdentity, ra.bundle.identity, "delivery record still card A");
-  // B is durably queued（exactly one entry, QUEUED state）
+  assert.equal(rec.state.delivery.reviewBundleIdentity, rb.bundle.identity, "delivery record is card B");
+  // A is durable in the ledger as PENDING（exactly one entry per card; card B2/C）
   const { reviewQueueStatus } = await import("../../src/governance/review-queue.mjs");
   const st = reviewQueueStatus(dir);
   assert.equal(st.ok, true);
-  const entry = st.queue.entries.find((e) => e.cardId === cardIdB);
-  assert.ok(entry, "B queued entry exists");
-  assert.equal(entry.state, "QUEUED");
+  const aEntry = st.queue.entries.find((e) => e.cardId === cardIdA);
+  assert.ok(aEntry, "A ledger entry exists");
+  assert.equal(aEntry.state, "PENDING", "A remains an unresolved pending review");
+  assert.equal(aEntry.bundleIdentity, aIdentity, "A identity preserved");
+  assert.equal(aEntry.isLatestPresented, false, "A not presented");
+  const bEntry = st.queue.entries.find((e) => e.cardId === cardIdB);
+  assert.ok(bEntry, "B entry exists");
+  assert.equal(bEntry.isLatestPresented, true, "B presented");
   assert.equal(st.queue.entries.filter((e) => e.cardId === cardIdB).length, 1, "one entry only");
 });
 
@@ -404,30 +410,28 @@ test("T10. requiresReview=false is never forced to produce an external-review bu
   assert.equal(readdirSync(join(OUT, cardId)).filter((f) => f !== "closeout-state.json").length, 0, "no bundle artifacts");
 });
 
-// ── R7: resolved occupant auto-rotated at the next delivery ───────────────
+// ── R7: a reviewed generation is archived via the LEDGER verdict flow; the
+// next delivery publishes over the presentation（no auto-rotate seam）────────
 
-test("R7. a RESOLVED occupant is auto-rotated at the next delivery（Archive/）; never auto-generates verdicts", { timeout: 30000 }, async () => {
+test("R7. PASS on the ledger archives A; the next delivery publishes B; verdicts never auto-generate", { timeout: 30000 }, async () => {
   const cardA = "LC-R7A";
   const cardB = "LC-R7B";
   const dir = surface("r7");
   const ra = await drive(cardA, { surfaceDir: dir });
   assert.equal(ra.final, "PASS");
-  // Controller applies a genuine PASS verdict to the surface occupant
+  // Controller applies a genuine PASS verdict to the DURABLE LEDGER entry
+  //（the verdict authority; archives from the immutable ledger artifact）.
   const rec = readExternalReviewDeliveryRecord(join(dir, "delivery.json"));
   assert.equal(rec.ok, true);
-  const applied = applyExternalReviewVerdict(rec.state, {
-    verdict: "PASS",
-    reviewerIdentity: "AUTOLOOP_PI_GRAPH_RB1H_EXTERNAL_REVIEW",
-    reviewedAt: "2026-08-08T12:00:00.000Z",
-    bundleIdentity: rec.state.delivery.reviewBundleIdentity,
-    bundleSha256: rec.state.delivery.reviewBundleSha256,
+  const rot = rotateExternalReviewSurface({
+    surfaceDir: dir, archiveDir: ARCHIVE,
+    cardId: cardA, identity: rec.state.delivery.reviewBundleIdentity, verdict: "PASS",
   });
-  assert.equal(applied.ok, true);
-  const written = writeExternalReviewDeliveryRecord({ outDir: dir, state: applied.state, cardId: cardA, fileName: "delivery.json" });
-  assert.equal(written.ok, true);
-  // next required card delivers -> resolved occupant auto-rotated, new card published
+  assert.equal(rot.ok, true, `ledger verdict applied (${rot.reason ?? ""})`);
+  // next required card delivers -> Current = B（publish-always; no special
+  // auto-rotation seam, no auto-generated verdicts）
   const rb = await drive(cardB, { surfaceDir: dir });
-  assert.equal(rb.final, "PASS", `next card delivers after auto-rotate (${rb.reason})`);
+  assert.equal(rb.final, "PASS", `next card publishes (${rb.reason})`);
   // Archive now holds card A（flat naming）; Current holds card B
   const archived = readdirSync(ARCHIVE).filter((f) => f.includes(cardA) && f.includes("review-bundle"));
   assert.ok(archived.length === 1, `card A archived (${archived.join(",")})`);

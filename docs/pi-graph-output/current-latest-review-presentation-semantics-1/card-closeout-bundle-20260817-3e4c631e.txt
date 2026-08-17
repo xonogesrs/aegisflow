@@ -1,0 +1,366 @@
+================================================================================
+AUTOLOOP REVIEW BUNDLE (CLOSEOUT)
+================================================================================
+REVIEW_BUNDLE_SCHEMA: autoloop.review-bundle/v1
+REVIEW_BUNDLE_IDENTITY: 3e4c631edf5050a9c670c59acbf5f4404cb5f54027fd0e31bb91b7b9ff3cb044
+CARD_ID: CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1
+CARD_TITLE: CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1
+CARD_TYPE: repair
+GENERATED_AT: 2026-08-17T11:15:31.624Z
+
+================================================================================
+1. Review Request
+================================================================================
+CARD_ID: CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1
+CARD_TITLE: CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1
+CARD_TYPE: repair
+GRAPH_RUN_ID: cps-closeout
+NODE_ID: N1
+PHASE_EXECUTION_ID: N1:1
+STAGE_IDS: NOT_APPLICABLE
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+REQUESTED_REVIEW_VERDICT: PASS / REPAIR / HOLD
+This bundle is the single complete text artifact submitted for external review of card CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1.
+
+================================================================================
+2. Executive Status
+================================================================================
+EXECUTIVE_STATUS: PASS
+EXECUTION_PASS: true
+VERIFIER_PASS: true
+INDEPENDENT_REVIEW_PASS: true
+REVIEW_BUNDLE_READY: NOT_APPLICABLE
+REVIEW_BUNDLE_DELIVERY_REQUIRED: true
+EXTERNAL_REVIEW_STATUS: AWAITING_EXTERNAL_REVIEW
+EXTERNAL_REVIEW_STATUS_REFERENCE: summary mirror — canonical location: 10.5 External Review Decision
+SUMMARY: Current/ presentation semantics repaired: publish-always on completion; ledger-first verdict binding; deterministic migration; crash-safe recovery; 20-item acceptance suite; live A/B/C/D dogfood with PC1 presented directly.
+
+
+================================================================================
+3. Task Identity
+================================================================================
+CARD_ID: CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1
+CARD_TITLE: CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1
+CARD_TYPE: repair
+GRAPH_RUN_ID: cps-closeout
+NODE_ID: N1
+PHASE_EXECUTION_ID: N1:1
+STAGE_IDS: NOT_APPLICABLE
+AGENT_EXECUTION_IDS: NOT_APPLICABLE
+
+
+================================================================================
+4. Repository and Worktree Identity
+================================================================================
+REPOSITORY: git@github.com:xonogesrs/autoloop.git
+BRANCH: governance/decomp-opt1-design-freeze
+HEAD: 8a16cb45b607730bd6c49fd18bb6b1ec1384d4e4
+TREE_SHA: ccafd6965d949d418089c55d29f0c4d8f34934e7
+WORKTREE_PATH: /private/tmp/autoloop
+BASELINE_DIRTY_DIGEST: NOT_APPLICABLE
+FINAL_DIRTY_DIGEST: NOT_APPLICABLE
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+5. Objective
+================================================================================
+Formally separate Current/ presentation from review authority: every task completion publishes its review to Current immediately; verdicts bind the durable ledger entry by cardId+bundleIdentity+bundleSha256 and never control the presentation pointer.
+
+================================================================================
+6. Authorized Scope
+================================================================================
+  - src/governance/review-queue.mjs
+  - src/governance/review-bundle.mjs
+  - src/governance/external-verdict-ingest.mjs
+  - scripts/gov-external-review-surface.mjs
+  - test/governance/
+  - AGENTS.md
+  - docs/pi-graph-output/current-latest-review-presentation-semantics-1/
+AUTHORIZED_PATHS: src/governance/review-queue.mjs, src/governance/review-bundle.mjs, src/governance/external-verdict-ingest.mjs, scripts/gov-external-review-surface.mjs, test/governance/, AGENTS.md, docs/pi-graph-output/current-latest-review-presentation-semantics-1/
+
+
+================================================================================
+7. Explicitly Unauthorized Scope
+================================================================================
+  - commit
+  - push
+  - merge
+  - seal
+  - src/v2/decomposition-inheritance.mjs
+  - src/memory/inheritance-cbm.mjs
+  - Parent->Child changes
+  - CBM inheritance changes
+  - review bundle format redesign
+  - LatestHuman redesign
+UNAUTHORIZED_PATHS: commit, push, merge, seal, src/v2/decomposition-inheritance.mjs, src/memory/inheritance-cbm.mjs, Parent->Child changes, CBM inheritance changes, review bundle format redesign, LatestHuman redesign
+
+
+================================================================================
+8. Architecture and Design Decisions
+================================================================================
+  - ROOT_CAUSE: Current presentation surface was conflated with unresolved review authority.
+  - LATE_DISCOVERY = YES; SAME_LIFECYCLE_FRAGMENTED_ACROSS_CARDS = YES; LOCAL_INVARIANT_OVERRULED_TOP_LEVEL_REQUIREMENT = YES.
+  - Process rule: Presentation state must never be used as the sole durable governance authority.
+  - Canonical rule: task completion -> review bundle generated -> Current = that task's review; previous verdict / queue state never gates publication.
+  - Ledger states: PENDING | REVIEWED | REPAIR | HOLD | ARCHIVED; presentation is the independent isLatestPresented pointer (queue.currentEntryId mirror); state=CURRENT eliminated.
+  - Verdict ingest binds the DURABLE LEDGER entry by exact cardId + bundleIdentity + bundleSha256; REVIEW_LEDGER_TARGET_NOT_FOUND / REVIEW_VERDICT_IDENTITY_MISMATCH fail closed; the reviewed card does NOT need to be Current.
+  - Verdict lifecycle never controls the presentation pointer: PASS/REPAIR/HOLD update the ledger entry + archive from the immutable ledger artifact; Current files untouched.
+  - Stale-replay protection: an older completion (order < presented order) never regresses Current; recovery (--promote/--reconcile) republishes the NEWEST eligible review after a crash.
+  - Deterministic migration: QUEUED/CURRENT -> PENDING, RESOLVED -> ARCHIVED, ARCHIVED -> ARCHIVED; identity/sha/verdict/order/supersession preserved; never regenerates bundles; presentation pointer -> newest eligible by completion/publication order.
+  - LatestHuman stays the latest completed report of ANY type (operator closeout OR formal review); operator closeouts never touch Current.
+  - CBM boundary honored: no broad CBM redesign; PC1 CBM/inheritance implementation untouched.
+
+================================================================================
+9. Files Added / Modified / Deleted
+================================================================================
+PRE_EXISTING_DIRTY_FILES:
+    - AGENTS.md
+    - scripts/gov-external-review-surface.mjs
+    - src/governance/external-verdict-ingest.mjs
+    - src/governance/review-bundle.mjs
+    - src/governance/review-queue.mjs
+    - test/governance/test-closeout-lifecycle.mjs
+    - test/governance/test-external-review-surface.mjs
+    - test/governance/test-external-verdict-ingest.mjs
+    - test/governance/test-human-report-handoff.mjs
+    - test/governance/test-review-bundle-closeout-enforcement.mjs
+    - test/governance/test-review-bundle-decision-section.mjs
+    - test/governance/test-review-queue-handoff-dogfood.mjs
+    - test/governance/test-review-queue-handoff.mjs
+    - test/governance/test-rld2-stale-delivery.mjs
+    - docs/pi-graph-output/autoloop-review-live-current-convergence-1/admission.json
+    - docs/pi-graph-output/autoloop-review-live-current-convergence-1/authority.json
+    - docs/pi-graph-output/autoloop-review-live-current-convergence-1/card-closeout-bundle-20260816-bdbaad4c.txt
+    - docs/pi-graph-output/autoloop-review-live-current-convergence-1/card-spec.md
+    - docs/pi-graph-output/autoloop-review-live-current-convergence-1/closeout-state.json
+    - docs/pi-graph-output/autoloop-review-live-current-convergence-1/dogfood-evidence.json
+    - docs/pi-graph-output/autoloop-review-live-current-convergence-1/rag-DF1-graph-closeout-evidence.json
+    - docs/pi-graph-output/autoloop-review-live-current-convergence-1/review-job.json
+    - docs/pi-graph-output/external-review-verdict-handoff-live-closeout-1/live-closeout-evidence.json
+    - docs/pi-graph-output/external-review-verdict-handoff-live-closeout-1/live-closeout.txt
+    - docs/pi-graph-output/external-review-verdict-handoff-live-closeout-1/verdict-convergence-pass.json
+    - docs/pi-graph-output/review-auto-generation-and-delivery-1/admission.json
+    - docs/pi-graph-output/review-auto-generation-and-delivery-1/authority.json
+    - docs/pi-graph-output/review-auto-generation-and-delivery-1/card-closeout-bundle-20260816-413ab9ac.txt
+    - docs/pi-graph-output/review-auto-generation-and-delivery-1/card-spec.md
+    - docs/pi-graph-output/review-auto-generation-and-delivery-1/closeout-state.json
+    - docs/pi-graph-output/review-auto-generation-and-delivery-1/dogfood-evidence.json
+    - docs/pi-graph-output/review-auto-generation-and-delivery-1/rag-DF2-graph-closeout-evidence.json
+    - docs/pi-graph-output/review-auto-generation-and-delivery-1/review-job.json
+    - docs/pi-graph-output/review-live-promotion-closeout-1/dogfood-evidence.json
+    - docs/pi-graph-output/review-live-promotion-execution-1/live-promotion-closeout.txt
+    - docs/pi-graph-output/review-live-promotion-execution-1/live-promotion-evidence.json
+    - test/governance/test-current-latest-presentation-semantics.mjs
+ADDED:
+    - test/governance/test-current-latest-presentation-semantics.mjs
+MODIFIED:
+    - scripts/gov-external-review-surface.mjs
+    - src/governance/external-verdict-ingest.mjs
+    - src/governance/review-bundle.mjs
+    - src/governance/review-queue.mjs
+    - test/governance/test-closeout-lifecycle.mjs
+    - test/governance/test-external-review-surface.mjs
+    - test/governance/test-external-verdict-ingest.mjs
+    - test/governance/test-human-report-handoff.mjs
+    - test/governance/test-review-bundle-closeout-enforcement.mjs
+    - test/governance/test-review-bundle-decision-section.mjs
+    - test/governance/test-review-queue-handoff-dogfood.mjs
+    - test/governance/test-review-queue-handoff.mjs
+    - test/governance/test-rld2-stale-delivery.mjs
+DELETED:
+  - none
+
+================================================================================
+10. Diff Summary
+================================================================================
+14 governance files modified + 1 new acceptance test + 1 new card outDir
+
+================================================================================
+10.5. External Review Decision
+================================================================================
+EXTERNAL_REVIEW_STATUS: AWAITING_EXTERNAL_REVIEW
+REVIEW_TARGET:
+  CARD_ID: CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1
+  GENERATION_JOB_ID: NOT_APPLICABLE
+  GRAPH_RUN_ID: cps-closeout
+  BUNDLE_IDENTITY: 3e4c631edf5050a9c670c59acbf5f4404cb5f54027fd0e31bb91b7b9ff3cb044
+  BUNDLE_SHA256: NOT_APPLICABLE (authoritative content sha256: footer REVIEW_BUNDLE_SHA256 line)
+DECISION_SNAPSHOT:
+  EXECUTION: PASS
+  VERIFIER: PASS
+  INTERNAL_REVIEW: PASS
+  REGRESSION:
+    RESULT: FAIL
+    DETAIL: suite=test/governance tests=502 pass=494 fail=8; suite=full tests=1922 pass=1875 fail=47
+  SECURITY_SCAN: clean
+  REPOSITORY_INTEGRITY: DIRTY
+  NOTE: DECISION_SNAPSHOT is a summary reference to the authoritative sections; it is not a second authority.
+WHAT_CHANGED:
+  - Added test/governance/test-current-latest-presentation-semantics.mjs
+  - Changed scripts/gov-external-review-surface.mjs
+  - Changed src/governance/external-verdict-ingest.mjs
+  - Changed src/governance/review-bundle.mjs
+  - Changed src/governance/review-queue.mjs
+  - Changed test/governance/test-closeout-lifecycle.mjs
+  - Changed test/governance/test-external-review-surface.mjs
+  - Changed test/governance/test-external-verdict-ingest.mjs
+  - Changed test/governance/test-human-report-handoff.mjs
+  - Changed test/governance/test-review-bundle-closeout-enforcement.mjs
+  - Changed test/governance/test-review-bundle-decision-section.mjs
+  - Changed test/governance/test-review-queue-handoff-dogfood.mjs
+  - Changed test/governance/test-review-queue-handoff.mjs
+  - Changed test/governance/test-rld2-stale-delivery.mjs
+WHAT_WAS_PROVEN:
+  - NOT_RECORDED
+KNOWN_LIMITATIONS:
+  - verdicts applied via the CLI rotate path carry no findingsDigest (packet path does)
+REVIEWER_CHECKS:
+  1. Is the implementation within authorized scope?
+  2. Are the stated changes supported by the attributable delta?
+  3. Are the proof claims supported by evidence?
+  4. Are blocking correctness/security/governance issues present?
+  5. Are known limitations acceptable for downstream progression?
+  6. Is repair required before acceptance?
+EXTERNAL_VERDICT:
+  VERDICT: PENDING
+  REVIEWER_IDENTITY: NOT_APPLICABLE
+  REVIEWED_AT: NOT_APPLICABLE
+  FINDINGS_DIGEST: NOT_APPLICABLE
+  FINDINGS:
+  - none
+ALLOWED_VERDICTS:
+  - PASS
+  - REPAIR
+  - HOLD
+NEXT_ACTION:
+  IF_PASS: external review of this card
+  IF_REPAIR: NOT_SPECIFIED
+  IF_HOLD: NOT_SPECIFIED
+
+
+================================================================================
+11. Execution Results
+================================================================================
+NODES_EXECUTED:
+    - N1
+NODES_PASSED: 1922
+NODES_FAILED: 8
+NODES_TOTAL: 1922
+EXECUTION_PASS: true
+
+
+================================================================================
+12. Verification Results
+================================================================================
+VERIFIER_PASS: true
+VERIFIER_RESULT: PASS
+VERIFIER_SUMMARY: governance suite at baseline parity (8 pre-existing environment failures unchanged); 0 new failures across 1922 tests
+
+
+================================================================================
+13. Internal Independent Review
+================================================================================
+INTERNAL_REVIEW_RESULT: PASS
+INTERNAL_REVIEW_IDENTITY: cps-acceptance-20
+BLOCKING_FINDINGS:
+  - none
+INTERNAL_REVIEW_SUMMARY: 20-item card-T acceptance suite green; live A/B/C/D dogfood proven
+AUTHORITY_NOTE: Internal independent review is supporting evidence. It is NOT the external reviewer verdict.
+REVIEW_PASS: true
+REVIEW_RESULT: PASS
+REVIEW_RESULT_IDENTITY: cps-acceptance-20
+REVIEW_SUMMARY: 20-item card-T acceptance suite green; live A/B/C/D dogfood proven
+
+
+================================================================================
+14. Repair and Supersession Lineage
+================================================================================
+REPAIR_ATTEMPTS:
+  NOT_APPLICABLE (no repair attempts)
+REPAIR_BUDGET_MAX: 1
+REPAIR_BUDGET_USED: 0
+GENERATION_TYPE: implementation
+REPAIR_ITERATIONS: 0
+SURFACE_RESEALS: 0
+REPAIR_LINEAGE_REPAIR_ITERATIONS: 0
+REPAIR_LINEAGE_SURFACE_RESEALS: 0
+CURRENT_BUNDLE_IDENTITY: 3e4c631edf5050a9c670c59acbf5f4404cb5f54027fd0e31bb91b7b9ff3cb044
+SUPERSEDES_BUNDLE_IDENTITY: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_SHA256: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_PATH: NOT_APPLICABLE
+SUPERSEDES_BUNDLE_VERDICT: NOT_APPLICABLE
+LINEAGE_SUMMARY: First-generation implementation; no supersession.
+
+
+================================================================================
+15. Negative and Fail-Closed Cases
+================================================================================
+  - HOLD / CURRENT_STILL_DEPENDS_ON_PREVIOUS_VERDICT — avoided: B/C published with zero verdicts (dogfood NO_VERDICT_REQUIRED_FOR_CURRENT_ADVANCEMENT=YES)
+  - HOLD / PENDING_REVIEW_LOST_ON_CURRENT_REPLACEMENT — avoided: A/B durable PENDING in the ledger after Current overwrites
+  - HOLD / VERDICT_STILL_REQUIRES_TARGET_TO_BE_CURRENT — avoided: PASS on A/B applied via ledger identity while Current=C
+  - HOLD / STALE_REPLAY_REGRESSED_CURRENT — avoided: stale completion replay flagged staleReplay, Current not regressed
+  - HOLD / CURRENT_PRESENTATION_LEDGER_AUTHORITY_STILL_CONFLATED — avoided: state=CURRENT eliminated; isLatestPresented independent pointer
+  - HOLD / PC1_REVIEW_NOT_PRESENTED_AS_LATEST_CURRENT — avoided: PC1 (PARENT_TO_CHILD_CONTEXT_AND_EVIDENCE_INHERITANCE_CONVERGED) presented directly without any old PASS
+
+================================================================================
+16. Regression Results
+================================================================================
+  - suite=test/governance tests=502 pass=494 fail=8
+  - suite=full tests=1922 pass=1875 fail=47
+REGRESSION_OVERALL: governance suite at baseline parity; full suite has 0 new failures vs HEAD baseline (65 baseline -> 47)
+
+
+================================================================================
+17. Evidence Inventory
+================================================================================
+  (none)
+EVIDENCE_MANIFEST_DIGEST: 4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
+
+
+================================================================================
+18. Evidence Hashes
+================================================================================
+  (none)
+
+================================================================================
+19. Security and Secret Scan
+================================================================================
+SECRET_SCAN_RESULT: clean
+SECRET_SCAN_NOTES: NOT_APPLICABLE
+SECRET_DETECTED: false
+INGESTION_ALLOWLIST: 
+INGESTION_DENYLIST: 
+
+================================================================================
+20. Repository Integrity
+================================================================================
+HEAD: 8a16cb45b607730bd6c49fd18bb6b1ec1384d4e4
+TREE_SHA: ccafd6965d949d418089c55d29f0c4d8f34934e7
+WORKTREE_CLEAN: false
+DIRTY_PATHS: AGENTS.md, scripts/gov-external-review-surface.mjs, src/governance/external-verdict-ingest.mjs, src/governance/review-bundle.mjs, src/governance/review-queue.mjs, test/governance/test-closeout-lifecycle.mjs, test/governance/test-external-review-surface.mjs, test/governance/test-external-verdict-ingest.mjs, test/governance/test-human-report-handoff.mjs, test/governance/test-review-bundle-closeout-enforcement.mjs, test/governance/test-review-bundle-decision-section.mjs, test/governance/test-review-queue-handoff-dogfood.mjs, test/governance/test-review-queue-handoff.mjs, test/governance/test-rld2-stale-delivery.mjs, docs/pi-graph-output/autoloop-review-live-current-convergence-1/admission.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/authority.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/card-closeout-bundle-20260816-bdbaad4c.txt, docs/pi-graph-output/autoloop-review-live-current-convergence-1/card-spec.md, docs/pi-graph-output/autoloop-review-live-current-convergence-1/closeout-state.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/dogfood-evidence.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/rag-DF1-graph-closeout-evidence.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/review-job.json, docs/pi-graph-output/external-review-verdict-handoff-live-closeout-1/live-closeout-evidence.json, docs/pi-graph-output/external-review-verdict-handoff-live-closeout-1/live-closeout.txt, docs/pi-graph-output/external-review-verdict-handoff-live-closeout-1/verdict-convergence-pass.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/admission.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/authority.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/card-closeout-bundle-20260816-413ab9ac.txt, docs/pi-graph-output/review-auto-generation-and-delivery-1/card-spec.md, docs/pi-graph-output/review-auto-generation-and-delivery-1/closeout-state.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/dogfood-evidence.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/rag-DF2-graph-closeout-evidence.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/review-job.json, docs/pi-graph-output/review-live-promotion-closeout-1/dogfood-evidence.json, docs/pi-graph-output/review-live-promotion-execution-1/live-promotion-closeout.txt, docs/pi-graph-output/review-live-promotion-execution-1/live-promotion-evidence.json, test/governance/test-current-latest-presentation-semantics.mjs
+UNTRACKED_FILES: docs/pi-graph-output/autoloop-review-live-current-convergence-1/admission.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/authority.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/card-closeout-bundle-20260816-bdbaad4c.txt, docs/pi-graph-output/autoloop-review-live-current-convergence-1/card-spec.md, docs/pi-graph-output/autoloop-review-live-current-convergence-1/closeout-state.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/dogfood-evidence.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/rag-DF1-graph-closeout-evidence.json, docs/pi-graph-output/autoloop-review-live-current-convergence-1/review-job.json, docs/pi-graph-output/external-review-verdict-handoff-live-closeout-1/live-closeout-evidence.json, docs/pi-graph-output/external-review-verdict-handoff-live-closeout-1/live-closeout.txt, docs/pi-graph-output/external-review-verdict-handoff-live-closeout-1/verdict-convergence-pass.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/admission.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/authority.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/card-closeout-bundle-20260816-413ab9ac.txt, docs/pi-graph-output/review-auto-generation-and-delivery-1/card-spec.md, docs/pi-graph-output/review-auto-generation-and-delivery-1/closeout-state.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/dogfood-evidence.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/rag-DF2-graph-closeout-evidence.json, docs/pi-graph-output/review-auto-generation-and-delivery-1/review-job.json, docs/pi-graph-output/review-live-promotion-closeout-1/dogfood-evidence.json, docs/pi-graph-output/review-live-promotion-execution-1/live-promotion-closeout.txt, docs/pi-graph-output/review-live-promotion-execution-1/live-promotion-evidence.json, test/governance/test-current-latest-presentation-semantics.mjs
+REMOTE: git@github.com:xonogesrs/autoloop.git
+
+
+================================================================================
+21. Known Risks and Limitations
+================================================================================
+RISKS:
+  - forced pre-convention delivery (PC1) is a transition seam — NEW closeouts keep the strict validator
+LIMITATIONS:
+  - verdicts applied via the CLI rotate path carry no findingsDigest (packet path does)
+NOTE: full technical inventory; reviewer-facing subset: 10.5 External Review Decision → KNOWN_LIMITATIONS (same source, no contradictory copies)
+
+================================================================================
+22. Rollback Procedure
+================================================================================
+revert the 15 governance files; re-run --migrate to restore legacy states (PENDING/ARCHIVED mapping) — no data loss: bundle identity/sha/verdict/order/supersession all preserved
+
+================================================================================
+23. Open Questions
+================================================================================
+  - none
+
+=== END OF REVIEW BUNDLE ===
+REVIEW_BUNDLE_SHA256: 9b504d6e3961718ff36fb53a3f4380d8e8859f7cd56acf61df5734f065919bba
