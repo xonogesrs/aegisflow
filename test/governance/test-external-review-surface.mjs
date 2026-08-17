@@ -56,6 +56,7 @@ import {
   rotateExternalReviewSurface,
   acquireExternalReviewSurfaceLock,
   releaseExternalReviewSurfaceLock,
+  externalReviewSurfaceLockPath,
 } from "../../src/governance/review-bundle.mjs";
 
 const REPO_A = "/Volumes/NVM2T/Development/autoloop";
@@ -384,7 +385,7 @@ test("9. observer/crash: no mixed trio ever visible; stale staging leftovers cle
 test("10. stale lock（dead pid）is broken; live lock blocks", { timeout: 30000 }, async () => {
   const dir = join(ROOT, "surface-10");
   mkdirSync(dir, { recursive: true });
-  const lockPath = join(dirname(dir), ".surface.lock");
+  const lockPath = externalReviewSurfaceLockPath(dir);
   // stale owner（dead pid 99999999）must not wedge the surface
   writeFileSync(lockPath, JSON.stringify({ pid: 99999999, token: "dead-token", acquiredAt: "2026-08-07T00:00:00.000Z" }), "utf8");
   const a = acquireExternalReviewSurfaceLock(dir);

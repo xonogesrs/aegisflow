@@ -15,7 +15,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   currentSurfaceReviewStatus,
   serializeExternalReviewState,
@@ -28,6 +29,8 @@ import {
 import { buildPhaseExecutionPrompt } from "../../src/v2/phase-response-contract.mjs";
 
 const SURFACE = join(tmpdir(), `vca1-p0b-surface-${process.pid}`);
+// Repo root resolved from THIS test file — location-independent.
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 test.beforeEach(() => {
   rmSync(SURFACE, { recursive: true, force: true });
@@ -71,7 +74,7 @@ test("scope guard: attempted root = /Users/zhengfengqing is blocked before any e
 });
 
 test("scope guard: explicit repo-scoped verification root is allowed", () => {
-  const result = checkVerificationRoot("/Volumes/NVM2T/Development/autoloop/src/governance");
+  const result = checkVerificationRoot(join(REPO, "src", "governance"));
   assert.equal(result.ok, true);
 });
 
@@ -87,7 +90,7 @@ test("scope guard: allowlist contract — a caller-authorized root under $HOME i
 
 test("Pi prompt text: executor prompt instructs authoritative-source-first and bounded verification root", () => {
   const phase = { phase_id: "p1", verification_plan: { method: "m", success_criteria: "s", failure_criteria: "f" } };
-  const taskCard = { repositoryRoot: "/Volumes/NVM2T/Development/autoloop", allowedPaths: ["src/x.mjs"], forbiddenPaths: [] };
+  const taskCard = { repositoryRoot: REPO, allowedPaths: ["src/x.mjs"], forbiddenPaths: [] };
   const prompt = buildPhaseExecutionPrompt({ phase, taskCard, lifecyclePhase: "executor", attempt: 0 });
   assert.match(prompt, /AUTHORITATIVE_SOURCE_FIRST/);
   assert.match(prompt, /VERIFICATION_SCOPE_UNBOUNDED/);
@@ -96,7 +99,7 @@ test("Pi prompt text: executor prompt instructs authoritative-source-first and b
 
 test("Pi prompt text: reviewer prompt also carries the bounded-verification instruction", () => {
   const phase = { phase_id: "p1", verification_plan: { method: "m", success_criteria: "s", failure_criteria: "f" } };
-  const taskCard = { repositoryRoot: "/Volumes/NVM2T/Development/autoloop", allowedPaths: [], forbiddenPaths: [] };
+  const taskCard = { repositoryRoot: REPO, allowedPaths: [], forbiddenPaths: [] };
   const prompt = buildPhaseExecutionPrompt({ phase, taskCard, lifecyclePhase: "reviewer", attempt: 0 });
   assert.match(prompt, /AUTHORITATIVE_SOURCE_FIRST/);
 });

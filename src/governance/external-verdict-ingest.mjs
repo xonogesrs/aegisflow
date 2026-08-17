@@ -43,7 +43,7 @@ import {
   sha256Hex,
   EXTERNAL_REVIEW_VERDICTS,
 } from "./review-bundle.mjs";
-import { readReviewQueue, findEntry, findEntryByIdentity, ensureQueueMigrated, presentedEntry, writeReviewQueue } from "./review-queue.mjs";
+import { readReviewQueue, findEntry, findEntryByIdentity, ensureQueueMigrated, presentedEntry, writeReviewQueue, acquireQueueLock, releaseQueueLock } from "./review-queue.mjs";
 
 export const EXTERNAL_VERDICT_PACKET_SCHEMA = "autoloop.external-review-verdict/v1";
 
@@ -204,6 +204,11 @@ export async function ingestExternalVerdict({ packet = null, packetPath = null, 
   if (!lock.ok) {
     return { ok: false, code: EXTERNAL_VERDICT_HANDOFF_HOLDS.AUTHORITY_REGRESSED, errors: [`${EXTERNAL_VERDICT_HANDOFF_HOLDS.AUTHORITY_REGRESSED}:${lock.reason ?? "surface_busy"}`], result: null };
   }
+  const ql = acquireQueueLock(dir);
+  if (!ql.ok) {
+    releaseExternalReviewSurfaceLock({ lockPath: lock.lockPath, token: lock.token });
+    return { ok: false, code: EXTERNAL_VERDICT_HANDOFF_HOLDS.AUTHORITY_REGRESSED, errors: [`${EXTERNAL_VERDICT_HANDOFF_HOLDS.AUTHORITY_REGRESSED}:${ql.reason ?? "queue_busy"}`], result: null };
+  }
   try {
     const migrated = ensureQueueMigrated(dir);
     if (!migrated.ok) {
@@ -242,7 +247,7 @@ export async function ingestExternalVerdict({ packet = null, packetPath = null, 
     // ── already applied to this ledger generation（resume paths）─────────
     if (entry.verdict && entry.verdict.bundleIdentity === packet.bundleIdentity) {
       if (entry.verdict.verdict === packet.verdict && (entry.verdict.findingsDigest ?? null) === packet.findingsDigest) {
-        return finishLifecycle({ packet, dir, arch, lock, alreadyApplied: true, currentBefore, queue });
+        return finishLifecycle({ packet, dir, arch, lock, queueLock: ql, alreadyApplied: true, currentBefore, queue });
       }
       return {
         ok: false,
@@ -268,8 +273,9 @@ export async function ingestExternalVerdict({ packet = null, packetPath = null, 
     if (!wq.ok) {
       return { ok: false, code: EXTERNAL_VERDICT_HANDOFF_HOLDS.APPLIED_BUT_ROTATION_FAILED, errors: [`ledger_write_failed:${wq.reason}`], result: { packet, currentBefore } };
     }
-    return finishLifecycle({ packet, dir, arch, lock, alreadyApplied: false, currentBefore, queue });
+    return finishLifecycle({ packet, dir, arch, lock, queueLock: ql, alreadyApplied: false, currentBefore, queue });
   } finally {
+    releaseQueueLock({ lockPath: ql.lockPath, token: ql.token });
     releaseExternalReviewSurfaceLock({ lockPath: lock.lockPath, token: lock.token });
   }
 }
@@ -285,7 +291,7 @@ function presentedInfo(queue, dir) {
  *  controls the presentation pointer（card I）: Current stays exactly as it
  *  was; PASS additionally archives the reviewed bundle from the immutable
  *  ledger artifact（card I — never from Current files）. */
-function finishLifecycle({ packet, dir, arch, lock, alreadyApplied, currentBefore, queue }) {
+function finishLifecycle({ packet, dir, arch, lock, queueLock, alreadyApplied, currentBefore, queue }) {
   const code = alreadyApplied ? VERDICT_HANDOFF_NO_DUPLICATE_TRANSITION : "APPLIED";
   if (packet.verdict !== "PASS") {
     // REPAIR / HOLD: the ledger entry is the durable state; Current untouched;
@@ -328,6 +334,7 @@ function finishLifecycle({ packet, dir, arch, lock, alreadyApplied, currentBefor
     identity: packet.bundleIdentity,
     verdict: "PASS",
     lock,
+    queueLock, // caller（ingest）already holds the queue single-writer lock
   });
   if (!rot.ok) {
     return {

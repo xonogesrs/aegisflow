@@ -60,11 +60,37 @@ import {
   runStateDrivenCloseout,
   assertFinalCardCloseout,
   buildExternalReviewState,
-  applyExternalReviewVerdict,
-  writeExternalReviewDeliveryRecord,
-  readExternalReviewDeliveryRecord,
   resolveCandidateRange,
 } from "../../src/governance/review-bundle.mjs";
+import {
+  ingestExternalVerdict,
+  findingsDigest,
+  EXTERNAL_VERDICT_PACKET_SCHEMA,
+} from "../../src/governance/external-verdict-ingest.mjs";
+
+/**
+ * Apply a PASS verdict through the single production ingress（the durable
+ * LEDGER, identity-bound）— the authoritative record the final closeout gate
+ * reads. Verdict lifecycle never rewrites Current/ files（presentation is a
+ * pointer; the ledger owns the verdict）.
+ */
+async function ledgerPassVerdict({ surfaceDir, archiveDir, cardId, bundleIdentity, bundleSha256 }) {
+  return ingestExternalVerdict({
+    packet: {
+      schema: EXTERNAL_VERDICT_PACKET_SCHEMA,
+      cardId,
+      bundleIdentity,
+      bundleSha256,
+      verdict: "PASS",
+      reviewerIdentity: "reviewer:ext",
+      reviewedAt: new Date().toISOString(),
+      findingsDigest: findingsDigest([]),
+      findings: [],
+    },
+    surfaceDir,
+    archiveDir,
+  });
+}
 import { productionRemoteMatch } from "../../scripts/shared/gov-args.mjs";
 
 const sha = (c, n) => c.repeat(n);
@@ -435,7 +461,7 @@ test("T15+T17: final closeout succeeds after evidence commits advance HEAD (cand
   const outDir = join(root, cardId);
   mkdirSync(outDir, { recursive: true });
   process.env.AUTOLOOP_REVIEW_SURFACE = join(tmpdir(), `t15-surface-${process.pid}`);
-  process.env.AUTOLOOP_REVIEW_ARCHIVE = join(repo.dir, "archive");
+  process.env.AUTOLOOP_REVIEW_ARCHIVE = join(tmpdir(), `t15-archive-${process.pid}`);
 
   // candidate committed first (committed-before-baseline)
   mkdirSync(join(repo.dir, "src"), { recursive: true });
@@ -491,17 +517,15 @@ test("T15+T17: final closeout succeeds after evidence commits advance HEAD (cand
   const bundleId = r1.bundle.identity;
   const bundleSha = r1.bundle.sha256;
 
-  // review verdict applied to the delivered surface record
-  const rec = readExternalReviewDeliveryRecord(join(process.env.AUTOLOOP_REVIEW_SURFACE, "delivery.json"));
-  assert.equal(rec.ok, true);
-  const applied = applyExternalReviewVerdict(rec.state, {
-    verdict: "PASS", reviewerIdentity: "reviewer:ext",
-    reviewedAt: new Date().toISOString(), bundleIdentity: bundleId, bundleSha256: bundleSha,
-    findingsDigest: sha("f", 64),
+  // review verdict applied to the DURABLE LEDGER（identity-bound）via the
+  // production ingress — the authoritative record the final closeout gate
+  // reads. Current/ files untouched（presentation is a pointer）.
+  const ingested = await ledgerPassVerdict({
+    surfaceDir: process.env.AUTOLOOP_REVIEW_SURFACE,
+    archiveDir: process.env.AUTOLOOP_REVIEW_ARCHIVE,
+    cardId, bundleIdentity: bundleId, bundleSha256: bundleSha,
   });
-  assert.equal(applied.ok, true, applied.errors?.join(","));
-  const written = writeExternalReviewDeliveryRecord({ outDir: process.env.AUTOLOOP_REVIEW_SURFACE, state: applied.state, cardId, fileName: "delivery.json" });
-  assert.equal(written.ok, true, written.reason ?? "");
+  assert.equal(ingested.ok, true, (ingested.errors ?? []).join(";") || String(ingested.code ?? ""));
 
   // evidence commits advance HEAD after the bundle
   writeFileSync(join(outDir, "evidence.json"), "{}\n");
@@ -539,7 +563,7 @@ test("T16: reseal generation closes with original baseline + candidate intact", 
   const outDir = join(root, cardId);
   mkdirSync(outDir, { recursive: true });
   process.env.AUTOLOOP_REVIEW_SURFACE = join(tmpdir(), `t16-surface-${process.pid}`);
-  process.env.AUTOLOOP_REVIEW_ARCHIVE = join(repo.dir, "archive-16");
+  process.env.AUTOLOOP_REVIEW_ARCHIVE = join(tmpdir(), `t16-archive-${process.pid}`);
 
   mkdirSync(join(repo.dir, "src"), { recursive: true });
   writeFileSync(join(repo.dir, "src", "impl.txt"), "impl\n");
@@ -597,9 +621,9 @@ test("T16: reseal generation closes with original baseline + candidate intact", 
     generationType: "surface-reseal",
   };
   const resealPath = writeCardState(repo, cardId, resealState).statePath;
-  // The reseal generation delivers to the CARD'S OWN surface dir (the shared
-  // external surface is occupied by the first generation's trio — the
-  // governed deliverer fail-closes on an unresolved occupant by design).
+  // The reseal generation delivers to the CARD'S OWN surface dir so its
+  // ledger + delivery stay generation-scoped（a completion always publishes
+  // to its surface — the presentation slot is never occupied-locked）.
   const resealSurface = join(outDir, "surface");
   const rReseal = await runStateDrivenCloseout({
     statePath: resealPath, graphResult: passGraph, repoPath: repo.dir, cwd: repo.dir,
@@ -610,15 +634,14 @@ test("T16: reseal generation closes with original baseline + candidate intact", 
   const bundleId2 = rReseal.bundle.identity;
   const bundleSha2 = rReseal.bundle.sha256;
 
-  // verdict on the resealed bundle (same substantive review, re-bound)
-  const rec = readExternalReviewDeliveryRecord(join(resealSurface, "delivery.json"));
-  const applied = applyExternalReviewVerdict(rec.state, {
-    verdict: "PASS", reviewerIdentity: "reviewer:ext",
-    reviewedAt: new Date().toISOString(), bundleIdentity: bundleId2, bundleSha256: bundleSha2,
-    findingsDigest: sha("f", 64),
+  // verdict on the resealed bundle（same substantive review, re-bound）—
+  // applied via the production ingest to the reseal surface's DURABLE LEDGER.
+  const ingested = await ledgerPassVerdict({
+    surfaceDir: resealSurface,
+    archiveDir: process.env.AUTOLOOP_REVIEW_ARCHIVE,
+    cardId, bundleIdentity: bundleId2, bundleSha256: bundleSha2,
   });
-  assert.equal(applied.ok, true, applied.errors?.join(","));
-  writeExternalReviewDeliveryRecord({ outDir: resealSurface, state: applied.state, cardId, fileName: "delivery.json" });
+  assert.equal(ingested.ok, true, (ingested.errors ?? []).join(";") || String(ingested.code ?? ""));
 
   // reseal did NOT replace the baseline
   const stAfter = readCloseoutState(resealPath);
@@ -644,7 +667,7 @@ test("T18: complete lifecycle authority→admission→candidate→review→STAGE
   const outDir = join(root, cardId);
   mkdirSync(outDir, { recursive: true });
   process.env.AUTOLOOP_REVIEW_SURFACE = join(tmpdir(), `t18-surface-${process.pid}`);
-  process.env.AUTOLOOP_REVIEW_ARCHIVE = join(repo.dir, "archive-18");
+  process.env.AUTOLOOP_REVIEW_ARCHIVE = join(tmpdir(), `t18-archive-${process.pid}`);
 
   // 1. authority issued (schema-valid) inside the card outDir — the
   // candidate-domain excludes docs/pi-graph-output, so the record never
@@ -732,14 +755,15 @@ test("T18: complete lifecycle authority→admission→candidate→review→STAGE
     outDir, surfaceDir: process.env.AUTOLOOP_REVIEW_SURFACE,
   });
   assert.equal(r1.final, "PASS", r1.reason ?? "");
-  const rec = readExternalReviewDeliveryRecord(join(process.env.AUTOLOOP_REVIEW_SURFACE, "delivery.json"));
-  const applied = applyExternalReviewVerdict(rec.state, {
-    verdict: "PASS", reviewerIdentity: "reviewer:ext",
-    reviewedAt: new Date().toISOString(), bundleIdentity: r1.bundle.identity, bundleSha256: r1.bundle.sha256,
-    findingsDigest: sha("f", 64),
+  // external PASS verdict applied via the production ingest to the DURABLE
+  // LEDGER（identity-bound）— the authoritative record the final closeout
+  // gate reads.
+  const ingested = await ledgerPassVerdict({
+    surfaceDir: process.env.AUTOLOOP_REVIEW_SURFACE,
+    archiveDir: process.env.AUTOLOOP_REVIEW_ARCHIVE,
+    cardId, bundleIdentity: r1.bundle.identity, bundleSha256: r1.bundle.sha256,
   });
-  assert.equal(applied.ok, true, applied.errors?.join(","));
-  writeExternalReviewDeliveryRecord({ outDir: process.env.AUTOLOOP_REVIEW_SURFACE, state: applied.state, cardId, fileName: "delivery.json" });
+  assert.equal(ingested.ok, true, (ingested.errors ?? []).join(";") || String(ingested.code ?? ""));
 
   // 9. final closeout
   const rFinal = await runStateDrivenCloseout({

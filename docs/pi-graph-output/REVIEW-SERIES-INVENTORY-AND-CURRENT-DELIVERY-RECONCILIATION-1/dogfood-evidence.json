@@ -1,0 +1,84 @@
+{
+  "schema": "autoloop.dogfood-evidence/v1",
+  "cardId": "REVIEW-SERIES-INVENTORY-AND-CURRENT-DELIVERY-RECONCILIATION-1",
+  "runAt": "2026-08-17T12:10:00.000Z",
+  "verdict": "PASS",
+  "holdCode": null,
+  "holdReason": null,
+  "acceptance": {
+    "A_CURRENT_IDENTITY": "3e4c631edf5050a9c670c59acbf5f4404cb5f54027fd0e31bb91b7b9ff3cb044",
+    "B_CURRENT_IDENTITY": "dc09c31f47cfd8853b5905c537b4ee0416205ed7f4d1131c8e93a237a1e6a9d9",
+    "C_CURRENT_IDENTITY": "aedcafcc8453bc9346e2abaceafb6b7b7615636eafc8c3c9e167773cde3e867b",
+    "A_TO_B_CHANGED": "YES",
+    "B_TO_C_CHANGED": "YES",
+    "NO_VERDICT_USED": "YES",
+    "NO_ROTATE_USED": "YES",
+    "NO_PROMOTE_USED": "YES",
+    "PC1_PRESENTED_WITHOUT_OLD_PASS": "YES"
+  },
+  "dogfood": {
+    "surface": "/Users/zhengfengqing/Desktop/AutoLoop-Review/Current",
+    "method": "node scripts/gov-external-review-surface.mjs --deliver <bundle> --card <id>",
+    "A": {
+      "cardId": "CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1",
+      "identity": "3e4c631edf5050a9c670c59acbf5f4404cb5f54027fd0e31bb91b7b9ff3cb044",
+      "sha256": "9b504d6e3961718ff36fb53a3f4380d8e8859f7cd56acf61df5734f065919bba",
+      "bundle": "docs/pi-graph-output/current-latest-review-presentation-semantics-1/card-closeout-bundle-20260817-3e4c631e.txt",
+      "validator": "valid",
+      "order": 10,
+      "ledgerAfter": { "state": "PENDING", "isLatestPresented": true, "verdict": null }
+    },
+    "B": {
+      "cardId": "AUTOLOOP-PI-GRAPH-CBM3-1",
+      "identity": "dc09c31f47cfd8853b5905c537b4ee0416205ed7f4d1131c8e93a237a1e6a9d9",
+      "sha256": "cd050e3e47e571862a83db74f8274962f88c76cf7b186677fdc410dcdb7c5724",
+      "bundle": "docs/pi-graph-output/cbm3/card-closeout-bundle-20260807-dc09c31f.txt",
+      "validator": "valid",
+      "order": 11,
+      "ledgerAfter": { "state": "PENDING", "isLatestPresented": true, "verdict": null },
+      "A_ledgerAfter": { "state": "PENDING", "isLatestPresented": false, "verdict": null }
+    },
+    "C": {
+      "cardId": "AUTOLOOP-PI-GRAPH-DE1",
+      "identity": "aedcafcc8453bc9346e2abaceafb6b7b7615636eafc8c3c9e167773cde3e867b",
+      "sha256": "ae31691b15dd4257f28bf18d1aec9443b554e0970902f6dc273c31ccbeee68a9",
+      "bundle": "docs/pi-graph-output/de1/card-closeout-bundle-20260808-aedcafcc.txt",
+      "validator": "valid",
+      "order": 12,
+      "ledgerAfter": { "state": "PENDING", "isLatestPresented": true, "verdict": null },
+      "A_B_ledgerAfter": { "state": "PENDING", "isLatestPresented": false, "verdict": null }
+    }
+  },
+  "lifecycleObservations": [
+    { "step": 1, "op": "A completes (no verdicts anywhere)", "result": "Current = A (3e4c631e) immediately; delivery.json AWAITING_EXTERNAL_REVIEW; ledger order 10" },
+    { "step": 2, "op": "B completes while A PENDING", "result": "Current = B (dc09c31f); A stayed durable PENDING (no verdict); A_TO_B_CHANGED=YES" },
+    { "step": 3, "op": "C completes while A/B PENDING", "result": "Current = C (aedcafcc); A/B stayed PENDING (no verdicts); B_TO_C_CHANGED=YES" },
+    { "step": 4, "op": "PC1 (order 9) late replay after C (order 12)", "result": "REFUSED as stale replay (queued=true staleReplay=true); Current NOT regressed to PC1 — N4 ordering guard verified live" },
+    { "step": 5, "op": "live surface restored to the canonical state", "result": "Current = PARENT_TO_CHILD_CONTEXT_AND_EVIDENCE_INHERITANCE_CONVERGED (fa0fd10b) — byte-identical to the PC1 closeout bundle; no old review PASS required (card K)" }
+  ],
+  "ledgerFinalState": {
+    "presented": "PARENT_TO_CHILD_CONTEXT_AND_EVIDENCE_INHERITANCE_CONVERGED (fa0fd10b, order 9, isLatestPresented=true)",
+    "PENDING": ["RBD-RESEAL-DOGFOOD (order 8)", "PARENT_TO_CHILD_CONTEXT_AND_EVIDENCE_INHERITANCE_CONVERGED (order 9, presented)"],
+    "REVIEWED": ["AUTOLOOP-REVART-LC1-B2 (PASS)", "RBD-LIFECYCLE-DOGFOOD (PASS)"],
+    "ARCHIVED": ["AUTOLOOP-CBM-LIVE-INTEGRATION-1", "AUTOLOOP-REVIEW-LIVE-CURRENT-CONVERGENCE-1", "REVIEW-AUTO-GENERATION-AND-DELIVERY-1", "REPORT_B", "REVIEW-BUNDLE-REVIEW-SECTION-CONVERGENCE-1"],
+    "dogfoodEntries": "rolled back with the snapshot restore — the live ledger returns to its canonical pre-dogfood state (nextOrder 10); the A/B/C proof stands in this evidence"
+  },
+  "verification": {
+    "governanceSuite": { "tests": 519, "pass": 519, "fail": 0, "consecutiveCleanRuns": 12 },
+    "fullSuite": { "tests": 1985, "pass": 1947, "fail": 38, "allPreExistingEnvironmental": true, "governanceFailures": 0, "note": "the 38 are colima/subagent/secret-scan environment failures identical in class to the e55da27 baseline (47) minus the 8 governance/path-drift failures fixed by this card" },
+    "testsRepairedThisCard": [
+      "test/governance/test-candidate-provenance-repair.mjs (T15/T16/T18: verdict applied via the production LEDGER ingest, not the surface record — old surface-record semantics were R0-conflicting)",
+      "test/governance/test-external-review-surface.mjs (per-surface lock path)",
+      "test/governance/test-verification-scope-guard.mjs (repo-relative path)",
+      "test/governance/test-verification-timing.mjs (repo-relative path)",
+      "test/governance/test-vca1-phase0b-enforcement.mjs (repo-relative path)",
+      "test/governance/test-git-status-parsing.mjs (location-independent live-repo check)"
+    ]
+  },
+  "sourceRepairedThisCard": [
+    "src/governance/review-bundle.mjs: per-surface presentation lock (externalReviewSurfaceLockPath) — unrelated surfaces no longer collide; staging cleanup scoped to own token + dead owner; stale surface_occupied documentation removed (surface_occupied = 0 in live source)",
+    "src/governance/review-queue.mjs: queue-file single-writer lock (acquireQueueLock/releaseQueueLock, bounded spin) — the shared ledger projection serializes read→mutate→write across surfaces of one root",
+    "src/governance/external-verdict-ingest.mjs: queue lock held across apply→archive (rotate receives the caller-held queueLock — no deadlock)",
+    "scripts/gov-external-review-surface.mjs: stale queued/autoRotated/resealed output removed; stale-replay note corrected"
+  ]
+}

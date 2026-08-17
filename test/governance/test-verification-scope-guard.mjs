@@ -11,7 +11,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   checkVerificationRoot,
   assertVerificationRoot,
@@ -19,7 +20,9 @@ import {
   VERIFICATION_SCOPE_HOLDS,
 } from "../../src/governance/verification-scope-guard.mjs";
 
-const REPO = "/Volumes/NVM2T/Development/autoloop";
+// Repo root resolved from THIS test file — location-independent（the repo
+// was relocated between /Volumes/NVM2T/Development/autoloop and /tmp）.
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 test("NEG1: recursive scan of /Users/zhengfengqing is rejected before traversal", () => {
   const result = checkVerificationRoot("/Users/zhengfengqing");

@@ -14,6 +14,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   timingFields,
   parseNodeTestOut,
@@ -21,7 +23,8 @@ import {
   aggregateTiming,
 } from "../../src/governance/verification-timing.mjs";
 
-const REPO = "/Volumes/NVM2T/Development/autoloop";
+// Repo root resolved from THIS test file — location-independent.
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 test("S2/1: timingFields records MEASURED start/completed/wallMs from real instants", () => {
   const start = Date.now() - 1234;

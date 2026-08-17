@@ -155,6 +155,66 @@ export function queueNeedsMigration(queue) {
 }
 
 /**
+ * Queue-file single-writer lock. The queue.json projection may be shared by
+ * several surfaces under one review root（entries are surface-scoped）— its
+ * read-modify-write cycles must serialize even when the SURFACE presentation
+ * locks are per-surface. Acquire BEFORE any read→mutate→write cycle on the
+ * queue and release in a finally（see the surface lock for the same
+ * tmp+rename / stale-owner pattern）. Lock order is always surface → queue
+ *（never the reverse）— no deadlock.
+ */
+export function reviewQueueLockPath(surfaceDir = null) {
+  return join(reviewQueueDir(surfaceDir), ".queue.lock");
+}
+
+export function acquireQueueLock(surfaceDir = null, { spinMs = 3000, stepMs = 10 } = {}) {
+  const lockPath = reviewQueueLockPath(surfaceDir);
+  const token = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  mkdirSync(dirname(lockPath), { recursive: true });
+  const write = () => {
+    writeFileSync(lockPath, JSON.stringify({ pid: process.pid, token, acquiredAt: new Date().toISOString() }), { flag: "wx" });
+    return { ok: true, token, lockPath };
+  };
+  // Bounded spin: queue critical sections are short（read→mutate→tmp+rename
+  // write）and the queue file is shared by several surfaces of one root — a
+  // concurrent writer should be WAITED OUT, not failed instantly（a
+  // transient queue_busy would otherwise degrade concurrent deliveries）.
+  const deadline = Date.now() + spinMs;
+  for (;;) {
+    try {
+      return write();
+    } catch (e) {
+      if (e.code !== "EEXIST") return { ok: false, reason: `queue_lock_error:${String(e?.message ?? e).slice(0, 120)}`, lockPath };
+    }
+    try {
+      const raw = JSON.parse(readFileSync(lockPath, "utf8"));
+      if (raw?.pid && !queueOwnerAlive(raw.pid)) {
+        // crashed owner — break the stale lock and retry immediately.
+        rmSync(lockPath, { force: true });
+        try { return write(); } catch { /* raced breaker — keep spinning */ }
+      }
+    } catch { /* unreadable lock — fail closed, do not guess */ }
+    if (Date.now() >= deadline) {
+      return { ok: false, reason: "queue_busy", lockPath };
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, stepMs);
+  }
+}
+
+function queueOwnerAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; }
+}
+
+export function releaseQueueLock({ lockPath, token } = {}) {
+  if (!lockPath || !token) return;
+  try {
+    const raw = JSON.parse(readFileSync(lockPath, "utf8"));
+    if (raw?.token === token) rmSync(lockPath, { force: true });
+  } catch { /* best effort */ }
+}
+
+/**
  * Read the durable queue（fail-closed）. Missing file = empty queue（valid）;
  * present-but-corrupt = { ok:false, holdCode: REVIEW_QUEUE_CORRUPT } — never
  * silently discard entries.

@@ -31,7 +31,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { scanForSecrets, sha256Text } from "../evidence/run-evidence-store.mjs";
 import { publishHumanReport } from "./human-report.mjs";
 import { readReviewJob, findingsPath, verdictPath, updateReviewJob } from "./review-job.mjs";
@@ -50,6 +50,8 @@ import {
   readLatestPointer,
   reviewQueueStatus,
   findEntry,
+  acquireQueueLock,
+  releaseQueueLock,
 } from "./review-queue.mjs";
 import { buildChangeInventory } from "./change-inventory.mjs";
 import { candidateDomain } from "./candidate-domain-policy.mjs";
@@ -682,9 +684,22 @@ export function readExternalReviewDeliveryRecord(path) {
  * concurrent delivery cannot acquire it -> surface_busy -> fail-closed. A
  * crashed owner's lock（dead pid）is broken so the surface never wedges.
  */
+/**
+ * Lock file path for a review surface — PER-SURFACE（keyed by the surface
+ * dir name, sibling of the surface）. Two surfaces under the same parent
+ * never block each other（a shared `dirname/.surface.lock` made any two
+ * tmpdir-based test surfaces collide with false surface_busy）; the single
+ * real Desktop surface keeps exactly one lock, renamed from `.surface.lock`
+ * to `.surface-Current.lock`（old stale locks are inert orphans）.
+ */
+export function externalReviewSurfaceLockPath(surfaceDir) {
+  const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
+  return join(dirname(dir), `.surface-${basename(dir)}.lock`);
+}
+
 export function acquireExternalReviewSurfaceLock(surfaceDir = null) {
   const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
-  const lockPath = join(dirname(dir), ".surface.lock");
+  const lockPath = externalReviewSurfaceLockPath(dir);
   const token = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const acquire = () => {
     try {
@@ -729,13 +744,15 @@ export function releaseExternalReviewSurfaceLock({ lockPath, token } = {}) {
  * Atomically deliver the current valid bundle to the fixed external-review
  * surface（Current/）: review-bundle.txt + delivery.json + evidence.json.
  *
- * RB-1H repair（atomic-publication / concurrency contract）:
+ * CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1（atomic-publication /
+ * concurrency contract）:
  *   1. single-owner publication: the whole publish runs under the surface
- *      lock — a second concurrent delivery fails surface_busy, never
- *      overwrites the first
- *   2. occupancy fail-closed: if Current/ already holds a published trio
- *      （any non-dot entry）the delivery REFUSES（surface_occupied）— an
- *      un-rotated valid review is never overwritten
+ *      lock — a second concurrent delivery to the SAME surface fails
+ *      surface_busy, never overwrites the first
+ *   2. Current/ is a PRESENTATION slot, never a review-authority lock — a
+ *      fresh completion ALWAYS publishes（whatever occupies the slot is
+ *      replaced）; only an OLDER completion replay is refused（stale replay
+ *      never regresses Current）and an identical generation is idempotent
  *   3. the trio is fully built in an INVISIBLE staging dir
  *      （parent/.incoming-<token>）, then exposed to the reviewer by ONE
  *      directory-level rename — the reviewer can never observe a mixed trio
@@ -779,18 +796,6 @@ function publishTrioToSurface({ dir, parent, token, bundlePath, state, source, c
 }
 
 /**
- * Read the queue for a surface（fail-closed: corrupt queue -> HOLD）. A
- * corrupt queue file is NEVER silently discarded（Phase 6 T14）.
- */
-function loadQueueOrHold(surfaceDir) {
-  const qr = readReviewQueue(surfaceDir ?? null);
-  if (!qr.ok) {
-    return { hold: true, reason: `queue_hold:${qr.holdCode}:${qr.reason ?? ""}`, queue: null };
-  }
-  return { hold: false, reason: null, queue: qr.queue };
-}
-
-/**
  * Update the Latest navigation pointer for a newly persisted formal review
  * generation. Best-effort（Phase 6 T15: a Latest failure never blocks or
  * invalidates review authority）— the queue entry is already durable.
@@ -802,12 +807,13 @@ function touchLatest(entry, surfaceDir) {
 
 /**
  * REVIEW-LATEST-HUMAN-HANDOFF-1 — publish the human-facing latest report for
- * a delivered formal review bundle（F1）: Latest Human Report = the new
- * bundle whether it landed CURRENT or QUEUED. This is INDEPENDENT of review
- * scheduling: a publication failure never fails the delivery（best-effort;
- * the error surfaces on the delivery result as humanReportError）. The human
- * dir derives from the resolved surface dir, so env-isolated surfaces（tests
- * / CI）automatically isolate the human surface too.
+ * a delivered formal review bundle（F1）: Latest Human Report = the newest
+ * generated bundle（an OLDER completion replay never regresses it）. This is
+ * INDEPENDENT of review scheduling: a publication failure never fails the
+ * delivery（best-effort; the error surfaces on the delivery result as
+ * humanReportError）. The human dir derives from the resolved surface dir, so
+ * env-isolated surfaces（tests / CI）automatically isolate the human surface
+ * too.
  */
 function publishHumanForBundle({ dir, bundlePath, state, source, generation, jobId }) {
   try {
@@ -838,13 +844,16 @@ function publishHumanForBundle({ dir, bundlePath, state, source, generation, job
  * Deliver the current valid bundle to the fixed external-review surface
  *（Current/）: review-bundle.txt + delivery.json + evidence.json.
  *
- * RB-1H repair（atomic-publication / concurrency contract）:
+ * CURRENT-LATEST-REVIEW-PRESENTATION-SEMANTICS-1（atomic-publication /
+ * concurrency contract）:
  *   1. single-owner publication: the whole publish runs under the surface
- *      lock — a second concurrent delivery fails surface_busy, never
- *      overwrites the first
- *   2. occupancy fail-closed: if Current/ already holds a published trio
- *      （any non-dot entry）the delivery REFUSES（surface_occupied）— an
- *      un-rotated valid review is never overwritten
+ *      lock — a second concurrent delivery to the SAME surface fails
+ *      surface_busy, never overwrites the first
+ *   2. Current/ is a PRESENTATION slot, never a review-authority lock — a
+ *      fresh completion ALWAYS publishes, replacing whatever occupies the
+ *      slot（card D1: A completes -> Current = A, whatever the previous
+ *      card）; an identical generation already presented is idempotent; an
+ *      OLDER completion replay never regresses Current（N4）
  *   3. the trio is fully built in an INVISIBLE staging dir
  *      （parent/.incoming-<token>）, then exposed to the reviewer by ONE
  *      directory-level rename — the reviewer can never observe a mixed trio
@@ -852,23 +861,19 @@ function publishHumanForBundle({ dir, bundlePath, state, source, generation, job
  *   4. any failure returns attempted:false — the caller（runCloseoutGate）
  *      keeps the card at AWAITING_BUNDLE_DELIVERY
  *
- * REVART-LC1 review-queue handoff（this card）— the single-slot surface is
- * now a QUEUE FRONT, not the whole pipeline:
- *   - Current empty                       -> publish directly; entry becomes
- *                                            CURRENT; Latest updated（T1）
- *   - Current occupied, SAME identity     -> idempotent reuse（T7）
- *   - Current occupied, DIFFERENT card    -> QUEUED behind the occupant;
- *                                            Latest updated; queued delivery
- *                                            is SUCCESS, not surface_occupied
- *                                            failure（T2）
- *   - Current occupied, sanctioned reseal
- *     of the occupant's own lineage       -> Current updates to the
- *                                            superseding generation in place;
- *                                            no queue duplicate（T10）
- *   - Current occupied, same card,
- *     conflicting identity                -> queue entry HOLD（T8）
- *   - Current occupied, RESOLVED occupant -> auto-rotate（R7）then promote the
- *                                            next pending review（T3/T19）
+ * Deterministic publication decision（N3 single-writer ordering / N4 stale-
+ * replay protection）:
+ *   - fresh completion（new monotonic order）  -> publish to Current;
+ *                                                entry marked presented;
+ *                                                Latest updated
+ *   - identical generation already presented  -> idempotent reuse（T7）
+ *   - OLDER completion replay（order < current）
+ *                                             -> ledger entry durable;
+ *                                                presentation NOT regressed
+ *   - same card, conflicting identity, no
+ *     valid supersession                      -> queue entry HOLD（T8）,
+ *                                                fail-closed（never publishes
+ *                                                over an ambiguous lineage）
  */
 export function deliverToExternalReviewSurface({ bundlePath, state, source = {}, outDir, surfaceDir = null, lock = null, currentCardId = null, generation = null, jobId = null, queueDir = null }) {
   const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
@@ -897,6 +902,14 @@ export function deliverToExternalReviewSurface({ bundlePath, state, source = {},
   }
   const token = ownLock.token;
   const lockPath = ownLock.lockPath;
+  // Queue-file single-writer lock（shared across surfaces of one root）—
+  // the ledger read→mutate→write cycles must serialize even when the
+  // surface presentation locks are per-surface.
+  const ql = acquireQueueLock(qSurface);
+  if (!ql.ok) {
+    releaseExternalReviewSurfaceLock({ lockPath, token });
+    return { attempted: false, reason: `queue_busy:${ql.reason ?? "queue_lock_unavailable"}`, surfaceDir: dir };
+  }
   try {
     // crash-safe migration of any legacy queue file before any write
     const migrated = ensureQueueMigrated(qSurface);
@@ -981,12 +994,26 @@ export function deliverToExternalReviewSurface({ bundlePath, state, source = {},
   } catch (e) {
     return { attempted: false, reason: `surface_delivery_failed:${String(e?.message ?? e).slice(0, 200)}`, surfaceDir: dir };
   } finally {
+    releaseQueueLock({ lockPath: ql.lockPath, token: ql.token });
     releaseExternalReviewSurfaceLock({ lockPath, token });
     try {
-      // stale staging cleanup: under OUR lock no other publisher is mid-flight,
-      // so any leftover .incoming-* in the parent is a crashed attempt's residue
+      // Staging cleanup — scoped so a LIVE concurrent publisher（per-surface
+      // locks allow several surfaces under one parent to publish in
+      // parallel）is never disturbed: remove OUR OWN token's staging and
+      // .incoming-* whose embedded owner pid is dead（crashed attempt's
+      // residue — the token embeds `pid-timestamp-rand`）. A live foreign
+      // publisher's staging is left intact.
+      const own = `.incoming-${token}`;
       for (const f of readdirSync(parent)) {
-        if (f.startsWith(".incoming-")) rmSync(join(parent, f), { recursive: true, force: true });
+        if (!f.startsWith(".incoming-")) continue;
+        if (f === own) {
+          rmSync(join(parent, f), { recursive: true, force: true });
+          continue;
+        }
+        const pid = Number.parseInt(f.slice(".incoming-".length).split("-")[0], 10);
+        if (!Number.isInteger(pid) || !surfaceProcessAlive(pid)) {
+          rmSync(join(parent, f), { recursive: true, force: true });
+        }
       }
     } catch { /* best effort */ }
   }
@@ -1001,45 +1028,54 @@ export function deliverToExternalReviewSurface({ bundlePath, state, source = {},
  * older review（N4）; bundle bytes are copied verbatim, never regenerated.
  * Caller MUST hold the surface lock.
  */
-export function promoteNextPendingReviewLocked({ surfaceDir, archiveDir = null, lock = null, queue = null }) {
+export function promoteNextPendingReviewLocked({ surfaceDir, archiveDir = null, lock = null }) {
   const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
-  const q = queue ?? loadQueueOrHold(dir).queue;
-  if (!q) return { ok: false, reason: "queue_hold", promoted: null, queue: q };
-  const newest = newestEligibleEntry(q, dir);
-  if (!newest) return { ok: true, reason: "none_eligible", promoted: null, queue: q };
-  const presented = presentedEntry(q, dir);
-  if (presented && presented.entryId === newest.entryId && presented.bundleIdentity === newest.bundleIdentity) {
-    // already presented in the ledger — but the SURFACE trio must actually be
-    // there（crash between ledger persist and publish; card N1）. Republish
-    // when the presentation files are missing or stale.
-    const bundlePath = join(dir, "review-bundle.txt");
-    const deliveryPath = join(dir, "delivery.json");
-    const trioPresent = existsSync(bundlePath) && existsSync(deliveryPath)
-      && readExternalReviewDeliveryRecord(deliveryPath).ok
-      && bundleContentSha256(bundlePath) === newest.bundleSha256;
-    if (trioPresent) {
-      return { ok: true, reason: "already_current", promoted: null, queue: q };
+  // Queue single-writer lock; the queue is RE-READ under the lock（the
+  // caller's snapshot may predate a concurrent writer）.
+  const ql = acquireQueueLock(dir);
+  if (!ql.ok) return { ok: false, reason: `queue_busy:${ql.reason ?? "queue_lock_unavailable"}`, promoted: null, queue: null };
+  try {
+    const migrated = ensureQueueMigrated(dir);
+    if (!migrated.ok) return { ok: false, reason: migrated.reason ?? "queue_hold", promoted: null, queue: null };
+    const q = migrated.queue;
+    const newest = newestEligibleEntry(q, dir);
+    if (!newest) return { ok: true, reason: "none_eligible", promoted: null, queue: q };
+    const presented = presentedEntry(q, dir);
+    if (presented && presented.entryId === newest.entryId && presented.bundleIdentity === newest.bundleIdentity) {
+      // already presented in the ledger — but the SURFACE trio must actually be
+      // there（crash between ledger persist and publish; card N1）. Republish
+      // when the presentation files are missing or stale.
+      const bundlePath = join(dir, "review-bundle.txt");
+      const deliveryPath = join(dir, "delivery.json");
+      const trioPresent = existsSync(bundlePath) && existsSync(deliveryPath)
+        && readExternalReviewDeliveryRecord(deliveryPath).ok
+        && bundleContentSha256(bundlePath) === newest.bundleSha256;
+      if (trioPresent) {
+        return { ok: true, reason: "already_current", promoted: null, queue: q };
+      }
     }
+    mkdirSync(dir, { recursive: true });
+    const state = buildExternalReviewState({
+      bundle: { identity: newest.bundleIdentity, sha256: newest.bundleSha256 },
+      bundlePath: newest.bundlePath,
+      deliveryAttempted: true,
+      deliveryMethod: "external-review-surface",
+    });
+    publishTrioToSurface({
+      dir,
+      parent: dirname(dir),
+      token: lock?.token ?? `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      bundlePath: newest.bundlePath,
+      state,
+      source: { task: { cardId: newest.cardId }, evidence: newest.evidencePath ? [{ path: newest.evidencePath, sha256: "0".repeat(64) }] : [] },
+      cardId: newest.cardId,
+    });
+    const mk = markPresented(q, newest.cardId, { deliveredAt: new Date().toISOString(), surfaceDir: dir });
+    writeReviewQueue(mk.queue, { surfaceDir: dir });
+    return { ok: true, promoted: mk.entry, queue: mk.queue };
+  } finally {
+    releaseQueueLock({ lockPath: ql.lockPath, token: ql.token });
   }
-  mkdirSync(dir, { recursive: true });
-  const state = buildExternalReviewState({
-    bundle: { identity: newest.bundleIdentity, sha256: newest.bundleSha256 },
-    bundlePath: newest.bundlePath,
-    deliveryAttempted: true,
-    deliveryMethod: "external-review-surface",
-  });
-  publishTrioToSurface({
-    dir,
-    parent: dirname(dir),
-    token: lock?.token ?? `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-    bundlePath: newest.bundlePath,
-    state,
-    source: { task: { cardId: newest.cardId }, evidence: newest.evidencePath ? [{ path: newest.evidencePath, sha256: "0".repeat(64) }] : [] },
-    cardId: newest.cardId,
-  });
-  const mk = markPresented(q, newest.cardId, { deliveredAt: new Date().toISOString(), surfaceDir: dir });
-  writeReviewQueue(mk.queue, { surfaceDir: dir });
-  return { ok: true, promoted: mk.entry, queue: mk.queue };
 }
 
 /**
@@ -1054,7 +1090,7 @@ export function promoteNextPendingReview({ surfaceDir = null, archiveDir = null 
   try {
     const migrated = ensureQueueMigrated(dir);
     if (!migrated.ok) return { ok: false, reason: migrated.reason ?? "queue_hold", promoted: null };
-    return promoteNextPendingReviewLocked({ surfaceDir: dir, archiveDir, lock: ownLock, queue: migrated.queue });
+    return promoteNextPendingReviewLocked({ surfaceDir: dir, archiveDir, lock: ownLock });
   } finally {
     releaseExternalReviewSurfaceLock({ lockPath: ownLock.lockPath, token: ownLock.token });
   }
@@ -1072,7 +1108,7 @@ export function reconcileReviewQueue({ surfaceDir = null, archiveDir = null, loc
   if (lock) {
     const migrated = ensureQueueMigrated(dir);
     if (!migrated.ok) return { ok: false, reason: migrated.reason ?? "queue_hold", promoted: null };
-    return promoteNextPendingReviewLocked({ surfaceDir: dir, archiveDir, lock, queue: migrated.queue });
+    return promoteNextPendingReviewLocked({ surfaceDir: dir, archiveDir, lock });
   }
   return promoteNextPendingReview({ surfaceDir: dir, archiveDir });
 }
@@ -1102,7 +1138,7 @@ export function latestReviewPointer({ surfaceDir = null } = {}) {
  * Runs under the same single-owner lock（never races a concurrent publish）.
  * Returns { ok, archived, cleared:false, promoted:null, queue }.
  */
-export function rotateExternalReviewSurface({ surfaceDir = null, archiveDir = null, cardId = "CARD", identity = "unknown", verdict = "PENDING", dateStr = null, lock = null } = {}) {
+export function rotateExternalReviewSurface({ surfaceDir = null, archiveDir = null, cardId = "CARD", identity = "unknown", verdict = "PENDING", dateStr = null, lock = null, queueLock = null } = {}) {
   const dir = resolve(surfaceDir ?? externalReviewSurfaceDir());
   const arch = resolve(archiveDir ?? externalReviewArchiveDir());
   if (!EXTERNAL_REVIEW_VERDICTS.includes(verdict)) {
@@ -1111,6 +1147,11 @@ export function rotateExternalReviewSurface({ surfaceDir = null, archiveDir = nu
   const ownLock = lock ?? acquireExternalReviewSurfaceLock(dir);
   if (!ownLock.ok) {
     return { ok: false, reason: ownLock.reason ?? "surface_busy", archived: [] };
+  }
+  const ql = queueLock ?? acquireQueueLock(dir);
+  if (!ql.ok) {
+    if (!lock) releaseExternalReviewSurfaceLock({ lockPath: ownLock.lockPath, token: ownLock.token });
+    return { ok: false, reason: `queue_busy:${ql.reason ?? "queue_lock_unavailable"}`, archived: [] };
   }
   try {
     const migrated = ensureQueueMigrated(dir);
@@ -1144,6 +1185,7 @@ export function rotateExternalReviewSurface({ surfaceDir = null, archiveDir = nu
   } finally {
     // Release only a lock WE acquired. A caller that passed its own lock
     // owns release.
+    if (!queueLock) releaseQueueLock({ lockPath: ql.lockPath, token: ql.token });
     if (!lock) {
       releaseExternalReviewSurfaceLock({ lockPath: ownLock.lockPath, token: ownLock.token });
     }

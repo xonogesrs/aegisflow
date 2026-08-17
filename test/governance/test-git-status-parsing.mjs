@@ -19,7 +19,8 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   parseGitStatusPorcelainZ,
   collectRepoFacts,
@@ -27,6 +28,9 @@ import {
 } from "../../src/governance/review-bundle.mjs";
 
 const REPO = join(tmpdir(), `rb1r-porcelain-${process.pid}`);
+// The live-repo regression case resolves the real checkout from this file —
+// location-independent（the repo was relocated from /Volumes/NVM2T）.
+const REAL_REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const git = (args, opts = {}) => spawnSync("git", args, { cwd: REPO, encoding: "utf8", ...opts });
 
 before(() => {
@@ -179,8 +183,16 @@ test("11. clean repo -> clean digest, empty lists", { timeout: 30000 }, () => {
   assert.deepEqual(facts.untrackedFiles, []);
 });
 
-test("12. real repo A: package.json is no longer truncated（live regression）", { timeout: 30000 }, () => {
-  const facts = collectRepoFacts("/Volumes/NVM2T/Development/autoloop");
-  assert.ok(facts.dirtyPaths.includes("package.json"), `repo A dirty paths keep package.json (${JSON.stringify(facts.dirtyPaths.slice(0, 3))})`);
-  assert.ok(!facts.dirtyPaths.includes("ackage.json"), "no ackage.json anywhere");
+test("12. real repo A: no truncated porcelain path（live regression）", { timeout: 30000 }, () => {
+  // RB-1 regression: the parser dropped the first character of the first
+  // path（package.json -> ackage.json）. Live invariant on the REAL checkout
+  //（location-independent）: no reported path may be a first-char-truncated
+  // form, and a path literally named package.json keeps its full name. The
+  // deterministic "modified package.json stays intact" case is test 1（scratch
+  // repo）— the live repo's dirty set is state-dependent, so it cannot
+  // require package.json to be dirty.
+  const facts = collectRepoFacts(REAL_REPO);
+  const dirty = facts.dirtyPaths;
+  assert.ok(!dirty.includes("ackage.json"), "no ackage.json in dirty paths");
+  assert.ok(!dirty.some((p) => p.endsWith("/ackage.json")), "no ackage.json anywhere");
 });

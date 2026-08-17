@@ -421,14 +421,15 @@ if (mode === "deliver") {
     process.exit(1);
   }
   if (d.queued) {
-    console.log(`delivered=true queued=true method=${d.method} surface=${d.surfaceDir}`);
+    // Only reachable for an OLDER completion replay（staleReplay）: the
+    // ledger entry stays durable; the presentation is never regressed.
+    console.log(`delivered=true queued=true staleReplay=true method=${d.method} surface=${d.surfaceDir}`);
     console.log(`queueEntry=${d.entryId} order=${d.order}`);
     console.log(`reviewBundleIdentity: ${identity}`);
     console.log(`reviewBundleSha256: ${sha}`);
     console.log(`externalReviewStatus: ${attempted.externalReviewStatus} deliveryAttempted=${attempted.delivery.attempted}`);
-    if (d.autoRotated) console.log("autoRotated: resolved occupant rotated before queueing");
     if (d.latestError) console.log(`latestWarning: ${d.latestError}`);
-    console.log("note: queued behind the current occupant; promotes automatically after rotation");
+    console.log("note: older completion replay — ledger entry durable; Current NOT regressed（stale-replay guard, card N4）");
     process.exit(0);
   }
   console.log(`delivered=true method=${d.method} surface=${d.surfaceDir}`);
@@ -436,7 +437,6 @@ if (mode === "deliver") {
   console.log(`reviewBundleIdentity: ${identity}`);
   console.log(`reviewBundleSha256: ${sha}`);
   console.log(`externalReviewStatus: ${attempted.externalReviewStatus} deliveryAttempted=${attempted.delivery.attempted}`);
-  if (d.resealed) console.log("resealed: current occupant updated to superseding generation");
   if (d.latestError) console.log(`latestWarning: ${d.latestError}`);
   console.log("note: RECEIVED is proven solely by the external reviewer's verdict");
   process.exit(0);
