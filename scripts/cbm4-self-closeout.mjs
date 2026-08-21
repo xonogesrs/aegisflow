@@ -36,7 +36,7 @@ import { openMemoryDb, applyMigrations, upsertRecord } from "../src/memory/sqlit
 import { deriveContentHash, deriveMemoryRecordId } from "../src/memory/identity.mjs";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const SCRATCH = `${HOME}/autoloop-cbm4-self-closeout`;
 const PROFILE = "autoloop-graph";
 const PARENT = { scope: { allowed_paths: ["docs/"], forbidden_paths: [".git"] } };

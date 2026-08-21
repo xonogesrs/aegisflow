@@ -42,7 +42,7 @@ import { runSubagentGraph } from "../src/subagent/subagent-graph-runner.mjs";
 import { agentExecutionIdFor, stageAgentExecutionId, SUBAGENT_REVIEW_RESULT_SCHEMA } from "../src/subagent/subagent-contract.mjs";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const SCRATCH = `${HOME}/autoloop-review-repair-test-scratch`;
 const PROFILE = "autoloop-graph";
 const PARENT = { scope: { allowed_paths: ["docs/"], forbidden_paths: [".git"] } };

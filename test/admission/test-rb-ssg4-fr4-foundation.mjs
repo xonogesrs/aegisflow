@@ -19,7 +19,7 @@ import { governPiCommand, governStructuredSearch } from "../../src/admission/pi-
 import { createFailedStrategyRegistry, SEARCH_HOLDS } from "../../src/admission/search-scope-governor.mjs";
 
 const HOME = "/Users/zhengfengqing";
-const REPO = "/Volumes/NVM2T/Development/autoloop";
+const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
 
 const decide = (command, cwd = REPO, registry) =>
   governPiCommand({ command, cwd, home: HOME, registry });

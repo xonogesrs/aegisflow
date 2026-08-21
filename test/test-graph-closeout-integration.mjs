@@ -29,7 +29,7 @@ import { runColimaGraph } from "../src/runtime/colima-graph-runner.mjs";
 import { validateReviewBundle, REVIEW_BUNDLE_HOLDS } from "../src/governance/review-bundle.mjs";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const SCRATCH = `${HOME}/autoloop-graph-closeout-test-scratch`;
 const PROFILE = "autoloop-graph";
 const PARENT = { scope: { allowed_paths: ["docs/"], forbidden_paths: [".git"] } };

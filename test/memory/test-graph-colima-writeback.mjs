@@ -28,7 +28,7 @@ import {
 } from "../../src/memory/index.mjs";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const SCRATCH = `${HOME}/autoloop-cbm3-graph-writeback-scratch`;
 const PROFILE = "autoloop-graph";
 const PARENT = { scope: { allowed_paths: ["docs/"], forbidden_paths: [".git"] } };

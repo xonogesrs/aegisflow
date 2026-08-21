@@ -22,7 +22,7 @@ import { phaseExecutionId } from "../src/v2/phase-task-card.mjs";
 import { deleteInstance, instanceSocket, cleanupStale } from "../src/runtime/colima-runtime.mjs";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const SCRATCH = `${HOME}/autoloop-c3-test-scratch`;
 const PROFILE = "autoloop-c3";
 const PHASE_ID = "c3-phase";

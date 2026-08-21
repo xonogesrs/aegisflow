@@ -33,7 +33,7 @@ import { spawn } from "node:child_process";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const HOME = homedir();
-const REPO_ROOT = "/Volumes/NVM2T/Development/autoloop";
+const REPO_ROOT = "/Volumes/NVM2T/Development/repos/autoloop";
 const OUT = join(REPO_ROOT, "docs/pi-graph-output/de2");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

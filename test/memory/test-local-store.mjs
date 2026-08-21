@@ -259,8 +259,8 @@ test("S16. validate() reports healthy store ok", () => {
 
 test("S17. resolveRepositoryIdentity derives deterministic repo/worktree/tree identity", async () => {
   const { resolveRepositoryIdentity } = await import("../../src/memory/index.mjs");
-  const id1 = resolveRepositoryIdentity("/Volumes/NVM2T/Development/autoloop");
-  const id2 = resolveRepositoryIdentity("/Volumes/NVM2T/Development/autoloop");
+  const id1 = resolveRepositoryIdentity("/Volumes/NVM2T/Development/repos/autoloop");
+  const id2 = resolveRepositoryIdentity("/Volumes/NVM2T/Development/repos/autoloop");
   assert.deepEqual(id1, id2);
   assert.ok(/^[0-9a-f]{64}$/.test(id1.repositoryIdentity));
   assert.ok(/^[0-9a-f]{64}$/.test(id1.worktreeIdentity));

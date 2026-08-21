@@ -36,7 +36,7 @@ import {
 import { validateAdapterResult } from "../src/adapter/contract.mjs";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const SCRATCH_ROOT = `${HOME}/autoloop-runtime`;
 const W1 = "autoloop-w1";
 const W2 = "autoloop-w2";

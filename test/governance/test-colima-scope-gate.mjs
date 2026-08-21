@@ -37,7 +37,7 @@ import {
   buildGraphCloseoutEvidenceSnapshot,
 } from "../../src/governance/review-bundle.mjs";
 
-const REPO = "/Volumes/NVM2T/Development/autoloop";
+const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
 
 const docsOnly = { authorizedScope: ["docs/pi-graph-output/x/"] };
 const memoryOnly = { authorizedScope: ["src/memory/", "test/memory/", "docs/pi-graph-output/x/"] };

@@ -71,7 +71,7 @@ test("scope guard: attempted root = /Users/zhengfengqing is blocked before any e
 });
 
 test("scope guard: explicit repo-scoped verification root is allowed", () => {
-  const result = checkVerificationRoot("/Volumes/NVM2T/Development/autoloop/src/governance");
+  const result = checkVerificationRoot("/Volumes/NVM2T/Development/repos/autoloop/src/governance");
   assert.equal(result.ok, true);
 });
 
@@ -87,7 +87,7 @@ test("scope guard: allowlist contract — a caller-authorized root under $HOME i
 
 test("Pi prompt text: executor prompt instructs authoritative-source-first and bounded verification root", () => {
   const phase = { phase_id: "p1", verification_plan: { method: "m", success_criteria: "s", failure_criteria: "f" } };
-  const taskCard = { repositoryRoot: "/Volumes/NVM2T/Development/autoloop", allowedPaths: ["src/x.mjs"], forbiddenPaths: [] };
+  const taskCard = { repositoryRoot: "/Volumes/NVM2T/Development/repos/autoloop", allowedPaths: ["src/x.mjs"], forbiddenPaths: [] };
   const prompt = buildPhaseExecutionPrompt({ phase, taskCard, lifecyclePhase: "executor", attempt: 0 });
   assert.match(prompt, /AUTHORITATIVE_SOURCE_FIRST/);
   assert.match(prompt, /VERIFICATION_SCOPE_UNBOUNDED/);
@@ -96,7 +96,7 @@ test("Pi prompt text: executor prompt instructs authoritative-source-first and b
 
 test("Pi prompt text: reviewer prompt also carries the bounded-verification instruction", () => {
   const phase = { phase_id: "p1", verification_plan: { method: "m", success_criteria: "s", failure_criteria: "f" } };
-  const taskCard = { repositoryRoot: "/Volumes/NVM2T/Development/autoloop", allowedPaths: [], forbiddenPaths: [] };
+  const taskCard = { repositoryRoot: "/Volumes/NVM2T/Development/repos/autoloop", allowedPaths: [], forbiddenPaths: [] };
   const prompt = buildPhaseExecutionPrompt({ phase, taskCard, lifecyclePhase: "reviewer", attempt: 0 });
   assert.match(prompt, /AUTHORITATIVE_SOURCE_FIRST/);
 });

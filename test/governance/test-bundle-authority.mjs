@@ -31,7 +31,7 @@ import {
   BUNDLE_AUTHORITY_HOLDS,
 } from "../../src/governance/review-bundle.mjs";
 
-const REPO = "/Volumes/NVM2T/Development/autoloop";
+const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
 
 // ── passing graph fixture（shape matches runColimaGraph / test-graph-closeout）──
 function passGraph(executionId) {

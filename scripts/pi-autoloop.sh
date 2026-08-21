@@ -24,6 +24,6 @@
 # opt-in entry point, not a global alias/wrapper override.
 set -euo pipefail
 
-REPO_ROOT="/Volumes/NVM2T/Development/autoloop"
+REPO_ROOT="/Volumes/NVM2T/Development/repos/autoloop"
 cd "$REPO_ROOT"
 exec pi --approve "$@"

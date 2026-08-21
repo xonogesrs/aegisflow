@@ -22,7 +22,7 @@ import { readFileSync, readdirSync, writeFileSync, mkdtempSync, rmSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const REPO = "/Volumes/NVM2T/Development/autoloop";
+const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
 const read = (p) => readFileSync(join(REPO, p), "utf8");
 
 const VERIFY_SCRIPTS = ["scripts/ta2-verify.mjs", "scripts/ta2r-verify.mjs", "scripts/ta3-verify.mjs", "scripts/rld2-verify.mjs"];

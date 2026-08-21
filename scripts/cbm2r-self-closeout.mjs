@@ -33,9 +33,9 @@ import { join } from "node:path";
 import { runMandatoryGraphCloseout } from "../src/governance/review-bundle.mjs";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const EXECUTION_ID = "cbm2r-self-closeout-20260807";
-const OUT = "/Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/cbm2r";
+const OUT = "/Volumes/NVM2T/Development/repos/autoloop/docs/pi-graph-output/cbm2r";
 
 // Supersede binding — linear chain（each generation supersedes the previous）:
 //   f484fae1（external REPAIR）-> 443d736c（internal generation, superseded
@@ -44,7 +44,7 @@ const OUT = "/Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/cbm2r";
 const SUPERSEDES = {
   reviewBundleIdentity: "443d736c15dd73e2e5c973db90c814e0060f7e4ce28eb5cff25d731931299915",
   reviewBundleSha256: "e94b7e1d81823e7a840026fd680997334ef42f6e19a050f0c125e04e0071ee44",
-  bundlePath: "/Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-443d736c.txt",
+  bundlePath: "/Volumes/NVM2T/Development/repos/autoloop/docs/pi-graph-output/cbm2r/card-closeout-bundle-20260807-443d736c.txt",
   verdict: null,
   reviewedAt: null,
 };

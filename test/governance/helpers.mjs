@@ -56,7 +56,7 @@ export function entryRecord(overrides = {}) {
     authorized_by: "controller",
     authorization_ref: "card",
     repository: REPOSITORY,
-    worktree: "/Volumes/NVM2T/Development/autoloop",
+    worktree: "/Volumes/NVM2T/Development/repos/autoloop",
     branch: BRANCH,
     base: BASE,
     base_head: "2a9d5c1e010a3654b2f371ef41e8c50c32cc21e4",

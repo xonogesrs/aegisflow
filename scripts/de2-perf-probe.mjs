@@ -30,7 +30,7 @@ import { createColimaReviewerAdapter } from "../src/runtime/colima-reviewer-adap
 import { recordGraphTelemetry } from "../src/telemetry/graph-observer.mjs";
 import { sha256Hex } from "../src/governance/review-bundle.mjs";
 
-const REPO = "/Volumes/NVM2T/Development/autoloop";
+const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
 const OUT = join(REPO, "docs/pi-graph-output/de2/de2-performance.json");
 const PROFILE = "autoloop-graph";
 

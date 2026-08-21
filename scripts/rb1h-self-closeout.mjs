@@ -30,16 +30,16 @@ import { join } from "node:path";
 import { runMandatoryGraphCloseout } from "../src/governance/review-bundle.mjs";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const EXECUTION_ID = "rb1h-self-closeout-20260807";
-const OUT = "/Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/rb1h";
+const OUT = "/Volumes/NVM2T/Development/repos/autoloop/docs/pi-graph-output/rb1h";
 
 // Supersede binding（RB-1H round-1 external REPAIR verdict; fixed facts）— the
 // new bundle supersedes 20a147b5, old artifact retained as historical evidence.
 const SUPERSEDES = {
   reviewBundleIdentity: "20a147b5a2cba19d97a4dd6e706ea40ef26cf2682520c6077d04fd120251b2df",
   reviewBundleSha256: "df3ef2e933de1f6f04314dec51f882e55d9e6cc336c6d73537394afbacd06f1b",
-  bundlePath: "/Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-20a147b5.txt",
+  bundlePath: "/Volumes/NVM2T/Development/repos/autoloop/docs/pi-graph-output/rb1h/card-closeout-bundle-20260807-20a147b5.txt",
   verdict: "REPAIR",
   reviewedAt: "2026-08-07",
 };

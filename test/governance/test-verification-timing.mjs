@@ -21,7 +21,7 @@ import {
   aggregateTiming,
 } from "../../src/governance/verification-timing.mjs";
 
-const REPO = "/Volumes/NVM2T/Development/autoloop";
+const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
 
 test("S2/1: timingFields records MEASURED start/completed/wallMs from real instants", () => {
   const start = Date.now() - 1234;

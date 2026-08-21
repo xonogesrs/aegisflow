@@ -35,7 +35,7 @@ import { createGraphMemoryProvider } from "../src/memory/index.mjs";
 import { runMandatoryGraphCloseout } from "../src/governance/review-bundle.mjs";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const SCRATCH = `${HOME}/autoloop-cbm3-self-closeout`;
 const PROFILE = "autoloop-graph";
 const PARENT = { scope: { allowed_paths: ["docs/"], forbidden_paths: [".git"] } };

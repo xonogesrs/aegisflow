@@ -25,7 +25,7 @@ import {
   writeGraphCloseoutEvidence,
 } from "../src/governance/review-bundle.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const OUT = join(REPO_A, "docs/pi-graph-output/rld2");
 const EXECUTION_ID = "rld2-root-cause-repair-20260809";
 

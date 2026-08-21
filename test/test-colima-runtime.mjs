@@ -32,7 +32,7 @@ test("card label is stable for stale cleanup scoping", () => {
 });
 
 test("assertMountAllowlist accepts only repo ro + scratch rw", () => {
-  const repo = "/Volumes/NVM2T/Development/autoloop";
+  const repo = "/Volumes/NVM2T/Development/repos/autoloop";
   const scratch = `${homedir()}/autoloop-runtime`;
   // allowed
   assert.doesNotThrow(() =>

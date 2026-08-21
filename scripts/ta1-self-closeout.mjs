@@ -21,7 +21,7 @@ import { join } from "node:path";
 import { stageAgentExecutionId, agentExecutionIdFor } from "../src/subagent/subagent-contract.mjs";
 import { runMandatoryGraphCloseout, buildGraphCloseoutSource, recursiveCanonicalJson, sha256Hex, collectRepoFacts } from "../src/governance/review-bundle.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const OUT = join(REPO_A, "docs/pi-graph-output/ta1");
 // New closeout EXECUTION for the corrected surface (FM-3 reseal precedent:
 // the final generation runs under its own graphRunId/evidence). The earlier

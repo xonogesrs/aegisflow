@@ -39,7 +39,7 @@ import {
   validateCardInventoryConsistency,
 } from "../../src/governance/card-inventory.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const ROOT = `${tmpdir()}/fm3-inventory-${process.pid}`;
 const OUT = join(ROOT, "out");
 

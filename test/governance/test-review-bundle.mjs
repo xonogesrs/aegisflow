@@ -34,7 +34,7 @@ import {
   evidenceManifestDigest,
 } from "../../src/governance/review-bundle.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const ROOT = `${tmpdir()}/rb-test-${process.pid}`;
 const OUT = join(ROOT, "out");
 const EV = join(ROOT, "ev");

@@ -180,7 +180,7 @@ test("11. clean repo -> clean digest, empty lists", { timeout: 30000 }, () => {
 });
 
 test("12. real repo A: package.json is no longer truncated（live regression）", { timeout: 30000 }, () => {
-  const facts = collectRepoFacts("/Volumes/NVM2T/Development/autoloop");
+  const facts = collectRepoFacts("/Volumes/NVM2T/Development/repos/autoloop");
   assert.ok(facts.dirtyPaths.includes("package.json"), `repo A dirty paths keep package.json (${JSON.stringify(facts.dirtyPaths.slice(0, 3))})`);
   assert.ok(!facts.dirtyPaths.includes("ackage.json"), "no ackage.json anywhere");
 });

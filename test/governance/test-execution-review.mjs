@@ -50,7 +50,7 @@ import {
 } from "../../src/governance/review-bundle.mjs";
 import { CLOSEOUT_STATE_SCHEMA, closeoutStatePath } from "../../src/governance/closeout-state.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 
 const ROOT = join(tmpdir(), `rsl2-exec-review-${process.pid}-${Date.now()}`);
 let SURFACE;

@@ -17,7 +17,7 @@ import { mkdirSync, readFileSync, existsSync, writeFileSync, renameSync } from "
 import { join } from "node:path";
 import { runMandatoryGraphCloseout, buildGraphCloseoutSource, buildGraphCloseoutEvidenceSnapshot, recursiveCanonicalJson, sha256Hex } from "../src/governance/review-bundle.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const OUT = join(REPO_A, "docs/pi-graph-output/de2r");
 const EXECUTION_ID = "de2r-self-closeout-20260808";
 

@@ -60,7 +60,7 @@ import {
   supersedesFromBundleText,
 } from "../../src/governance/review-bundle.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const ROOT = `${tmpdir()}/rb1g-delivery-${process.pid}`;
 const OUT = join(ROOT, "out");
 const OUT2 = join(ROOT, "out2");

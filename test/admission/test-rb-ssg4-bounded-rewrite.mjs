@@ -32,7 +32,7 @@ import {
 } from "../../src/admission/search-scope-governor.mjs";
 
 const HOME = "/Users/zhengfengqing";
-const REPO = "/Volumes/NVM2T/Development/autoloop";
+const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
 const DEV = "/Volumes/NVM2T/Development";
 
 /** Mirror the Pi extension pre-spawn seam: govern, then spawn only what is admitted. */

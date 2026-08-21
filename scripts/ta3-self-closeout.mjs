@@ -24,7 +24,7 @@ import {
   writeGraphCloseoutEvidence,
 } from "../src/governance/review-bundle.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const OUT = join(REPO_A, "docs/pi-graph-output/ta3");
 const EXECUTION_ID = "ta3-implementation-20260809";
 

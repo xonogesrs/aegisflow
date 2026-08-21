@@ -12,7 +12,7 @@ unbounded scan of the real filesystem.
 This is the AutoLoop repo. Its canonical path is:
 
 ```
-/Volumes/NVM2T/Development/autoloop
+/Volumes/NVM2T/Development/repos/autoloop
 ```
 
 If a task mentions AutoLoop, a card, a closeout, or an external-review
@@ -52,7 +52,7 @@ Never construct or run a command whose search root is `/`, `~`, `$HOME`, or
 `/Users/zhengfengqing` — including a dynamically-resolved path (e.g. a
 `../..` chain, or `cd` with no argument) that lands there. Bound every
 verification command's root to this repository
-(`/Volumes/NVM2T/Development/autoloop`) or a path a task explicitly names.
+(`/Volumes/NVM2T/Development/repos/autoloop`) or a path a task explicitly names.
 
 If the evidence you need is not reachable from an authorized bounded root —
 including "I don't know where the relevant file/repo/state lives" — stop and

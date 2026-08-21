@@ -42,7 +42,7 @@ Applied PER to the bounded AutoLoop domain only. Verified at `3ab1ebf`:
 
 | Check | Result |
 |---|---|
-| repo / worktree | `/Volumes/NVM2T/Development/autoloop` — canonical path per `AGENTS.md` |
+| repo / worktree | `/Volumes/NVM2T/Development/repos/autoloop` — canonical path per `AGENTS.md` |
 | branch | `governance/reversible-lifecycle-draft-pr` |
 | HEAD | `3ab1ebf3c9bf604cf14b2aff4a1ed47a048774fc` (matches `expected_HEAD=3ab1ebf`) |
 | worktree | clean |

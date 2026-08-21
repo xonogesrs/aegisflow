@@ -45,7 +45,7 @@ import {
   readCloseoutState,
 } from "../../src/governance/closeout-state.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const ROOT = `${tmpdir()}/closeout-lifecycle-${process.pid}`;
 const OUT = join(ROOT, "out");
 const ARCHIVE = join(ROOT, "archive");

@@ -50,7 +50,7 @@ import {
   readCloseoutState,
 } from "../../src/governance/closeout-state.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const ROOT = `${tmpdir()}/rb2r1-enforce-${process.pid}`;
 const OUT = join(ROOT, "out");
 const surface = (n) => join(ROOT, `surface-${n}`);

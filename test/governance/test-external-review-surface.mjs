@@ -58,7 +58,7 @@ import {
   releaseExternalReviewSurfaceLock,
 } from "../../src/governance/review-bundle.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const ROOT = `${tmpdir()}/rb1h-surface-${process.pid}`;
 const OUT = join(ROOT, "out");
 const ARCHIVE = join(ROOT, "archive");

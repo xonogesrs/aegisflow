@@ -36,11 +36,11 @@ import { join } from "node:path";
 import { runMandatoryGraphCloseout, buildSupersedeRecord, readExternalReviewDeliveryRecord } from "../src/governance/review-bundle.mjs";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const EXECUTION_ID = "rb1g-self-closeout-20260807";
 // Durable OUT inside the repo（the ~/Desktop/AutoLoop-Review mirror was wiped
 // twice by an external cleanup process; the repo copy survives）.
-const OUT = process.argv[2] ?? "/Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/rb1g";
+const OUT = process.argv[2] ?? "/Volumes/NVM2T/Development/repos/autoloop/docs/pi-graph-output/rb1g";
 
 /**
  * The PREVIOUS delivery record for a repair generation = the CHAIN HEAD: the

@@ -7,7 +7,7 @@
 //
 // Usage:
 //   node scripts/c3-colima-task.mjs --card ./task-card.json [--profile autoloop-c3]
-//                                   [--scratch ~/autoloop-runtime] [--repo /Volumes/NVM2T/Development/autoloop]
+//                                   [--scratch ~/autoloop-runtime] [--repo /Volumes/NVM2T/Development/repos/autoloop]
 //                                   [--out <dir>] [--timeout-ms 90000]
 //
 //   --card path.json       task card with { id?, executionId?, runtime: {...} }
@@ -34,7 +34,7 @@ function arg(name, fallback) {
 const HOME = homedir();
 const cardPath = arg("--card", null);
 const profile = arg("--profile", "autoloop-c3");
-const repoPath = arg("--repo", "/Volumes/NVM2T/Development/autoloop");
+const repoPath = arg("--repo", "/Volumes/NVM2T/Development/repos/autoloop");
 const scratchRoot = arg("--scratch", `${HOME}/autoloop-runtime`);
 const timeoutMs = Number(arg("--timeout-ms", "90000"));
 const outDir = arg("--out", "/Users/zhengfengqing/Desktop/AutoLoop-Review/governance/c3-results");

@@ -145,7 +145,7 @@ if (mode === "enumerate-review-job") {
 // generate mode
 if (mode === "generate") {
   const sourcePath = arg("--generate", null);
-  const repoPath = arg("--repo", "/Volumes/NVM2T/Development/autoloop");
+  const repoPath = arg("--repo", "/Volumes/NVM2T/Development/repos/autoloop");
   const outDir = arg("--out", `${process.env.HOME}/Desktop/AutoLoop-Review`);
   const timeoutMs = Number(arg("--timeout-ms", "30000"));
   const fileName = arg("--file", null);
@@ -370,7 +370,7 @@ if (mode === "final-closeout") {
 if (mode === "state-driven-closeout") {
   const statePath = arg("--state-driven-closeout", null);
   const evidencePath = arg("--graph-evidence", null);
-  const repo = arg("--repo", "/Volumes/NVM2T/Development/autoloop");
+  const repo = arg("--repo", "/Volumes/NVM2T/Development/repos/autoloop");
   const outDir = arg("--out", null);
   const surfaceDir = arg("--surface", null);
   const timeoutMs = Number(arg("--timeout-ms", "30000"));

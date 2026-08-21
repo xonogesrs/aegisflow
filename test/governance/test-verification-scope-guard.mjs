@@ -19,7 +19,7 @@ import {
   VERIFICATION_SCOPE_HOLDS,
 } from "../../src/governance/verification-scope-guard.mjs";
 
-const REPO = "/Volumes/NVM2T/Development/autoloop";
+const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
 
 test("NEG1: recursive scan of /Users/zhengfengqing is rejected before traversal", () => {
   const result = checkVerificationRoot("/Users/zhengfengqing");

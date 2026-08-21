@@ -83,7 +83,7 @@ import {
   writeGraphCloseoutEvidence,
 } from "../src/governance/review-bundle.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const OUT = join(REPO_A, "docs/pi-graph-output/ta2r");
 const EXECUTION_ID = "ta2r-lineage-reseal-20260809b";
 
@@ -325,7 +325,7 @@ const closeout = {
   supersedes: {
     reviewBundleIdentity: "2d63309140c7cd1f4563e0db073876c410482326fd72fcbf25cdfec5f7c84c05",
     reviewBundleSha256: "483054ab9f998de3d59acd6cabfa4fbc671fb5b92ead8287fedc328a48d49bb8",
-    bundlePath: "/Volumes/NVM2T/Development/autoloop/docs/pi-graph-output/ta2r/card-closeout-bundle-20260809-2d633091.txt",
+    bundlePath: "/Volumes/NVM2T/Development/repos/autoloop/docs/pi-graph-output/ta2r/card-closeout-bundle-20260809-2d633091.txt",
     // the superseded bundle（the previous TA-2R closeout）was archived with
     // the external HOLD verdict（TA2R_REPAIR_LINEAGE_ACCOUNTING_NOT_CUMULATIVE,
     // findings digest 23f9f198...）— its own lineage reports the single

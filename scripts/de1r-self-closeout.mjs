@@ -20,7 +20,7 @@ import { stageAgentExecutionId, agentExecutionIdFor } from "../src/subagent/suba
 import { runMandatoryGraphCloseout, buildGraphCloseoutSource, recursiveCanonicalJson, sha256Hex } from "../src/governance/review-bundle.mjs";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const OUT = join(REPO_A, "docs/pi-graph-output/de1r");
 const EXECUTION_ID = "de1r-self-closeout-20260808";
 

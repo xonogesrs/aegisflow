@@ -45,7 +45,7 @@ import {
   sha256Hex,
 } from "../src/governance/review-bundle.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const OUT = join(REPO_A, "docs/pi-graph-output/ta2");
 const EXECUTION_ID = "ta2-self-closeout-20260809";
 

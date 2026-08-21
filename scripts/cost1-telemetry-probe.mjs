@@ -31,7 +31,7 @@ import { canonicalJson, sha256Hex } from "../src/telemetry/contract.mjs";
 import { aggregateGraphRun } from "../src/telemetry/aggregate.mjs";
 import { recordGraphTelemetry } from "../src/telemetry/graph-observer.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const OUT = join(REPO_A, "docs", "pi-graph-output", "cost1");
 // Documented real-graph scale reference（used ONLY to express relative
 // overhead against a realistic workload; measured from the closeout graph +

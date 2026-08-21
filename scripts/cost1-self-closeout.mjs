@@ -30,7 +30,7 @@ import { runMandatoryGraphCloseout, buildGraphCloseoutSource, recursiveCanonical
 import { TelemetryStore, recordGraphTelemetry, telemetrySourceMap, sourceMapSummary } from "../src/telemetry/index.mjs";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const SCRATCH = `${HOME}/autoloop-cost1-self-closeout`;
 const PROFILE = "autoloop-graph";
 const PARENT = { scope: { allowed_paths: ["docs/"], forbidden_paths: [".git"] } };

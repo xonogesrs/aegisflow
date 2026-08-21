@@ -40,7 +40,7 @@ const silent = { info() {}, warn() {}, error() {} };
 function store(root) {
   return new LocalMemoryStore({ stateRoot: root, log: silent });
 }
-const REPO_PATH = "/Volumes/NVM2T/Development/autoloop";
+const REPO_PATH = "/Volumes/NVM2T/Development/repos/autoloop";
 
 // R-10 (AUTH1): build a schema-valid admission with an explicit retrieval
 // authority so the graph-time memory gate can be exercised offline.

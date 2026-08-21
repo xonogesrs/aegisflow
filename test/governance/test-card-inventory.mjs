@@ -23,7 +23,7 @@ import {
   captureBaselineInventory,
 } from "../../src/governance/review-bundle.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/autoloop";
+const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const ROOT = `${tmpdir()}/cbm2r-inventory-${process.pid}`;
 const OUT = join(ROOT, "out");
 
