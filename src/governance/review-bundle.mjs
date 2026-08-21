@@ -51,6 +51,12 @@ import {
   validateCardInventoryConsistency,
 } from "./card-inventory.mjs";
 import { assertColimaAllClaims } from "./colima-scope-gate.mjs";
+import {
+  ORACLE_EVIDENCE_SCHEMA,
+  ORACLE_REJECTIONS as PASS_ORACLE_REJECTIONS,
+  evaluatePassOracle,
+  normalizeSuccessContract,
+} from "./pass-oracle.mjs";
 
 export const REVIEW_BUNDLE_SCHEMA = "autoloop.review-bundle/v1";
 export const REVIEW_BUNDLE_SOURCE_SCHEMA = "autoloop.review-bundle.source/v1";
@@ -2371,6 +2377,15 @@ export async function runCloseoutGate({
   supersedes = null,     // { reviewBundleIdentity, reviewBundleSha256, bundlePath, verdict?, reviewedAt? }
   agentIdentity = null,  // identity of the implementing agent（verdict self-declaration guard）
   surfaceDir = null,     // fixed surface override（defaults to externalReviewSurfaceDir()）
+  // AUTOLOOP-P4 — task success contract（frozen verification plan）+ authority
+  // revocation, forwarded into THE PASS ORACLE that decides the final
+  // verdict. successContract: { requiredChecks: [{ id, kind:
+  //   "regression-suite"|"verifier", suite?, freshness?, requiresIndependent?
+  // }], invariantResults?: [{ id, ok, detail? }] }. The implicit checks
+  // review-bundle-valid + independent-review are ALWAYS required and cannot
+  // be removed.
+  successContract = null, // declared task success conditions（bound pre-execution）
+  authorityRevocation = null, // { revoked: true, reason } — fail-closed when set
 } = {}) {
   // 1) source present with a completed final review
   if (!source || typeof source !== "object") {
@@ -2590,7 +2605,91 @@ export async function runCloseoutGate({
     }
   }
 
-  // 6) final closeout verdict
+  // 6) AUTOLOOP-P4 — THE PASS ORACLE. Every formal closeout PASS converges
+  //    on evaluatePassOracle: the declared success contract + attributable
+  //    evidence（bundle validation, independent review, task-specific
+  //    checks）+ invariants + authority state → PASS | NOT_PASS. A NOT_PASS
+  //    oracle NEVER returns final PASS（fail-closed）.
+  const p4CardId = typeof source.task?.cardId === "string" ? source.task.cardId : null;
+  const p4Generation = Number.isInteger(source.task?.generation) ? source.task.generation : null;
+  const p4Norm = normalizeSuccessContract({
+    requiredChecks: Array.isArray(successContract?.requiredChecks) ? successContract.requiredChecks : [],
+    head: merged.repo.head ?? null,
+    treeSha: merged.repo.treeSha ?? null,
+    authority: authorityRevocation && authorityRevocation.revoked ? authorityRevocation : undefined,
+  });
+  const p4Contract = { ok: p4Norm.ok, errors: p4Norm.errors, contract: { ...p4Norm.contract, cardId: p4CardId, generation: p4Generation } };
+  const p4Now = new Date().toISOString();
+  const p4Binding = { head: merged.repo.head ?? null, treeSha: merged.repo.treeSha ?? null };
+  const p4Evidence = [
+    {
+      schema: ORACLE_EVIDENCE_SCHEMA, evidenceId: "gate:review-bundle-valid", cardId: p4CardId, generation: p4Generation ?? 0,
+      checkId: "review-bundle-valid", kind: "deterministic",
+      producer: { identity: "review-bundle-validator", role: "independent" },
+      result: "PASS", at: p4Now, command: "validateReviewBundle", binding: p4Binding,
+    },
+    {
+      schema: ORACLE_EVIDENCE_SCHEMA, evidenceId: "gate:independent-review", cardId: p4CardId, generation: p4Generation ?? 0,
+      checkId: "independent-review", kind: "semantic",
+      producer: { identity: review.reviewResultIdentity ?? "graph-final-review", role: "independent" },
+      // buildGraphCloseoutSource keeps result and pass consistent; a
+      // hand-built source may carry only `result` — both spellings accepted,
+      // anything else is a FAIL（fail-closed）.
+      result: (review.pass === true || review.result === "PASS") ? "PASS" : "FAIL",
+      at: p4Now, command: "finalReviewerVerdicts", binding: p4Binding,
+    },
+  ];
+  for (const c of p4Norm.contract.requiredChecks) {
+    if (c.id === "review-bundle-valid" || c.id === "independent-review") continue;
+    let result = null;
+    let command = null;
+    if ((c.kind ?? "regression-suite") === "verifier") {
+      command = "closeout-verifier";
+      if (source.verifier && typeof source.verifier === "object") {
+        result = source.verifier.pass === true || source.verifier.result === "PASS" ? "PASS" : "FAIL";
+      }
+    } else {
+      const suite = c.suite ?? c.id;
+      command = `regression:${suite}`;
+      const entry = Array.isArray(source.regression)
+        ? source.regression.find((r) => r && r.suite === suite)
+        : null;
+      if (entry) {
+        // Repo convention（§16）: regression entries carry COUNTS
+        // {suite, tests, pass, fail} — a passing suite is tests > 0,
+        // fail === 0 and every test passed.
+        result = Number(entry.tests) > 0 && Number(entry.fail) === 0 && Number(entry.pass) === Number(entry.tests) ? "PASS" : "FAIL";
+      }
+    }
+    if (result !== null) {
+      p4Evidence.push({
+        schema: ORACLE_EVIDENCE_SCHEMA, evidenceId: `gate:${c.id}`, cardId: p4CardId, generation: p4Generation ?? 0,
+        checkId: c.id, kind: "deterministic",
+        producer: { identity: "closeout-gate", role: "executor" },
+        result, at: p4Now, command, binding: p4Binding,
+      });
+    }
+  }
+  const oracle = evaluatePassOracle({
+    contract: p4Contract,
+    evidence: p4Evidence,
+    invariants: Array.isArray(successContract?.invariantResults) ? successContract.invariantResults : [],
+    now: p4Now,
+  });
+  if (!oracle.pass) {
+    return {
+      final: "HOLD",
+      holdCode: "PASS_ORACLE_REJECTED",
+      reason: `PASS_ORACLE_REJECTED:${oracle.failures.map((f) => `${f.code}${f.checkId ? `@${f.checkId}` : ""}`).join(",")}`,
+      bundlePath: path,
+      bundle: { identity: bundle.identity, sha256: bundle.sha256, evidenceManifestDigest: bundle.evidenceManifestDigest, generatedAt: bundle.generatedAt, fileName },
+      externalReview,
+      supersedes: supersedes ?? null,
+      oracle,
+    };
+  }
+
+  // 7) final closeout verdict（reached ONLY through a PASS oracle）
   if (source.executiveStatus === "PASS") {
     if (deliveryUnconfirmed) {
       return {
@@ -2601,6 +2700,7 @@ export async function runCloseoutGate({
         bundle: { identity: bundle.identity, sha256: bundle.sha256, evidenceManifestDigest: bundle.evidenceManifestDigest, generatedAt: bundle.generatedAt, fileName },
         externalReview,
         supersedes: supersedes ?? null,
+        oracle,
       };
     }
     return {
@@ -2611,6 +2711,7 @@ export async function runCloseoutGate({
       bundle: { identity: bundle.identity, sha256: bundle.sha256, evidenceManifestDigest: bundle.evidenceManifestDigest, generatedAt: bundle.generatedAt, fileName },
       externalReview,
       supersedes: supersedes ?? null,
+      oracle,
     };
   }
   return {
@@ -2621,6 +2722,7 @@ export async function runCloseoutGate({
     bundle: { identity: bundle.identity, sha256: bundle.sha256, evidenceManifestDigest: bundle.evidenceManifestDigest, generatedAt: bundle.generatedAt, fileName },
     externalReview,
     supersedes: supersedes ?? null,
+    oracle,
   };
 }
 
@@ -3229,6 +3331,11 @@ export async function runMandatoryGraphCloseout({
         source,
         repoPath,
         outDir: dir,
+        // AUTOLOOP-P4: the declared task success contract（frozen in the
+        // closeout-state record / closeout contract pre-execution）is
+        // forwarded into THE PASS ORACLE. The executor cannot weaken it at
+        // gate time — it arrives from persisted state, not caller output.
+        successContract: closeout?.successContract ?? graphResult?.successContract ?? null,
         timeoutMs,
         fileName,
         // RB2-B2: this IS the formal Review closeout boundary（applicability
@@ -3480,6 +3587,45 @@ export function assertFinalCardCloseout({
   }
   if (delivery?.reviewBundleIdentity !== bundleCheck.identity || delivery?.reviewBundleSha256 !== bundleCheck.sha256) {
     return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: EXTERNAL_REVIEW_HOLDS.STALE_BUNDLE, reason: "EXTERNAL_REVIEW_STALE_BUNDLE:delivery record bound to a different bundle identity/sha" };
+  }
+
+  // AUTOLOOP-P4 — final acceptance is an ORACLE decision over the verified
+  // facts above（bundle valid + bound independent PASS verdict + reviewer
+  // independence）. The oracle is the single PASS/NOT_PASS decider; this bar
+  // can only confirm what the oracle accepts.
+  let p4Head = null;
+  let p4Tree = null;
+  if (repoPath) {
+    try {
+      const p4Facts = collectRepoFacts(repoPath);
+      p4Head = p4Facts?.head ?? null;
+      p4Tree = p4Facts?.treeSha ?? null;
+    } catch { /* verifyAppliedCloseoutBundle already failed closed on live-repo unavailability */ }
+  }
+  const p4Now = new Date().toISOString();
+  const p4Norm = normalizeSuccessContract({ head: p4Head, treeSha: p4Tree });
+  const p4Binding = { head: p4Head, treeSha: p4Tree };
+  const p4Oracle = evaluatePassOracle({
+    contract: { ok: true, errors: [], contract: { ...p4Norm.contract, cardId, generation: null } },
+    evidence: [
+      {
+        schema: ORACLE_EVIDENCE_SCHEMA, evidenceId: "final-bar:review-bundle-valid", cardId, generation: 0,
+        checkId: "review-bundle-valid", kind: "deterministic",
+        producer: { identity: "verifyAppliedCloseoutBundle", role: "independent" },
+        result: "PASS", at: p4Now, command: "validateReviewBundle+bundle_sha256+head/tree/dirty-binding", binding: p4Binding,
+      },
+      {
+        schema: ORACLE_EVIDENCE_SCHEMA, evidenceId: "final-bar:independent-review", cardId, generation: 0,
+        checkId: "independent-review", kind: "semantic",
+        producer: { identity: reviewer, role: "independent" },
+        result: "PASS", at: reviewedAt, command: "external-review-verdict-bound-to-current-bundle", binding: p4Binding,
+      },
+    ],
+    invariants: [],
+    now: p4Now,
+  });
+  if (!p4Oracle.pass) {
+    return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: "PASS_ORACLE_REJECTED", reason: `PASS_ORACLE_REJECTED:${p4Oracle.failures.map((f) => f.code).join(",")}` };
   }
   return { ok: true, stage: "REVIEW_ACCEPTED", bundlePath: bundleCheck.path, reviewerIdentity: reviewer, reviewedAt, source: recordSource };
 }

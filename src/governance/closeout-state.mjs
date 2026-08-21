@@ -257,6 +257,14 @@ export function materializeCloseoutContract(state) {
     regressionSummary: state.regressionSummary ?? null,
     risks: Array.isArray(state.risks) ? state.risks.slice() : [],
     limitations: Array.isArray(state.limitations) ? state.limitations.slice() : [],
+    // AUTOLOOP-P4: the declared task success contract（verification plan
+    // frozen at card admission/closeout-state write time）is carried through
+    // into the closeout gate's PASS ORACLE. Optional: cards without one are
+    // still held to the implicit review-bundle-valid + independent-review
+    // checks.
+    successContract: state.successContract && typeof state.successContract === "object" && !Array.isArray(state.successContract)
+      ? state.successContract
+      : undefined,
     rollbackProcedure: state.rollbackProcedure ?? null,
     openQuestions: Array.isArray(state.openQuestions) ? state.openQuestions.slice() : [],
     recommendedNextStep: state.recommendedNextStep ?? null,
