@@ -163,7 +163,11 @@ if (mode === "generate") {
   }
 
   const facts = collectRepoFacts(repoPath);
-  const result = await runCloseoutGate({ source, repoPath, outDir, timeoutMs, fileName, repoFacts: facts });
+  // RB2-B2: the CLI --generate path is a FORMAL Review closeout entry —
+  // delivery to the fixed review surface is mandatory regardless of whether
+  // the source JSON carries externalReview.deliveryRequired（the flag is
+  // informational; absence / false / malformed can never skip publication）.
+  const result = await runCloseoutGate({ source, repoPath, outDir, timeoutMs, fileName, repoFacts: facts, formal: true });
   console.log(`final=${result.final} holdCode=${result.holdCode ?? "null"}`);
   if (result.reason) console.log(`reason: ${result.reason}`);
   if (result.bundlePath) console.log(`bundle: ${result.bundlePath}`);

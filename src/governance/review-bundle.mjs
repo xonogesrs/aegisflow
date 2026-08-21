@@ -2340,13 +2340,23 @@ export async function runCloseoutGate({
   validate = validateReviewBundle,
   repoFacts = null,
   // RB-1G external review bundle delivery:
-  //   deliver     = undefined → hard rule（RB-1H）: requiresReview closeouts
+  //   deliver     = undefined → hard rule（RB-1H）: formal review closeouts
   //                 atomically deliver to the FIXED external-review surface
   //                 （Current/）; a failed surface write keeps the card at
   //                 AWAITING_BUNDLE_DELIVERY. Pass an explicit hook to
-  //                 override, or null to opt out（test-only paths）.
+  //                 override, or null to opt out（non-formal test paths only）.
   deliver = undefined,   // async ({ bundlePath, bundle, state, source, outDir }) -> { attempted, method?, attemptedAt?, reason? }
   deliveryMethod = null, // fallback method name when `deliver` reports success without one
+  // RB2-B2（AUTOLOOP-V1-REVFIX-B2 — MANDATORY REVIEW DELIVERY INVARIANT）:
+  // formal:true marks the FORMAL Review closeout boundary（set only by the
+  // production entry points runMandatoryGraphCloseout and
+  // gov-closeout-bundle --generate）. Once the formal gate is reached with a
+  // valid bundle, publication is REQUIRED — the caller-supplied source flag
+  // `externalReview.deliveryRequired` is derived-informational ONLY and can
+  // never suppress it（nor can its absence / malformed shape silently skip
+  // it）. Non-formal invocations（unit-test helpers）never set formal and opt
+  // out with deliver: null — they never touch the desktop surface.
+  formal = false,        // formal Review closeout boundary reached
   supersedes = null,     // { reviewBundleIdentity, reviewBundleSha256, bundlePath, verdict?, reviewedAt? }
   agentIdentity = null,  // identity of the implementing agent（verdict self-declaration guard）
   surfaceDir = null,     // fixed surface override（defaults to externalReviewSurfaceDir()）
@@ -2397,6 +2407,14 @@ export async function runCloseoutGate({
       remote: facts.remote,
     },
     bundleReady: source.executiveStatus === "PASS",
+    // RB2-B2: for a FORMAL review closeout the delivery-required truth is
+    // DERIVED（informational §2 rendering）— a caller-supplied
+    // externalReview.deliveryRequired that is missing / false / malformed /
+    // non-object can never change it. Non-formal sources keep their own
+    // shape untouched（NOT_APPLICABLE rendering unchanged）.
+    externalReview: (formal === true && (!source.externalReview || typeof source.externalReview !== "object" || Array.isArray(source.externalReview)))
+      ? { deliveryRequired: true, status: source.externalReview?.status ?? "AWAITING_EXTERNAL_REVIEW", supersedes: source.externalReview?.supersedes ?? null }
+      : (formal === true ? { ...source.externalReview, deliveryRequired: true } : source.externalReview),
   };
 
   // 2b) TA-2R（finding 2 / NEG17）— content-identity attribution fail-closed.
@@ -2484,13 +2502,35 @@ export async function runCloseoutGate({
     bundlePath: path,
     supersedes: supersedes ?? null,
   });
-  // RB-1H hard rule: a requiresReview card MUST atomically deliver the
-  // current valid bundle to the FIXED external-review surface. No fixed
-  // surface delivery -> the card stays AWAITING_BUNDLE_DELIVERY（never a
-  // PASS/external-review claim without a delivered artifact）. The default
-  // surface deliverer is used unless the caller passed an explicit hook.
-  if (source.externalReview?.deliveryRequired === true && deliver === undefined) {
+  // ── RB2-B2 MANDATORY REVIEW DELIVERY INVARIANT ────────────────────────
+  // AUTOLOOP-V1-REVFIX-B2（SOURCE_CONTRACT_GAP）: publication for a FORMAL
+  // review closeout is REQUIRED once the gate is reached with a valid
+  // bundle. The caller-supplied source flag `externalReview.deliveryRequired`
+  // is derived-informational ONLY — it can never suppress publication, and
+  // its absence / false / malformed shape can never silently skip it:
+  //   FORMAL_REVIEW_CLOSEOUT + bundle valid  →  DELIVERY_REQUIRED
+  // No fixed surface delivery -> the card stays AWAITING_BUNDLE_DELIVERY
+  // （never a PASS/external-review claim without a delivered artifact）. The
+  // default surface deliverer is used unless the caller passed an explicit
+  // hook（a custom hook is still a delivery attempt — attempted:false keeps
+  // the closeout non-PASS）.
+  const formalCloseout = formal === true;
+  if (formalCloseout && deliver === undefined) {
+    // hard rule: default surface deliverer（flag-independent）
     deliver = (d) => deliverToExternalReviewSurface({ ...d, source: merged, surfaceDir: surfaceDir ?? null });
+  }
+  if (formalCloseout && deliver === null) {
+    // an explicit opt-out can never suppress a FORMAL closeout's delivery —
+    // this input cannot be safely canonicalized, so it fails closed.
+    return {
+      final: "HOLD",
+      holdCode: EXTERNAL_REVIEW_HOLDS.DELIVERY_NOT_CONFIRMED,
+      reason: "FORMAL_CLOSEOUT_DELIVERY_OPT_OUT_DENIED:deliver=null cannot suppress mandatory formal delivery",
+      bundlePath: path,
+      bundle: { identity: bundle.identity, sha256: bundle.sha256, evidenceManifestDigest: bundle.evidenceManifestDigest, generatedAt: bundle.generatedAt, fileName },
+      externalReview,
+      supersedes: supersedes ?? null,
+    };
   }
   if (deliver) {
     try {
@@ -2516,14 +2556,15 @@ export async function runCloseoutGate({
   }
 
   // AUTOLOOP_REPORT_LIFECYCLE_REPAIR_1（FM-2 / R4 / R5 / R6）: delivery is
-  // part of successful closeout. For requiresReview + deliveryRequired:
+  // part of successful closeout. For a FORMAL closeout（RB2-B2: delivery is
+  // mandatory at the formal gate — never caller-optional）:
   //   - a failed / declined / blocked delivery（AWAITING_BUNDLE_DELIVERY）
   //     makes the top-level final non-PASS（R4 / R6 propagation）;
   //   - when the fixed-surface default channel reported success, the surface
   //     artifact is re-verified（identity + recomputed SHA + delivery record）
   //     so an AWAITING_EXTERNAL_REVIEW state can only accompany a truly
   //     present bundle（R5 invariant）.
-  const requiresDelivery = source.externalReview?.deliveryRequired === true;
+  const requiresDelivery = formalCloseout;
   let deliveryUnconfirmed = requiresDelivery
     && (externalReview.externalReviewStatus === EXTERNAL_REVIEW_STATUSES[1] || externalReview.delivery.attempted !== true);
   if (!deliveryUnconfirmed && requiresDelivery && externalReview.delivery.method === "external-review-surface") {
@@ -3162,6 +3203,11 @@ export async function runMandatoryGraphCloseout({
         outDir: dir,
         timeoutMs,
         fileName,
+        // RB2-B2: this IS the formal Review closeout boundary（applicability
+        // already requires closeout.requiresReview === true）— delivery is
+        // mandatory at the gate regardless of the source's derived
+        // deliveryRequired flag.
+        formal: true,
         // RB-1G external review bundle delivery options（forwarded from the
         // card closeout contract）:
         deliver: closeout?.deliver ?? undefined,
