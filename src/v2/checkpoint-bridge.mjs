@@ -28,6 +28,7 @@ import { acquireLease, releaseLease } from "../c2d/lease.mjs";
 import { permitFromLease } from "../c2d/permit.mjs";
 import { collectFingerprint, assertFingerprint } from "../c2d/fingerprint.mjs";
 import { canonicalJson, sha256Text } from "../evidence/run-evidence-store.mjs";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
 export const AUTOLOOP_CHECKPOINT_FORMAT_VERSION = "1.0.0";
@@ -64,6 +65,11 @@ export const POST_HEAD_EVENT_SEMANTICS = Object.freeze({
     "RESUME_REQUESTED", "RESUME_VALIDATED", "RESUME_REJECTED",
     "READ_ONLY_PHASE_REQUEUED_AFTER_INTERRUPTION",
     "GRAPH_CREATED", "GRAPH_INPUT_FROZEN",
+    // I1: the decomposition-manifest artifact is written BEFORE this event;
+    // a crash in the event→checkpoint sub-window leaves a replay-safe marker
+    // (the artifact is durable truth; resume re-derives and verifies its
+    // digest three ways).
+    "DECOMPOSITION_MANIFEST_WRITTEN",
   ]),
   resumeSafe: new Set([
     // DE-1 F1 examples: journaled before their checkpoint -> post-head on crash
@@ -400,6 +406,24 @@ export function checkpointExists(root, executionId) {
 
 export function collectRepositoryFingerprint(repoRoot) {
   return collectFingerprint(repoRoot);
+}
+
+/**
+ * I1 — read-only observation of the repository tree object id (F3A).
+ * One git read; the tree id is a deterministic field of the commit object,
+ * so it is re-derived per run only (never per child). Returns null on any
+ * failure (caller fails closed).
+ */
+export function collectRepositoryTree(repoRoot) {
+  try {
+    const out = execFileSync("git", ["-C", repoRoot, "rev-parse", "HEAD^{tree}"], {
+      encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    });
+    const tree = out.trim();
+    return /^[0-9a-f]{40}$/.test(tree) ? tree : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

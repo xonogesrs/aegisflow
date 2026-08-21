@@ -148,6 +148,16 @@ async function interruptedCheckpoint({
   store.init();
   store.writeArtifact("input.json", { source: SOURCE, parent: PARENT, manifest: MANIFEST_REQ });
   store.writeArtifact("decomposition-ir.json", ir);
+  // I1: a complete interrupted run also carries the decomposition-validation
+  // artifact (resume re-derives the manifest from it) — hand-built checkpoints
+  // must mirror a real run's durable artifacts.
+  store.writeArtifact("decomposition-validation.json", {
+    schema_valid: true,
+    structural: [],
+    semantic: [],
+    scorecard_verdict: "PASS",
+    prompt_builder_version: "test-prompt-version",
+  });
   for (const ev of [
     { event_type: "RUN_CREATED", stage: "run", payload: {} },
     { event_type: "INPUT_FROZEN", stage: "input", payload: {} },
@@ -354,7 +364,7 @@ test("33: evidence write failure stops the run (no next phase)", async () => {
   // → phase failed → HOLD before p_impl.
   const factories = {
     executorAdapterFactory: () => createScriptedAdapter([
-      { expect: { phase: "executor", attempt: 0 }, result: completed("synthetic-secret-sentinel-0123456789abcdef evidence output", "x") },
+      { expect: { phase: "executor", attempt: 0 }, result: completed("ghp_0123456789abcdef0123456789abcdef evidence output", "x") },
     ]),
     reviewerAdapterFactory: () => createScriptedAdapter([{ expect: { phase: "reviewer", attempt: 0 }, result: completed(verdictJson(), "x") }]),
   };

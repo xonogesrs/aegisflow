@@ -27,11 +27,12 @@ import { RunEvidenceStore, canonicalJson, sha256Text, EvidenceHoldError } from "
 import { listDirSafe } from "../c2d/fs-atomic.mjs";
 import { finalizeRunManifest, buildRunManifest, writeFinalReport, MANIFEST_FORMAT_VERSION } from "../evidence/run-manifest.mjs";
 import {
-  validateRunIdentity, collectRepositoryFingerprint, publishCheckpoint, readCheckpoint, checkpointExists,
+  validateRunIdentity, collectRepositoryFingerprint, collectRepositoryTree, publishCheckpoint, readCheckpoint, checkpointExists,
   buildInputFingerprint, buildConfigurationFingerprint, buildDagFingerprint, buildIrSha256,
   AUTOLOOP_CHECKPOINT_FORMAT_VERSION, deriveChainId, deriveCheckpointId,
   classifyResumeCapability, classifyPostHeadEvent,
 } from "./checkpoint-bridge.mjs";
+import { buildDecompositionManifest, DECOMPOSITION_MANIFEST_FORMAT } from "./decomposition-manifest.mjs";
 import { runExecutionOrchestrator } from "./execution-orchestrator.mjs";
 import { runProductionPipeline } from "./production-pipeline.mjs";
 import { requiresWriterLease } from "./runner.mjs";
@@ -280,6 +281,7 @@ class DurableRun {
     this.configurationFingerprint = null;
     this.irSha = null;
     this.dagSha = null;
+    this.decompositionManifestId = null;
     this.finalVerdict = null;
     this.finalReason = null;
     this.manifestSha = null;
@@ -336,6 +338,12 @@ class DurableRun {
       resumePolicy: this._resumePolicy(),
       expectedRevision: this.state.expectedRevision,
       created_at: this.createdAt,
+      // I1: once produced, every checkpoint pins the decomposition manifest
+      // digest (additive snapshot field via the sealed snapshotOverrides
+      // seam; resume verifies recomputed == artifact == checkpoint).
+      snapshotOverrides: this.decompositionManifestId
+        ? { decomposition_manifest_sha256: this.decompositionManifestId }
+        : null,
     });
     this.state.expectedRevision = pub.revision;
     this.store.appendEvent({
@@ -738,6 +746,41 @@ async function runDurableInner({
   store.appendEvent({ event_type: "DAG_ACCEPTED", stage: "decomposition", payload: { phase_count: (pipeline.ir.phases || []).length } });
   await run.checkpoint({});
 
+  // ── I1: Decomposition Manifest — produced exactly once per decomposition
+  // revision, after DAG_ACCEPTED, through the existing evidence path
+  // (secret-scan + size bound + journal + checkpoint). Fail-closed on any
+  // missing binding or build failure; the artifact is the durable authority
+  // that children (I2) reference by digest. This block is CPU + one tree
+  // observation only — no model call, no per-child work. ──
+  const manifestResult = buildDecompositionManifest({
+    parentExecutionId: run.executionId,
+    chainId: run.chainId,
+    parentRevision: sha256Text(canonicalJson(source)),
+    inputFingerprint: run.inputFingerprint,
+    configurationFingerprint: run.configurationFingerprint,
+    ir: pipeline.ir,
+    irSha: run.irSha,
+    dagSha: run.dagSha,
+    repositoryIdentity: {
+      repository_root_identity: run.repoFingerprint.repository_root_identity,
+      expected_head: run.repoFingerprint.expected_head,
+      tree: collectRepositoryTree(cwd),
+    },
+    sourceHashes: computeSourceHashes(),
+    promptBuilderVersion: pipeline.prompts?.version ?? "",
+  });
+  if (!manifestResult.ok) {
+    return terminateDurableRun(run, { final: "HOLD", reason: `DECOMPOSITION_MANIFEST_INVALID:${manifestResult.code}`, ir: pipeline.ir });
+  }
+  run.store.writeArtifact("decomposition-manifest.json", manifestResult.manifest);
+  run.decompositionManifestId = manifestResult.manifest_id;
+  store.appendEvent({
+    event_type: "DECOMPOSITION_MANIFEST_WRITTEN",
+    stage: "decomposition",
+    payload: { format_version: DECOMPOSITION_MANIFEST_FORMAT, manifest_sha256: manifestResult.manifest_id, bytes: manifestResult.bytes },
+  });
+  await run.checkpoint({});
+
   // ── DAG execution（checkpoints at phase/lifecycle/terminal boundaries）──
   const orchestratorHooks = run.buildOrchestratorHooks(pipeline.ir);
   try {
@@ -986,6 +1029,7 @@ export async function resumeAutoLoopInternal({
   // ── Validation（any failure → HOLD / RESUME_FINGERPRINT_MISMATCH）──
   let ir = null;
   let expectedFp = null;
+  let verifiedManifestId = null;
   try {
     // (format major + journal chain/head alignment were validated in the
     // read-only pre-gate above; the remaining fingerprint checks follow.)
@@ -1075,6 +1119,120 @@ export async function resumeAutoLoopInternal({
       }
     }
 
+    // 9. I1 decomposition manifest binding（recomputed == artifact ==
+    // checkpoint, three-way; fail-closed on any mismatch / malformed /
+    // stale binding）. The manifest payload is re-derived from the SAME
+    // frozen durable inputs the initial build used: frozen input.json
+    // (input fingerprint), frozen decomposition-ir.json (irSha/dagSha/phase
+    // digests), checkpoint configuration fingerprint, run-level F3A
+    // repository identity (root/HEAD from the frozen fingerprint, tree from
+    // one fresh observation — same commit ⇒ same tree), current source
+    // hashes, and the frozen prompt-builder version. Identical bound inputs
+    // must re-derive the identical digest; anything else fails closed.
+    const manifestArtifactPath = join(execDir, "artifacts", "decomposition-manifest.json");
+    const manifestArtifactExists = existsSync(manifestArtifactPath);
+    const checkpointManifestId = typeof snapshot.decomposition_manifest_sha256 === "string"
+      ? snapshot.decomposition_manifest_sha256 : null;
+    const validationArtifact = existsSync(join(execDir, "artifacts", "decomposition-validation.json"))
+      ? JSON.parse(readFileSync(join(execDir, "artifacts", "decomposition-validation.json"), "utf8"))
+      : null;
+    // Recompute inputs are identical for verify and reconstruct paths.
+    const manifestBuildInputs = () => ({
+      parentExecutionId: identity.executionId,
+      chainId: identity.chainId,
+      parentRevision: sha256Text(canonicalJson(frozen.source)),
+      inputFingerprint: inputFp,
+      configurationFingerprint: snapshot.configuration_fingerprint,
+      ir,
+      irSha: buildIrSha256(ir),
+      dagSha: buildDagFingerprint(ir),
+      repositoryIdentity: {
+        repository_root_identity: expectedFp.repository_root_identity,
+        expected_head: expectedFp.expected_head,
+        tree: collectRepositoryTree(repoRoot),
+      },
+      sourceHashes: computeSourceHashes(),
+      promptBuilderVersion: validationArtifact?.prompt_builder_version ?? "",
+    });
+    if (manifestArtifactExists || checkpointManifestId) {
+      if (!manifestArtifactExists) {
+        throw new DurableHoldError("RESUME_FINGERPRINT_MISMATCH", "decomposition manifest artifact missing but checkpoint pins a manifest id");
+      }
+      const frozenManifest = (() => {
+        try {
+          return JSON.parse(readFileSync(manifestArtifactPath, "utf8"));
+        } catch {
+          throw new DurableHoldError("RESUME_FINGERPRINT_MISMATCH", "decomposition manifest artifact malformed (unparseable)");
+        }
+      })();
+      if (typeof frozenManifest?.manifest_id !== "string" || frozenManifest.manifest_id.length === 0) {
+        throw new DurableHoldError("RESUME_FINGERPRINT_MISMATCH", "decomposition manifest artifact malformed: missing manifest_id");
+      }
+      // Artifact self-consistency: the stored payload must hash to its own
+      // declared manifest_id (catches any tampered binding field even when
+      // the declared digest itself was left untouched).
+      const payloadOnly = { ...frozenManifest };
+      delete payloadOnly.manifest_id;
+      delete payloadOnly.content_sha256;
+      if (sha256Text(canonicalJson(payloadOnly)) !== frozenManifest.manifest_id) {
+        throw new DurableHoldError("RESUME_FINGERPRINT_MISMATCH", "decomposition manifest artifact self-inconsistent (payload digest != manifest_id)");
+      }
+      const recomputed = buildDecompositionManifest(manifestBuildInputs());
+      if (!recomputed.ok) {
+        throw new DurableHoldError("RESUME_FINGERPRINT_MISMATCH", `decomposition manifest cannot be re-derived: ${recomputed.code}`);
+      }
+      if (recomputed.manifest_id !== frozenManifest.manifest_id) {
+        throw new DurableHoldError("RESUME_FINGERPRINT_MISMATCH", "decomposition manifest digest mismatch (recomputed != artifact)");
+      }
+      if (checkpointManifestId && checkpointManifestId !== frozenManifest.manifest_id) {
+        throw new DurableHoldError("RESUME_FINGERPRINT_MISMATCH", "decomposition manifest digest mismatch (artifact != checkpoint)");
+      }
+      verifiedManifestId = frozenManifest.manifest_id;
+    } else {
+      // Crash in the DAG_ACCEPTED → manifest-write sub-window: reconstruct
+      // the manifest from the same frozen inputs and persist it, so a
+      // resumed run always has the authoritative artifact (fail-closed
+      // evidence; the checkpoint pins it at the next safe boundary).
+      const rebuilt = buildDecompositionManifest(manifestBuildInputs());
+      if (!rebuilt.ok) {
+        throw new DurableHoldError("RESUME_FINGERPRINT_MISMATCH", `decomposition manifest cannot be reconstructed: ${rebuilt.code}`);
+      }
+      store.writeArtifact("decomposition-manifest.json", rebuilt.manifest);
+      store.appendEvent({
+        event_type: "DECOMPOSITION_MANIFEST_WRITTEN",
+        stage: "resume",
+        payload: { format_version: DECOMPOSITION_MANIFEST_FORMAT, manifest_sha256: rebuilt.manifest_id, bytes: rebuilt.bytes, reconstructed: true },
+      });
+      verifiedManifestId = rebuilt.manifest_id;
+    }
+
+    // I1-R1 (B): crash between the artifact write and the journal event
+    // leaves a valid artifact with NO DECOMPOSITION_MANIFEST_WRITTEN record
+    // and no checkpoint pin — resume must repair the journal so the emission
+    // record always exists alongside the artifact (evidence-path/journaled
+    // semantics; replay-safe marker, never a second artifact write).
+    // I1-R1.5: verifyJournal() failure here MUST fail closed — never swallow
+    // an integrity error and treat it as "just no manifest event".
+    let manifestEventExists = false;
+    let journalScan;
+    try {
+      journalScan = store.verifyJournal();
+    } catch (e) {
+      throw new DurableHoldError("RESUME_FINGERPRINT_MISMATCH",
+        `journal integrity failure during manifest rescan: ${e?.code || e?.name || "error"}`);
+    }
+    for (let s = 1; s <= journalScan.count; s++) {
+      const { event } = store.readEvent(s);
+      if (event?.event_type === "DECOMPOSITION_MANIFEST_WRITTEN") { manifestEventExists = true; break; }
+    }
+    if (!manifestEventExists) {
+      store.appendEvent({
+        event_type: "DECOMPOSITION_MANIFEST_WRITTEN",
+        stage: "resume",
+        payload: { format_version: DECOMPOSITION_MANIFEST_FORMAT, manifest_sha256: verifiedManifestId, recovered_journal_gap: true },
+      });
+    }
+
     store.appendEvent({ event_type: "RESUME_VALIDATED", stage: "resume", payload: { checkpoint_digest: checkpointDigest } });
   } catch (e) {
     try {
@@ -1158,6 +1316,9 @@ export async function resumeAutoLoopInternal({
   run.configurationFingerprint = snapshot.configuration_fingerprint;
   run.irSha = snapshot.decomposition_ir_sha256;
   run.dagSha = snapshot.dag_sha256;
+  // I1: carry the verified/reconstructed manifest id so the next checkpoint
+  // pins it (and any subsequent resume gets the full three-way binding).
+  run.decompositionManifestId = typeof verifiedManifestId === "string" ? verifiedManifestId : null;
   run.createdAt = snapshot.created_at;
   run.state.expectedRevision = snapshot.revision;
   run.state.phaseStates = { ...snapshot.phase_states };
