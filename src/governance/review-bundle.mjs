@@ -57,6 +57,14 @@ import {
   evaluatePassOracle,
   normalizeSuccessContract,
 } from "./pass-oracle.mjs";
+import {
+  computeCascade,
+  revocationFactsForOracle,
+} from "./truth-revocation.mjs";
+import {
+  readRevocationLedger,
+  revocationLedgerPath,
+} from "./truth-revocation-store.mjs";
 
 export const REVIEW_BUNDLE_SCHEMA = "autoloop.review-bundle/v1";
 export const REVIEW_BUNDLE_SOURCE_SCHEMA = "autoloop.review-bundle.source/v1";
@@ -2386,6 +2394,12 @@ export async function runCloseoutGate({
   // be removed.
   successContract = null, // declared task success conditions（bound pre-execution）
   authorityRevocation = null, // { revoked: true, reason } — fail-closed when set
+  // POST-P4 Truth Revocation Cascade — validated revocation EVENTS（or a
+  // precomputed { evidenceIds, artifactShas } facts object）from the durable
+  // ledger. Forwarded into THE PASS ORACLE: revoked required evidence can
+  // never satisfy PASS; unrelated truth is untouched. The oracle stays the
+  // only PASS authority — revocation integrates THROUGH it.
+  truthRevocations = null,
 } = {}) {
   // 1) source present with a completed final review
   if (!source || typeof source !== "object") {
@@ -2670,10 +2684,41 @@ export async function runCloseoutGate({
       });
     }
   }
+  // POST-P4 Truth Revocation Cascade — the gate SELF-LOADS the durable
+  // ledger from <outDir>/truth-revocations/（red-team finding: relying on
+  // callers to supply facts left every production path unwired）. A caller-
+  // supplied truthRevocations array is an OVERRIDE for tests/direct use and
+  // is fully re-validated. Any unreadable/corrupt ledger or invalid event
+  // fails closed — never a PASS derived from a partial revocation view.
+  let p4RevocationFacts = null;
+  if (Array.isArray(truthRevocations)) {
+    const p4Cascade = computeCascade({ events: truthRevocations, evidence: p4Evidence });
+    if (p4Cascade.rejectedEvents.length > 0) {
+      return {
+        final: "HOLD",
+        holdCode: "TRUTH_REVOCATION_INVALID",
+        reason: `TRUTH_REVOCATION_INVALID:${p4Cascade.rejectedEvents.map((r) => r.revocationId ?? "unnamed").join(",")}`,
+        bundlePath: path,
+      };
+    }
+    p4RevocationFacts = revocationFactsForOracle(p4Cascade);
+  } else {
+    const p4Ledger = readRevocationLedger(revocationLedgerPath(outDir));
+    if (!p4Ledger.ok) {
+      return {
+        final: "HOLD",
+        holdCode: p4Ledger.holdCode ?? "TRUTH_REVOCATION_LEDGER_INVALID",
+        reason: `${p4Ledger.holdCode ?? "TRUTH_REVOCATION_LEDGER_INVALID"}:${p4Ledger.reason ?? "unreadable"}`,
+        bundlePath: path,
+      };
+    }
+    p4RevocationFacts = revocationFactsForOracle(computeCascade({ events: p4Ledger.events, evidence: p4Evidence }));
+  }
   const oracle = evaluatePassOracle({
     contract: p4Contract,
     evidence: p4Evidence,
     invariants: Array.isArray(successContract?.invariantResults) ? successContract.invariantResults : [],
+    revocations: p4RevocationFacts,
     now: p4Now,
   });
   if (!oracle.pass) {
@@ -3561,7 +3606,6 @@ export function assertFinalCardCloseout({
   const delivery = state?.delivery ?? null;
   const verdict = state?.verdict ?? null;
   const implementer = implementerIdentity ?? agentIdentity ?? closeout?.agentIdentity ?? null;
-
   if (state?.externalReviewStatus !== "PASS") {
     return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: EXTERNAL_REVIEW_HOLDS.NOT_COMPLETE, reason: "EXTERNAL_REVIEW_NOT_COMPLETE:authoritative_review_record_not_pass" };
   }
@@ -3588,11 +3632,6 @@ export function assertFinalCardCloseout({
   if (delivery?.reviewBundleIdentity !== bundleCheck.identity || delivery?.reviewBundleSha256 !== bundleCheck.sha256) {
     return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: EXTERNAL_REVIEW_HOLDS.STALE_BUNDLE, reason: "EXTERNAL_REVIEW_STALE_BUNDLE:delivery record bound to a different bundle identity/sha" };
   }
-
-  // AUTOLOOP-P4 — final acceptance is an ORACLE decision over the verified
-  // facts above（bundle valid + bound independent PASS verdict + reviewer
-  // independence）. The oracle is the single PASS/NOT_PASS decider; this bar
-  // can only confirm what the oracle accepts.
   let p4Head = null;
   let p4Tree = null;
   if (repoPath) {
@@ -3602,26 +3641,38 @@ export function assertFinalCardCloseout({
       p4Tree = p4Facts?.treeSha ?? null;
     } catch { /* verifyAppliedCloseoutBundle already failed closed on live-repo unavailability */ }
   }
+  // POST-P4 Truth Revocation Cascade — the FINAL acceptance bar re-derives
+  // revocation facts from the durable ledger itself（red-team finding: this
+  // second oracle call previously ignored revocations and could re-mint a
+  // CURRENT CLOSED/PASS over revoked truth）. Authority-level revocations
+  // fence by producer identity, covering this bar's distinct synthetic
+  // evidence ids. Ledger unreadable/corrupt → HOLD（fail-closed）.
+  const p4Ledger = readRevocationLedger(revocationLedgerPath(outDir));
+  if (!p4Ledger.ok) {
+    return { ok: false, stage: "REVIEW_BUNDLE_READY", holdCode: p4Ledger.holdCode ?? "TRUTH_REVOCATION_LEDGER_INVALID", reason: `${p4Ledger.holdCode ?? "TRUTH_REVOCATION_LEDGER_INVALID"}:${p4Ledger.reason ?? "unreadable"}` };
+  }
   const p4Now = new Date().toISOString();
   const p4Norm = normalizeSuccessContract({ head: p4Head, treeSha: p4Tree });
   const p4Binding = { head: p4Head, treeSha: p4Tree };
+  const p4FinalEvidence = [
+    {
+      schema: ORACLE_EVIDENCE_SCHEMA, evidenceId: "final-bar:review-bundle-valid", cardId, generation: 0,
+      checkId: "review-bundle-valid", kind: "deterministic",
+      producer: { identity: "verifyAppliedCloseoutBundle", role: "independent" },
+      result: "PASS", at: p4Now, command: "validateReviewBundle+bundle_sha256+head/tree/dirty-binding", binding: p4Binding,
+    },
+    {
+      schema: ORACLE_EVIDENCE_SCHEMA, evidenceId: "final-bar:independent-review", cardId, generation: 0,
+      checkId: "independent-review", kind: "semantic",
+      producer: { identity: reviewer, role: "independent" },
+      result: "PASS", at: reviewedAt, command: "external-review-verdict-bound-to-current-bundle", binding: p4Binding,
+    },
+  ];
   const p4Oracle = evaluatePassOracle({
     contract: { ok: true, errors: [], contract: { ...p4Norm.contract, cardId, generation: null } },
-    evidence: [
-      {
-        schema: ORACLE_EVIDENCE_SCHEMA, evidenceId: "final-bar:review-bundle-valid", cardId, generation: 0,
-        checkId: "review-bundle-valid", kind: "deterministic",
-        producer: { identity: "verifyAppliedCloseoutBundle", role: "independent" },
-        result: "PASS", at: p4Now, command: "validateReviewBundle+bundle_sha256+head/tree/dirty-binding", binding: p4Binding,
-      },
-      {
-        schema: ORACLE_EVIDENCE_SCHEMA, evidenceId: "final-bar:independent-review", cardId, generation: 0,
-        checkId: "independent-review", kind: "semantic",
-        producer: { identity: reviewer, role: "independent" },
-        result: "PASS", at: reviewedAt, command: "external-review-verdict-bound-to-current-bundle", binding: p4Binding,
-      },
-    ],
+    evidence: p4FinalEvidence,
     invariants: [],
+    revocations: revocationFactsForOracle(computeCascade({ events: p4Ledger.events, evidence: p4FinalEvidence })),
     now: p4Now,
   });
   if (!p4Oracle.pass) {

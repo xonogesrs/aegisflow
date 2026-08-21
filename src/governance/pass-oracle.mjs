@@ -51,8 +51,8 @@ export const ORACLE_FRESHNESS_MODES = Object.freeze(["repo", "content", "none"])
 export const ORACLE_CHECK_KINDS = Object.freeze(["regression-suite", "verifier", "review-bundle-valid", "independent-review"]);
 
 export const ORACLE_REJECTIONS = Object.freeze({
-  CONTRACT_INVALID: "ORACLE_CONTRACT_INVALID",
   AUTHORITY_REVOKED: "ORACLE_AUTHORITY_REVOKED",
+  EVIDENCE_REVOKED: "ORACLE_EVIDENCE_REVOKED",
   MALFORMED_EVIDENCE: "ORACLE_EVIDENCE_MALFORMED",
   UNATTRIBUTABLE: "ORACLE_EVIDENCE_UNATTRIBUTABLE",
   LINEAGE_MISMATCH: "ORACLE_EVIDENCE_LINEAGE_MISMATCH",
@@ -244,6 +244,13 @@ function detailOf(code, checkId, extra) {
  *   invariants: array of { id, ok, detail? } — applicable registered global
  *               invariant results（only violations block; absent = not
  *               applicable）
+ *   revocations: optional { evidenceIds: [..], artifactShas: [..] } —
+ *               CURRENT-AUTHORITY revocation facts（Truth Revocation Cascade,
+ *               truth-revocation.mjs computeCascade → revocationFactsForOracle）.
+ *               Evidence whose id is revoked, or whose content binding pins a
+ *               revoked artifact, is REJECTED（ORACLE_EVIDENCE_REVOKED）— it
+ *               can never satisfy any check again. Historical records are NOT
+ *               rewritten; only the current decision loses their weight.
  *   now:        ISO timestamp of the evaluation
  * } input
  * @returns {{
@@ -251,7 +258,7 @@ function detailOf(code, checkId, extra) {
  *   rejectedEvidence, evaluatedAt
  * }}
  */
-export function evaluatePassOracle({ contract, evidence = [], invariants = [], now }) {
+export function evaluatePassOracle({ contract, evidence = [], invariants = [], revocations = null, now }) {
   const evaluatedAt = typeof now === "string" && ISO_TS.test(now) ? now : new Date().toISOString();
 
   // 0) contract validity — fail closed before anything else.
@@ -292,6 +299,26 @@ export function evaluatePassOracle({ contract, evidence = [], invariants = [], n
     if (C.generation != null && r.generation !== C.generation) {
       rejected.push({ evidenceId: r.evidenceId, code: ORACLE_REJECTIONS.GENERATION_FENCED, detail: `evidence generation ${r.generation} != contract generation ${C.generation}` });
       continue;
+    }
+    // 2b) CURRENT-AUTHORITY revocation（Truth Revocation Cascade）— revoked
+    //     evidence can never satisfy any check; a revoked artifact poisons
+    //     every evidence record still bound to it; evidence produced by a
+    //     revoked AUTHORITY（reviewer/verifier identity）is rejected too.
+    //     Fail-closed BEFORE freshness: revocation is stronger than staleness.
+    if (revocations) {
+      const evRevoked = Array.isArray(revocations.evidenceIds) && revocations.evidenceIds.includes(r.evidenceId);
+      const artRevoked = r.binding.artifactSha256 != null
+        && Array.isArray(revocations.artifactShas) && revocations.artifactShas.includes(r.binding.artifactSha256);
+      const authRevoked = r.producer?.identity != null
+        && Array.isArray(revocations.authorityIds) && revocations.authorityIds.includes(r.producer.identity);
+      if (evRevoked || artRevoked || authRevoked) {
+        rejected.push({
+          evidenceId: r.evidenceId,
+          code: ORACLE_REJECTIONS.EVIDENCE_REVOKED,
+          detail: evRevoked ? "evidence_revoked" : authRevoked ? `authority_revoked:${r.producer.identity}` : `artifact_revoked:${r.binding.artifactSha256}`,
+        });
+        continue;
+      }
     }
     if (!declared.has(r.checkId)) {
       rejected.push({ evidenceId: r.evidenceId, code: ORACLE_REJECTIONS.UNDECLARED_CHECK, detail: r.checkId });
@@ -339,7 +366,12 @@ export function evaluatePassOracle({ contract, evidence = [], invariants = [], n
       continue;
     }
     if (passes.length === 0) {
-      const anyRejected = rejected.some((r) => r.detail?.includes(spec.id) || r.code === ORACLE_REJECTIONS.STALE);
+      // Revoked candidates count like stale ones: a required check whose
+      // only candidates were revoked is reported as MISSING with rejected
+      // candidate context（never silently "no evidence ever existed"）.
+      const anyRejected = rejected.some((r) => r.detail?.includes(spec.id)
+        || r.code === ORACLE_REJECTIONS.STALE
+        || r.code === ORACLE_REJECTIONS.EVIDENCE_REVOKED);
       failures.push(detailOf(ORACLE_REJECTIONS.MISSING_REQUIRED, spec.id, anyRejected ? "candidate_evidence_rejected" : undefined));
       continue;
     }
