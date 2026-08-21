@@ -18,7 +18,8 @@ import { CONTRACTS_BY_ID } from "../src/v2/case-contracts.mjs";
 import { probeSource, probeParent, PROBE_ORDER } from "./shared/probe-sources.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const EVIDENCE_ROOT = "/Volumes/NVM2T/Development/AutoLoopEvidence";
+import { EVIDENCE_ROOT } from "./shared/evidence-root.mjs";
+export { EVIDENCE_ROOT };
 const CONTEXT_LENGTH = 1_000_000;
 
 const sha = (s) => createHash("sha256").update(s).digest("hex");

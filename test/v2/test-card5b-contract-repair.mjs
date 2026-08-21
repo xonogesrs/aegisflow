@@ -30,7 +30,7 @@ function eff(a, r = "forbidden", ext = "forbidden", ev = "none", extra = {}) {
 }
 
 // ── Card 5 live raw IR（frozen evidence）──
-const LIVE_EVIDENCE_PATH = "/Volumes/NVM2T/Development/AutoLoopEvidence/card-5-live-probe-2026-08-02T15-43-49-242Z/evidence.json";
+const LIVE_EVIDENCE_PATH = "/Volumes/NVM2T/Development/evidence/autoloop/card-5-live-probe-2026-08-02T15-43-49-242Z/evidence.json";
 function liveE2IR() {
   const ev = JSON.parse(readFileSync(LIVE_EVIDENCE_PATH, "utf8"));
   return ev.cases[0].parsed_ir;

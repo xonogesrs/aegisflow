@@ -32,7 +32,7 @@ import { CONTRACTS_BY_ID } from "../../src/v2/case-contracts.mjs";
 import { probeParent, probeSource } from "../../scripts/shared/probe-sources.mjs";
 
 const EVIDENCE = JSON.parse(
-  readFileSync(new URL("/Volumes/NVM2T/Development/AutoLoopEvidence/card-5c-live-probe-2026-08-02T16-10-02-635Z/evidence.json", "file://"), "utf8"),
+  readFileSync(new URL("/Volumes/NVM2T/Development/evidence/autoloop/card-5c-live-probe-2026-08-02T16-10-02-635Z/evidence.json", "file://"), "utf8"),
 );
 
 const SYSTEM = buildSystemPrompt();

@@ -14,7 +14,8 @@ import { probeSource, PROBE_ORDER } from "./shared/probe-sources.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CONTRACTS_DIR = "/Users/zhengfengqing/aura-plans/autoloop-analysis";
-export const EVIDENCE_ROOT = "/Volumes/NVM2T/Development/AutoLoopEvidence";
+import { EVIDENCE_ROOT } from "./shared/evidence-root.mjs";
+export { EVIDENCE_ROOT };
 
 function sha256(text) {
   return createHash("sha256").update(text).digest("hex");

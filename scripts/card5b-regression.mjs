@@ -9,9 +9,9 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { scanProvenance, scanRetiredOracle, scanFailureTaxonomy } from "./card5b-provenance-scan.mjs";
+import { EVIDENCE_ROOT } from "./shared/evidence-root.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const EVIDENCE_ROOT = "/Volumes/NVM2T/Development/AutoLoopEvidence";
 
 const sha = (s) => createHash("sha256").update(s).digest("hex");
 const fsha = (p) => sha(readFileSync(p, "utf8"));

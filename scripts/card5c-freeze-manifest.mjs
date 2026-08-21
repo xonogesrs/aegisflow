@@ -15,7 +15,8 @@ import { scanProvenance, scanRetiredOracle, scanFailureTaxonomy } from "./card5b
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CONTRACTS_DIR = "/Users/zhengfengqing/aura-plans/autoloop-analysis";
-export const EVIDENCE_ROOT = "/Volumes/NVM2T/Development/AutoLoopEvidence";
+import { EVIDENCE_ROOT } from "./shared/evidence-root.mjs";
+export { EVIDENCE_ROOT };
 
 const sha = (s) => createHash("sha256").update(s).digest("hex");
 const fsha = (p) => sha(readFileSync(p, "utf8"));
