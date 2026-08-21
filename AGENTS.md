@@ -85,3 +85,23 @@ same contract in code (`checkVerificationRoot`/`assertVerificationRoot`) for
 AutoLoop's own automated call sites. This file is the equivalent instruction
 for you, since you are not invoked through that code path when run
 interactively.
+
+## Durable worktrees (storage policy, mandatory)
+
+A worktree that must outlive a single command (task state, card
+implementation, anything you expect to return to) is DURABLE. Create durable
+worktrees only via:
+
+```
+scripts/durable-worktree.sh autoloop <card-id> [base-ref]
+→ /Volumes/NVM2T/Development/worktrees/autoloop/<card-id>/
+```
+
+The helper verifies the exact NVM2T mount by UUID and fails clearly with no
+fallback. Never `git worktree add` a durable task under `/tmp`,
+`/private/tmp`, or an arbitrary `~/` path.
+
+Exception: short-lived, self-cleaning, non-authoritative temp worktrees
+(e.g. `src/c2d/mutation-run.mjs` isolated mutation runs, colima per-run
+scratch roots) are ephemeral and must keep using OS temp — do not route them
+through the helper.
