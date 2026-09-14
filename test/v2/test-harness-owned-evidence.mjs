@@ -342,7 +342,10 @@ test("C4Q-11 orchestrator: reviewer receives full bundle → PASS", async () => 
 
 test("C4Q-12 synthetic secret, oversize, missing facts all fail closed", () => {
   const cwd = gitFixture();
-  const SYNTH = "synthetic-secret-sentinel-0123456789abcdef";
+  // Sentinel must match a REAL credential shape（SECRET_PATTERNS sk_key）:
+  // the original free-form sentinel matched no pattern, so this fail-closed
+  // proof never fired. Pattern-shaped sentinel keeps the no-echo asserts honest.
+  const SYNTH = "sk-syntheticsentinelfixed123456";
   try {
     const card = writerCard({ cwd });
     // secret: the verification command carries a secret pattern → evidence scan catches it

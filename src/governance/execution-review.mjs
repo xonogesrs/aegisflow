@@ -52,6 +52,8 @@ export const EXECUTION_REVIEW_HOLDS = Object.freeze({
   SECRET_DETECTED: "EXECUTION_REVIEW_SECRET_DETECTED",
   PUBLISH_FAILED: "EXECUTION_REVIEW_PUBLISH_FAILED",
   REREAD_MISMATCH: "EXECUTION_REVIEW_REREAD_MISMATCH",
+  STALE_ROTATION: "EXECUTION_REVIEW_STALE_ROTATION",
+  SURFACE_CHANGED: "EXECUTION_REVIEW_SURFACE_CHANGED",
   NOT_PUBLISHED: "EXECUTION_REVIEW_NOT_PUBLISHED",
   SOURCE_FAILED: "EXECUTION_REVIEW_SOURCE_FAILED",
 });
@@ -124,9 +126,16 @@ export function executionReviewContentSha256(text) {
 /** Parse identity + header fields from a published execution review text. */
 export function parseExecutionReviewText(text) {
   const src = String(text ?? "");
+  // Footer fields (identity / content sha) are appended by the publisher
+  // AFTER the terminator — the trusted region. Take the LAST match so a
+  // body-injected lookalike line can never spoof them (adversarial gate B2).
+  const last = (re) => {
+    const all = [...src.matchAll(re)];
+    return all.length ? all[all.length - 1][1] : null;
+  };
   return {
-    identity: src.match(/^REVIEW_PUBLICATION_IDENTITY:\s*([0-9a-f]{64})$/m)?.[1] ?? null,
-    sha256: src.match(/^REVIEW_PUBLICATION_SHA256:\s*([0-9a-f]{64})$/m)?.[1] ?? null,
+    identity: last(/^REVIEW_PUBLICATION_IDENTITY:\s*([0-9a-f]{64})$/gm),
+    sha256: last(/^REVIEW_PUBLICATION_SHA256:\s*([0-9a-f]{64})$/gm),
     executionId: src.match(/^EXECUTION_ID:\s*(.+)$/m)?.[1]?.trim() ?? null,
     cardId: src.match(/^CARD_ID:\s*(.+)$/m)?.[1]?.trim() ?? null,
     outcome: src.match(/^OUTCOME:\s*(.+)$/m)?.[1]?.trim() ?? null,
@@ -176,8 +185,14 @@ export function validateExecutionReviewSource(source) {
   return { ok: errors.length === 0, errors };
 }
 
+// Rendered cell values are control-char sanitized: a source field can never
+// inject a newline and forge header/footer lines (RSL3 adversarial gate B1).
+function cell(value) {
+  return String(value).replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, " ");
+}
+
 function statusLine(name, value) {
-  const v = value === undefined || value === null || value === "" ? "NOT_APPLICABLE" : String(value);
+  const v = value === undefined || value === null || value === "" ? "NOT_APPLICABLE" : cell(value);
   return `${name}: ${v}\n`;
 }
 
@@ -185,7 +200,7 @@ function listBlock(title, items, prefix = "  - ") {
   const arr = Array.isArray(items) ? items : [];
   const out = [`\n${title}\n`];
   if (arr.length === 0) out.push(`${prefix}(none)\n`);
-  else for (const it of arr) out.push(`${prefix}${typeof it === "string" ? it : JSON.stringify(it)}\n`);
+  else for (const it of arr) out.push(`${prefix}${cell(typeof it === "string" ? it : JSON.stringify(it))}\n`);
   return out.join("");
 }
 
@@ -300,29 +315,72 @@ function processAlive(pid) {
 export function acquireLatestReviewLock(surfaceDir = null) {
   const dir = resolve(surfaceDir ?? latestReviewDir());
   const lockPath = join(dirname(dir), ".latest.lock");
+  const recoverPath = `${lockPath}.recover`;
   const token = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  const acquire = () => {
+  const payload = () =>
+    JSON.stringify({ pid: process.pid, token, acquiredAt: new Date().toISOString() });
+  try { mkdirSync(dirname(lockPath), { recursive: true }); } catch { /* best effort */ }
+
+  const create = () => {
     try {
-      writeFileSync(lockPath, JSON.stringify({ pid: process.pid, token, acquiredAt: new Date().toISOString() }), { flag: "wx" });
+      writeFileSync(lockPath, payload(), { flag: "wx" });
       return { ok: true, token, lockPath, dir };
     } catch (e) {
-      if (e.code === "EEXIST") {
-        try {
-          const raw = JSON.parse(readFileSync(lockPath, "utf8"));
-          if (raw?.pid && !processAlive(raw.pid)) {
-            rmSync(lockPath, { force: true });
-            try {
-              writeFileSync(lockPath, JSON.stringify({ pid: process.pid, token, acquiredAt: new Date().toISOString() }), { flag: "wx" });
-              return { ok: true, token, lockPath, dir };
-            } catch { /* raced — fall through */ }
-          }
-        } catch { /* unreadable lock — fail closed */ }
-      }
+      if (e.code === "EEXIST") return null; // contended — caller decides
       return { ok: false, reason: "latest_surface_busy", lockPath, dir };
     }
   };
-  try { mkdirSync(dirname(lockPath), { recursive: true }); } catch { /* best effort */ }
-  return acquire();
+
+  // Stale-owner takeover, serialized by a recovery-claim marker so two
+  // racers can never both transition "observed dead lock" -> "owning":
+  // exactly one claimant may replace the dead lock, and it removes the
+  // stale file only after re-validating it still holds the EXACT dead
+  // owner bytes it observed (a live lock is never deleted — fail closed
+  // to `latest_surface_busy` instead).
+  const tryRecover = () => {
+    let raw = null;
+    try { raw = JSON.parse(readFileSync(lockPath, "utf8")); } catch { return null; } // unreadable — fail closed
+    if (!raw?.pid || processAlive(raw.pid)) return null; // live/malformed owner — busy
+    let claimed = false;
+    try {
+      writeFileSync(recoverPath, JSON.stringify({ pid: process.pid, token }), { flag: "wx" });
+      claimed = true;
+    } catch (e) {
+      if (e.code !== "EEXIST") return null;
+      // Existing claim: reclaimable only when its owner is provably dead
+      // and the bytes are unchanged between the liveness check and removal.
+      try {
+        const prior = JSON.parse(readFileSync(recoverPath, "utf8"));
+        if (!prior?.pid || processAlive(prior.pid)) return null;
+        const recheck = JSON.parse(readFileSync(recoverPath, "utf8"));
+        if (recheck?.pid !== prior.pid || recheck?.token !== prior.token) return null;
+        rmSync(recoverPath, { force: true });
+      } catch { return null; }
+      try {
+        writeFileSync(recoverPath, JSON.stringify({ pid: process.pid, token }), { flag: "wx" });
+        claimed = true;
+      } catch { return null; }
+    }
+    if (!claimed) return null;
+    try {
+      let cur = null;
+      try { cur = JSON.parse(readFileSync(lockPath, "utf8")); } catch { cur = null; }
+      if (cur && cur.pid === raw.pid && cur.token === raw.token) {
+        rmSync(lockPath, { force: true });
+      }
+      return create(); // null on a lost create race — caller reports busy
+    } finally {
+      try { rmSync(recoverPath, { force: true }); } catch { /* best effort */ }
+    }
+  };
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const got = create();
+    if (got) return got;
+    const recovered = tryRecover();
+    if (recovered && recovered.ok) return recovered;
+  }
+  return { ok: false, reason: "latest_surface_busy", lockPath, dir };
 }
 
 export function releaseLatestReviewLock({ lockPath, token } = {}) {
@@ -335,6 +393,25 @@ export function releaseLatestReviewLock({ lockPath, token } = {}) {
 
 function sanitizeName(s) {
   return String(s ?? "CARD").replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 80) || "CARD";
+}
+
+/**
+ * Exact publication identities already present in the flat archive. Used by
+ * the RSL3 stale-generation fence: an execution whose review has been rotated
+ * into the archive is SUPERSEDED and may never republish onto Latest.
+ */
+function archivedIdentities(arch) {
+  const ids = new Set();
+  let names = [];
+  try { names = readdirSync(arch); } catch { return ids; }
+  for (const name of names) {
+    if (!name.endsWith("-review.txt")) continue;
+    try {
+      const id = parseExecutionReviewText(readFileSync(join(arch, name), "utf8")).identity;
+      if (id) ids.add(id);
+    } catch { /* unreadable entry — skip; never fails the scan open */ }
+  }
+  return ids;
 }
 
 /**
@@ -427,10 +504,22 @@ export function publishExecutionReview(source, {
     // ── idempotent retry（T12）: same execution + same identity already on
     // the surface -> no archive, no rewrite.
     if (existsSync(currentPath)) {
-      const cur = parseExecutionReviewText(readFileSync(currentPath, "utf8"));
-      if (cur.executionId && cur.executionId === exec.executionId && cur.identity === identity) {
-        return { ok: true, idempotent: true, identity, sha256: cur.sha256 ?? executionReviewContentSha256(readFileSync(currentPath, "utf8")), path: currentPath, archivedPath: null, previousIdentity: cur.identity };
+      const curRaw = readFileSync(currentPath, "utf8");
+      const cur = parseExecutionReviewText(curRaw);
+      // Trust the short-circuit ONLY when the current surface is internally
+      // consistent (claimed sha recomputes). A hand-forged lookalike falls
+      // through and is overwritten by the legitimate publication instead of
+      // confirming it (adversarial gate B2).
+      if (cur.executionId && cur.executionId === exec.executionId && cur.identity === identity
+          && cur.sha256 && executionReviewContentSha256(curRaw) === cur.sha256) {
+        return { ok: true, idempotent: true, identity, sha256: cur.sha256, path: currentPath, archivedPath: null, previousIdentity: cur.identity };
       }
+    }
+    // ── RSL3 stale-generation fence: an execution whose review is already
+    // in the archive is superseded; a late retry must NEVER rotate the
+    // surface backwards (G2/G6) — fail closed before any mutation. ──────
+    if (archivedIdentities(resolve(archiveDir ?? latestReviewArchiveDir())).has(identity)) {
+      return { ok: false, holdCode: EXECUTION_REVIEW_HOLDS.STALE_ROTATION, reason: `EXECUTION_REVIEW_STALE_ROTATION:${identity.slice(0, 12)}` };
     }
     // ── archive previous（byte-identical; collision-safe; crash-safe）────
     const arch = archivePreviousLatest({ surfaceDir: dir, archiveDir: archiveDir ?? undefined, lock: ownLock });
@@ -460,8 +549,17 @@ export function publishExecutionReview(source, {
     rmSync(staging, { recursive: true, force: true });
     mkdirSync(staging, { recursive: true });
     writeFileSync(join(staging, "review.txt"), fullText, "utf8");
+    // ── RSL3 commit-time continuity fence: the surface at rename time must
+    // still be EXACTLY the predecessor we archived. A lock thief that slipped
+    // past acquire would otherwise silently lose our publication — abort
+    // fail-closed instead (C1/C2: no lost update, no dual-current). ──────
+    const currentNow = existsSync(currentPath)
+      ? parseExecutionReviewText(readFileSync(currentPath, "utf8")).identity
+      : null;
+    if ((currentNow ?? null) !== (arch.previousIdentity ?? null)) {
+      return { ok: false, holdCode: EXECUTION_REVIEW_HOLDS.SURFACE_CHANGED, reason: `EXECUTION_REVIEW_SURFACE_CHANGED:expected:${arch.previousIdentity ?? "NONE"}:found:${currentNow ?? "NONE"}` };
+    }
     renameSync(join(staging, "review.txt"), currentPath);
-    // stale staging cleanup under OUR lock
     for (const f of readdirSync(parent)) {
       if (f.startsWith(".latest-incoming-")) {
         try { rmSync(join(parent, f), { recursive: true, force: true }); } catch { /* best effort */ }

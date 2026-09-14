@@ -36,7 +36,39 @@ export const PRODUCTION_GATE_HOLDS = Object.freeze({
   ADMISSION_INVALID: "ADMISSION_INVALID",
   ADMISSION_DRIFT: "ADMISSION_DRIFT",
   ALLOCATION_BINDING_MISMATCH: "ALLOCATION_BINDING_MISMATCH",
+  AUTHORITY_SEAM_OVERRIDE_REJECTED: "AUTHORITY_SEAM_OVERRIDE_REJECTED",
 });
+
+// RSL2 bypass fence: governance DI seams（review barrier / closeout gate /
+// surface redirection）are INTERNAL test seams of the runners. A production
+// caller must never be able to replace the universal execution-review
+// barrier or redirect the fixed Latest surface through runnerOpts. These
+// keys are rejected fail-closed BEFORE any dispatch; tests that need DI call
+// the raw runners directly（runColimaGraph etc.）, never this entrypoint.
+export const AUTHORITY_SEAM_RUNNER_KEYS = Object.freeze([
+  "executionReviewBarrier",
+  "closeoutGate",
+  "closeoutSourceBuilder",
+  "closeoutEvidenceWriter",
+  "executionReviewSurfaceDir",
+  "executionReviewArchiveDir",
+  // STAGE C PRODUCTION WIRING fence: the selection bind pair and the
+  // issuance-authentication resolver are derived INSIDE the runners from the
+  // authoritative admission/allocation. A caller-supplied substitute through
+  // runnerOpts would let runtime input choose its own tool authority.
+  "toolSelectionContext",
+  "selectionAuthority",
+  // STAGE D cross-session rollover fence (T22): rollover session identity,
+  // generation and trigger control are minted by THE rollover authority
+  // from durable truth — never accepted through the execution sink.
+  "rolloverControl",
+  "rolloverSessionBinding",
+  "rolloverTriggerEvent",
+  "successorSessionIdentity",
+  "sessionIdentityDigest",
+  "sessionGeneration",
+  "spawnSuccessorSession",
+]);
 
 /**
  * Validate a per-task allocation BOUND to the admission at the execution
@@ -188,6 +220,22 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
         closeout: { applied: false },
       };
     }
+  }
+  // ── RSL2 bypass fence: reject governance DI-seam overrides ────────────
+  // The universal execution-review barrier and the closeout gate are
+  // authority seams. A caller-supplied replacement via runnerOpts would let
+  // a formal execution reach a terminal PASS without publishing its review.
+  // Fail closed BEFORE the runner is invoked（nodeResults: []）.
+  const seamConflicts = Object.keys(runnerOpts).filter((k) => AUTHORITY_SEAM_RUNNER_KEYS.includes(k));
+  if (seamConflicts.length > 0) {
+    return {
+      final: "HOLD",
+      holdCode: PRODUCTION_GATE_HOLDS.AUTHORITY_SEAM_OVERRIDE_REJECTED,
+      reason: `AUTHORITY_SEAM_OVERRIDE_REJECTED: caller options override governance authority seams: ${seamConflicts.join(",")}`,
+      nodeResults: [],
+      transitions: [],
+      closeout: { applied: false },
+    };
   }
   if (typeof fn !== "function") {
     return {

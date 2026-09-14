@@ -24,12 +24,22 @@
 import { runAdmittedGraph, assertProductionAdmission } from "../admission/admission-gate.mjs";
 import { deriveBudgetEnvelope } from "../budget/envelope.mjs";
 import { ENFORCED_DIMENSIONS } from "../budget/contract.mjs";
-import { aggregateGraphRun } from "../telemetry/aggregate.mjs";
+// P7 subtraction (M25-optimizer): the telemetry AGGREGATE is advisory-only
+// input for the OPTIONAL optimizer. It is loaded lazily through the same
+// optional seam so the governance core never hard-imports the telemetry
+// module for advisory purposes (OBSERVABILITY_ONLY — no acceptance/rejection
+// authority ever flows from it).
 import { digestOf } from "../canonical-digest.mjs";
 import { deriveExecutorRuntime } from "../admission/policy-projection.mjs";
 import { deriveLifecycleEligibleTransitions } from "../lifecycle-runner.mjs";
-import { runOptimizer } from "./optimizer.mjs";
+// P7 subtraction (M25-optimizer → OPTIONAL_ORCHESTRATION): the advisory
+// optimizer is NO LONGER a hard-core import. The coordinator holds the
+// budget authority (global split, envelope derivation, allocation binding)
+// and consumes the optimizer only through the OPTIONAL advisory seam below —
+// absent advisory ⇒ deterministic advisory-fallback decision, core
+// unaffected. Nothing authoritative moves into the optional layer.
 import { assertReviewArtifactEnforced } from "../governance/review-artifact-gate.mjs";
+import { assessDirectExecutionTask, createDirectExecutionRunner } from "../sop/proportional-sop.mjs";
 import {
   CONTROL_PLANE_SCHEMA,
   CONTROL_PLANE_VERSION,
@@ -38,9 +48,39 @@ import {
   REVIEWER_STRATEGIES,
   OPTIMIZER_HOLDS,
   EXECUTION_HOLDS,
+  EXECUTOR_MODEL_ALLOWLIST,
 } from "./contract.mjs";
 
+/**
+ * Stage B — the ONE SOP-bound direct execution runner (FAST_PATH/S0). It is
+ * dispatched only through runAdmittedGraph below, so every direct task still
+ * crosses the admission gate, the governance seam fence, allocation binding
+ * and budget enforcement. Created once; stateless per run.
+ */
+const DIRECT_EXECUTION_RUNNER = createDirectExecutionRunner();
 export { deriveExecutorRuntime };
+
+// ── P7 subtraction (M25-optimizer): OPTIONAL advisory layer resolution ──
+// The advisory optimizer and the advisory telemetry aggregate live in the
+// OPTIONAL orchestration/telemetry layers. They are resolved ONCE at module
+// load through try/catch dynamic imports; absence (file missing, import
+// failure) degrades to null and the coordinator runs its deterministic
+// advisory fallback. NOTHING authoritative lives behind these imports: the
+// coordinator's budget authority (global split, envelope, allocation
+// binding) and the execution sink's admission/identity/allocation gates are
+// entirely local to the core.
+let ADVISORY_OPTIMIZER = null;
+let ADVISORY_TELEMETRY_AGGREGATE = null;
+try {
+  ADVISORY_OPTIMIZER = await import("../orchestration/optimizer.mjs");
+} catch {
+  ADVISORY_OPTIMIZER = null; // optional layer absent — advisory fallback applies
+}
+try {
+  ADVISORY_TELEMETRY_AGGREGATE = await import("../telemetry/aggregate.mjs");
+} catch {
+  ADVISORY_TELEMETRY_AGGREGATE = null; // advisory provenance unavailable — fallback applies
+}
 
 /**
  * Eligible reviewer set owned by the admission review policy (singleton
@@ -123,6 +163,48 @@ function holdDecision(holdCode, reason) {
   };
 }
 
+// P7 subtraction (M25-optimizer): the OPTIONAL advisory seam. When the
+// optional orchestration layer is present it exposes runOptimizer(ctx) →
+// decision record; when it is ABSENT the coordinator falls back to this
+// deterministic advisory-fallback decision. The fallback is NOT an
+// acceptance/rejection authority: the coordinator's own budget authority
+// (global split + envelope + allocation binding) and the execution sink's
+// admission/allocation/identity gates are unchanged and remain the only
+// authority. The fallback preserves the optimizer's own HOLD contract
+// (missing lifecycle authority → HOLD) so no advisory absence can widen
+// authority.
+function advisoryFallbackDecision({ runtime, eligibleTransitions, eligibleReviewers, taskAllocation }) {
+  if (eligibleTransitions === null || eligibleTransitions === undefined) {
+    return holdDecision(OPTIMIZER_HOLDS.MISSING_LIFECYCLE_AUTHORITY, "missing/invalid lifecycle state (authoritative eligible transition set unavailable)");
+  }
+  const executor = EXECUTOR_MODEL_ALLOWLIST.length === 1
+    ? { provider: EXECUTOR_MODEL_ALLOWLIST[0].provider, model: EXECUTOR_MODEL_ALLOWLIST[0].model }
+    : null;
+  const retryReplan = Array.isArray(eligibleTransitions) && eligibleTransitions.length === 1 ? eligibleTransitions[0] : null;
+  const reviewerStrategy = Array.isArray(eligibleReviewers) && eligibleReviewers.length === 1 ? eligibleReviewers[0] : null;
+  const dims = {};
+  for (const [d, limit] of Object.entries(taskAllocation?.dimensions ?? {})) {
+    if (limit === null || limit === undefined) continue;
+    dims[d] = limit;
+  }
+  const recommendation = (executor || retryReplan || reviewerStrategy) ? "RECOMMENDATION" : "NO_RECOMMENDATION";
+  return {
+    schema: OPTIMIZER_DECISION_SCHEMA,
+    version: OPTIMIZER_DECISION_VERSION,
+    recommendation,
+    holdCode: null,
+    escalationClass: "IN_ENVELOPE",
+    reasons: ["advisory layer absent — deterministic advisory fallback (no scoring; coordinator budget authority unchanged)"],
+    executor,
+    runtime,
+    retryReplan,
+    reviewerStrategy,
+    budgetAllocation: Object.keys(dims).length > 0 ? { dimensions: dims } : null,
+    observedProvenance: null,
+    decisionId: digestOf({ advisoryFallback: true, runtime, eligibleTransitions, taskAllocation: dims }),
+  };
+}
+
 /**
  * Bind a per-task allocation to its task + admission + dimensions with an
  * integrity digest (Finding 1). The execution sink re-derives this digest and
@@ -163,14 +245,30 @@ function computePlanIdentity(plan) {
  *        non-authoritative runner/test options ONLY.
  * @param {object|null} [opts.globalBudget] — { dimensions: { [dim]: limit } }
  * @param {Array<object>} [opts.telemetryEvents] — telemetry events for the
- *        observed optimization input (provenance via aggregate identity)
+ *        observed optimization input (provenance via aggregate identity).
+ *        P7 subtraction (M25-optimizer): consumed ONLY by the optional
+ *        advisory layer — the aggregate is computed lazily so the hard core
+ *        never imports the telemetry module for advisory purposes.
  * @returns {{ ok: true, plan } | { ok: false, holdCode, reason }}
  */
 export function coordinate({ tasks = [], globalBudget = null, telemetryEvents = [] } = {}) {
   if (!Array.isArray(tasks) || tasks.length === 0) {
     return { ok: false, holdCode: OPTIMIZER_HOLDS.MALFORMED_INPUT, reason: "coordinate requires a non-empty tasks array" };
   }
-  const observed = aggregateGraphRun({ events: telemetryEvents });
+  // P7 subtraction (M25-optimizer): the aggregate identity is advisory
+  // provenance for the OPTIONAL optimizer. The aggregate module is loaded
+  // lazily ONLY when events were supplied — with no events this is a pure
+  // pass-through and the hard core never touches the telemetry module. A
+  // missing/failed aggregate degrades to advisory-absent (fallback), never
+  // to an authority change.
+  let observed = null;
+  if (telemetryEvents.length > 0 && ADVISORY_TELEMETRY_AGGREGATE) {
+    try {
+      observed = ADVISORY_TELEMETRY_AGGREGATE.aggregateGraphRun({ events: telemetryEvents });
+    } catch {
+      observed = null;
+    }
+  }
 
   const entries = tasks.map((t, i) => {
     const admission = t?.admission ?? null;
@@ -216,16 +314,32 @@ export function coordinate({ tasks = [], globalBudget = null, telemetryEvents = 
       if (eligibleTransitions === null) {
         t.decision = holdDecision(OPTIMIZER_HOLDS.MISSING_LIFECYCLE_AUTHORITY, "missing/invalid lifecycle state (authoritative eligible transition set unavailable)");
       } else {
-        t.decision = runOptimizer({
-          admission: t.admission,
-          budgetEnvelope: t.envelope,
-          budgetRemaining: effective,
-          taskAllocation,
-          runtime,
-          eligibleTransitions,
-          eligibleReviewers: deriveEligibleReviewers(t.admission),
-          observed: { source: "telemetry-aggregate", aggregateIdentity: observed.aggregateIdentity },
-        });
+        // ── P7 subtraction (M25-optimizer): OPTIONAL advisory seam ────────
+        // The optimizer advisory lives in the optional orchestration layer
+        // (src/orchestration/optimizer.mjs), resolved at module load. When
+        // the layer is ABSENT the coordinator uses the deterministic
+        // advisory fallback — the core never depends on the optional layer,
+        // and no authority moves into it. The advisory decision is still
+        // only a RECOMMENDATION record: the execution sink re-validates
+        // admission identity + allocation binding + budget enforcement
+        // regardless of what the advisory said.
+        t.decision = ADVISORY_OPTIMIZER?.runOptimizer
+          ? ADVISORY_OPTIMIZER.runOptimizer({
+              admission: t.admission,
+              budgetEnvelope: t.envelope,
+              budgetRemaining: effective,
+              taskAllocation,
+              runtime,
+              eligibleTransitions,
+              eligibleReviewers: deriveEligibleReviewers(t.admission),
+              observed: { source: "telemetry-aggregate", aggregateIdentity: observed?.aggregateIdentity ?? "" },
+            })
+          : advisoryFallbackDecision({
+              runtime,
+              eligibleTransitions,
+              eligibleReviewers: deriveEligibleReviewers(t.admission),
+              taskAllocation,
+            });
       }
     }
     t.runtime = runtime;
@@ -278,6 +392,22 @@ const AUTHORITATIVE_RUN_KEYS = new Set([
   "memory_policy", "review_policy", "repair_budget", "evidence_policy",
   "human_gates", "review_surface_policy", "authority_binding", "fail_closed",
   "taskId", "taskAllocation", "eligibleTransitions", "lifecycleState",
+  // RSL2 bypass fence: governance DI seams must never be caller-overridable
+  // through the execution sink（mirrors AUTHORITY_SEAM_RUNNER_KEYS in
+  // src/admission/admission-gate.mjs, which enforces the same boundary at
+  // the entrypoint itself）.
+  "executionReviewBarrier", "closeoutGate", "closeoutSourceBuilder",
+  "closeoutEvidenceWriter", "executionReviewSurfaceDir", "executionReviewArchiveDir",
+  // STAGE C PRODUCTION WIRING fence（mirrors admission-gate.mjs）: the
+  // selection bind pair / authority are runner-internal derivations from the
+  // authoritative admission + allocation, never caller-overridable.
+  "toolSelectionContext", "selectionAuthority",
+  // STAGE D cross-session rollover fence (T22): rollover identity/generation/
+  // trigger control is minted by THE rollover authority from durable truth —
+  // never accepted from caller options (AUTHORITATIVE_RUN_KEYS pattern).
+  "rolloverControl", "rolloverSessionBinding", "rolloverTriggerEvent",
+  "successorSessionIdentity", "sessionIdentityDigest", "sessionGeneration",
+  "spawnSuccessorSession",
 ]);
 
 /**
@@ -287,8 +417,10 @@ const AUTHORITATIVE_RUN_KEYS = new Set([
  * authoritative allocation is bound into the execution request so the runner
  * sees the narrowed effective limits (Finding 1).
  *
- * HOLDed tasks are skipped; direct-execution (FAST_PATH) tasks have no graph
- * runtime and are NOT graph-dispatched (no silent fallback — Finding 5).
+ * HOLDed tasks are skipped; direct-execution (FAST_PATH/S0) tasks are bound
+ * to the single SOP direct execution runner (Stage B) and dispatched through
+ * the SAME runAdmittedGraph boundary — the former `graph === null` silent
+ * skip is removed (no silent fallback — Finding 5).
  */
 export async function executeSequentially({ plan = null } = {}) {
   if (!plan || !Array.isArray(plan.tasks)) return { ok: false, reason: "plan.tasks required", results: [] };
@@ -304,9 +436,40 @@ export async function executeSequentially({ plan = null } = {}) {
       results.push({ taskId: task.taskId, dispatched: false, holdCode: task.decision.holdCode });
       continue;
     }
-    if (task.graph === null || task.graph === undefined) {
-      results.push({ taskId: task.taskId, dispatched: false, reason: "direct execution (no graph runtime)" });
+    // Separate authoritative fields from caller runner/test options (Finding 3).
+    // Checked BEFORE any routing/dispatch decision — an authority-seam
+    // override is rejected regardless of runtime.
+    const { runner, ...forward } = task.runnerOpts ?? {};
+    const conflicts = Object.keys(forward).filter((k) => AUTHORITATIVE_RUN_KEYS.has(k));
+    if (conflicts.length > 0) {
+      results.push({ taskId: task.taskId, dispatched: false, holdCode: EXECUTION_HOLDS.AUTHORITY_OVERRIDE_REJECTED, reason: `caller options override authoritative execution fields: ${conflicts.join(",")}` });
       continue;
+    }
+
+    // ── Stage B proportional SOP scale bind ──────────────────────────────
+    // A direct-execution task (runtime "direct" ⇒ graph null) is routed
+    // through the SAME admission/allocation/authority gauntlet below via the
+    // SOP-bound direct lifecycle runner. A null/missing graph under ANY
+    // other runtime is contradictory authority and fails closed.
+    let isDirectExecution = false;
+    if (task.graph === null || task.graph === undefined) {
+      if (task.runtime !== "direct") {
+        results.push({
+          taskId: task.taskId,
+          dispatched: false,
+          holdCode: EXECUTION_HOLDS.GRAPH_RUNTIME_UNRESOLVED,
+          reason: "graph runtime unresolved for a non-direct task (graph===null silent skip removed)",
+        });
+        continue;
+      }
+      const readiness = assessDirectExecutionTask(task);
+      if (!readiness.ok) {
+        // Explicit fail-closed HOLD at the sink (card-mandated codes) — the
+        // former silent `dispatched:false` skip is unreachable.
+        results.push({ taskId: task.taskId, dispatched: false, holdCode: readiness.holdCode, reason: readiness.reason });
+        continue;
+      }
+      isDirectExecution = true;
     }
 
     // Admission identity binding (Finding 3): the admission reaching the sink
@@ -338,18 +501,15 @@ export async function executeSequentially({ plan = null } = {}) {
       }
     }
 
-    // Separate authoritative fields from caller runner/test options (Finding 3).
-    const { runner, ...forward } = task.runnerOpts ?? {};
-    const conflicts = Object.keys(forward).filter((k) => AUTHORITATIVE_RUN_KEYS.has(k));
-    if (conflicts.length > 0) {
-      results.push({ taskId: task.taskId, dispatched: false, holdCode: EXECUTION_HOLDS.AUTHORITY_OVERRIDE_REJECTED, reason: `caller options override authoritative execution fields: ${conflicts.join(",")}` });
-      continue;
-    }
-
     const result = await runAdmittedGraph({
       admission: task.admission,
       graph: task.graph,
-      runner,
+      // Stage B: for direct tasks the caller-supplied test `runner` seam is
+      // deliberately IGNORED — the SOP-bound direct execution runner is the
+      // only lawful EXECUTION-stage handler, so an injected substitute can
+      // never bypass the proportional bind. Its DI (adapters/taskCard/cwd)
+      // still arrives through forward (non-authoritative keys only).
+      runner: isDirectExecution ? DIRECT_EXECUTION_RUNNER : runner,
       budget: { allocation: task.taskAllocation ?? null },
       ...forward,
     });
