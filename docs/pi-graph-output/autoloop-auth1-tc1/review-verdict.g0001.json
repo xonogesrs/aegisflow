@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "autoloop.review-verdict/v1",
+  "jobId": "autoloop-auth1-tc1.g0001",
+  "lineageId": "autoloop-auth1-tc1",
+  "generation": 1,
+  "candidateIdentity": {
+    "changedTreeIdentity": "91d53c2b45745e21616f0eff4850a445f1d6e928a7c74fccf48ced4ae6ae1da3",
+    "patchSha256": "eb4b85f654dfcc1d66dd0c1d9ca7d90f49a962ca5a8c69e7916e50ce760bcf32",
+    "currentHead": "a06124c8d919757c1a6371daaae89ab14546c9ef",
+    "baseHead": "7cde0ba0fdd9f66db0dfbe82bb5945fc9bb9ca60",
+    "repository": "xonogesrs/autoloop",
+    "branch": "governance/auth1-production-retrieval-authority"
+  },
+  "specIdentity": {
+    "specId": "autoloop-auth1-tc1",
+    "specDigest": "ee9025ff17f0568e87980a3a9e02f7946523cb2f8b0a7195361ce3d4a6b3bd1f"
+  },
+  "findingsDigest": "3b7f8c7b63098144b6c3963e2566a955a7c50031ba0cbc2e2b51069af45b2e0a",
+  "reviewerIdentity": "controller",
+  "verdict": "PASS",
+  "summary": "TC1 terminal review: successor generation + terminal ordering foundation verified against final commit HEAD a06124c8. No BLOCKER/MAJOR findings.",
+  "recommendedNextAction": "Accept and deliver canonically to external review surface.",
+  "createdAt": "2026-08-16T07:39:41.680Z"
+}

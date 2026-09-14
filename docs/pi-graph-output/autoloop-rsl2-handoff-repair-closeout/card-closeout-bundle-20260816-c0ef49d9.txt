@@ -1,0 +1,185 @@
+================================================================================
+AUTOLOOP EXECUTION REVIEW
+================================================================================
+REVIEW_SCHEMA: autoloop.execution-review/v1
+EXECUTION_ID: autoloop-rsl2-handoff-repair-closeout-20260816
+CARD_ID: autoloop-rsl2-handoff-repair-closeout
+CARD_TITLE: RSL2 Handoff Repair Closeout Verification
+OUTCOME: PASS
+HOLD_CODE: NOT_APPLICABLE
+REASON: NOT_APPLICABLE
+GENERATED_AT: 2026-08-16T11:05:00.000Z
+ADMISSION_REVIEW_REQUIREMENT: REQUIRED (admission self-hosted-card-execution; strength external; external no)
+
+================================================================================
+1. Requested Task
+================================================================================
+OBJECTIVE: Verify that commit c9226bd correctly repairs the human handoff
+authority routing — the normal "latest formal execution review" question must
+resolve the fixed Domain A surface (~/Desktop/AutoLoop-Review/Latest/review.txt)
+while the unresolved external-review question stays on Domain B
+(Current/delivery.json) — WITHOUT changing RSL2 publication state, PGMA1, or
+review lifecycle semantics. Verification only: no feature work, no RSL3, no
+review re-publication, no PGMA1 mutation, no verdict minting.
+
+================================================================================
+2. Repository Identity
+================================================================================
+REPOSITORY: xonogesrs/autoloop
+BRANCH: governance/rsl2-universal-execution-review-surface
+HEAD (verification target): c9226bd (docs(rsl2): route execution-review handoff to fixed Latest surface)
+HEAD (RSL2 implementation): 583acb9 (feat(rsl2): universal execution review surface)
+BASE: e1ecb45 (auth1 mainline)
+WORKTREE: /Volumes/NVM2T/Development/autoloop
+
+================================================================================
+3. Work Performed
+================================================================================
+SUMMARY: Read-only closeout verification of the handoff routing repair.
+V1: clean-session human handoff resolution（fresh read of AGENTS.md
+AUTHORITATIVE_SOURCE_FIRST, no reliance on prior-session knowledge）.
+V2: external-review routing resolution.
+V3: canonical status + independent hash recomputation.
+V4: mutation boundary of commit c9226bd.
+V5: routing-ambiguity regression scan of live routing docs.
+
+================================================================================
+4. Mutations
+================================================================================
+ADDED:
+  - docs/pi-graph-output/autoloop-rsl2-handoff-repair-closeout/card-closeout-bundle-20260816-<identity8>.txt (this evidence artifact; untracked)
+MODIFIED:
+  (none)
+DELETED:
+  (none)
+NOTE: No source, surface, or lifecycle state was modified by this card. The
+only prior mutation in scope is commit c9226bd (AGENTS.md routing split).
+
+================================================================================
+5. Verification / Tests
+================================================================================
+TEST_RESULTS:
+  - V1 (handoff routing): PASS — fresh-session follow of AGENTS.md
+    AUTHORITATIVE_SOURCE_FIRST resolves "What's the latest formal execution's
+    review?" deterministically to ~/Desktop/AutoLoop-Review/Latest/review.txt
+    (Domain A; structured answer: node scripts/gov-execution-review.mjs
+    --status). The fixed entrypoint holds the RSL2 execution review.
+  - V2 (external review routing): PASS — the same routing doc resolves "What
+    unresolved external review/verdict is currently waiting?" to
+    ~/Desktop/AutoLoop-Review/Current/delivery.json (Domain B), explicitly
+    marked as a DIFFERENT question. Live state: cardId autoloop-pgma1,
+    externalReviewStatus AWAITING_EXTERNAL_REVIEW, verdict null, identity
+    e29094b40b31f017522409d4ed8a3725d6f8b24b0973b2a66b3ab7556ebe47c9, sha
+    545c741abf2fea1aec8512d56717405bec28d78efebf57cc0b523cfab4bc9975. The
+    Latest review is NOT treated as the unresolved external inbox.
+  - V3 (status + independent recompute): PASS —
+    node scripts/gov-execution-review.mjs --status reports executionId
+    autoloop-rsl2-implementation-20260816, cardId autoloop-rsl2, outcome PASS,
+    reviewExecutionIdentity ecd7ee419baa81cbbe43b3a33088bd2b986f761f0ffb40849e475a16d0c0eb12,
+    reviewExecutionSha256 fcb33a8c6e5fa919702aac0314a4222237070612363f44512247da76e19631e9.
+    INDEPENDENT recompute (python, sha256 over content up to and including
+    the END terminator line, footer excluded): content sha == fcb33a8c... ==
+    footer REVIEW_PUBLICATION_SHA256; footer identity == ecd7ee41... Matches
+    the claimed RSL2 identity/digest exactly.
+  - V4 (mutation boundary): PASS — git show c9226bd: 1 file changed
+    (AGENTS.md, 14 insertions, 4 deletions), full diff = the two-question
+    routing split only. No source, no runner, no lifecycle, no surface
+    machinery, no PGMA1, no Current/delivery.json, no Latest/review.txt, no
+    archive change. Branch delta vs base e1ecb45 = exactly the 8 RSL2 files
+    (7 implementation + AGENTS.md). Archive lineage intact: exactly one entry,
+    Latest/archive/20260816-autoloop-rsl1-b6aac81f-review.txt. Live state
+    consistency: Current/delivery.json unchanged (PGMA1 AWAITING_EXTERNAL_
+    REVIEW, verdict null, identity/sha as above); Latest/review.txt content
+    hash unchanged (V3 recompute).
+  - V5 (routing ambiguity regression): PASS — live routing docs scanned
+    (AGENTS.md, README.md, ENVIRONMENT.md, docs/operations/): only AGENTS.md
+    routes the review-surface question, and it now carries the split
+    (Domain A latest-execution-review -> Latest/review.txt; Domain B inbox
+    status -> Current/delivery.json). No remaining instruction routes the
+    "latest completed execution review" question to Current/delivery.json.
+    Historical governance docs describing the inbox (Domain B) are accurate
+    domain descriptions, not handoff routing instructions for the
+    latest-execution-review question.
+
+================================================================================
+6. Findings
+================================================================================
+FINDINGS:
+  - (subject of this closeout, already repaired in c9226bd) The normal human
+    handoff for a just-finished formal execution previously resolved to the
+    External Review Inbox (Current/delivery.json) because AGENTS.md
+    AUTHORITATIVE_SOURCE_FIRST conflated the two authority domains in one
+    routing line. c9226bd splits them. No competing route remains (V5).
+  - This verification confirms the repair is effective without disturbing the
+    RSL2 publication state: Latest/review.txt still identifies RSL2 with the
+    claimed identity/digest (V3), PGMA1 remains pending and un-mutated (V2/V4),
+    archive lineage is intact (V4).
+
+================================================================================
+7. Result / Verdict
+================================================================================
+OUTCOME: PASS
+ADMISSION_REVIEW_REQUIREMENT: REQUIRED (strength external; external no)
+VERDICT: PASS / RSL2_HUMAN_HANDOFF_AUTHORITY_ROUTING_REPAIRED_AND_VERIFIED
+FAIL_CLOSED_CHECK: V1-V5 all PASS — no HOLD / RSL2_HANDOFF_ROUTING_CLOSEOUT_NOT_VERIFIED
+  trigger; no competing authority/path and no mutated state detected.
+CONVERGENCE: REPAIR / RSL2_HUMAN_HANDOFF_STILL_BOUND_TO_EXTERNAL_REVIEW_INBOX
+  -> PASS / RSL2_HUMAN_HANDOFF_AUTHORITY_ROUTING_REPAIRED_AND_VERIFIED.
+  RSL2 is now closed out: publication, storage, and routing are handled as
+  three separated layers (publication correct at RSL2; storage verified;
+  routing repaired + verified here).
+
+================================================================================
+8. Remaining Blocker / Debt
+================================================================================
+RISKS:
+  (none new)
+LIMITATIONS:
+  - This verification card's own review is delivered as an evidence artifact
+    only, per card scope (verification-only; no review re-publication). The
+    fixed entrypoint continues to resolve the RSL2 execution review (V1/V3);
+    the next rotation is exercised by RSL3.
+  - PGMA1 remains AWAITING_EXTERNAL_REVIEW in the Domain B inbox; its verdict
+    is the controller's, minted by reviewing PGMA1 itself — never to free a
+    slot.
+
+================================================================================
+9. Next Action
+================================================================================
+NEXT_ACTION: RSL3 — Real End-to-End Review Surface Lifecycle Acceptance:
+PGMA1 stays pending in the inbox while Task A -> Latest A, Task B -> A
+archived + Latest B, Task C HOLD -> B archived + Latest C; fail-closed on
+missing/invalid/unpublished reviews. (Not started by this card.)
+
+================================================================================
+Domain A / Domain B Final Authority Table
+================================================================================
+DOMAIN A — LATEST_EXECUTION_REVIEW:
+  AUTHORITY: src/governance/execution-review.mjs (publishExecutionReview /
+  verifyLatestExecutionReview / latestExecutionReviewStatus)
+  FIXED SURFACE: ~/Desktop/AutoLoop-Review/Latest/review.txt
+  ARCHIVE: ~/Desktop/AutoLoop-Review/Latest/archive/
+  SEMANTICS: most recent formal execution review; rotates on every execution;
+  independent of inbox state
+  CURRENT STATE: autoloop-rsl2, identity ecd7ee419baa..., sha
+  fcb33a8c6e5f... (verified V3)
+  ROUTING: AGENTS.md AUTHORITATIVE_SOURCE_FIRST (V1)
+
+DOMAIN B — PENDING_EXTERNAL_REVIEW:
+  AUTHORITY: src/governance/review-bundle.mjs (deliverToExternalReviewSurface
+  / rotateExternalReviewSurface / currentSurfaceReviewStatus)
+  FIXED SURFACE: ~/Desktop/AutoLoop-Review/Current/delivery.json (+
+  review-bundle.txt / evidence.json)
+  ARCHIVE: ~/Desktop/AutoLoop-Review/Archive/
+  SEMANTICS: unresolved external review; stays occupied until a verdict;
+  fail-closed occupancy
+  CURRENT STATE: autoloop-pgma1, AWAITING_EXTERNAL_REVIEW, verdict null
+  (verified V2/V4)
+  ROUTING: AGENTS.md AUTHORITATIVE_SOURCE_FIRST (V2)
+
+INVARIANT: a pending inbox occupant never blocks the Latest execution review,
+and vice versa — both verified live (V2/V3).
+
+=== END OF EXECUTION REVIEW ===
+REVIEW_PUBLICATION_IDENTITY: c0ef49d993221138a5003cf9e2d45a9057107ab3a129acf0b673b97e74748ba9
+REVIEW_PUBLICATION_SHA256: c0ef49d993221138a5003cf9e2d45a9057107ab3a129acf0b673b97e74748ba9

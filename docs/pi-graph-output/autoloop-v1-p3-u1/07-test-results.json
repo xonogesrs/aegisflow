@@ -1,0 +1,40 @@
+{
+  "schema": "autoloop.p3-u1.test-results/v1",
+  "card_id": "AUTOLOOP-V1-P3-U1-PI-EXECUTION-SEAM-RESTORE-1",
+  "policy": "Card section 11: no adapter/governance source change, so only affected regression + necessary execution integration; no full AutoLoop suite rerun.",
+  "runs": [
+    {
+      "command": "node --test test/test-pi-rpc-adapter.mjs test/test-pi-lifecycle-integration.mjs",
+      "result": "tests 68 / pass 68 / fail 0 / skipped 0",
+      "duration_ms": 10371,
+      "coverage": "adapter RPC protocol handling: spawn/env, prompt delivery, agent_settled->get_last_assistant_text completion, malformed_json, timeout/abort escalation (SIGTERM->SIGKILL group), process disappearance, no-tools policy, env-allowlist isolation, protocol byte limits, diagnostics-without-raw-content, negative no-spawn cases, lifecycle integration"
+    },
+    {
+      "command": "ALLOW_REAL_PI_SMOKE=1 node test/pi-rpc-real-smoke.mjs (the ONE authorized real-Pi smoke)",
+      "result": "PASS / AUTOLOOP_PI_RPC_SMOKE_OK_CONFIRMED — status_completed, output_exact 'AUTOLOOP_PI_RPC_SMOKE_OK', zero_tool_calls, no_new_sessions, no_removed_sessions, zero_cwd_mutations; terminalReason 'stop', exitCode 0, eventCount 63",
+      "evidence": "04-real-smoke/"
+    },
+    {
+      "command": "ALLOW_REAL_PI_USAGE_PROBE=1 node scripts/pi-rpc-usage-probe.mjs",
+      "result": "exit 0 — USAGE_PRESENT true, STRUCTURED true, AUTHORITATIVE true; 29 usage samples on message_update + message_end; fields: input/output/cacheRead/cacheWrite/totalTokens/cost(+reasoning); terminal text 'USAGE_PROBE_OK'",
+      "evidence": "05-usage-reachability/"
+    },
+    {
+      "command": "node --check scripts/pi-rpc-usage-probe.mjs",
+      "result": "syntax OK"
+    },
+    {
+      "command": "npm run check (find src -name '*.mjs' -exec node --check {} +)",
+      "result": "clean (no output = all src files pass)"
+    },
+    {
+      "command": "git diff --check",
+      "result": "clean"
+    },
+    {
+      "command": "N1 missing-executor direct check (piExecutable=/nonexistent/pi-binary)",
+      "result": "status='error', 'spawn /nonexistent/pi-binary ENOENT' — fail-closed, no fallback"
+    }
+  ],
+  "not_run": "full test:v1 / test:v2 / test:governance suites — explicitly out of scope for this unblock card (no shared critical-boundary source change; card section 11)."
+}

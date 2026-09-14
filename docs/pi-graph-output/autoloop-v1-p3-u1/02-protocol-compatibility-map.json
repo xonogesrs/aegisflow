@@ -1,0 +1,67 @@
+{
+  "schema": "autoloop.p3-u1.protocol-compatibility-map/v1",
+  "card_id": "AUTOLOOP-V1-P3-U1-PI-EXECUTION-SEAM-RESTORE-1",
+  "current_generation": {
+    "package": "@earendil-works/pi-coding-agent",
+    "version": "0.84.2",
+    "rpc_mode": "--mode rpc (still supported; also --mode text|json)",
+    "wire": "JSONL stdin/stdout (commands in, events+responses out); remote sessions use a separate CBOR protocol (@earendil-works/pi-protocol) NOT used by stdio --mode rpc",
+    "evidence": "pi --help (mode options), dist/modes/rpc/rpc-types.d.ts, dist/modes/json-event.d.ts, dist/core/agent-session.js (agent_settled emission), raw wire capture 05-usage-reachability/raw-protocol.jsonl"
+  },
+  "compatibility_table": [
+    {
+      "AUTOLOOP_EXPECTATION": "spawn flags: --mode rpc --no-session --no-tools/--no-builtin-tools/--tools/--exclude-tools --no-extensions --no-skills --no-prompt-templates --no-themes --no-context-files --provider <p> --model <m>",
+      "CURRENT_PI_SURFACE": "all flags present verbatim in 0.84.2 help",
+      "MAPPING": "1:1",
+      "STATUS": "COMPATIBLE"
+    },
+    {
+      "AUTOLOOP_EXPECTATION": "command {type:'prompt', message:string}",
+      "CURRENT_PI_SURFACE": "{type:'prompt', message:string, images?, streamingBehavior?} — message is a required string; adapter's JSON-stringified card payload is opaque prompt text to the model",
+      "MAPPING": "1:1 (superset: new optional fields)",
+      "STATUS": "COMPATIBLE"
+    },
+    {
+      "AUTOLOOP_EXPECTATION": "event agent_settled (agent turn complete)",
+      "CURRENT_PI_SURFACE": "emitted after each agent turn (agent-session.js _emitAgentSettled -> this._emit({type:'agent_settled'})); observed on the wire",
+      "MAPPING": "1:1",
+      "STATUS": "COMPATIBLE"
+    },
+    {
+      "AUTOLOOP_EXPECTATION": "command {type:'get_last_assistant_text'} after agent_settled",
+      "CURRENT_PI_SURFACE": "still a supported RpcCommand (rpc-types.d.ts); response observed on the wire",
+      "MAPPING": "1:1",
+      "STATUS": "COMPATIBLE"
+    },
+    {
+      "AUTOLOOP_EXPECTATION": "response {type:'response', command:'get_last_assistant_text', data:{text}}",
+      "CURRENT_PI_SURFACE": "{id?, type:'response', command:'get_last_assistant_text', success:true, data:{text: string|null}} — adapter reads (evt.data && evt.data.text) ?? '' which also handles success:false (no data)",
+      "MAPPING": "1:1 (data.text may be null; adapter coalesces to '')",
+      "STATUS": "COMPATIBLE"
+    },
+    {
+      "AUTOLOOP_EXPECTATION": "event message_end {message:{role:'assistant', stopReason, errorMessage}}",
+      "CURRENT_PI_SURFACE": "same shape; observed: role='assistant', stopReason='stop', errorMessage absent, usage attached to message",
+      "MAPPING": "1:1",
+      "STATUS": "COMPATIBLE"
+    },
+    {
+      "AUTOLOOP_EXPECTATION": "event message_update {message:{content:[...], partial}} (cumulative streaming snapshots, partial=true on streaming updates)",
+      "CURRENT_PI_SURFACE": "CHANGED: {type:'message_update', usage: Usage, assistantMessageEvent} — cumulative snapshots REMOVED (message_start + deltas + message_end final), no `message` field, no `partial` flag",
+      "MAPPING": "adapter uses message_update ONLY for diagnostic byte/subtype accounting; the no-message branch classifies as 'unknown' subtype — completion contract unaffected",
+      "STATUS": "COMPATIBLE (contract-safe; diagnostic subtype buckets partial/snapshot/delta will be empty/unknown in current generation)"
+    },
+    {
+      "AUTOLOOP_EXPECTATION": "commands {type:'abort'} and {type:'abort_bash'} on timeout/abort",
+      "CURRENT_PI_SURFACE": "both still supported RpcCommands",
+      "MAPPING": "1:1",
+      "STATUS": "COMPATIBLE"
+    }
+  ],
+  "new_fields_of_note": {
+    "message_update.usage": "authoritative pi-ai Usage object on every streaming update AND on message_end.message.usage — this is the structured usage source P3-U1 must prove reachable (see 05-usage-reachability/report.json)",
+    "unused_commands": "current generation adds steer/follow_up/set_model/get_state/compact/get_messages etc. — unused by the adapter; harmless"
+  },
+  "REQUIRED_CHANGE": "NONE for the adapter completion contract. No adapter source change made (verified: git diff shows no change to src/adapter/*).",
+  "edge_observation": "if get_last_assistant_text ever returns success:false, the adapter completes with empty stdout rather than erroring; the smoke gate's output_exact check then fails -> HOLD, so it is fail-safe. Noted for the original P3 phase; not a blocker for this unblock."
+}

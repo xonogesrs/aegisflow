@@ -1,0 +1,15 @@
+e4e4720069c54ecedc73eca5430d2bcdcdf797b93d114146f22e8c14b10ee8ea  ./01-executor-reality-map.json
+3bb2ce40af439e439daa7cbacf8d56b284fdef6ee535b468f3713f9547d7cfcc  ./02-protocol-compatibility-map.json
+78f63c4e8a47b579e0d1b78d579a8e4e82784331c84db875214946821f0bbc0c  ./03-restoration-decision.json
+391028d4752ac7e63aa77663b83fd1ae5f26b17559db2ecb26ba821797666456  ./04-real-smoke/checks.json
+44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a  ./04-real-smoke/cwd-inventory-after.json
+44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a  ./04-real-smoke/cwd-inventory-before.json
+13e5d5f36116e893f6382537b07f8e7d94500f2211510ffdb60cfd889e28371d  ./04-real-smoke/normalized-result.json
+a5620945bb26cd81eccf089a09cdf70ec1d5c104fd93101fef6bfa3e4302828f  ./04-real-smoke/session-diff.json
+bb64ddfd3ac1dff1d1e78cea4f8cb57b77eb4267f16470cde1185d9d8ec1fdf1  ./05-usage-reachability/probe-request.json
+6545e1d572e4b54ef41555603d4b976b832f8ddc0f8d7c3b78af1b854377d64c  ./05-usage-reachability/raw-protocol.jsonl
+ad1dbb315ec332b601b5d761766c3d17800588d470aa0970666211233b37cd9c  ./05-usage-reachability/raw-protocol.sha256
+e10f5a661cee274a90ee444bab5e0cb1c27285d4dce9ad6b676bfefd20cfbf22  ./05-usage-reachability/report.json
+8ef1a0463c4674a1a7158ad67eb3e8fbb24939267961db234944812318a76838  ./06-negative-verification.json
+f805808dc871b98c48db8c2b75464426de00f71f30d87673ec9b3b195be07f25  ./07-test-results.json
+1f7b3552a3aba58a5d7173ec8397df13daa994c3365c0df4dc84801bc4a1e49e  ./08-review-bundle.md
