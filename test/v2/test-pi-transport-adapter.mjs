@@ -13,7 +13,7 @@ import {
 import { validateIRShape } from "../../src/v2/ir-schema.mjs";
 
 function adapterWith(fetchImpl, hooks) {
-  return createPiTransportAdapter({ fetchImpl, onEvent: hooks?.onEvent });
+  return createPiTransportAdapter({ fetchImpl, allowMissingKey: true, onEvent: hooks?.onEvent });
 }
 
 const GOOD_IR = {

@@ -21,7 +21,12 @@
 
 import { spawn } from "node:child_process";
 import { assertAdapterRequest, assertAdapterResult } from "./contract.mjs";
-import { createJsonlSplitter, parseEventLine, ProtocolLimitError, HARD_MAX_CUMULATIVE_BYTES, DEFAULT_MAX_CUMULATIVE_BYTES, DEFAULT_MAX_LINE_BYTES, resetSnapshotAccounting } from "./pi-rpc-protocol.mjs";
+import {
+  createJsonlSplitter, parseEventLine, ProtocolLimitError,
+  HARD_MAX_CUMULATIVE_BYTES, DEFAULT_MAX_CUMULATIVE_BYTES, DEFAULT_MAX_LINE_BYTES,
+  resetSnapshotAccounting,
+} from "./pi-rpc-protocol.mjs";
+import { validateToolSelection, TOOL_SELECTION_SCHEMA } from "../admission/policy-projection.mjs";
 
 export const DEFAULT_ENV_ALLOWLIST = Object.freeze(["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "TERM"]);
 
@@ -41,17 +46,60 @@ function buildChildEnv(allowlist) {
   return env;
 }
 
+// STAGE C (contract §7): the raw caller allowlist/denylist JOIN IS REMOVED.
+// Caller raw tool strings have ZERO authority post-implementation; unknown/
+// unshaped toolPolicy continues to fail closed to the safest default. Only a
+// canonical autoloop.tool-selection/v1 output that passes validateToolSelection
+// reaches argv (see resolveToolSpawnArgs below).
 function toolPolicyArgs(toolPolicy) {
   if (!toolPolicy || toolPolicy.mode === "no-tools") return ["--no-tools"];
   if (toolPolicy.mode === "no-builtin-tools") return ["--no-builtin-tools"];
-  if (toolPolicy.mode === "allowlist" && Array.isArray(toolPolicy.tools)) return ["--tools", toolPolicy.tools.join(",")];
-  if (toolPolicy.mode === "denylist" && Array.isArray(toolPolicy.tools)) return ["--exclude-tools", toolPolicy.tools.join(",")];
-  // Unknown/unspecified toolPolicy fails closed to the safest default rather
-  // than guessing a permissive one.
   return ["--no-tools"];
 }
 
-function buildArgs({ provider, model, toolPolicy, extraArgs = [] }) {
+/**
+ * STAGE C §7 adapter re-validation. Canonical selection outputs are resolved
+ * against THE authoritative lifecycle binding (issuance authentication) and
+ * re-verified with the SAME validator module as the selector; only then do
+ * the selected adapterToolNames reach argv. Any failure is a pre-spawn HOLD:
+ * applied=false, zero tool invocations, TOOL_SELECTION_PROVENANCE_INVALID
+ * (or its specific drift code).
+ */
+async function resolveToolSpawnArgs({ toolPolicy, selectionAuthority, executionId, phase, attempt }) {
+  const canonicalShape = toolPolicy && typeof toolPolicy === "object" && !Array.isArray(toolPolicy) &&
+    toolPolicy.contractVersion === TOOL_SELECTION_SCHEMA;
+  // STAGE C PRODUCTION WIRING (T5): an adapter WIRED with the lifecycle
+  // selection authority is part of a canonical composition. An invocation
+  // reaching it WITHOUT a canonical selection means the bind was lost
+  // upstream — downgrading to the legacy --no-tools spawn would be exactly
+  // the forbidden silent no-tools success. Fail closed BEFORE any spawn:
+  // applied=false, zero tool invocations. Un-wired adapters (standalone /
+  // unaffiliated use) keep the contract §7 legacy safe default below.
+  if (!canonicalShape && typeof selectionAuthority === "function") {
+    return { hold: true, code: "TOOL_SELECTION_PROVENANCE_INVALID", reason: "wired executor received no canonical toolSelectionBind for THIS invocation" };
+  }
+  if (canonicalShape) {
+    let binding = null;
+    if (typeof selectionAuthority === "function") {
+      try {
+        binding = await selectionAuthority({ executionId, phase, attempt });
+      } catch {
+        binding = null; // authority resolution failure = unauthenticated
+      }
+    }
+    const verdict = validateToolSelection(toolPolicy, { authorityBinding: binding });
+    if (!verdict.ok) {
+      return { hold: true, code: verdict.code, reason: verdict.reason };
+    }
+    const args = verdict.basis === "LEGITIMATE_EMPTY"
+      ? ["--no-tools"]
+      : ["--tools", verdict.argvToolNames.join(",")];
+    return { hold: false, args, basis: verdict.basis, names: verdict.argvToolNames };
+  }
+  return { hold: false, legacy: true, args: toolPolicyArgs(toolPolicy), basis: null, names: [] };
+}
+
+function buildArgs({ provider, model, toolSpawnArgs, extraArgs = [] }) {
   for (const a of extraArgs) {
     if (FORBIDDEN_ARGS.has(a)) {
       throw new Error(`pi_rpc_adapter_forbidden_arg: ${a}`);
@@ -60,7 +108,7 @@ function buildArgs({ provider, model, toolPolicy, extraArgs = [] }) {
   const args = [
     "--mode", "rpc",
     "--no-session",
-    ...toolPolicyArgs(toolPolicy),
+    ...toolSpawnArgs,
     "--no-extensions",
     "--no-skills",
     "--no-prompt-templates",
@@ -150,6 +198,10 @@ export function createPiRpcAdapter(options = {}) {
     extraArgs = [],
     environmentAllowlist = DEFAULT_ENV_ALLOWLIST,
     toolPolicy: defaultToolPolicy,
+    // STAGE C §7 item 6: issuance-authentication resolver over THE
+    // authoritative frozen admission / lifecycle bind context. Provided by
+    // the production composition; absent = no binding authority configured.
+    selectionAuthority,
     protocolLimits = {},
     graceMs = 300,
   } = options;
@@ -190,12 +242,34 @@ export function createPiRpcAdapter(options = {}) {
       return assertAdapterResult(abortedResult({ executionId, stdout: "", stderr: "", metadata: {} }));
     }
 
+    const toolResolution = await resolveToolSpawnArgs({ toolPolicy, selectionAuthority, executionId, phase, attempt });
+    if (toolResolution.hold) {
+      // Pre-spawn HOLD: applied=false, ZERO tool invocations, truthful hold code.
+      return assertAdapterResult(errorResult({
+        executionId,
+        stdout: "",
+        stderr: "",
+        error: `${toolResolution.code}: ${toolResolution.reason}`,
+        metadata: {
+          selectionHoldCode: toolResolution.code,
+          selectionTelemetryState: "SELECTED_REJECTED",
+          applied: false,
+          toolInvocationCount: 0,
+        },
+      }));
+    }
+
     let args;
     try {
-      args = buildArgs({ provider, model, toolPolicy, extraArgs });
+      args = buildArgs({ provider, model, toolSpawnArgs: toolResolution.args, extraArgs });
     } catch (e) {
       return assertAdapterResult(errorResult({ executionId, stdout: "", stderr: "", error: e.message, metadata: {} }));
     }
+    const toolSelectionMeta = toolResolution.legacy ? null : {
+      selectionBasis: toolResolution.basis,
+      adapterToolNames: toolResolution.names,
+      telemetryState: toolResolution.basis === "LEGITIMATE_EMPTY" ? "NOT_SELECTED" : "SELECTED",
+    };
     const env = buildChildEnv(allowlist);
 
     let child;
@@ -435,6 +509,7 @@ export function createPiRpcAdapter(options = {}) {
         : (outcome.detail && outcome.detail.reason) || outcome.kind,
       processTreeKilled: termInfo.processTreeKilled,
       args,
+      toolSelection: toolSelectionMeta,
       rawWireBytes,
       protocolCumulativeBytes: splitter.cumulativeBytes,
       protocolMaxCumulativeBytes: configuredMaxCumulativeBytes,

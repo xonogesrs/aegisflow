@@ -17,6 +17,13 @@ import { createHash } from "node:crypto";
 import { requiresWriterLease } from "./runner.mjs";
 import { canonicalRepositoryPath } from "../c2d/mutation-scope.mjs";
 import {
+  projectToolSelection,
+  TOOL_SELECTION_SCHEMA,
+  FROZEN_RUNTIME_VOCABULARY_DIGEST,
+  observeRuntimeIdentity,
+  ToolSelectionError,
+} from "../admission/policy-projection.mjs";
+import {
   buildExecutorFinalResponseContract,
   buildReviewerFinalResponseContract,
   buildPhaseExecutionPrompt,
@@ -27,6 +34,8 @@ export const PHASE_CARD_ERRORS = Object.freeze({
   INVALID_ARTIFACT_PATH: "PHASE_ARTIFACT_PATH_INVALID",
   OUT_OF_PARENT_SCOPE: "PHASE_ARTIFACT_OUT_OF_PARENT_SCOPE",
   IN_FORBIDDEN_PATH: "PHASE_ARTIFACT_IN_FORBIDDEN_PATH",
+  TOOL_SELECTION_RAW_POLICY_REJECTED: "PHASE_TOOL_SELECTION_RAW_POLICY_REJECTED",
+  TOOL_SELECTION_BIND_INVALID: "PHASE_TOOL_SELECTION_BIND_REJECTED",
 });
 
 export class PhaseCardError extends Error {
@@ -41,6 +50,89 @@ export class PhaseCardError extends Error {
 export function phaseExecutionId(parentExecutionId, phaseId) {
   const digest = createHash("sha256").update(`${parentExecutionId}:${phaseId}`).digest("hex");
   return `exec_${digest.slice(0, 32)}`;
+}
+
+/**
+ * STAGE C — THE selector bind (single, per node dispatch).
+ *
+ * taskCard.toolPolicy is MINTED from projectToolSelection output bound to
+ * THIS phase's execution identity. Raw caller hooks.toolPolicy has ZERO
+ * authority post-implementation: any non-undefined `toolPolicy` arriving
+ * WITHOUT a bind context is discarded (never forwarded), and the card
+ * records the rejection truthfully. Enforcement against argv lives in
+ * src/adapter/pi-rpc-adapter.mjs using the SAME validator module.
+ */
+export function mintTaskCardToolSelectionBind({
+  phase,
+  executionId,
+  admission,
+  taskAllocation,
+  nodeRole,
+  runtimeIdentity,
+  runtimeVocabularyDigest,
+} = {}) {
+  if (!admission || !taskAllocation) {
+    throw new PhaseCardError(PHASE_CARD_ERRORS.TOOL_SELECTION_BIND_INVALID,
+      "toolSelectionBind requires { admission, taskAllocation }");
+  }
+  // §4 drift fence — ACTUAL observation by default: the pinned binary is
+  // hashed on every mint (realpath + sha256), so an upgraded/replaced
+  // runtime fails closed HERE with RUNTIME_VOCABULARY_DRIFT. An explicit
+  // observed override must match the frozen identity or the selector
+  // throws the same code. Vocabulary-digest capture parity is exercised
+  // by T1 (live `pi --help`) and owned by the production composition.
+  // Explicit null nodeRole ⇒ direct/FAST_PATH execution semantics（§6.1: no
+  // sub-agent role exists）; undefined ⇒ derive from the writer-lease rule
+  // like every graph-phase dispatch.
+  const effectiveNodeRole = nodeRole !== undefined
+    ? nodeRole
+    : (requiresWriterLease(phase) ? "writer" : "readonly-analyst");
+  // Adversarial-review C4 repair: an observation failure（missing/unreadable
+  // pinned binary）must surface as THE frozen drift code, never a raw fs
+  // exception — the failure-code taxonomy is part of the frozen contract.
+  let observedIdentity = runtimeIdentity;
+  if (observedIdentity === undefined || observedIdentity === null) {
+    try {
+      observedIdentity = observeRuntimeIdentity();
+    } catch (e) {
+      throw new ToolSelectionError("TOOL_SELECTION_RUNTIME_VOCABULARY_DRIFT",
+        `pinned runtime identity could not be observed: ${e?.code ?? e?.name ?? "error"}: ${String(e?.message ?? e).slice(0, 200)}`);
+    }
+  }
+  return projectToolSelection({
+    admission,
+    nodeRole: effectiveNodeRole,
+    taskAllocation,
+    runtimeIdentity: observedIdentity,
+    runtimeVocabularyDigest: runtimeVocabularyDigest ?? FROZEN_RUNTIME_VOCABULARY_DIGEST,
+    executionId,
+  });
+}
+
+/**
+ * Card-level mint: validates the bind envelope, then delegates to THE one
+ * mint above. Raw caller hooks.toolPolicy has ZERO authority — any
+ * non-undefined `toolPolicy` arriving WITHOUT a bind context is discarded
+ * (never forwarded) and the rejection recorded truthfully.
+ */
+function mintToolPolicy({ phase, cardExecutionId, toolSelectionBind }) {
+  if (toolSelectionBind != null) {
+    const b = toolSelectionBind;
+    if (typeof b !== "object" || !b.admission || !b.taskAllocation) {
+      throw new PhaseCardError(PHASE_CARD_ERRORS.TOOL_SELECTION_BIND_INVALID,
+        "toolSelectionBind requires { admission, taskAllocation, nodeRole?, runtimeIdentity?, runtimeVocabularyDigest? }");
+    }
+    return mintTaskCardToolSelectionBind({
+      phase,
+      executionId: cardExecutionId,
+      admission: b.admission,
+      taskAllocation: b.taskAllocation,
+      ...(b.nodeRole != null ? { nodeRole: b.nodeRole } : {}),
+      ...(b.runtimeIdentity != null ? { runtimeIdentity: b.runtimeIdentity } : {}),
+      ...(b.runtimeVocabularyDigest != null ? { runtimeVocabularyDigest: b.runtimeVocabularyDigest } : {}),
+    });
+  }
+  return undefined;
 }
 
 /**
@@ -92,6 +184,7 @@ export function buildPhaseTaskCard({
   maxRepairAttempts,
   expectedReviewerModel = "",
   toolPolicy,
+  toolSelectionBind,
   environmentAllowlist,
 }) {
   if (!phase || typeof phase !== "object" || Array.isArray(phase)) {
@@ -172,7 +265,12 @@ export function buildPhaseTaskCard({
     forbiddenPaths: parentForbidden.slice(),
     maxRepairAttempts,
     expectedReviewerModel,
-    toolPolicy,
+    // STAGE C: taskCard.toolPolicy is MINTED from projectToolSelection — the
+    // raw caller hooks.toolPolicy passthrough is REMOVED (authority = NONE).
+    // A canonical selection arriving via `toolPolicy` without a bind context
+    // cannot be authenticated, so it is rejected like any raw shape.
+    toolPolicy: mintToolPolicy({ phase, executionId, cardExecutionId: phaseExecutionId(executionId, phase.phase_id), toolPolicy, toolSelectionBind }),
+    callerToolPolicyIgnored: toolPolicy != null && toolSelectionBind == null ? true : undefined,
     environmentAllowlist,
   };
 

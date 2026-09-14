@@ -353,3 +353,652 @@ export function buildAdmissionRecord({ taskId, classification, authorityRecordDi
     ...(Object.keys(extensions ?? {}).length ? { extensions } : {}),
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// STAGE C — TOOL_SELECTION_CONTRACT_V1 (FROZEN, REV 3)
+// AUTOLOOP-V1-STAGE-C-REGISTRY-BACKED-TASK-SPECIFIC-TOOL-SELECTION-1
+//
+// THE single registry-backed task-specific tool selector. One pure
+// projection (projectToolSelection), one validator (validateToolSelection)
+// reused verbatim by the pi adapter, one issuance-authentication resolver
+// factory (createLifecycleSelectionAuthority). No second catalog, no second
+// selector, no second executor: everything below derives from the EXISTING
+// authorities — src/admission/registry.mjs capabilities,
+// TOOL_PERMISSIONS vocabulary, projectEnvelopeFields, admission records —
+// plus ONE frozen adapter projection onto the pinned Pi runtime surface.
+//
+// Identity layers (contract §1) are NEVER conflated:
+//   CANONICAL_TOOL_ID / TOOL_PERMISSION_ID — agent-neutral permission ids
+//   ADAPTER_TOOL_NAME                      — Pi-runtime-specific names
+// Pi is only the FIRST adapterKind projection; adding another adapterKind
+// requires new mapping ROWS under the SAME schema/authority, never a new
+// catalog or selector.
+// ═══════════════════════════════════════════════════════════════════════
+
+import { createHash } from "node:crypto";
+import { readFileSync, realpathSync } from "node:fs";
+import { canonicalize, digestOf } from "../canonical-digest.mjs";
+import { admissionDigest } from "./admission-record.mjs";
+
+export const TOOL_SELECTION_SCHEMA = "autoloop.tool-selection/v1";
+export const RUNTIME_VOCABULARY_SCHEMA = "autoloop.runtime-vocabulary/v1";
+export const TOOL_MAPPING_SCHEMA = "autoloop.tool-mapping/v1";
+export const TOOL_SELECTION_REGISTRY_DIGEST_SCHEMA = "autoloop.tool-selection-registry/v1";
+export const PI_ADAPTER_KIND = "pi-builtin";
+
+/** Frozen failure codes (failure-code-analysis.md) — exactly ten, no others. */
+export const TOOL_SELECTION_FAILURE_CODES = Object.freeze([
+  "TOOL_SELECTION_CONTRACT_MISSING",
+  "TOOL_SELECTION_TASK_INTENT_MISSING",
+  "TOOL_SELECTION_PERMISSION_UNMAPPED",
+  "TOOL_SELECTION_TOOL_UNAUTHORIZED",
+  "TOOL_SELECTION_TOOL_REVOKED",
+  "TOOL_SELECTION_UNKNOWN_CANONICAL_TOOL",
+  "TOOL_SELECTION_RUNTIME_VOCABULARY_DRIFT",
+  "TOOL_SELECTION_MAPPING_DRIFT",
+  "TOOL_SELECTION_PROVENANCE_INVALID",
+  "TOOL_SELECTION_REQUIRED_TOOL_UNAVAILABLE",
+]);
+
+/**
+ * FROZEN runtime identity (contract §2, captured 2026-08-23T16:05:45Z via
+ * read-only `pi --help`; no tool invocation, no network).
+ */
+export const FROZEN_RUNTIME_IDENTITY = Object.freeze({
+  realpath: "/Users/zhengfengqing/.npm-global/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  sha256: "840d1e8e689ed9e4937bcb00b9a810e02a8567d9afb10a47097f11ca93ea1521",
+  version: "0.84.2",
+});
+
+/** FROZEN runtime vocabulary — bytewise-sorted exact names. */
+export const FROZEN_RUNTIME_TOOL_NAMES = Object.freeze(
+  ["bash", "edit", "find", "grep", "ls", "read", "write"].sort()
+);
+
+export const FROZEN_RUNTIME_VOCABULARY_DIGEST =
+  "86dac294a94b7c16d6a337fc792ff40695c8d785f27de95314b1a9de5bd72301";
+
+export const TOOL_SELECTION_MAPPING_VERSION = 1;
+
+/**
+ * FROZEN permission→tool mapping V1 (contract §5). bash is UNMAPPED in V1:
+ * arbitrary-execution surface, never selectable. fs.stat is a zero-projection
+ * row: grants nothing alone, inert inside a mixed selection.
+ *
+ * Rows carry agent-neutral canonicalToolId / requiredPermissionId and an
+ * adapter-specific projection (adapterKind + adapterToolNames). A future
+ * adapter adds NEW rows under a different adapterKind through THIS
+ * authority — never a second catalog.
+ */
+export const TOOL_SELECTION_MAPPING = Object.freeze([
+  Object.freeze({
+    canonicalToolId: "fs.read",
+    requiredPermissionId: "fs.read",
+    adapterKind: PI_ADAPTER_KIND,
+    adapterToolNames: Object.freeze(["read"]),
+    runtimeVocabularyDigest: FROZEN_RUNTIME_VOCABULARY_DIGEST,
+    mappingVersion: TOOL_SELECTION_MAPPING_VERSION,
+    status: "ACTIVE",
+  }),
+  Object.freeze({
+    canonicalToolId: "fs.grep",
+    requiredPermissionId: "fs.grep",
+    adapterKind: PI_ADAPTER_KIND,
+    adapterToolNames: Object.freeze(["grep"]),
+    runtimeVocabularyDigest: FROZEN_RUNTIME_VOCABULARY_DIGEST,
+    mappingVersion: TOOL_SELECTION_MAPPING_VERSION,
+    status: "ACTIVE",
+  }),
+  Object.freeze({
+    canonicalToolId: "fs.list",
+    requiredPermissionId: "fs.list",
+    adapterKind: PI_ADAPTER_KIND,
+    adapterToolNames: Object.freeze(["ls", "find"]),
+    runtimeVocabularyDigest: FROZEN_RUNTIME_VOCABULARY_DIGEST,
+    mappingVersion: TOOL_SELECTION_MAPPING_VERSION,
+    status: "ACTIVE",
+  }),
+  Object.freeze({
+    canonicalToolId: "fs.stat",
+    requiredPermissionId: "fs.stat",
+    adapterKind: PI_ADAPTER_KIND,
+    adapterToolNames: Object.freeze([]),
+    runtimeVocabularyDigest: FROZEN_RUNTIME_VOCABULARY_DIGEST,
+    mappingVersion: TOOL_SELECTION_MAPPING_VERSION,
+    status: "ACTIVE",
+  }),
+  Object.freeze({
+    canonicalToolId: "fs.write-scratch",
+    requiredPermissionId: "fs.write-scratch",
+    adapterKind: PI_ADAPTER_KIND,
+    adapterToolNames: Object.freeze(["edit", "write"]),
+    runtimeVocabularyDigest: FROZEN_RUNTIME_VOCABULARY_DIGEST,
+    mappingVersion: TOOL_SELECTION_MAPPING_VERSION,
+    status: "ACTIVE",
+  }),
+]);
+
+/** Fail-closed selection error carrying its exact frozen hold code. */
+export class ToolSelectionError extends Error {
+  constructor(code, reason) {
+    super(`tool_selection: ${code}: ${reason}`);
+    this.name = "ToolSelectionError";
+    this.code = code;
+    this.holdCode = code;
+  }
+}
+
+/** Domain-separated digest: sha256(schema + "\n" + canonical + "\n"). */
+function domainDigest(schema, canonicalJsonText) {
+  return createHash("sha256").update(`${schema}\n${canonicalJsonText}\n`, "utf8").digest("hex");
+}
+
+/**
+ * Contract §3 canonicalization of a name set: UTF-8 exact case (trim
+ * FORBIDDEN, never silently applied); duplicates, empty strings, control
+ * chars (\x00-\x1F,\x7F), comma, newline, NUL all fail closed; output is
+ * bytewise-sorted unique strings.
+ */
+export function canonicalizeNameSet(names, { schemaLabel = "name set" } = {}) {
+  if (!Array.isArray(names)) throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", `${schemaLabel} must be an array`);
+  const seen = new Set();
+  for (const n of names) {
+    if (typeof n !== "string") throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", `${schemaLabel} entry is not a string`);
+    if (n.length === 0) throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", `${schemaLabel} contains an empty string`);
+    if (seen.has(n)) throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", `${schemaLabel} duplicate entry: ${n}`);
+    for (const ch of n) {
+      const c = ch.codePointAt(0);
+      if (c <= 0x1f || c === 0x7f || ch === "," || ch === "\n" || ch === "\0") {
+        throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", `${schemaLabel} forbidden character in entry`);
+      }
+    }
+    seen.add(n);
+  }
+  return [...seen].sort((a, b) => Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8")));
+}
+
+/** §3 vocabulary digest over a sorted name array. */
+export function computeRuntimeVocabularyDigest(sortedNames) {
+  return domainDigest(RUNTIME_VOCABULARY_SCHEMA, JSON.stringify(sortedNames));
+}
+
+// Module-load self-check: the frozen vocabulary MUST reproduce its frozen
+// digest (drift-fence integrity; T1 anchors this independently).
+if (computeRuntimeVocabularyDigest([...FROZEN_RUNTIME_TOOL_NAMES]) !== FROZEN_RUNTIME_VOCABULARY_DIGEST) {
+  throw new Error("CAPABILITY_REGISTRY_DRIFT: frozen runtime vocabulary digest mismatch");
+}
+
+/** §3 mapping digest over the bytewise-sorted mapping-row array. */
+export function computeMappingDigest(rows = TOOL_SELECTION_MAPPING) {
+  const sorted = [...rows].sort((a, b) =>
+    Buffer.compare(Buffer.from(a.canonicalToolId, "utf8"), Buffer.from(b.canonicalToolId, "utf8")));
+  return domainDigest(TOOL_MAPPING_SCHEMA, canonicalize(sorted));
+}
+
+export const FROZEN_MAPPING_DIGEST = computeMappingDigest();
+
+/**
+ * §3 REGISTRY_DIGEST (REV 2): over the sorted array of
+ * { capability_id, required_permissions, default_state } rows for EVERY
+ * capability id in (admission.capabilities.required ∪ allowed). Recomputed
+ * by the validator — never accepted from a payload.
+ */
+export function computeRegistryDigest(admission) {
+  const reg = capabilityRegistry();
+  const ids = new Set();
+  for (const raw of [...(admission?.capabilities?.required ?? []), ...(admission?.capabilities?.allowed ?? [])]) {
+    const id = resolveCapabilityId(raw);
+    if (!id) continue; // unknown ids fail separately as UNKNOWN_CANONICAL_TOOL
+    ids.add(id);
+  }
+  const rows = [...ids].sort((a, b) => Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8")))
+    .map((id) => ({ capability_id: id, required_permissions: reg[id].required_permissions, default_state: reg[id].default_state }));
+  return domainDigest(TOOL_SELECTION_REGISTRY_DIGEST_SCHEMA, canonicalize(rows));
+}
+
+/**
+ * Observe the ACTUAL pinned runtime identity pre-bind (§4 drift fence):
+ * realpath resolution + file sha256. Version is supplied only by explicit
+ * introspection (never guessed) — null here means "not observed".
+ */
+export function observeRuntimeIdentity({ executablePath = FROZEN_RUNTIME_IDENTITY.realpath } = {}) {
+  const real = realpathSync(executablePath);
+  const content = readFileSync(real);
+  const sha256 = createHash("sha256").update(content).digest("hex");
+  return { realpath: real, sha256, version: null };
+}
+
+/**
+ * Parse the "Built-in Tool Names" surface out of captured `pi --help` text.
+ * Pure: tests drive the REAL binary; production composition may cache one
+ * capture per process. Names are never invented here.
+ */
+export function parsePiBuiltinToolNames(helpText) {
+  const lines = String(helpText).split(/\r?\n/);
+  const startIdx = lines.findIndex((l) => /built[- ]in tool names/i.test(l.trim()));
+  if (startIdx === -1) return null;
+  // Bullet surface: "  <name>  - <description>" until the first non-bullet line.
+  const seen = new Set();
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    const m = lines[i].match(/^\s+([a-z][a-z0-9-]*)\s+-\s+/);
+    if (!m) break;
+    seen.add(m[1]);
+  }
+  return canonicalizeNameSet([...seen], { schemaLabel: "captured runtime vocabulary" });
+}
+
+const SELECTION_ROLES = ["readonly-analyst", "writer", "repairer", "reviewer", "verifier", "join"];
+
+function permissionVocabularySet() {
+  return new Set([...TOOL_PERMISSIONS.READ_ONLY, ...TOOL_PERMISSIONS.SCRATCH_WRITE]);
+}
+
+// Row consumption is ADAPTER-KIND SCOPED: this projection implements
+// adapterKind=pi-builtin. ACTIVE rows of OTHER kinds (future omp/codex)
+// are invisible here — adding them can never poison existing projections.
+// A second kind ships its own projection constants alongside these rows in
+// THIS single mapping authority (never a second catalog).
+function activeRowsFor(permissionId, rows, kind = PI_ADAPTER_KIND) {
+  return rows.filter((r) => r.requiredPermissionId === permissionId && r.status === "ACTIVE" && r.adapterKind === kind);
+}
+
+/**
+ * §6.1 taskToolIntent: nodeRole ∈ selection roles ⇒ per-node-role envelope
+ * projection (the frozen TASK_INTENT_AUTHORITY formula); nodeRole == null
+ * (direct/FAST_PATH execution — no sub-agent role exists) ⇒ the admission's
+ * own tool_permissions upper bound. Caller hooks / prompt / raw toolPolicy
+ * have ZERO influence anywhere in this function.
+ */
+function taskToolIntent({ admission, nodeRole }) {
+  const vocab = permissionVocabularySet();
+  // Registry/admission references use envelope CLASS KEYS (READ_ONLY /
+  // SCRATCH_WRITE); canonical intent is the EXPANDED fs.* ids. Unknown
+  // entries fail closed — never silently filtered.
+  const expand = (entries) => {
+    const out = [];
+    for (const e of entries ?? []) {
+      if (Object.prototype.hasOwnProperty.call(TOOL_PERMISSIONS, e)) {
+        out.push(...TOOL_PERMISSIONS[e]);
+      } else if (vocab.has(e)) {
+        out.push(e);
+      } else {
+        throw new ToolSelectionError("TOOL_SELECTION_UNKNOWN_CANONICAL_TOOL", `intent permission outside registry-derived vocabulary: ${String(e)}`);
+      }
+    }
+    return [...new Set(out)];
+  };
+  if (nodeRole === null || nodeRole === undefined) {
+    return expand(admission.tool_permissions ?? []);
+  }
+  if (typeof nodeRole !== "string" || !SELECTION_ROLES.includes(nodeRole)) {
+    throw new ToolSelectionError("TOOL_SELECTION_TASK_INTENT_MISSING", `unknown nodeRole: ${String(nodeRole)}`);
+  }
+  // Reviewer is hard-pinned no-tools by lifecycle-runner.mjs REVIEWER_TOOL_POLICY;
+  // a reviewer reaching the selector is a bypass attempt, never a request.
+  if (nodeRole === "reviewer" || nodeRole === "join") {
+    throw new ToolSelectionError("TOOL_SELECTION_TASK_INTENT_MISSING", `role ${nodeRole} never selects tools (reviewer pin / non-executing role)`);
+  }
+  try {
+    const envelope = projectEnvelopeFields({ admission, nodeRole });
+    return envelope.toolPermissions.filter((p) => vocab.has(p));
+  } catch (e) {
+    if (e instanceof AdmissionEnvelopeError) {
+      throw new ToolSelectionError("TOOL_SELECTION_TASK_INTENT_MISSING", `envelope projection failed: ${e.message}`);
+    }
+    throw e;
+  }
+}
+
+/**
+ * THE selector (§6.2). Pure, deterministic, fail-closed. Bound exactly once
+ * per node dispatch. Drift checks run FIRST (REV 2 ordering); the mapping/
+ * vocabulary intersection terms never silently drop a domain that a drift
+ * check would have flagged.
+ *
+ * @param {object} p
+ * @param {object} p.admission — THE frozen admission record (authoritative)
+ * @param {string|null} p.nodeRole — selection role, or null for direct execution
+ * @param {object} p.taskAllocation — authoritative allocation { taskId, admissionId, dimensions, allocationId }
+ * @param {{realpath,sha256,version|null}} p.runtimeIdentity — OBSERVED actual runtime identity
+ * @param {string} p.runtimeVocabularyDigest — observed/captured vocabulary digest
+ * @param {string} p.executionId — runIdentity of THIS dispatch
+ * @param {string} [p.selectedAt] — ISO instant override (tests); default now
+ * @param {Array} [p.mappingRows] — mapping override (negative tests only; the
+ *   adapter still validates every selection against FROZEN_MAPPING_DIGEST)
+ * @returns {object} frozen autoloop.tool-selection/v1 selection output
+ */
+export function projectToolSelection({
+  admission,
+  nodeRole = null,
+  taskAllocation,
+  runtimeIdentity,
+  runtimeVocabularyDigest,
+  executionId,
+  selectedAt,
+  mappingRows = TOOL_SELECTION_MAPPING,
+} = {}) {
+  // ── 0. contract/mapping binding present (CONTRACT_MISSING otherwise) ──
+  if (!admission || typeof admission !== "object") throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", "no frozen admission record");
+  if (!taskAllocation || typeof taskAllocation !== "object") throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", "no authoritative task allocation");
+  if (!runtimeIdentity || typeof runtimeIdentity !== "object") throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", "no observed runtime identity");
+  if (typeof runtimeVocabularyDigest !== "string") throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", "no runtime vocabulary digest");
+  if (typeof executionId !== "string" || executionId.length === 0) throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", "executionId (runIdentity) required");
+  if (!Array.isArray(mappingRows) || mappingRows.length === 0) throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", "mapping binding missing");
+
+  // ── 1. §4 drift checks FIRST: runtime identity + vocabulary digest ──
+  if (runtimeIdentity.realpath !== FROZEN_RUNTIME_IDENTITY.realpath ||
+      runtimeIdentity.sha256 !== FROZEN_RUNTIME_IDENTITY.sha256 ||
+      (runtimeIdentity.version != null && runtimeIdentity.version !== FROZEN_RUNTIME_IDENTITY.version)) {
+    throw new ToolSelectionError("TOOL_SELECTION_RUNTIME_VOCABULARY_DRIFT", "observed runtime identity != frozen contract identity");
+  }
+  if (runtimeVocabularyDigest !== FROZEN_RUNTIME_VOCABULARY_DIGEST) {
+    throw new ToolSelectionError("TOOL_SELECTION_RUNTIME_VOCABULARY_DRIFT", "observed runtime vocabulary digest != frozen digest");
+  }
+
+  // ── 2. TASK_ALLOCATION_IDENTITY (§3 REV 2): coordinator allocation-binding digest ──
+  if (typeof taskAllocation.allocationId !== "string" || taskAllocation.allocationId.length === 0) {
+    throw new ToolSelectionError("TOOL_SELECTION_PROVENANCE_INVALID", "task allocation carries no allocationId binding digest");
+  }
+  const recomputedAllocationDigest = digestOf({
+    taskId: taskAllocation.taskId,
+    admissionId: taskAllocation.admissionId,
+    dimensions: taskAllocation.dimensions,
+  });
+  if (recomputedAllocationDigest !== taskAllocation.allocationId) {
+    throw new ToolSelectionError("TOOL_SELECTION_PROVENANCE_INVALID", "allocation binding digest mismatch (substituted/reconstructed allocation)");
+  }
+  if (taskAllocation.admissionId !== admission.admission_id) {
+    throw new ToolSelectionError("TOOL_SELECTION_PROVENANCE_INVALID", "allocation bound to a different admission");
+  }
+  if (typeof admission.task_id === "string" && taskAllocation.taskId !== admission.task_id) {
+    throw new ToolSelectionError("TOOL_SELECTION_PROVENANCE_INVALID", "allocation taskId != admission.task_id");
+  }
+
+  // ── 3. intent (§6.1), validated against the permission vocabulary ──
+  const intent = taskToolIntent({ admission, nodeRole });
+  const vocab = permissionVocabularySet();
+  for (const p of intent) {
+    if (!vocab.has(p)) throw new ToolSelectionError("TOOL_SELECTION_UNKNOWN_CANONICAL_TOOL", `intent permission outside registry-derived vocabulary: ${p}`);
+  }
+
+  // ── 4. allowed upper bound + registry-active permission universe ──
+  // Registry/admission permission references use the envelope CLASS KEYS
+  // (READ_ONLY / SCRATCH_WRITE); the contract's canonical vocabulary is the
+  // EXPANDED fs.* ids. Expansion happens HERE and only here.
+  const expandPermissions = (entries, label) => {
+    const out = [];
+    for (const e of entries ?? []) {
+      if (Object.prototype.hasOwnProperty.call(TOOL_PERMISSIONS, e)) {
+        out.push(...TOOL_PERMISSIONS[e]);
+      } else if (vocab.has(e)) {
+        out.push(e);
+      } else {
+        throw new ToolSelectionError("TOOL_SELECTION_UNKNOWN_CANONICAL_TOOL", `${label} outside registry-derived vocabulary: ${String(e)}`);
+      }
+    }
+    return out;
+  };
+  const allowedSet = new Set(expandPermissions(admission.tool_permissions ?? [], "admission.tool_permissions"));
+  const deniedResolved = new Set((admission.capabilities?.denied ?? []).map(resolveCapabilityId).filter(Boolean));
+  const grantedIds = [...new Set([
+    ...(admission.capabilities?.required ?? []),
+    ...(admission.capabilities?.allowed ?? []),
+  ])].map((raw) => {
+    const id = resolveCapabilityId(raw);
+    if (!id) throw new ToolSelectionError("TOOL_SELECTION_UNKNOWN_CANONICAL_TOOL", `granted capability outside registry: ${String(raw)}`);
+    return id;
+  });
+  const reg = capabilityRegistry();
+  const registryActiveTools = new Set();
+  for (const id of grantedIds) {
+    if (deniedResolved.has(id)) continue; // denied/revoked capability contributes nothing
+    for (const perm of expandPermissions(reg[id].required_permissions, `${id}.required_permissions`)) {
+      registryActiveTools.add(perm);
+    }
+  }
+
+
+  // ── 5. unauthorized intent fails closed (never silently narrowed) ──
+  for (const p of intent) {
+    if (!allowedSet.has(p)) throw new ToolSelectionError("TOOL_SELECTION_TOOL_UNAUTHORIZED", `intent permission not in admitted allowed set: ${p}`);
+  }
+
+  // ── 6. S1 = intent ∩ allowed ∩ registryActive; every drop is explained ──
+  const s1 = intent.filter((p) => registryActiveTools.has(p));
+  const droppedByRegistry = intent.filter((p) => !registryActiveTools.has(p));
+  if (droppedByRegistry.length > 0) {
+    // Owning capability revoked/denied at selection time (revocation seam).
+    throw new ToolSelectionError("TOOL_SELECTION_TOOL_REVOKED", `intent permissions whose owning capability is not registry-active: ${droppedByRegistry.join(",")}`);
+  }
+
+  // ── 7. mapping-domain drift BEFORE any further narrowing (REV 2 order) ──
+  for (const p of s1) {
+    const rows = mappingRows.filter((r) => r.requiredPermissionId === p && r.adapterKind === PI_ADAPTER_KIND);
+    for (const row of rows) {
+      if (row.mappingVersion !== TOOL_SELECTION_MAPPING_VERSION) {
+        throw new ToolSelectionError("TOOL_SELECTION_MAPPING_DRIFT", `row ${p} mappingVersion stale`);
+      }
+      if (row.runtimeVocabularyDigest !== FROZEN_RUNTIME_VOCABULARY_DIGEST) {
+        throw new ToolSelectionError("TOOL_SELECTION_MAPPING_DRIFT", `row ${p} authored against a foreign runtime vocabulary`);
+      }
+      if (row.status === "ACTIVE") {
+        for (const n of row.adapterToolNames) {
+          if (!FROZEN_RUNTIME_TOOL_NAMES.includes(n)) {
+            throw new ToolSelectionError("TOOL_SELECTION_MAPPING_DRIFT", `mapped adapterToolName absent from verified runtime: ${n}`);
+          }
+        }
+      }
+    }
+  }
+
+  // ── 8. fully-revoked PI rows for selected permissions fail closed ──
+  // (foreign-kind rows are invisible to this projection; a permission whose
+  // only rows belong to another kind is simply unmapped HERE, never revoked)
+  for (const p of s1) {
+    const rows = mappingRows.filter((r) => r.requiredPermissionId === p && r.adapterKind === PI_ADAPTER_KIND);
+    if (rows.length > 0 && rows.every((r) => r.status !== "ACTIVE")) {
+      throw new ToolSelectionError("TOOL_SELECTION_TOOL_REVOKED", `all mapping rows revoked for selected permission: ${p}`);
+    }
+  }
+
+  // ── 9. effective selection: ≥1 ACTIVE mapped name (zero-projection inert) ──
+  const effective = s1.filter((p) => activeRowsFor(p, mappingRows).some((r) => r.adapterToolNames.length > 0));
+
+  // ── 10. empty-selection semantics (§6.3: REV 2 laundering + REV 3 mixed) ──
+  let basis;
+  if (effective.length > 0) {
+    basis = "DERIVED_SELECTION";
+  } else if (s1.length > 0) {
+    // Nonempty permission-level set reduced to zero names solely through
+    // zero-projection rows ⇒ laundering, never LEGITIMATE_EMPTY.
+    throw new ToolSelectionError("TOOL_SELECTION_PERMISSION_UNMAPPED", `nonempty selection (${s1.join(",")}) maps to zero adapter tool names`);
+  } else if (intent.length > 0) {
+    // Unreachable given steps 5–8 throw earlier; defense-in-depth fail-closed.
+    throw new ToolSelectionError("TOOL_SELECTION_PERMISSION_UNMAPPED", "intent survived no intersection term");
+  } else {
+    basis = "LEGITIMATE_EMPTY"; // honest derived-empty (e.g. the FAST_PATH theorem)
+  }
+
+  // ── 11. deterministic frozen output (§7) ──
+  const canonicalToolIds = [...new Set(effective)].sort((a, b) => Buffer.compare(Buffer.from(a, "utf8"), Buffer.from(b, "utf8")));
+  const adapterToolNames = canonicalizeNameSet(
+    effective.flatMap((p) => activeRowsFor(p, mappingRows).flatMap((r) => r.adapterToolNames)),
+    { schemaLabel: "selected adapterToolNames" },
+  );
+  const selection = {
+    contractVersion: TOOL_SELECTION_SCHEMA,
+    taskIdentity: { taskId: taskAllocation.taskId, taskAllocationDigest: taskAllocation.allocationId },
+    runIdentity: executionId,
+    admissionIdentity: { admissionId: admission.admission_id, admissionDigest: admissionDigest(admission) },
+    nodeRole: nodeRole ?? null,
+    canonicalToolIds,
+    permissionIds: [...canonicalToolIds],
+    adapterKind: PI_ADAPTER_KIND,
+    adapterToolNames,
+    registryDigest: computeRegistryDigest(admission),
+    // Kind-scoped: foreign-kind rows never alter THIS projection's digest.
+    mappingDigest: computeMappingDigest(mappingRows.filter((r) => r.adapterKind === PI_ADAPTER_KIND)),
+    runtimeIdentity: {
+      realpath: runtimeIdentity.realpath,
+      sha256: runtimeIdentity.sha256,
+      version: runtimeIdentity.version ?? FROZEN_RUNTIME_IDENTITY.version,
+    },
+    runtimeVocabularyDigest,
+    selectionBasis: basis,
+    selectedAt: selectedAt ?? new Date().toISOString(),
+  };
+  selection.selectionDigest = domainDigest(TOOL_SELECTION_SCHEMA, canonicalize(selection));
+  return deepFreeze(selection);
+}
+
+function deepFreeze(obj) {
+  for (const v of Object.values(obj)) {
+    if (v && typeof v === "object" && !Object.isFrozen(v)) deepFreeze(v);
+  }
+  return Object.freeze(obj);
+}
+
+/**
+ * Issuance authentication (§7 item 6): resolve THIS invocation's identities
+ * AGAINST the authoritative frozen admission record / lifecycle bind
+ * context. The resolver closes over THE admission; nothing is ever accepted
+ * from the selection payload's own fields. This is a RESOLVER over existing
+ * authorities — not a catalog, selector, governor, or runner.
+ */
+export function createLifecycleSelectionAuthority({
+  admission,
+  taskAllocation,
+} = {}) {
+  if (!admission || typeof admission !== "object") throw new TypeError("createLifecycleSelectionAuthority: frozen admission required");
+  if (!taskAllocation || typeof taskAllocation !== "object") throw new TypeError("createLifecycleSelectionAuthority: authoritative taskAllocation required");
+  return async function selectionAuthority({ executionId, phase } = {}) {
+    if (typeof executionId !== "string" || executionId.length === 0) return null;
+    return {
+      taskId: taskAllocation.taskId,
+      taskAllocationDigest: taskAllocation.allocationId,
+      taskAllocationDimensions: taskAllocation.dimensions,
+      runIdentity: executionId,
+      phase: phase ?? null,
+      admissionId: admission.admission_id,
+      admissionDigestValue: admissionDigest(admission),
+      admission,
+    };
+  };
+}
+
+/**
+ * §7 adapter re-validation — THE ONE validator, imported by
+ * src/adapter/pi-rpc-adapter.mjs (same module as the selector; never a
+ * second copy). Returns { ok:true, argvToolNames, basis } or
+ * { ok:false, code, reason } with code ∈ TOOL_SELECTION_FAILURE_CODES.
+ */
+export function validateToolSelection(selection, { authorityBinding } = {}) {
+  const invalid = (reason) => ({ ok: false, code: "TOOL_SELECTION_PROVENANCE_INVALID", reason });
+  if (!authorityBinding) return invalid("no authoritative lifecycle binding expectation resolved for THIS invocation");
+  if (!selection || typeof selection !== "object" || Array.isArray(selection)) return invalid("selection output missing/malformed");
+  if (selection.contractVersion !== TOOL_SELECTION_SCHEMA) return invalid("contractVersion mismatch");
+  const { selectionDigest, ...rest } = selection;
+  if (typeof selectionDigest !== "string" || selectionDigest.length !== 64) return invalid("selectionDigest missing");
+  if (domainDigest(TOOL_SELECTION_SCHEMA, canonicalize(rest)) !== selectionDigest) return invalid("SELECTION_DIGEST recompute mismatch");
+
+  // Identities resolve against the AUTHORITATIVE store — never payload fields.
+  if (!selection.taskIdentity || selection.taskIdentity.taskId !== authorityBinding.taskId) return invalid("taskIdentity.taskId does not resolve authoritatively");
+  if (!selection.taskIdentity || selection.taskIdentity.taskAllocationDigest !== authorityBinding.taskAllocationDigest) return invalid("taskIdentity.taskAllocationDigest does not resolve authoritatively");
+  if (selection.runIdentity !== authorityBinding.runIdentity) return invalid("runIdentity does not match THIS invocation");
+  if (!selection.admissionIdentity || selection.admissionIdentity.admissionId !== authorityBinding.admissionId) return invalid("admissionIdentity.admissionId does not resolve authoritatively");
+  if (!selection.admissionIdentity || selection.admissionIdentity.admissionDigest !== authorityBinding.admissionDigestValue) return invalid("admissionIdentity.admissionDigest does not match the authoritative record");
+
+  // Digests current: registry recomputed from THE authoritative admission;
+  // implementer-chosen values are provenance violations (REV 2 gap B).
+  if (selection.registryDigest !== computeRegistryDigest(authorityBinding.admission)) return invalid("registryDigest does not match the single registry state for the authoritative admission");
+  if (selection.mappingDigest !== FROZEN_MAPPING_DIGEST) return invalid("mappingDigest stale/forged");
+  if (selection.runtimeVocabularyDigest !== FROZEN_RUNTIME_VOCABULARY_DIGEST) return { ok: false, code: "TOOL_SELECTION_RUNTIME_VOCABULARY_DRIFT", reason: "runtimeVocabularyDigest stale" };
+  const ri = selection.runtimeIdentity ?? {};
+  if (ri.realpath !== FROZEN_RUNTIME_IDENTITY.realpath || ri.sha256 !== FROZEN_RUNTIME_IDENTITY.sha256) {
+    return { ok: false, code: "TOOL_SELECTION_RUNTIME_VOCABULARY_DRIFT", reason: "runtimeIdentity stale/forged" };
+  }
+
+  // Schema coherence: frozen field set, canonical arrays, enums.
+  if (!Array.isArray(selection.canonicalToolIds) || !Array.isArray(selection.permissionIds)) return invalid("missing canonical/permission id fields");
+  if (JSON.stringify(selection.canonicalToolIds) !== JSON.stringify(selection.permissionIds)) return invalid("permissionIds != canonicalToolIds (V1 identity rows)");
+  for (const key of ["canonicalToolIds", "adapterToolNames"]) {
+    const arr = selection[key];
+    let canon = null;
+    try { canon = canonicalizeNameSet(arr, { schemaLabel: key }); } catch { canon = null; }
+    if (!canon || JSON.stringify(canon) !== JSON.stringify(arr)) return invalid(`${key} not canonical (sorted/unique/exact)`);
+  }
+  if (selection.adapterKind !== PI_ADAPTER_KIND) return invalid("unknown adapterKind");
+  if (selection.selectionBasis !== "LEGITIMATE_EMPTY" && selection.selectionBasis !== "DERIVED_SELECTION") return invalid("selectionBasis unknown");
+  if (!(typeof selection.selectedAt === "string" && !Number.isNaN(Date.parse(selection.selectedAt)))) return invalid("selectedAt not ISO-8601");
+
+  // Every name ∈ THIS kind's frozen ACTIVE mapping ∩ verified runtime
+  // vocabulary; basis/name coherence (no laundering shape). Foreign-kind
+  // rows (future adapters) never widen what a pi-builtin selection may carry.
+  const mappableNames = new Set(
+    TOOL_SELECTION_MAPPING.filter((r) => r.status === "ACTIVE" && r.adapterKind === PI_ADAPTER_KIND).flatMap((r) => r.adapterToolNames)
+  );
+  for (const n of selection.adapterToolNames) {
+    if (!mappableNames.has(n) || !FROZEN_RUNTIME_TOOL_NAMES.includes(n)) {
+      return invalid(`adapterToolName outside frozen mapping ∩ verified runtime vocabulary: ${n}`);
+    }
+  }
+  // DERIVATION FIDELITY (review F1): names must be exactly the union the
+  // frozen mapping derives from the carried ids, and ids must live in the
+  // permission vocabulary — a resigned payload with authoritative identities
+  // but swapped tool arrays can never reach argv.
+  const permVocab = permissionVocabularySet();
+  for (const id of selection.canonicalToolIds) {
+    if (!permVocab.has(id)) return invalid(`canonicalToolId outside permission vocabulary: ${id}`);
+  }
+  const derivedNames = canonicalizeNameSet(
+    TOOL_SELECTION_MAPPING
+      .filter((r) => r.status === "ACTIVE" && r.adapterKind === PI_ADAPTER_KIND && selection.canonicalToolIds.includes(r.requiredPermissionId))
+      .flatMap((r) => r.adapterToolNames),
+    { schemaLabel: "derived adapterToolNames" },
+  );
+  if (JSON.stringify(derivedNames) !== JSON.stringify(selection.adapterToolNames)) {
+    return invalid("adapterToolNames do not equal ⋃ ACTIVE mapping rows for the carried canonicalToolIds");
+  }
+
+  // DETERMINISTIC REPLAY (review F1, strongest fence): re-run THE selector
+  // over the authoritative admission + payload nodeRole and require the
+  // payload to reproduce it exactly. A resigned payload with copied
+  // identities but swapped tool arrays cannot pass — the replay yields the
+  // honest derivation.
+  //
+  // CONDITIONAL BY DESIGN (review finding #3 disposition: accepted):
+  // production resolvers (createLifecycleSelectionAuthority requires a full
+  // taskAllocation; the durable-resume reconstruction binds ai.dimensions)
+  // ALWAYS carry taskAllocationDimensions, so this replay engages on every
+  // production validation. The truthy guard exists so contract tests can
+  // isolate the identity/digest fences from the replay fence using minimal
+  // bindings; a binding without dimensions is not reachable through any
+  // production seam.
+  if (authorityBinding.taskAllocationDimensions) {
+    let replay;
+    try {
+      replay = projectToolSelection({
+        admission: authorityBinding.admission,
+        nodeRole: selection.nodeRole ?? null,
+        taskAllocation: {
+          taskId: authorityBinding.taskId,
+          admissionId: authorityBinding.admissionId,
+          dimensions: authorityBinding.taskAllocationDimensions,
+          allocationId: authorityBinding.taskAllocationDigest,
+        },
+        runtimeIdentity: FROZEN_RUNTIME_IDENTITY,
+        runtimeVocabularyDigest: FROZEN_RUNTIME_VOCABULARY_DIGEST,
+        executionId: authorityBinding.runIdentity,
+      });
+    } catch (e) {
+      return invalid(`deterministic replay failed: ${e?.code ?? e?.name}: ${e?.message ?? e}`);
+    }
+    const fingerprint = (x) => JSON.stringify({ ids: x.canonicalToolIds, names: x.adapterToolNames, basis: x.selectionBasis, registryDigest: x.registryDigest });
+    if (fingerprint(replay) !== fingerprint(selection)) {
+      return invalid("payload does not reproduce the deterministic projection from the authoritative admission");
+    }
+  }
+
+  return { ok: true, argvToolNames: selection.adapterToolNames, basis: selection.selectionBasis, selection };
+
+}

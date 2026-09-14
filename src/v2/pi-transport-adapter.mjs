@@ -153,6 +153,9 @@ export function createPiTransportAdapter(opts = {}) {
 
   const onEvent = opts.onEvent || (() => {});
   const { fetch: guardedFetch, count } = createGuardedFetch(TRANSPORT_FREEZE, opts.fetchImpl || globalThis.fetch, onEvent);
+  // allowMissingKey：test-only。僅供 scripted-fetch 測試繞過 ambient credential 解析；
+  // production 呼叫端不得傳入，真實請求仍需有效 API key（fail-closed 不變）。
+  const authOverride = opts.allowMissingKey === true ? { apiKey: "test-only-no-key" } : {};
 
   async function generate({ systemPrompt, input, maxTokens = TRANSPORT_FREEZE.maxTokens, reasoningEffort = TRANSPORT_FREEZE.reasoningEffort }) {
     const t0 = Date.now();
@@ -168,6 +171,7 @@ export function createPiTransportAdapter(opts = {}) {
         maxTokens,
         timeoutMs: TRANSPORT_FREEZE.timeoutMs,
         maxRetries: 0,
+        ...authOverride,
       });
     } catch (e) {
       return { status: "error", reason: "stream_setup_failed", errorMessage: String(e?.message || e), elapsedMs: Date.now() - t0 };
