@@ -17,6 +17,7 @@ import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { rmSync, mkdirSync } from "node:fs";
 import { runSubagentGraph } from "../src/subagent/subagent-graph-runner.mjs";
+import { resolveInstance } from "../src/runtime/colima-runtime.mjs";
 
 // DE-2 production wiring: runSubagentGraph runs under native durable execution
 // by DEFAULT (runDurableGraph -> runColimaGraph -> journal + checkpoints). The
@@ -31,6 +32,8 @@ const HOME = homedir();
 const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const SCRATCH = `${HOME}/autoloop-subagent-test-scratch`;
 const PROFILE = "autoloop-graph";
+// Ownership contract: the runner deletes the instance only when it created it.
+const instancePreExisted = resolveInstance(PROFILE).ok;
 const PARENT = { scope: { allowed_paths: [], forbidden_paths: [] } };
 
 const repoHeadBefore = spawnSync("git", ["-C", REPO_A, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
@@ -120,7 +123,7 @@ test("SA-R1 || SA-R2 -> JOIN: PASS, two real parallel sub-agents, distinct ident
 
   // cleanup + repo purity
   assert.equal(r.cleanup.containersFound, 0);
-  assert.equal(r.cleanup.instanceDeleted, true);
+  assert.equal(r.cleanup.instanceDeleted, !instancePreExisted);
   const headAfter = spawnSync("git", ["-C", REPO_A, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
   assert.equal(headAfter, repoHeadBefore, "repo A head unchanged");
 
@@ -149,7 +152,7 @@ test("sub-agent cancel via AbortSignal -> HOLD + cleanup", { timeout: 600000 }, 
   const r = await runSubagentGraph({ durable: false, ir, parent: PARENT, cwd: REPO_A, executionId: "subagent-cancel-1", profile: PROFILE, repoPath: REPO_A, scratchRoot: SCRATCH, timeoutMs: 120000, signal: ac.signal });
   assert.equal(r.final, "HOLD");
   assert.equal(r.cleanup.containersFound, 0, "cancel leaves no containers");
-  assert.equal(r.cleanup.instanceDeleted, true);
+  assert.equal(r.cleanup.instanceDeleted, !instancePreExisted);
 });
 
 test("malformed structured result -> node cannot PASS (fail-closed)", { timeout: 600000 }, async (t) => {
@@ -167,5 +170,5 @@ test("sub-agent process crash -> HOLD, cleanup, no residue", { timeout: 600000 }
   assert.equal(r.final, "HOLD");
   assert.notEqual(nodeById(r, "SA-R1").final, "PASS");
   assert.equal(r.cleanup.containersFound, 0, "crashed agent container cleaned");
-  assert.equal(r.cleanup.instanceDeleted, true);
+  assert.equal(r.cleanup.instanceDeleted, !instancePreExisted);
 });

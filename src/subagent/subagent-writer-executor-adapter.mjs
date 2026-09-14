@@ -343,9 +343,16 @@ export function createSubagentWriterExecutorAdapter({ profile, repoPath, scratch
     const reviewFindingsIdentity = isRepair && review?.result
       ? sha256Hex(canonicalJson(review.result))
       : null;
+    // CEDF: dependency-reconciliation conflicts（injected by
+    // subagent-graph-runner onPhaseStart）ride the EXISTING
+    // blockingFindings channel — the reviewer sees them and HOLDs instead
+    // of silently chaining a conflicted prerequisite. The repair attempt
+    // keeps precedence over the review findings it is bound to.
     const blockingFindings = isRepair
       ? (Array.isArray(review?.result?.blockingFindings) ? review.result.blockingFindings : [])
-      : null;
+      : Array.isArray(runtime.dependencyConflicts)
+        ? runtime.dependencyConflicts
+        : null;
     const repairBudget = { maxAttempts: maxRepairAttempts, remaining: Math.max(0, maxRepairAttempts - attempt) };
     const agentRole = isRepair ? "repairer" : "writer";
 

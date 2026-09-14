@@ -52,12 +52,14 @@ export function buildAgentCommand(taskType) {
     'FILES=""', 'COUNT=0', 'CLAIM="task completed"', 'W_STATUS="PASS"',
     'case "' + taskType + '" in',
     "  count_todos)",
-    '    FILES=$(grep -rl "TODO" /src/docs 2>/dev/null || true)',
+    '    grep -rl "TODO" /src/docs > /scratch/.agent-files.txt 2>/dev/null || true',
+    '    FILES=$(cat /scratch/.agent-files.txt)',
     '    COUNT=$(printf \'%s\\n\' "$FILES" | grep -c . || true)',
     '    CLAIM="found ${COUNT} file(s) containing TODO under /src/docs"',
     '    ;;',
     "  inventory_markdown)",
-    "    FILES=$(find /src/docs -name '*.md' -type f 2>/dev/null | sort)",
+    "    find /src/docs -name '*.md' -type f 2>/dev/null | sort > /scratch/.agent-files.txt",
+    "    FILES=$(cat /scratch/.agent-files.txt)",
     '    COUNT=$(printf \'%s\\n\' "$FILES" | grep -c . || true)',
     '    CLAIM="found ${COUNT} markdown file(s) under /src/docs"',
     '    ;;',
@@ -159,7 +161,12 @@ export function createSubagentExecutorAdapter({ profile, repoPath, scratchRoot, 
       runtimeInstance: { profile, socket: null },
       timeoutMs: runtime.limits?.timeoutMs ?? request.timeoutMs,
       dependencyResultsDigest: runtime.dependencyResultsDigest ?? null,
+      // CBM-3: structured memory DATA context（adversarial-gate repair — the
+      // blockingFindings injection must not displace this passthrough）.
       memoryContext: runtime.memoryContext ?? null,
+      // CEDF: injected dependency-reconciliation conflicts ride the
+      // existing envelope blockingFindings channel（fail-closed context）.
+      blockingFindings: Array.isArray(runtime.dependencyConflicts) ? runtime.dependencyConflicts : null,
       admissionId: runtime.admissionId ?? null,
       admissionDigest: runtime.admissionDigest ?? null,
     });

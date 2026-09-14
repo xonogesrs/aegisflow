@@ -131,7 +131,15 @@ test("1. research graph with closeout auto-generates a validated bundle WITHOUT 
   const dirtyEntries = dirtyLine.slice("DIRTY_PATHS:".length).trim() === "[]"
     ? []
     : dirtyLine.slice("DIRTY_PATHS:".length).trim().split(", ").filter(Boolean);
-  assert.ok(dirtyEntries.includes("package.json"), "DIRTY_PATHS keeps package.json");
+  const porcelainPaths = new Set(spawnSync("git", ["-C", REPO_A, "status", "--porcelain=v1"], { encoding: "utf8" })
+    .stdout.split("\n").filter(Boolean).map((l) => l.slice(3)));
+  // git status --porcelain collapses fully-untracked directories; the bundle
+  // inventory expands them (ls-files --others), so anchor against the union.
+  const untrackedExpanded = new Set(spawnSync("git", ["-C", REPO_A, "ls-files", "--others", "--exclude-standard"], { encoding: "utf8" })
+    .stdout.split("\n").filter(Boolean));
+  const liveDirty = new Set([...porcelainPaths, ...untrackedExpanded]);
+  assert.ok(dirtyEntries.every((p) => liveDirty.has(p)), "every DIRTY_PATHS entry is a live dirty/untracked path (no truncation/fabrication)");
+  if (porcelainPaths.has("package.json")) assert.ok(dirtyEntries.includes("package.json"), "DIRTY_PATHS keeps package.json intact when dirty");
   assert.ok(!dirtyEntries.includes("ackage.json"), "no ackage.json entry in DIRTY_PATHS");
   assert.ok(dirtyEntries.every((p) => p.length > 0), "no empty path entries");
   const v = validateReviewBundle(r.closeout.bundlePath, { authorizedDir: OUT });

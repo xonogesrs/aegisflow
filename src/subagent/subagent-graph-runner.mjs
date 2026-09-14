@@ -50,7 +50,9 @@ import { createSubagentExecutorAdapter } from "./subagent-executor-adapter.mjs";
 import { createSubagentWriterExecutorAdapter } from "./subagent-writer-executor-adapter.mjs";
 import { createSubagentReviewerAdapter } from "./subagent-reviewer-adapter.mjs";
 import { createReviewAgentReviewerAdapter } from "./subagent-review-agent.mjs";
+import { reconcileChildResults, reconciliationFinding } from "./result-reconciliation.mjs";
 import { prepareOwnedScratchRoot, planOwnedScratchRoot, getScratchAuthorityToken } from "../runtime/scratch-ownership.mjs";
+import { requiresWriterLease } from "../v2/runner.mjs";
 
 export const SUBAGENT_GRAPH_RESULT_SCHEMA = "autoloop.subagent.parallel-graph-result/v1";
 /** sha256 over the concatenated canonical contents of all result files. */
@@ -97,6 +99,36 @@ function dependencyResultIdentities(resultsDir, executionId, dependsOn) {
         phaseExecutionId: phaseExecutionId(executionId, d),
         status: raw?.status ?? null,
         filesChanged: Array.isArray(raw?.filesChanged) ? raw.filesChanged : null,
+      };
+    });
+}
+
+/**
+ * CEDF reconciliation load: the SAME persisted results the
+ * dependencyResultIdentities seam reads（existsSync-filtered, unparseable
+ * entries yield a null result and carry no claims）, shaped for
+ * reconcileChildResults. Role comes from the IR phase runtime so join
+ * verifiers are excluded from DUPLICATE_CLAIM.
+ */
+function persistedDependencyRecords(resultsDir, dependsOn, phaseFor) {
+  return (dependsOn ?? [])
+    .filter((d) => existsSync(join(resultsDir, `${d}.json`)))
+    .map((d) => {
+      let raw = null;
+      try {
+        raw = JSON.parse(readFileSync(join(resultsDir, `${d}.json`), "utf8"));
+      } catch {
+        raw = null;
+      }
+      const depPhase = phaseFor(d);
+      return {
+        phaseId: d,
+        // CEDF adversarial fence: joinVerify exempts a dependency from
+        // DUPLICATE_CLAIM ONLY when it is genuinely non-mutating. A mutating
+        // phase self-declaring joinVerify keeps FULL writer authority and
+        // therefore NO exemption（it is reconciled as a normal child）.
+        role: depPhase?.runtime?.joinVerify && !requiresWriterLease(depPhase) ? "join" : depPhase?.runtime?.agentRole ?? null,
+        result: raw,
       };
     });
 }
@@ -315,6 +347,9 @@ export async function resumeSubagentGraph({
   // TA-2（N）: the authoritative admission re-verified on resume（stored
   // admission_id mismatch -> HOLD / ADMISSION_DRIFT）.
   admission = null,
+  // STAGE D: successor session binding forwarded to THE durable §9a/§13a
+  // cross-session gate inside resumeDurableGraph (never authority by itself).
+  rolloverSessionBinding = null,
 }) {
   const durableExecutionId = persistence?.executionId ?? durableExecutionIdFor(executionId);
   const root = persistence?.root ?? join(homedir(), ".autoloop", "durable", durableExecutionId);
@@ -374,6 +409,7 @@ export async function resumeSubagentGraph({
     // scratch wipe（worktrees / phase scratch are still reclaimed）.
     scratchPreserve: ["results"],
     admission,
+    rolloverSessionBinding,
   });
   return { ...durableResult, executionId, durableExecutionId };
 }
@@ -409,6 +445,21 @@ function buildSubagentGraphHooks({ ir, resultsDir, dependencyExecutionId, hooks,
       mkdirSync(resultsDir, { recursive: true });
       const phase = phaseFor(phaseId);
       if (phase) {
+        // CEDF child-result reconciliation: before this phase binds its
+        // dependencies' persisted results as frozen prerequisite context,
+        // their claims are reconciled（pure, deterministic）. The digest
+        // below stays computable regardless; a CONFLICT verdict rides the
+        // EXISTING envelope blockingFindings channel
+        //（runtime.dependencyConflicts -> buildSubagentEnvelope
+        // blockingFindings -> reviewer HOLD / governance PASS-closeout
+        // block）so conflicting siblings are never silently chained.
+        if ((phase.depends_on ?? []).length > 0) {
+          const reconciliation = reconcileChildResults(persistedDependencyRecords(resultsDir, phase.depends_on, phaseFor));
+          phase.runtime.dependencyReconciliation = reconciliation;
+          if (reconciliation.verdict === "CONFLICT") {
+            phase.runtime.dependencyConflicts = reconciliation.conflicts.map(reconciliationFinding);
+          }
+        }
         if (isWriterSubagentPhase(phase)) {
           // TA-2（K）: writer envelope fields（mutationScope + tool
           // permissions）are projected FROM the admission — never from the
@@ -509,10 +560,25 @@ function subagentExecutorFactory({ profile, repoPath, scratchRoot, resultsDir, m
     const roSubagent = createSubagentExecutorAdapter({ profile, repoPath, scratchRoot, resultsDir, resultSink });
     const writerSubagent = createSubagentWriterExecutorAdapter({ profile, repoPath, scratchRoot, resultsDir, resultSink, maxRepairAttempts });
     const roColima = createColimaExecutorAdapter({ profile, repoPath, scratchRoot, resultSink });
-    // One dispatcher for all phases; routes on the phase's runtime spec.
     return () => ({
       runAdapter: async (request) => {
         const rt = request.taskCard?.runtime ?? {};
+        // CEDF adversarial fence（P1 repair）: a dependency-reconciliation
+        // CONFLICT fail-closes EVERY consumer channel BEFORE any spawn —
+        // writer, read-only sub-agent, and readonly/joinVerify colima alike.
+        // The writer review channel keeps its blockingFindings seeding as
+        // defense-in-depth; this gate removes the silent-chain path where
+        // non-writer consumers never read envelope blockingFindings.
+        if (Array.isArray(rt.dependencyConflicts) && rt.dependencyConflicts.length > 0) {
+          return {
+            status: "error",
+            executionId: request.executionId,
+            error: `DEPENDENCY_CONFLICT_HOLD:${rt.dependencyConflicts.length}`,
+            stdout: "",
+            stderr: "",
+            metadata: { dependencyConflicts: rt.dependencyConflicts },
+          };
+        }
         if (rt.mode === "subagent" && rt.agentRole === "writer") return writerSubagent.runAdapter(request);
         if (rt.mode === "readonly") return roColima.runAdapter(request);
         return roSubagent.runAdapter(request);
@@ -546,4 +612,4 @@ function subagentReviewerFactory({ profile, repoPath, scratchRoot, resultsDir })
   };
 }
 
-export { isWriterPhase };
+export { isWriterPhase, buildSubagentGraphHooks, subagentExecutorFactory };

@@ -1,6 +1,6 @@
 {
   "schema": "autoloop.de2r-subagent-resume/v1",
-  "ranAt": "2026-08-08T12:47:47.038Z",
+  "ranAt": "2026-09-12T10:12:10.212Z",
   "probe": "production sub-agent fresh-process resume（runSubagentGraph SIGKILL -> resumeSubagentGraph）",
   "crashBoundaries": [
     "after RO node result",
@@ -14,31 +14,31 @@
       "point": "A1",
       "name": "crash after RO node result (SA-R1 PHASE_PASSED)",
       "outcome": "PASS",
-      "detail": " final=PASS crashedResults=[SA-R1.json,SA-R2.json] dupSuppressed=1 journalEvents=64"
+      "detail": " final=PASS crashedResults=[] dupSuppressed=1 journalEvents=67"
     },
     {
       "point": "A2",
       "name": "crash after writer/result boundary (SA-W1 PHASE_PASSED)",
       "outcome": "PASS",
-      "detail": " final=PASS crashedResults=[SA-R1.json,SA-R2.json,SA-W1.json,SA-W1.review.json,SA-W1.worktree.json] dupSuppressed=1 journalEvents=55"
+      "detail": " final=PASS crashedResults=[] dupSuppressed=1 journalEvents=57"
     },
     {
       "point": "A3",
       "name": "crash before review (SA-W1 EXECUTOR_COMPLETED)",
       "outcome": "PASS_FAIL_CLOSED",
-      "detail": " final=HOLD crashedResults=[SA-R1.json,SA-R2.json,SA-W1.json,SA-W1.worktree.json] dupSuppressed=0 journalEvents=38"
+      "detail": " final=HOLD crashedResults=[] dupSuppressed=0 journalEvents=40"
     },
     {
       "point": "A4",
       "name": "crash after review (SA-W1 REVIEWER_COMPLETED)",
       "outcome": "PASS_FAIL_CLOSED",
-      "detail": " final=HOLD crashedResults=[SA-R1.json,SA-R2.json,SA-W1.json,SA-W1.review.json,SA-W1.worktree.json] dupSuppressed=0 journalEvents=40"
+      "detail": " final=HOLD crashedResults=[] dupSuppressed=0 journalEvents=42"
     },
     {
       "point": "A5",
       "name": "after final PASS (RUN_PASSED) — terminal resume short-circuits, zero re-execution",
       "outcome": "PASS",
-      "detail": " final=PASS crashedResults=[] dupSuppressed=0 journalEvents=56"
+      "detail": " final=PASS crashedResults=[] dupSuppressed=0 journalEvents=58"
     }
   ],
   "safety": {

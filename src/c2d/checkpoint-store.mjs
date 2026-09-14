@@ -8,7 +8,7 @@ import {
 } from "./fs-atomic.mjs";
 import { validateExecutionId } from "./execution-id.mjs";
 import { assertWritePermit } from "./permit.mjs";
-import { acquireStructuredLock } from "./lock.mjs";
+import { acquireStructuredLock, readCurrentLockRecord } from "./lock.mjs";
 
 export const FORMAT_VERSION = "1.0.0";
 export const SUPPORTED_FORMAT_MAJOR = 1;
@@ -141,31 +141,53 @@ export function publishCurrent(execDir, snapshot, { expectedRevision, permit } =
   }
 
   const live = assertWritePermit(execDir, permit);
+  // C3 derived-artifact owner (ADMISSION ARTIFACT 1 §2/D1): a caller that
+  // already holds the structured CURRENT.json.lock capability (same process,
+  // same lock path, live durable record still owned) MAY pass that handle as
+  // `heldLock`. The continuous-hold discipline requires ONE lock hold across
+  // Phase 1-3; publishCurrent then reuses the held capability instead of
+  // re-acquiring (never a second concurrent acquisition, never an unlock
+  // window). Ownership is re-proven from the durable lock record on every
+  // reuse (repository-mutation-lock assertHeld discipline).
+  const lockIdentity = {
+    lock_kind: "current",
+    execution_id: permit.execution_id,
+    checkpoint_id: permit.checkpoint_id,
+    chain_id: permit.chain_id,
+    lease_id: permit.lease_id,
+    lease_revision: permit.lease_revision,
+    actor_id: permit.actor_id,
+    session_id: permit.session_id,
+    repository_identity: live.repository_identity,
+    worktree_identity: live.worktree_identity,
+    expected_head: live.expected_head,
+  };
   let lock;
-  try {
-    lock = acquireStructuredLock(currentLockPath(execDir), {
-      lock_kind: "current",
-      execution_id: permit.execution_id,
-      checkpoint_id: permit.checkpoint_id,
-      chain_id: permit.chain_id,
-      lease_id: permit.lease_id,
-      lease_revision: permit.lease_revision,
-      actor_id: permit.actor_id,
-      session_id: permit.session_id,
-      repository_identity: live.repository_identity,
-      worktree_identity: live.worktree_identity,
-      expected_head: live.expected_head,
-    });
-  } catch (e) {
-    if (e instanceof C2dHoldError) {
-      // surface lock/guard-recovery taxonomy rather than masquerading as CAS
-      const code = String(e.code);
-      if (code.includes("LOCK_") || code.includes("GUARD") || code.includes("RECLAIM")) throw e;
-      throw new C2dHoldError(HOLD.CHECKPOINT_STALE_REVISION, "CURRENT lock busy (CAS contention)", {
-        cause: e.code,
-      });
+  if (permit._heldLock != null) {
+    const held = permit._heldLock;
+    if (held.path !== currentLockPath(execDir) || held.record == null) {
+      throw new C2dHoldError(HOLD.WRITE_PERMIT_REQUIRED, "held lock capability not bound to CURRENT.json.lock");
     }
-    throw e;
+    const rec = readCurrentLockRecord(held.path);
+    if (!rec || rec.lock_id !== held.record.lock_id || rec.process_id !== held.record.process_id
+      || rec.host_identity !== held.record.host_identity) {
+      throw new C2dHoldError(HOLD.LOCK_RECLAIM_NOT_PROVEN_SAFE, "held lock capability no longer owns the durable record");
+    }
+    lock = { release() { /* ownership retained by the outer D1 hold */ } };
+  } else {
+    try {
+      lock = acquireStructuredLock(currentLockPath(execDir), lockIdentity);
+    } catch (e) {
+      if (e instanceof C2dHoldError) {
+        // surface lock/guard-recovery taxonomy rather than masquerading as CAS
+        const code = String(e.code);
+        if (code.includes("LOCK_") || code.includes("GUARD") || code.includes("RECLAIM")) throw e;
+        throw new C2dHoldError(HOLD.CHECKPOINT_STALE_REVISION, "CURRENT lock busy (CAS contention)", {
+          cause: e.code,
+        });
+      }
+      throw e;
+    }
   }
 
   try {
@@ -318,4 +340,133 @@ export function validateSnapshotStructure(snapshot) {
     throw new C2dHoldError(HOLD.CHECKPOINT_CORRUPT, "checkpoint_integrity must use external_current_file");
   }
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// D3 — extension-head anchor block validation (AUTOLOOP-V1-STAGE-E-C3
+// POST-FINALIZATION DERIVED ARTIFACT OWNER; ADMISSION ARTIFACT 1 §R5/D3).
+//
+// The anchor block rides the CURRENT.json snapshot body as an ADDITIVE field
+// (`extension_head`). validateSnapshotStructure above tolerates additive
+// fields; the anchor block gets its OWN strict closed-field policy, invoked
+// AFTER validateSnapshotStructure passes. A snapshot whose anchor block
+// passes the snapshot validator but fails this validator FAILS CLOSED —
+// no partial adoption.
+//
+// Frozen anchor-block fields (§R5):
+//   execution_id            — exec_<32hex>
+//   phase_id                — non-empty bounded string
+//   committed_generation    — safe integer >= 0
+//   committed_link_digest   — 64-hex
+//   revocation_generation   — safe integer >= 0
+//   pending_mutation_id     — null | non-empty bounded string
+//   pending_generation      — null | safe integer >= 1
+//   pending_link_digest     — null | 64-hex
+//   committed_at            — null | ISO-8601 UTC timestamp string
+// Unknown/missing/unsafe fields => ANCHOR_SCHEMA_INVALID (fail-closed).
+// ---------------------------------------------------------------------------
+
+const ANCHOR_EXEC_RE = /^exec_[0-9a-f]{32}$/;
+const ANCHOR_HEX64_RE = /^[0-9a-f]{64}$/;
+const ANCHOR_ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+
+export const ANCHOR_BLOCK_FIELD = "extension_head";
+
+export const ANCHOR_BLOCK_FIELDS = Object.freeze([
+  "execution_id",
+  "phase_id",
+  "committed_generation",
+  "committed_link_digest",
+  "revocation_generation",
+  "pending_mutation_id",
+  "pending_generation",
+  "pending_link_digest",
+  "committed_at",
+]);
+
+const ANCHOR_MAX_BOUNDED_STRING = 256;
+
+function anchorStringOk(v) {
+  return typeof v === "string" && v.length > 0 && v.length <= ANCHOR_MAX_BOUNDED_STRING;
+}
+
+function anchorSafeInt(v, min) {
+  return typeof v === "number" && Number.isSafeInteger(v) && v >= min;
+}
+
+function anchorPendingConsistent(a) {
+  // The pending trio is either fully present or fully absent.
+  const set = (a.pending_mutation_id !== null ? 1 : 0)
+    + (a.pending_generation !== null ? 1 : 0)
+    + (a.pending_link_digest !== null ? 1 : 0);
+  return set === 0 || set === 3;
+}
+
+/**
+ * D3 strict closed-field validation of the extension-head anchor block.
+ * @returns {boolean} true when a well-formed anchor block is present.
+ * @throws C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID) on any violation.
+ */
+export function validateAnchorBlock(snapshot) {
+  if (snapshot[ANCHOR_BLOCK_FIELD] === undefined) return false;
+  const a = snapshot[ANCHOR_BLOCK_FIELD];
+  if (a === null || typeof a !== "object" || Array.isArray(a)) {
+    throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, "anchor block must be an object");
+  }
+  for (const key of Object.keys(a)) {
+    if (!ANCHOR_BLOCK_FIELDS.includes(key)) {
+      throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, `anchor block unknown field: ${key}`);
+    }
+  }
+  for (const key of ANCHOR_BLOCK_FIELDS) {
+    if (!(key in a)) {
+      throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, `anchor block missing field: ${key}`);
+    }
+  }
+  if (typeof a.execution_id !== "string" || !ANCHOR_EXEC_RE.test(a.execution_id)) {
+    throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, "anchor execution_id invalid");
+  }
+  if (!anchorStringOk(a.phase_id)) {
+    throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, "anchor phase_id invalid");
+  }
+  if (!anchorSafeInt(a.committed_generation, 0)) {
+    throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, "anchor committed_generation unsafe");
+  }
+  // A fresh execution that has never committed carries committed_generation
+  // 0 with committed_link_digest null — the verified-empty anchor (§R5).
+  // Any committed_generation >= 1 REQUIRES a 64-hex digest.
+  if (a.committed_generation === 0) {
+    if (a.committed_link_digest !== null) {
+      throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, "anchor committed_link_digest must be null at generation 0");
+    }
+  } else if (typeof a.committed_link_digest !== "string" || !ANCHOR_HEX64_RE.test(a.committed_link_digest)) {
+    throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, "anchor committed_link_digest invalid");
+  }
+  if (!anchorSafeInt(a.revocation_generation, 0)) {
+    throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, "anchor revocation_generation unsafe");
+  }
+  if (a.pending_mutation_id !== null && !anchorStringOk(a.pending_mutation_id)) {
+    throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, "anchor pending_mutation_id invalid");
+  }
+  if (a.pending_generation !== null && !anchorSafeInt(a.pending_generation, 1)) {
+    throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, "anchor pending_generation unsafe");
+  }
+  if (a.pending_link_digest !== null && (typeof a.pending_link_digest !== "string" || !ANCHOR_HEX64_RE.test(a.pending_link_digest))) {
+    throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, "anchor pending_link_digest invalid");
+  }
+  if (a.committed_at !== null && (typeof a.committed_at !== "string" || !ANCHOR_ISO_RE.test(a.committed_at))) {
+    throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, "anchor committed_at invalid");
+  }
+  if (!anchorPendingConsistent(a)) {
+    throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, "anchor pending trio not fully present/absent");
+  }
+  if (a.pending_generation !== null && a.pending_generation !== a.committed_generation + 1) {
+    throw new C2dHoldError(HOLD.ANCHOR_SCHEMA_INVALID, "anchor pending_generation must equal committed_generation + 1");
+  }
+  return true;
+}
+
+export function getAnchorBlock(snapshot) {
+  const present = validateAnchorBlock(snapshot);
+  return present ? snapshot[ANCHOR_BLOCK_FIELD] : null;
 }

@@ -213,9 +213,11 @@ export class RunEvidenceStore {
     ensureDir0700(artifactsDir(execDir));
     ensureDir0700(phasesDir(execDir));
     this.execDir = execDir;
-    // Resume/continuation: load the existing journal head so new events append
-    // after the last durable sequence（never rewriting sequence 1）.
-    const files = listDirSafe(journalDir(execDir)).filter((f) => f.endsWith(".json")).sort();
+    // Shared-directory layout: C2D rollover journal rows
+    // (`<rev>.intent.json` / `<rev>.complete.json`) live alongside the
+    // evidence journal. Only canonical evidence names participate in the
+    // evidence sequence scan.
+    const files = listDirSafe(journalDir(execDir)).filter((f) => /^\d{12}\.json$/.test(f)).sort();
     if (files.length > 0) {
       const last = files[files.length - 1];
       const seq = parseInt(last.replace(/\.json$/, ""), 10);
@@ -294,7 +296,8 @@ export class RunEvidenceStore {
    */
   verifyJournal() {
     if (!this.execDir) throw new EvidenceHoldError("EVIDENCE_STORE_NOT_INITIALIZED", "init() first");
-    const files = listDirSafe(journalDir(this.execDir)).filter((f) => f.endsWith(".json")).sort();
+    // Evidence-namespace only — see init() note on the shared journal dir.
+    const files = listDirSafe(journalDir(this.execDir)).filter((f) => /^\d{12}\.json$/.test(f)).sort();
     let previous = JOURNAL_GENESIS;
     let seq = 0;
     for (const f of files) {

@@ -61,6 +61,10 @@ export function buildReviewAgentCommand() {
     '[ -n "${REVIEW_SLEEP:-}" ] && sleep "$REVIEW_SLEEP"',
     'blocking=""',
     'add_blocking() { blocking="${blocking}${blocking:+|}$1"; }',
+    // CEDF: dependency-reconciliation conflicts are pre-seeded blocking
+    // findings（injected by the graph runner via runtime.dependencyConflicts
+    // -> REVIEW_SEED_BLOCKING）; they are structural and HOLD, never repair.
+    'for code in ${REVIEW_SEED_BLOCKING:-}; do add_blocking "$code"; done',
     // 1) dependency results（checked only when the writer declared deps）
     'if [ "${DEPENDENCY_COUNT:-0}" != "0" ]; then',
     '  if [ -f /results/SA-R1.json ] && [ -f /results/SA-R2.json ]; then deps_ok=1; else deps_ok=0; add_blocking DEPS_MISSING; fi',
@@ -93,7 +97,7 @@ export function buildReviewAgentCommand() {
     'if touch /src/.review-probe 2>/dev/null; then src_ro=0; add_blocking SRC_WRITABLE; else src_ro=1; fi',
     // 6) verdict: structural failures => HOLD; fixable content/test gaps => REPAIR
     'case "$blocking" in',
-    '  *WRITER_RESULT_MISSING*|*SCOPE_NOT_OK*|*DIFF_MISSING*|*WORKTREE_ARTIFACT_MISSING*|*WORKTREE_CONTENT_MISSING*|*SRC_WRITABLE*|*DEPS_MISSING*) R_STATUS="HOLD"; ACTION="HOLD" ;;',
+    '  *DEPENDENCY_CONFLICT*|*WRITER_RESULT_MISSING*|*SCOPE_NOT_OK*|*DIFF_MISSING*|*WORKTREE_ARTIFACT_MISSING*|*WORKTREE_CONTENT_MISSING*|*SRC_WRITABLE*|*DEPS_MISSING*) R_STATUS="HOLD"; ACTION="HOLD" ;;',
     '  *) R_STATUS="REPAIR"; ACTION="REPAIR" ;;',
     'esac',
     '[ -z "$blocking" ] && { R_STATUS="PASS"; ACTION="PASS"; }',
@@ -166,6 +170,9 @@ export function createReviewAgentReviewerAdapter({ profile, repoPath, scratchRoo
       dependencyResultsDigest: runtime.dependencyResultsDigest ?? null,
       outputSchemaIdentity: SUBAGENT_REVIEW_RESULT_SCHEMA,
       mutationScope,
+      // CEDF: the reviewer envelope carries the injected dependency
+      // conflicts on the existing blockingFindings channel（fail-closed）.
+      blockingFindings: Array.isArray(runtime.dependencyConflicts) ? runtime.dependencyConflicts : null,
       memoryContext: runtime.memoryContext ?? null,
     });
     const envelopeValidation = validateSubagentEnvelope(envelope);
@@ -184,6 +191,9 @@ export function createReviewAgentReviewerAdapter({ profile, repoPath, scratchRoo
       EMIT_MALFORMED: runtime.reviewMalformed ? "1" : "0",
       CRASH_AFTER: runtime.reviewCrashAfter ? "1" : "0",
       DEPENDENCY_COUNT: String(runtime.dependencyResultIdentities?.length ?? 0),
+      // CEDF: dependency-reconciliation conflicts（space-free codes）are
+      // pre-seeded as blocking findings -> structural HOLD verdict.
+      REVIEW_SEED_BLOCKING: Array.isArray(runtime.dependencyConflicts) ? runtime.dependencyConflicts.join(" ") : "",
     };
 
     const roMounts = [

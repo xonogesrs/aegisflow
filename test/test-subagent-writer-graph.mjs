@@ -30,6 +30,7 @@ import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { rmSync, mkdirSync } from "node:fs";
 import { runSubagentGraph } from "../src/subagent/subagent-graph-runner.mjs";
+import { resolveInstance } from "../src/runtime/colima-runtime.mjs";
 
 // DE-2 production wiring: runSubagentGraph runs under native durable execution
 // by DEFAULT (runDurableGraph -> runColimaGraph -> journal + checkpoints). The
@@ -44,6 +45,8 @@ const HOME = homedir();
 const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const SCRATCH = `${HOME}/autoloop-subagent-writer-test-scratch`;
 const PROFILE = "autoloop-graph";
+// Ownership contract: the runner deletes the instance only when it created it.
+const instancePreExisted = resolveInstance(PROFILE).ok;
 const PARENT = { scope: { allowed_paths: ["docs/"], forbidden_paths: [".git"] } };
 const SCOPE = "docs/pi-graph-output";
 
@@ -188,7 +191,7 @@ test("SA-R1 || SA-R2 -> SA-W1 -> SA-V1: PASS; writer sub-agent bound to dedicate
   // ── deterministic join + cleanup + repo purity ──
   assert.deepEqual(r.join.map((n) => n.nodeId), ["SA-R1", "SA-R2", "SA-W1", "SA-V1"]);
   assert.equal(r.cleanup.containersFound, 0);
-  assert.equal(r.cleanup.instanceDeleted, true);
+  assert.equal(r.cleanup.instanceDeleted, !instancePreExisted);
   const headAfter = spawnSync("git", ["-C", REPO_A, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
   assert.equal(headAfter, repoHeadBefore, "repo A head unchanged (zero pollution)");
 });
@@ -221,7 +224,7 @@ test("writer sub-agent timeout -> HOLD; agent terminated; worktree revoked; clea
   assert.equal(w1.final, "HOLD");
   assert.equal(w1.cleanup.worktreeRevoked, true, "timed-out writer worktree revoked");
   assert.equal(r.cleanup.containersFound, 0);
-  assert.equal(r.cleanup.instanceDeleted, true);
+  assert.equal(r.cleanup.instanceDeleted, !instancePreExisted);
 });
 
 test("writer sub-agent cancel via AbortSignal -> HOLD + deterministic cleanup", { timeout: 900000 }, async (t) => {
@@ -232,7 +235,7 @@ test("writer sub-agent cancel via AbortSignal -> HOLD + deterministic cleanup", 
   assert.equal(r.final, "HOLD");
   assert.equal(nodeById(r, "SA-W1").final, "HOLD");
   assert.equal(r.cleanup.containersFound, 0, "cancel leaves no containers");
-  assert.equal(r.cleanup.instanceDeleted, true);
+  assert.equal(r.cleanup.instanceDeleted, !instancePreExisted);
 });
 
 test("writer sub-agent process crash -> HOLD; no residue", { timeout: 900000 }, async (t) => {
@@ -241,7 +244,7 @@ test("writer sub-agent process crash -> HOLD; no residue", { timeout: 900000 }, 
   assert.equal(r.final, "HOLD");
   assert.notEqual(nodeById(r, "SA-W1").final, "PASS");
   assert.equal(r.cleanup.containersFound, 0);
-  assert.equal(r.cleanup.instanceDeleted, true);
+  assert.equal(r.cleanup.instanceDeleted, !instancePreExisted);
 });
 
 test("writer out-of-mutation-scope write -> HOLD（scope gate + executor fail-closed）; main repo untouched", { timeout: 900000 }, async (t) => {

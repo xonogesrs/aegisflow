@@ -21,7 +21,7 @@ function safeEqualHex(a, b) {
  * Build secret-bound permit from active lease + secrets.
  * lease_secret and session_secret are held only by caller, never written to disk.
  */
-export function permitFromLease(execDir, lease, secrets, expectedMutationCapability = false) {
+export function permitFromLease(execDir, lease, secrets, expectedMutationCapability = false, heldLock = null) {
   if (!lease || lease.released_at != null) {
     throw new C2dHoldError(HOLD.WRITE_PERMIT_REQUIRED, "no active lease for permit");
   }
@@ -50,6 +50,9 @@ export function permitFromLease(execDir, lease, secrets, expectedMutationCapabil
     // secrets stay on permit object only; never serialize to checkpoint
     _lease_secret: secrets.lease_secret,
     _session_secret: secrets.session_secret,
+    // D1 continuous-hold reentrancy: the caller's own structured-lock
+    // capability ({ path, record }) when it already holds CURRENT.json.lock.
+    _heldLock: heldLock,
   });
 }
 

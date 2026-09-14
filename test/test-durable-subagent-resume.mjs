@@ -70,8 +70,10 @@ test("DE-2R resumeSubagentGraph: completed durable run -> terminal short-circuit
     assert.equal(run.durableExecutionId, durableId, "run exposes the durable execution id");
 
     // ── fresh-process resume through the PRODUCTION entry ──────────────
-    const resumeScratch = join(HOME, ".de2r-test", `resume-scratch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
-    mkdirSync(resumeScratch, { recursive: true });
+    // Resume must present the SAME scratch namespace as the original run
+    // (fail-closed namespace-drift fence in resumeDurableGraph rejects a
+    // changed scratchRoot). A fresh-process resume reuses persisted truth.
+    const resumeScratch = scratchRoot;
     const resume = await resumeSubagentGraph({
       parent: { scope: { allowed_paths: [SCOPE], forbidden_paths: [".git"] } },
       manifest: [],

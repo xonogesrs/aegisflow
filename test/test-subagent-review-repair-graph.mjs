@@ -31,6 +31,7 @@ import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { rmSync, mkdirSync } from "node:fs";
 import { runSubagentGraph } from "../src/subagent/subagent-graph-runner.mjs";
+import { resolveInstance } from "../src/runtime/colima-runtime.mjs";
 
 // DE-2 production wiring: runSubagentGraph runs under native durable execution
 // by DEFAULT (runDurableGraph -> runColimaGraph -> journal + checkpoints). The
@@ -45,6 +46,8 @@ const HOME = homedir();
 const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const SCRATCH = `${HOME}/autoloop-review-repair-test-scratch`;
 const PROFILE = "autoloop-graph";
+// Ownership contract: the runner deletes the instance only when it created it.
+const instancePreExisted = resolveInstance(PROFILE).ok;
 const PARENT = { scope: { allowed_paths: ["docs/"], forbidden_paths: [".git"] } };
 const SCOPE = "docs/pi-graph-output";
 
@@ -177,7 +180,7 @@ test("R1 || R2 -> W1 (writer gap -> REVIEW1 finds it -> REPAIR1 fixes -> REVIEW2
   // ── deterministic join + cleanup + main repo purity ──
   assert.deepEqual(r.join.map((n) => n.nodeId), ["SA-R1", "SA-R2", "SA-W1", "SA-V1"]);
   assert.equal(r.cleanup.containersFound, 0);
-  assert.equal(r.cleanup.instanceDeleted, true);
+  assert.equal(r.cleanup.instanceDeleted, !instancePreExisted);
   const headAfter = spawnSync("git", ["-C", REPO_A, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
   assert.equal(headAfter, repoHeadBefore, "main repo untouched");
 });
@@ -191,7 +194,7 @@ test("review agent malformed result -> HOLD（no blind repair; no downstream）"
   assert.equal(w1.attempt, 0, "no repair attempt after a malformed review");
   assert.equal(w1.cleanup.worktreeRevoked, true);
   assert.equal(r.cleanup.containersFound, 0);
-  assert.equal(r.cleanup.instanceDeleted, true);
+  assert.equal(r.cleanup.instanceDeleted, !instancePreExisted);
 });
 
 test("review agent timeout -> HOLD REVIEWER_TIMEOUT; agent terminated; cleanup", { timeout: 900000 }, async (t) => {
@@ -220,7 +223,7 @@ test("review agent cancel via AbortSignal -> HOLD + deterministic cleanup", { ti
   const r = await runSubagentGraph({ durable: false, ir, parent: PARENT, cwd: REPO_A, executionId: "review-repair-cancel-1", profile: PROFILE, repoPath: REPO_A, scratchRoot: SCRATCH, maxRepairAttempts: 1, timeoutMs: 120000, signal: ac.signal });
   assert.equal(r.final, "HOLD");
   assert.equal(r.cleanup.containersFound, 0, "cancel leaves no containers");
-  assert.equal(r.cleanup.instanceDeleted, true);
+  assert.equal(r.cleanup.instanceDeleted, !instancePreExisted);
 });
 
 test("repair agent out-of-scope write -> HOLD（repair stays inside original mutationScope）", { timeout: 900000 }, async (t) => {
