@@ -236,10 +236,107 @@ test("14. deterministic query ordering + scope filters (tree / worktree / graphR
   insertRecord(db, b, { validate });
   assert.equal(queryRecords(db, { scopeTree: t1 }).length, 1);
   assert.equal(queryRecords(db, { scopeTree: t1 })[0].recordId, a.recordId);
+  assert.equal(queryRecords(db, { scopeTree: t2 }).length, 1);
   assert.equal(queryRecords(db, { scopeTree: t2 })[0].recordId, b.recordId);
   // graphRun scope filter
   const run = baseExecutionRecord({ scope: { graphRun: "run-X" } });
   insertRecord(db, run, { validate });
   assert.equal(queryRecords(db, { scopeGraphRun: "run-X" }).length, 1);
+  db.close();
+});
+
+// ── R2 PATTERN sqlite extension (AUTOLOOP-V1-STAGE-F-R2-IMPLEMENTATION-1;
+//    additive cases only — existing expectations above byte-untouched) ─────
+
+import { MEMORY_RECORD_SCHEMA as MRS2, deriveContentHash as dch2, deriveMemoryRecordId as dmri2, NOT_APPLICABLE as NA3 } from "../../src/memory/index.mjs";
+
+function patternRecord() {
+  const rec = {
+    schema: MRS2,
+    recordType: "PATTERN",
+    identity: { patternId: "pat-sql-1", repositoryIdentity: hex64("2") },
+    subject: { statement: "PATTERN (sqlite): bound check accepts PATTERN", contentHash: null, language: NA3 },
+    content: {
+      kind: "STRUCTURED",
+      data: {
+        mechanismDigest: hex64("1"),
+        applicabilityDigest: hex64("2"),
+        constituentIncidentSetDigest: hex64("3"),
+        constituentIncidentRecordIds: [hex64("4")],
+        qualificationRecordId: hex64("5"),
+        publicationGeneration: 1,
+        counterexamples: NA3,
+        applicability: {
+          appliesWhen: [{ field: "scope.path", op: "PATH_PREFIX", value: "src/memory" }],
+          doesNotApplyWhen: [],
+          mechanismSignature: { errorClass: "livelock" },
+        },
+      },
+    },
+    source: { source: "EXECUTION", identity: hex64("7") },
+    scope: { repository: hex64("2") },
+    trust: "UNVERIFIED",
+    validity: { status: "CURRENT", validityTree: NA3 },
+    lifecycle: { events: [] },
+    timestamps: { createdAt: "2026-09-08T00:00:00.000Z", updatedAt: "2026-09-08T00:00:00.000Z" },
+    evidence: { manifestDigest: hex64("8"), items: [] },
+    security: { scanResult: "clean", ingestionSource: "test-fixture" },
+    metadata: {},
+  };
+  rec.subject.contentHash = dch2(rec.content);
+  rec.recordId = dmri2(rec);
+  return rec;
+}
+
+test("R2-S1. record_type CHECK accepts PATTERN on a NEW store (CHECK IN-list extended)", () => {
+  const db = openMemoryDb(join(ROOT, "pattern.db"));
+  applyMigrations(db);
+  const pattern = patternRecord();
+  insertRecord(db, pattern, { validate });
+  const rows = queryRecords(db, { recordType: "PATTERN" });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].recordId, pattern.recordId);
+  assert.equal(rows[0].recordType, "PATTERN");
+  db.close();
+});
+
+test("R2-S2. old-CHECK store rejects PATTERN inserts until rebuild (reconcile-from-reality, never patched in place)", () => {
+  // simulate an EXISTING store created before the extension (frozen §3.3a:
+  // journal is truth; sqlite ⊆ journal rebuild is the standing recovery
+  // path; no destructive ALTER and no in-place migration).
+  const db = openMemoryDb(join(ROOT, "legacy.db"));
+  db.exec(`CREATE TABLE memory_records (
+    record_id TEXT PRIMARY KEY,
+    logical_key TEXT NOT NULL,
+    schema_version TEXT NOT NULL,
+    record_type TEXT NOT NULL CHECK (record_type IN ('CODE','EXECUTION','DECISION')),
+    trust TEXT NOT NULL CHECK (trust IN ('RAW','UNVERIFIED','VERIFIED','REVIEWED','CONFIRMED')),
+    trust_rank INTEGER NOT NULL,
+    validity_status TEXT NOT NULL CHECK (validity_status IN ('CURRENT','STALE','INVALIDATED','TOMBSTONED','CONFLICTED')),
+    scope_repository TEXT, scope_worktree TEXT, scope_commit TEXT, scope_tree TEXT, scope_path TEXT,
+    scope_symbol TEXT, scope_content_hash TEXT, scope_graph_run TEXT, scope_task TEXT,
+    scope_global INTEGER NOT NULL DEFAULT 0,
+    content_hash TEXT NOT NULL, source TEXT NOT NULL, source_identity TEXT,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL, json TEXT NOT NULL,
+    UNIQUE (logical_key, content_hash)
+  )`);
+  let threw = false;
+  try {
+    insertRecord(db, patternRecord(), { validate });
+  } catch (e) {
+    threw = true;
+    assert.ok(String(e?.message ?? e).includes("CHECK") || String(e?.message ?? e).includes("SCHEMA_INVALID"));
+  }
+  assert.equal(threw, true, "old CHECK store must reject PATTERN inserts (fail-closed)");
+  db.close();
+});
+
+test("R2-S3. extended store replays a PATTERN-free (legacy) journal cleanly — backward compatibility", () => {
+  const db = openMemoryDb(join(ROOT, "replay.db"));
+  applyMigrations(db);
+  const code = baseCodeRecord();
+  insertRecord(db, code, { validate });
+  assert.equal(queryRecords(db, {}).length, 1);
+  assert.equal(queryRecords(db, { recordType: "PATTERN" }).length, 0);
   db.close();
 });

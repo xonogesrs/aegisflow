@@ -133,3 +133,65 @@ test("Q11. lexical terms normalization is deterministic and deduped", () => {
   assert.deepEqual(normalizeQueryTerms(""), []);
   assert.deepEqual(normalizeQueryTerms(null), []);
 });
+
+// ── R2 PATTERN query-schema extension (AUTOLOOP-V1-STAGE-F-R2-IMPLEMENTATION-1;
+//    additive cases only — existing expectations above byte-untouched) ─────
+
+test("R2-Q1. recordTypes accepts PATTERN; null recordTypes still valid (null ⇒ ALL incl. PATTERN, frozen §5 semantics)", () => {
+  const withPattern = validateMemoryQueryV1({ ...okQuery(), recordTypes: ["PATTERN"] });
+  assert.equal(withPattern.valid, true);
+  assert.deepEqual(withPattern.query.recordTypes, ["PATTERN"]);
+  const mixed = validateMemoryQueryV1({ ...okQuery(), recordTypes: ["PATTERN", "CODE"] });
+  assert.equal(mixed.valid, true);
+  const none = validateMemoryQueryV1(okQuery());
+  assert.equal(none.valid, true);
+  assert.equal(none.query.recordTypes, null, "null recordTypes (all types incl. PATTERN) stays the frozen default");
+});
+
+test("R2-Q2. pattern selector fields accepted and normalized to explicit shape", () => {
+  const q = validateMemoryQueryV1({
+    ...okQuery(),
+    recordTypes: ["PATTERN"],
+    pattern: {
+      appliesWhen: [{ field: "scope.path", op: "PATH_PREFIX", value: "src/memory" }],
+      doesNotApplyWhen: [{ field: "scope.symbol", op: "SYMBOL_EQUALS", value: "x" }],
+      mechanismSignature: { errorClass: "livelock" },
+    },
+  });
+  assert.equal(q.valid, true, JSON.stringify(q.errors));
+  assert.deepEqual(q.query.pattern.appliesWhen, [{ field: "scope.path", op: "PATH_PREFIX", value: "src/memory" }]);
+  assert.deepEqual(q.query.pattern.mechanismSignature, { errorClass: "livelock" });
+});
+
+test("R2-Q3. query without pattern selectors normalizes to explicit nulls (byte-identical pre-R2 form + nulls)", () => {
+  const q = validateMemoryQueryV1(okQuery()).query;
+  assert.deepEqual(q.pattern, { appliesWhen: null, doesNotApplyWhen: null, mechanismSignature: null });
+});
+
+test("R2-Q4. unknown pattern sub-field rejected (QUERY_UNKNOWN_FIELD)", () => {
+  const q = validateMemoryQueryV1({ ...okQuery(), pattern: { bogus: true } });
+  assert.equal(q.valid, false);
+  assert.ok(q.errors.some((e) => e.includes(QUERY_ERRORS.QUERY_UNKNOWN_FIELD) && e.includes("pattern.bogus")));
+});
+
+test("R2-Q5. non-structured op rejected — lexical-similarity matching is NOT a query op ([CT §1 R6] NG)", () => {
+  const q = validateMemoryQueryV1({ ...okQuery(), pattern: { appliesWhen: [{ field: "x", op: "LEXICAL_SIMILAR", value: "y" }] } });
+  assert.equal(q.valid, false);
+  assert.ok(q.errors.some((e) => e.includes(QUERY_ERRORS.QUERY_UNKNOWN_ENUM)));
+});
+
+test("R2-Q6. malformed pattern condition rejected (empty array / bad value shape)", () => {
+  const q1 = validateMemoryQueryV1({ ...okQuery(), pattern: { appliesWhen: [] } });
+  assert.equal(q1.valid, false);
+  assert.ok(q1.errors.some((e) => e.includes("pattern.appliesWhen_must_be_non_empty_array")));
+  const q2 = validateMemoryQueryV1({ ...okQuery(), pattern: { appliesWhen: [{ field: "x", op: "PATH_PREFIX", value: 42 }] } });
+  assert.equal(q2.valid, false);
+  assert.ok(q2.errors.some((e) => e.includes("value_invalid")));
+});
+
+test("R2-Q7. pattern selectors change the query identity (deterministic digest input)", () => {
+  const base = validateMemoryQueryV1(okQuery()).query;
+  const withPattern = validateMemoryQueryV1({ ...okQuery(), pattern: { appliesWhen: [{ field: "scope.path", op: "PATH_PREFIX", value: "src" }] } }).query;
+  assert.notEqual(queryIdentity(base), queryIdentity(withPattern));
+  assert.equal(queryIdentity(withPattern), queryIdentity(validateMemoryQueryV1({ ...okQuery(), pattern: { appliesWhen: [{ field: "scope.path", op: "PATH_PREFIX", value: "src" }] } }).query));
+});

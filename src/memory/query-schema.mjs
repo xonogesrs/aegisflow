@@ -36,7 +36,7 @@
 // queries are rejected（QUERY_* errors）— a query that cannot be fully
 // understood is never partially executed.
 
-import { TRUST_STATES, SCOPES, RECORD_TYPES } from "./contract.mjs";
+import { TRUST_STATES, SCOPES, RECORD_TYPES, PATTERN_BOUNDARY_OPERATORS } from "./contract.mjs";
 import { recursiveCanonicalJson } from "./canonical.mjs";
 import { sha256Text } from "../evidence/run-evidence-store.mjs";
 
@@ -83,7 +83,18 @@ export const QUERY_FIELDS = Object.freeze([
   "logicalKey",
   "identitySelectors",
   "limits",
+  // R2 PATTERN applicability selectors (O7 boundary consultation; opt-in,
+  // default null — a query without them is byte-identical to pre-R2 form).
+  "pattern",
 ]);
+
+export const QUERY_PATTERN_FIELDS = Object.freeze([
+  "appliesWhen",        // structured conditions the pattern boundary must accept
+  "doesNotApplyWhen",   // structured conditions the pattern boundary must reject
+  "mechanismSignature", // structured mechanism-signature selectors
+]);
+
+export const QUERY_PATTERN_CONDITION_FIELDS = Object.freeze(["field", "op", "value"]);
 
 export const QUERY_CONTEXT_FIELDS = Object.freeze([
   "repository",
@@ -113,6 +124,7 @@ export function defaultQuery() {
     logicalKey: null,
     identitySelectors: { recordIds: [] },
     limits: { maxRecords: DEFAULT_MAX_RECORDS, maxBytes: DEFAULT_MAX_BYTES },
+    pattern: { appliesWhen: null, doesNotApplyWhen: null, mechanismSignature: null },
   };
 }
 
@@ -263,6 +275,56 @@ export function validateMemoryQueryV1(input) {
       }
     }
   }
+  // pattern applicability selectors (R2; structured only — never free text)
+  if (input.pattern !== undefined && input.pattern !== null) {
+    if (!isPlainObject(input.pattern)) {
+      errors.push(`${QUERY_ERRORS.QUERY_MALFORMED}:pattern_must_be_object`);
+    } else {
+      for (const k of Object.keys(input.pattern)) {
+        if (!QUERY_PATTERN_FIELDS.includes(k)) errors.push(`${QUERY_ERRORS.QUERY_UNKNOWN_FIELD}:pattern.${k}`);
+      }
+      for (const k of ["appliesWhen", "doesNotApplyWhen"]) {
+        const v = input.pattern[k];
+        if (v === undefined || v === null) continue;
+        if (!Array.isArray(v) || v.length === 0) {
+          errors.push(`${QUERY_ERRORS.QUERY_MALFORMED}:pattern.${k}_must_be_non_empty_array`);
+          continue;
+        }
+        for (const [i, cond] of v.entries()) {
+          if (!isPlainObject(cond)) {
+            errors.push(`${QUERY_ERRORS.QUERY_MALFORMED}:pattern.${k}[${i}]_must_be_object`);
+            continue;
+          }
+          for (const ck of Object.keys(cond)) {
+            if (!QUERY_PATTERN_CONDITION_FIELDS.includes(ck)) errors.push(`${QUERY_ERRORS.QUERY_UNKNOWN_FIELD}:pattern.${k}[${i}].${ck}`);
+          }
+          if (typeof cond.field !== "string" || cond.field.length === 0) {
+            errors.push(`${QUERY_ERRORS.QUERY_MALFORMED}:pattern.${k}[${i}].field_required`);
+          }
+          if (!PATTERN_BOUNDARY_OPERATORS.includes(cond.op)) {
+            errors.push(`${QUERY_ERRORS.QUERY_UNKNOWN_ENUM}:pattern.${k}[${i}].op:${String(cond.op)}`);
+          }
+          const val = cond.value;
+          const valOk = (typeof val === "string" && val.length > 0)
+            || (Array.isArray(val) && val.length > 0 && val.every((x) => typeof x === "string" && x.length > 0));
+          if (!valOk) errors.push(`${QUERY_ERRORS.QUERY_MALFORMED}:pattern.${k}[${i}].value_invalid`);
+        }
+      }
+      const ms = input.pattern.mechanismSignature;
+      if (ms !== undefined && ms !== null) {
+        if (!isPlainObject(ms)) {
+          errors.push(`${QUERY_ERRORS.QUERY_MALFORMED}:pattern.mechanismSignature_must_be_object`);
+        } else {
+          for (const [k, v] of Object.entries(ms)) {
+            if (v === null) continue;
+            const valOk = (typeof v === "string" && v.length > 0)
+              || (Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && x.length > 0));
+            if (!valOk) errors.push(`${QUERY_ERRORS.QUERY_MALFORMED}:pattern.mechanismSignature.${k}_value_invalid`);
+          }
+        }
+      }
+    }
+  }
   if (errors.length) return fail(errors);
 
   // ── normalize（explicit defaults; strip unknown-but-tolerated nulls）──
@@ -286,6 +348,13 @@ export function validateMemoryQueryV1(input) {
   q.identitySelectors.recordIds = [...(input.identitySelectors?.recordIds ?? [])];
   q.limits.maxRecords = input.limits?.maxRecords ?? DEFAULT_MAX_RECORDS;
   q.limits.maxBytes = input.limits?.maxBytes ?? DEFAULT_MAX_BYTES;
+  // pattern selectors normalize to explicit nulls (deterministic query
+  // identity input; absent selectors are byte-identical to pre-R2 queries)
+  q.pattern = {
+    appliesWhen: Array.isArray(input.pattern?.appliesWhen) ? input.pattern.appliesWhen.map((c) => ({ ...c })) : null,
+    doesNotApplyWhen: Array.isArray(input.pattern?.doesNotApplyWhen) ? input.pattern.doesNotApplyWhen.map((c) => ({ ...c })) : null,
+    mechanismSignature: isPlainObject(input.pattern?.mechanismSignature) ? { ...input.pattern.mechanismSignature } : null,
+  };
 
   // oversized query guard（after normalization）
   const serialized = Buffer.byteLength(recursiveCanonicalJson(q), "utf8");

@@ -28,6 +28,9 @@ import {
 } from "../../src/memory/index.mjs";
 
 const HOME = homedir();
+import { classify, scanRiskSignals } from "../../src/admission/classify.mjs";
+import { buildAdmissionRecord } from "../../src/admission/policy-projection.mjs";
+import { freezeAdmission } from "../../src/admission/admission-record.mjs";
 const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const SCRATCH = `${HOME}/autoloop-cbm3-graph-writeback-scratch`;
 const PROFILE = "autoloop-graph";
@@ -57,6 +60,29 @@ function buildVerifiedRecord(repoId, treeSha) {
   rec.subject.contentHash = deriveContentHash(rec.content);
   rec.recordId = deriveMemoryRecordId(rec);
   return rec;
+}
+
+// R-10 (AUTH1): graph-time memory retrieval requires an explicit admission
+// authority (memory_policy.retrieval_allowed === true). Build a schema-valid
+// admission so this fixture exercises the real gated wiring (same pattern as
+// test/memory/test-graph-context.mjs).
+const ADMISSION_EVIDENCE = {
+  affected_files: { score: 1, reasons: ["single file"] },
+  affected_subsystems: { score: 0, reasons: ["docs only"] },
+  dependency_depth: { score: 0, reasons: ["no deps"] },
+  ambiguity: { score: 0, reasons: ["exact"] },
+  expected_execution_steps: { score: 0, reasons: ["one edit"] },
+  verification_burden: { score: 0, reasons: ["none"] },
+  external_dependencies: { score: 0, reasons: ["none"] },
+  concurrency_potential: { score: 0, reasons: ["none"] },
+  statefulness: { score: 0, reasons: ["stateless"] },
+  rollback_complexity: { score: 0, reasons: ["revert one file"] },
+};
+function validAdmissionWithRetrieval(allowed) {
+  const c = classify({ dimensionScores: ADMISSION_EVIDENCE, riskSignals: scanRiskSignals("fix one typo in README") });
+  const rec = buildAdmissionRecord({ taskId: "TEST-CBM3-WRITEBACK", classification: c, mutationScope: ["docs/"] });
+  rec.memory_policy = { retrieval_allowed: allowed, writeback_allowed: false };
+  return freezeAdmission(rec);
 }
 
 const ir = {
@@ -110,8 +136,10 @@ test("graph reads memory; zero automatic write-back; AVAILABLE context on result
     executionId: "cbm3-graph-writeback",
     profile: PROFILE,
     repoPath: REPO_A,
+    admission: validAdmissionWithRetrieval(true),
     scratchRoot: SCRATCH,
-    timeoutMs: 90000,
+    executionReviewSurfaceDir: join(ROOT, "execution-review-surface"),
+    executionReviewArchiveDir: join(ROOT, "execution-review-archive"),
     memory,
   });
   assert.equal(r.final, "PASS", `graph PASS expected, got ${r.final} (${r.reason})`);

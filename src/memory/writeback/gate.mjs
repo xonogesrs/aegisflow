@@ -128,6 +128,34 @@ export function buildRecordFromCandidate(candidate, { now = new Date().toISOStri
       security: { scanResult: "clean", ingestionSource: "writeback-gate" },
       metadata: { candidateId: candidate.candidateId, writebackIntent: candidate.lifecycleIntent },
     };
+  } else if (candidate.proposedRecordType === "PATTERN") {
+    // R2 PATTERN branch ([CT §1 R2] write path; DATA-MODEL D2/D4). The
+    // candidate content IS the canonical pattern document (mechanism,
+    // applicability boundary, counterexamples, transfer potential, required
+    // lifecycle level) — structured, deterministic, no timestamps. Identity
+    // anchors: repository-bound. The gate stage machinery is UNCHANGED; this
+    // branch only builds the record shape that fences 5–7 already govern.
+    record = {
+      schema: MEMORY_RECORD_SCHEMA,
+      recordType: "PATTERN",
+      identity: {
+        patternId: identity.patternId,
+        repositoryIdentity: identity.repositoryIdentity ?? scope.repository,
+        ...(identity.worktreeIdentity ? { worktreeIdentity: identity.worktreeIdentity } : {}),
+        ...(identity.symbol ? { symbol: identity.symbol } : {}),
+      },
+      subject: { statement, contentHash: null, language: "NOT_APPLICABLE" },
+      content: candidate.proposedContent ?? { kind: "TEXT", text: statement },
+      source: { source: "EXECUTION", identity: candidate.sourceResultIdentity },
+      scope: { repository: scope.repository ?? identity.repositoryIdentity, ...(scope.worktree ? { worktree: scope.worktree } : {}), ...(scope.tree ? { tree: scope.tree } : {}) },
+      trust,
+      validity: { status: "CURRENT", validityTree: NOT_APPLICABLE },
+      lifecycle: { events: [] },
+      timestamps: { createdAt: now, updatedAt: now },
+      evidence: evidenceFor(trust, refs, { verifierIdentity, reviewIdentity }),
+      security: { scanResult: "clean", ingestionSource: "writeback-gate" },
+      metadata: { candidateId: candidate.candidateId, writebackIntent: candidate.lifecycleIntent },
+    };
   } else {
     // DECISION: CBM-4 never auto-writes DECISION（Controller authority only）
     throw Object.assign(new Error("WRITEBACK_DECISION_NOT_AUTOMATIC"), { code: "WRITEBACK_AUTHORITY_INSUFFICIENT" });
@@ -143,6 +171,63 @@ export function findCurrentByLogicalKey(store, logicalKey) {
     .prepare("SELECT json FROM memory_records WHERE logical_key = ? AND validity_status = 'CURRENT'")
     .all(logicalKey);
   return rows.map((r) => JSON.parse(r.json));
+}
+
+// ---------------------------------------------------------------------------
+// STAGE-F LIFECYCLE SEAM HELPER (RUNG-6 Step 4). Delegation-only: this helper
+// builds the journal-derived projection (via N2's read — chain-verified FIRST,
+// never a process-memory cache) and the intent from the candidate, then
+// consults N1::authorizeLifecycleEvent. It decides NOTHING about lifecycle
+// legality itself; it introduces no new authority; a failure result is
+// returned unchanged to the caller ({ ok:false, status, code, reason }).
+// ---------------------------------------------------------------------------
+function consultLifecycleSeam({ candidate, store, authorizeLifecycleEvent, readLifecycleJournalState, reviewIdentity, verifierIdentity, now }) {
+  const lifecycleIntent = candidate.provenance?.lifecycle ?? {};
+  const kind = lifecycleIntent.kind;
+  // The seam accepts ONLY registered lifecycle event kinds (closed set; an
+  // unregistered kind must have been rejected upstream — keep fail-closed).
+  const intent = {
+    claimSource: "JOURNAL_PROJECTION",
+    recordId: candidate.proposedIdentity?.patternId ?? candidate.candidateId,
+    logicalKey: candidate.proposedIdentity?.patternId ?? null,
+    contentHash: null,
+    event: kind,
+    to: lifecycleIntent.to ?? null,
+    generation: lifecycleIntent.generation ?? null,
+    policyAllowed: true, // F3 projection: the gate's own policy path (flags consumed, code unchanged)
+    executionIdentity: {
+      graphRunId: candidate.graphRunId,
+      task: candidate.taskCardId,
+      attempt: null,
+      selfAuthored: false,
+    },
+    elements: lifecycleIntent.elements ?? {},
+    lifecycleEventKind: kind,
+  };
+  let projection;
+  try {
+    projection = readLifecycleJournalState(store.journalPath);
+  } catch (e) {
+    return { ok: false, status: "WRITEBACK_STORE_INVALID", code: e.code ?? "JOURNAL_CHAIN_INVALID", reason: "lifecycle journal unreadable — reconcile-first" };
+  }
+  // Journal-derived record projection: current state of the record from the
+  // lifecycle journal (CANDIDATE when no lifecycle event exists yet — the R5
+  // record's presence is the CANDIDATE representation).
+  const events = (projection.events ?? []).filter((ev) => ev.operation === "LIFECYCLE_EVENT" && ev.payload?.recordId === intent.recordId);
+  let state = "CANDIDATE";
+  let generation = candidate.lifecycleEventGeneration ?? null;
+  for (const ev of events) {
+    if (ev.payload?.transition?.to) state = ev.payload.transition.to;
+    if (Number.isInteger(ev.payload?.generationAfter)) generation = ev.payload.generationAfter;
+  }
+  const recProjection = {
+    ...projection,
+    recordExists: true,
+    state,
+    generation,
+    policyAllowed: true, // the gate's policy path already passed (ceiling/ladder/evidence above)
+  };
+  return authorizeLifecycleEvent(intent, recProjection);
 }
 
 /** Mark a tree/path-bound CURRENT CODE record STALE when its baseline no longer holds. */
@@ -319,6 +404,36 @@ export async function runWritebackGate({ candidate, store, reviewIdentity = null
     }
 
     // 6) clean CREATE: journal-first write（idempotent）
+    // ——— STAGE-F LIFECYCLE SEAM (RUNG-6 Step 4; RUNG-5 MUTATION-SURFACE-FREEZE
+    // E1 row; GATE-SEAM.md insertion point). ONE additive delegation inside the
+    // PATTERN-branch decision path: AFTER the ladder/ceiling verdict and
+    // evidence checks have produced their outcome, BEFORE the journal append
+    // of the resulting event — if (lifecycle event kind) → consult
+    // src/learning/lifecycle/state-machine.mjs::authorizeLifecycleEvent(...).
+    // The gate adds NO second decision table; non-ok verdicts short-circuit
+    // with that exact code; existing kinds are unaffected (the kind check
+    // below cannot be true for any pre-existing writeback intent).
+    if (candidate.proposedRecordType === "PATTERN" && candidate?.lifecycleIntent === "CREATE" && candidate?.provenance?.lifecycle != null) {
+      const { authorizeLifecycleEvent } = await import("../../learning/lifecycle/state-machine.mjs");
+      const { readLifecycleJournalState } = await import("../../learning/lifecycle/event-journal.mjs");
+      const lifecycle = consultLifecycleSeam({
+        candidate,
+        store,
+        authorizeLifecycleEvent,
+        readLifecycleJournalState,
+        reviewIdentity,
+        verifierIdentity,
+        now,
+      });
+      if (!lifecycle.ok) {
+        // Short-circuit with the consulted module's exact code (outcome shape
+        // unchanged: { status, candidateId, reason }); the Layer-2 disposition
+        // maps onto the sealed gate vocabulary without reclassification.
+        const gateStatus = lifecycle.status === "HOLD" ? "WRITEBACK_STORE_INVALID" : "WRITEBACK_REJECTED";
+        return outcome(gateStatus, { recordId: candidate.proposedIdentity?.patternId ?? null, logicalKey, reason: `${lifecycle.code}:${lifecycle.reason}` });
+      }
+    }
+    // ——— END STAGE-F LIFECYCLE SEAM ———
     store.explicitImport(record, { source: "WRITEBACK_GATE" });
     return outcome("WRITEBACK_ACCEPTED", { recordId: record.recordId, logicalKey, candidateType: record.recordType, resultingTrust: record.trust });
   } catch (e) {

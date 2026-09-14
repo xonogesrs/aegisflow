@@ -93,3 +93,25 @@ test("6. lifecycle intents enum enforced", () => {
   assert.equal(validateWritebackCandidateV1(c).valid, true);
   assert.throws(() => baseCandidate({ lifecycleIntent: "MERGE" }), (e) => e.name === "WritebackCandidateError");
 });
+
+// ── R2 PATTERN candidate extension (AUTOLOOP-V1-STAGE-F-R2-IMPLEMENTATION-1;
+//    additive cases only — existing expectations above byte-untouched) ─────
+
+test("R2-C1. PATTERN is a legal proposedRecordType; candidateIdFor unchanged (PATTERN flows through proposedRecordType)", () => {
+  const c = baseCandidate({ proposedRecordType: "PATTERN" });
+  assert.equal(validateWritebackCandidateV1(c).valid, true, JSON.stringify(validateWritebackCandidateV1(c).errors));
+  // deterministic candidate identity: same canonical inputs ⇒ same candidateId
+  const c2 = baseCandidate({ proposedRecordType: "PATTERN" });
+  assert.equal(c.candidateId, c2.candidateId);
+});
+
+test("R2-C2. non-PATTERN invalid types still rejected (bad_proposedRecordType unchanged for others)", () => {
+  assert.throws(() => baseCandidate({ proposedRecordType: "PATTERNX" }), (e) => e.name === "WritebackCandidateError");
+  assert.throws(() => baseCandidate({ proposedRecordType: "pattern" }), (e) => e.name === "WritebackCandidateError");
+});
+
+test("R2-C3. PATTERN candidate identity differs across lineage/proposedIdentity (no aliasing)", () => {
+  const a = baseCandidate({ proposedRecordType: "PATTERN", proposedIdentity: { patternId: "pat-a", repositoryIdentity: REPO } });
+  const b = baseCandidate({ proposedRecordType: "PATTERN", proposedIdentity: { patternId: "pat-b", repositoryIdentity: REPO } });
+  assert.notEqual(a.candidateId, b.candidateId, "different lineage ⇒ different candidate identity");
+});

@@ -94,11 +94,27 @@ export function appendJournalEvent({ journalPath, state = { lastSequence: 0, pre
  * Read + chain-validate a journal. A partial TRAILING line（crash mid-append）
  * is detected and excluded（reported, not fatal）; a corrupted MIDDLE line is
  * fail-closed（JOURNAL_CHAIN_INVALID）. Duplicate sequences / gaps are fatal.
+ *
+ * RRC-T3（RUNG-8 repair; card §2/§3）: the trailing-newline discipline is
+ * VALIDITY-INDEPENDENT. The production append primitive can be interrupted
+ * after writing JSON bytes but before writing the terminating "\n", so an
+ * unterminated final line is TORN/PARTIAL by construction — even when its
+ * bytes form complete, syntactically valid JSON. The parser never infers
+ * atomicity from JSON validity: the final physical line is authoritative
+ * eligibility-wise ONLY when the file ends with "\n". A torn tail is
+ * EXCLUDED from the authoritative projection (prefix preserved) and
+ * reported via partialTrailingLine, which fail-closed seams surface as
+ * HOLD/fatal per their own frozen semantics.
  */
 export function readJournal(journalPath) {
   if (!existsSync(journalPath)) return { events: [], state: { lastSequence: 0, previousDigest: null }, partialTrailingLine: false, path: journalPath };
   const raw = readFileSync(journalPath, "utf8");
+  const endsWithNewline = raw.endsWith("\n");
   const lines = raw.split("\n");
+  // A trailing "" from the split is the newline terminator, not a record: an
+  // unterminated final physical line is lines[lines.length - 1] with content.
+  const lastLineIndex = endsWithNewline ? lines.length - 1 : lines.length - 1;
+  const hasUnterminatedFinalLine = !endsWithNewline && lines[lastLineIndex].length > 0;
   const events = [];
   let partialTrailingLine = false;
   let expectedSequence = 1;
@@ -108,12 +124,45 @@ export function readJournal(journalPath) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.trim() === "") continue;
+    // RRC-T3: the final physical line of a file that does not end with "\n"
+    // is a partial/torn write — EXCLUDED from authority BEFORE any parse.
+    // (Earlier fully terminated records remain readable and authoritative.)
+    if (i === lastLineIndex && hasUnterminatedFinalLine) {
+      // RRC-T3 primary rule: the unterminated final line is TORN — EXCLUDED
+      // from authority BEFORE adoption (validity-independent; a partial
+      // write is a strict byte-prefix of its full line and can never parse
+      // as complete JSON).
+      let torn = true;
+      try {
+        const candidate = JSON.parse(line);
+        // Foreign-corruption carve-out (NOT torn, fail closed): a segment
+        // that parses as complete JSON but FAILS chain validation cannot be
+        // produced by a partial append — a partial write is a byte-prefix of
+        // a chain-valid event, so it can never validate. The frozen
+        // middle-line fail-closed oracle (N2-11/N2-12 forms) must keep
+        // firing; treating chain-refuting bytes as torn would silently
+        // EXCLUDE foreign corruption — the one reading error the exclusion
+        // rule must never introduce. A chain-valid parseable form is the
+        // STAGE-2 defect shape: torn, excluded, never authoritative.
+        if (candidate != null && typeof candidate === "object") {
+          const probe = validateJournalEvent(candidate, { previousDigest: previousDigest ?? JOURNAL_GENESIS_DIGEST, expectedSequence });
+          if (!probe.valid) torn = false;
+        } else {
+          torn = false; // non-object JSON is not a byte-prefix of any event
+        }
+      } catch { /* unparseable ⇒ torn (primary rule) */ }
+      if (torn) {
+        partialTrailingLine = true;
+        continue;
+      }
+    }
     let event;
     try {
       event = JSON.parse(line);
     } catch {
-      // last line only may be a partial write（crash during append）
-      if (i === lines.length - 1 && line.trim().length > 0) {
+      // Defense-in-depth for split()-shape edges: a non-empty final line
+      // without the delimiter is torn regardless of parseability.
+      if (i === lines.length - 1 && line.trim().length > 0 && !endsWithNewline) {
         partialTrailingLine = true;
         continue;
       }

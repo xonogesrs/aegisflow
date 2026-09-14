@@ -40,13 +40,14 @@
 // selected, never silently dropped）.
 
 import { MEMORY_RETRIEVAL_RESULT_SCHEMA, MEMORY_RETRIEVAL_DIGEST_SCHEMA, queryIdentity, normalizeQueryTerms } from "./query-schema.mjs";
-import { TRUST_RANK, TRUST_STATES, VALIDITY_STATUSES, RELATIONSHIP_TYPES, MEMORY_RECORD_SCHEMA } from "./contract.mjs";
+import { TRUST_RANK, TRUST_STATES, VALIDITY_STATUSES, RELATIONSHIP_TYPES, MEMORY_RECORD_SCHEMA, RECORD_TYPES } from "./contract.mjs";
 import { recursiveCanonicalJson } from "./canonical.mjs";
 import { sha256Text } from "../evidence/run-evidence-store.mjs";
 import { storeSnapshotDigest, snapshotStats } from "./snapshot.mjs";
 import { ftsMatch } from "./sqlite-schema.mjs";
 import { scanFreeTextFields } from "./validation.mjs";
 import { deriveMemoryRecordId, deriveLogicalKey, deriveContentHash } from "./identity.mjs";
+import { evaluateBoundary } from "../learning/patterns/applicability.mjs";
 
 export const RETRIEVAL_ERRORS = Object.freeze({
   RETRIEVAL_INVALID_QUERY: "RETRIEVAL_INVALID_QUERY",
@@ -57,6 +58,19 @@ const VALIDITY_ELIGIBLE = Object.freeze({
   INCLUDE_STALE: ["CURRENT", "STALE"],
   ALL: ["CURRENT", "STALE", "INVALIDATED", "TOMBSTONED"],
 });
+
+// R2 O7 — PATTERN applicability selectors present in the structured query
+// (QUERY_FIELDS member `pattern`). Presence of any selector field TRIGGERS
+// boundary consultation for PATTERN hits (PLAN-OBLIGATION-FREEZE §1:
+// WHEN REQUIRED / WHEN NOT REQUIRED / TRIGGER INPUT — total over the input
+// space; no conditionals left to implementation judgment).
+function patternSelectorsPresent(query) {
+  const p = query.pattern;
+  if (!p || typeof p !== "object") return false;
+  return Array.isArray(p.appliesWhen) && p.appliesWhen.length > 0
+    || Array.isArray(p.doesNotApplyWhen) && p.doesNotApplyWhen.length > 0
+    || (p.mechanismSignature !== null && p.mechanismSignature !== undefined && typeof p.mechanismSignature === "object");
+}
 
 /** Searchable text for lexical matching（statement + content + path + symbol）. */
 export function recordSearchableText(rec) {
@@ -79,7 +93,7 @@ export function validateMemoryRecordLight(rec) {
   if (!rec || typeof rec !== "object" || Array.isArray(rec)) return { ok: false, errors: ["record_not_object"] };
   if (rec.schema !== MEMORY_RECORD_SCHEMA) errors.push(`schema_invalid:${String(rec.schema)}`);
   if (typeof rec.recordId !== "string") errors.push("recordId_missing");
-  if (typeof rec.recordType !== "string" || !["CODE", "EXECUTION", "DECISION"].includes(rec.recordType)) errors.push("recordType_invalid");
+  if (typeof rec.recordType !== "string" || !RECORD_TYPES.includes(rec.recordType)) errors.push("recordType_invalid");
   if (typeof rec.trust !== "string" || !TRUST_STATES.includes(rec.trust)) errors.push("trust_invalid");
   if (typeof rec.validity?.status !== "string" || !VALIDITY_STATUSES.includes(rec.validity.status)) errors.push("validity_invalid");
   if (typeof rec.scope !== "object" || rec.scope === null || Array.isArray(rec.scope)) errors.push("scope_missing");
@@ -303,7 +317,11 @@ export function detectRetrievalConflicts({ eligibleRecords, conflictedRecords, d
  * @returns {object} MEMORY_RETRIEVAL_RESULT_SCHEMA
  */
 export function retrieveMemory({ db, query }) {
-  const excluded = { repository: 0, worktree: 0, scope: 0, trust: 0, validity: 0, security: 0, conflict: 0 };
+  const excluded = { repository: 0, worktree: 0, scope: 0, trust: 0, validity: 0, security: 0, conflict: 0, boundary: 0 };
+  // R2 O7 trigger input (frozen §1): structured PATTERN applicability
+  // selectors — presence (not content) decides WHETHER consultation runs.
+  const patternSelectors = patternSelectorsPresent(query);
+  const pattern = patternSelectors ? query.pattern : null;
 
   // ── SQL candidate prefilter（card §30: no full DB serialization per
   // query）—— deterministic hard filters are pushed into parameterized SQL;
@@ -460,7 +478,36 @@ export function retrieveMemory({ db, query }) {
       else if (r === "trust") excluded.trust += 1;
       else if (r === "validity") excluded.validity += 1;
       else if (r === "security") excluded.security += 1;
+      else if (r === "boundary") excluded.boundary += 1;
       continue;
+    }
+    // R2 O7 — boundary consultation (frozen §1 semantics; AFTER all trust/
+    // validity/scope/security fences, BEFORE FTS candidate narrowing):
+    //   WHEN REQUIRED: PATTERN hit + query carries PATTERN applicability
+    //     selector fields → the record's STORED boundary is evaluated against
+    //     the query selectors (mechanism/applicability primary matching per
+    //     [CT §4]; the boundary is on the record, self-describing).
+    //   WHEN NOT REQUIRED: non-PATTERN hits keep today's semantics
+    //     byte-identical; PATTERN hits on selector-less queries flow through
+    //     identity/scope/trust-floor/lexical paths only.
+    //   FAILURE RESULT: a boundary that cannot re-derive from stored fields
+    //     fails closed (SCHEMA_INVALID class, boundary_vacuous — thrown by
+    //     the evaluator and NEVER swallowed); a required-but-false match
+    //     makes the record NON-ELIGIBLE — a deterministic filter with the
+    //     reason recorded (NOT an error).
+    //   DURABLE EFFECT: NONE (read-only consultation; output is ALWAYS DATA).
+    //   PROHIBITION: consultation NEVER infers applicability from lexical
+    //     similarity alone — only the structured selector fields above.
+    if (rec.recordType === "PATTERN" && patternSelectors) {
+      const verdict = evaluateBoundary(rec.content?.data?.applicability ?? null, {
+        appliesWhen: pattern.appliesWhen ?? undefined,
+        doesNotApplyWhen: pattern.doesNotApplyWhen ?? undefined,
+        mechanismSignature: pattern.mechanismSignature ?? undefined,
+      });
+      if (!verdict.eligible) {
+        excluded.boundary += 1;
+        continue;
+      }
     }
     // FTS: when lexical terms are present, a record must be a candidate
     // UNLESS it is explicitly selected by identity/logicalKey.

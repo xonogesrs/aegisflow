@@ -43,7 +43,7 @@ export const DDL_V1 = Object.freeze([
     record_id TEXT PRIMARY KEY,
     logical_key TEXT NOT NULL,
     schema_version TEXT NOT NULL,
-    record_type TEXT NOT NULL CHECK (record_type IN ('CODE','EXECUTION','DECISION')),
+    record_type TEXT NOT NULL CHECK (record_type IN ('CODE','EXECUTION','DECISION','PATTERN')),
     trust TEXT NOT NULL CHECK (trust IN ('RAW','UNVERIFIED','VERIFIED','REVIEWED','CONFIRMED')),
     trust_rank INTEGER NOT NULL,
     validity_status TEXT NOT NULL CHECK (validity_status IN ('CURRENT','STALE','INVALIDATED','TOMBSTONED','CONFLICTED')),

@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 export const WRITEBACK_CANDIDATE_SCHEMA = "autoloop.memory-writeback-candidate/v1";
 export const WRITEBACK_CANDIDATE_SCHEMA_VERSION = 1;
 
-export const WRITEBACK_RECORD_TYPES = Object.freeze(["EXECUTION", "CODE", "DECISION"]);
+export const WRITEBACK_RECORD_TYPES = Object.freeze(["EXECUTION", "CODE", "DECISION", "PATTERN"]);
 export const WRITEBACK_TRUST_INTENTS = Object.freeze(["UNVERIFIED", "VERIFIED", "REVIEWED"]);
 // CONFIRMED is NOT a legal write-back intent（Controller-only; card stage 4）.
 export const WRITEBACK_LIFECYCLE_INTENTS = Object.freeze([

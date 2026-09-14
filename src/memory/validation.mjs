@@ -35,6 +35,9 @@ import {
   NOT_APPLICABLE,
   NOT_APPLICABLE_LEGAL,
   ENVELOPE_FIELDS,
+  PATTERN_APPLICABILITY_DECISIONS,
+  PATTERN_BOUNDARY_OPERATORS,
+  PATTERN_MECHANISM_SIGNATURE_FIELDS,
 } from "./contract.mjs";
 import { specFieldsFor } from "./schema.mjs";
 import { deriveMemoryRecordId, deriveLogicalKey, deriveContentHash } from "./identity.mjs";
@@ -59,6 +62,50 @@ const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 export function isRfc3339Utc(s) {
   if (typeof s !== "string" || !RFC3339.test(s)) return false;
   return !Number.isNaN(new Date(s).getTime());
+}
+
+// R2 PATTERN per-type field spec (lives HERE, inside the PATTERN branch's
+// file, because src/memory/schema.mjs is not in the R2 mutation surface;
+// required-field semantics per PHASE-1-SCHEMA row 2: mechanism digest,
+// applicability boundary fields, constituent-incident binding, qualification
+// reference — all enforced below in the PATTERN branch).
+const PATTERN_TYPE_SPEC = Object.freeze({
+  identity: {
+    required: ["patternId", "repositoryIdentity"],
+    optional: ["worktreeIdentity", "symbol"],
+    description: "PATTERN identity anchors: patternId (stable pattern identity) + repositoryIdentity (patterns are repository-bound; [CT §1 R2]); worktree/symbol optional.",
+  },
+  subject: {
+    required: ["statement", "contentHash", "language"],
+    optional: [],
+    description: "subject.statement = the pattern statement; contentHash + language per envelope rule (language NOT_APPLICABLE-legal for PATTERN).",
+  },
+  content: { required: ["kind"], optional: ["text", "data"], description: "kind ∈ TEXT | STRUCTURED; STRUCTURED → content.data = the canonical pattern document (mechanism, applicability boundary, lineage, generation)." },
+});
+
+// PATTERN (R2) applicability boundary condition shape — the ONLY legal
+// machine-testable condition form (O6: boundary present + machine-testable;
+// never lexical-similarity-only). One condition:
+//   { field: <dotted data path | query field>, op: <PATTERN_BOUNDARY_OPERATORS>,
+//     value: <string | string[]> }
+export function validatePatternBoundaryCondition(cond) {
+  const errors = [];
+  if (!isPlainObject(cond)) return ["boundary_condition_not_object"];
+  for (const k of Object.keys(cond)) {
+    if (!["field", "op", "value"].includes(k)) errors.push(`boundary_unknown_field:${k}`);
+  }
+  if (typeof cond.field !== "string" || cond.field.length === 0) errors.push("boundary_field_required");
+  if (!PATTERN_BOUNDARY_OPERATORS.includes(cond.op)) errors.push(`boundary_op_invalid:${String(cond.op)}`);
+  if (typeof cond.value === "string") {
+    if (cond.value.length === 0) errors.push("boundary_value_empty");
+  } else if (Array.isArray(cond.value)) {
+    if (cond.value.length === 0 || !cond.value.every((v) => typeof v === "string" && v.length > 0)) {
+      errors.push("boundary_value_array_invalid");
+    }
+  } else {
+    errors.push("boundary_value_invalid");
+  }
+  return errors;
 }
 
 function ok(extra = {}) {
@@ -112,7 +159,10 @@ export function validateMemoryRecordV1(record, { authorizedDirs = [] } = {}) {
     return fail(errors);
   }
   const type = record.recordType;
-  const spec = specFieldsFor(type);
+  // per-type field spec — the sealed CBM-2 RECORD_TYPE_SCHEMAS for
+  // CODE/EXECUTION/DECISION; the R2 PATTERN spec above (same shape, local to
+  // this module — schema.mjs is not in the R2 surface)
+  const spec = type === "PATTERN" ? PATTERN_TYPE_SPEC : specFieldsFor(type);
   if (!spec) return fail([`${MEMORY_ERRORS.SCHEMA_INVALID}:no_schema_for_type:${type}`]);
 
   // required sub-objects
@@ -176,6 +226,85 @@ export function validateMemoryRecordV1(record, { authorizedDirs = [] } = {}) {
     if (!DECISION_TYPES.includes(record.identity?.decisionType)) errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:decisionType_invalid:${String(record.identity?.decisionType)}`);
     if (!DECISION_STATUSES.includes(record.subject?.status)) errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:decision_status_invalid:${String(record.subject?.status)}`);
     if (!AUTHORITIES.includes(record.subject?.authority)) errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:decision_authority_invalid:${String(record.subject?.authority)}`);
+  }
+
+  // ── PATTERN (R2) branch: two-layer separation (O3) — a PATTERN record is
+  // a qualified mechanism, never a raw incident; required digest fields and
+  // a machine-testable applicability boundary are enforced here (fail-closed,
+  // SCHEMA_INVALID class), BEFORE any identity recomputation. ─────────────
+  if (type === "PATTERN") {
+    const data = record.content?.data;
+    if (!isPlainObject(data)) {
+      errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:pattern_content_data_required`);
+    } else {
+      // O3 layer separation: a PATTERN carries mechanism/boundary/lineage
+      // digests — incident-layer raw fields are forbidden.
+      for (const rawField of ["stdout", "stderr", "rawIncidentPayload", "filesChanged"]) {
+        if (data[rawField] !== undefined) errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:pattern_forbidden_incident_layer_field:${rawField}`);
+      }
+      // required digest fields (mechanism / applicability / lineage)
+      if (!HEX64.test(String(data.mechanismDigest ?? ""))) errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:pattern_mechanism_digest_required`);
+      if (!HEX64.test(String(data.applicabilityDigest ?? ""))) errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:pattern_applicability_digest_required`);
+      if (!HEX64.test(String(data.constituentIncidentSetDigest ?? ""))) errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:pattern_constituent_incident_set_digest_required`);
+      // constituent-incident binding: verbatim recordIds, ≥1 (O4 lineage)
+      if (!Array.isArray(data.constituentIncidentRecordIds) || data.constituentIncidentRecordIds.length === 0
+        || !data.constituentIncidentRecordIds.every((id) => HEX64.test(String(id)))) {
+        errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:pattern_constituent_incident_record_ids_required`);
+      }
+      // qualification reference: independent qualification record id (O5)
+      if (!HEX64.test(String(data.qualificationRecordId ?? ""))) errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:pattern_qualification_record_id_required`);
+      // generation binding (D6): durable, immutable, integer ≥ 1
+      if (!Number.isInteger(data.publicationGeneration) || data.publicationGeneration < 1) {
+        errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:pattern_publication_generation_required`);
+      }
+      // O6 applicability boundary: present, structured, non-vacuous,
+      // machine-testable. A vacuous boundary ("applies everywhere") is
+      // rejected with the frozen fine code boundary_vacuous.
+      const b = data.applicability;
+      if (!isPlainObject(b)) {
+        errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:boundary_vacuous:applicability_boundary_missing`);
+      } else {
+        for (const k of Object.keys(b)) {
+          if (!["appliesWhen", "doesNotApplyWhen", "mechanismSignature"].includes(k)) {
+            errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:pattern_boundary_unknown_field:${k}`);
+          }
+        }
+        const aw = Array.isArray(b.appliesWhen) ? b.appliesWhen : null;
+        if (!aw || aw.length === 0) {
+          errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:boundary_vacuous:applies_when_empty_or_missing`);
+        } else {
+          for (const [i, cond] of aw.entries()) {
+            for (const e of validatePatternBoundaryCondition(cond)) {
+              errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:boundary_vacuous:applies_when[${i}].${e}`);
+            }
+          }
+        }
+        if (b.doesNotApplyWhen !== undefined && b.doesNotApplyWhen !== null) {
+          if (!Array.isArray(b.doesNotApplyWhen)) {
+            errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:pattern_does_not_apply_when_must_be_array`);
+          } else {
+            for (const [i, cond] of b.doesNotApplyWhen.entries()) {
+              for (const e of validatePatternBoundaryCondition(cond)) {
+                errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:boundary_vacuous:does_not_apply_when[${i}].${e}`);
+              }
+            }
+          }
+        }
+        const ms = b.mechanismSignature;
+        if (!isPlainObject(ms)) {
+          errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:boundary_vacuous:mechanism_signature_missing`);
+        } else {
+          const keys = Object.keys(ms).filter((k) => ms[k] !== undefined && ms[k] !== null);
+          if (keys.length === 0) {
+            errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:boundary_vacuous:mechanism_signature_empty`);
+          } else {
+            for (const k of keys) {
+              if (!PATTERN_MECHANISM_SIGNATURE_FIELDS.includes(k)) errors.push(`${MEMORY_ERRORS.SCHEMA_INVALID}:pattern_mechanism_signature_field_invalid:${k}`);
+            }
+          }
+        }
+      }
+    }
   }
 
   // timestamps RFC3339

@@ -144,3 +144,150 @@ test("extra: metadata / lifecycle changes do NOT change recordId", () => {
   const d = baseCodeRecord({ scope: { repository: hex64("a"), tree: hex40("X") } });
   assert.notEqual(a.recordId, d.recordId, "identity-relevant scope change changes recordId");
 });
+
+// ── R2 PATTERN record-type extension (AUTOLOOP-V1-STAGE-F-R2-IMPLEMENTATION-1;
+//    additive cases only — existing expectations above byte-untouched) ─────
+
+import { MEMORY_RECORD_SCHEMA, deriveContentHash, deriveMemoryRecordId, RECORD_TYPES, PATTERN_BOUNDARY_OPERATORS, PATTERN_MECHANISM_SIGNATURE_FIELDS, PATTERN_APPLICABILITY_DECISIONS, NOT_APPLICABLE as NA2 } from "../../src/memory/index.mjs";
+
+const PATTERN_CONTENT = () => ({
+  kind: "STRUCTURED",
+  data: {
+    mechanismDigest: hex64("1"),
+    applicabilityDigest: hex64("2"),
+    constituentIncidentSetDigest: hex64("3"),
+    constituentIncidentRecordIds: [hex64("4")],
+    qualificationRecordId: hex64("5"),
+    publicationGeneration: 1,
+    counterexamples: NA2,
+    applicability: {
+      appliesWhen: [{ field: "scope.path", op: "PATH_PREFIX", value: "src/memory" }],
+      doesNotApplyWhen: [{ field: "identity.patternId", op: "SYMBOL_EQUALS", value: "pat-excluded" }],
+      mechanismSignature: { errorClass: "livelock", tool: "retry-loop" },
+    },
+  },
+});
+
+function basePatternRecord(overrides = {}) {
+  const rec = {
+    schema: MEMORY_RECORD_SCHEMA,
+    recordType: "PATTERN",
+    identity: { patternId: "pat-1", repositoryIdentity: hex64("6") },
+    subject: { statement: "PATTERN: retry loop without backoff livelocks", contentHash: null, language: NA2 },
+    content: PATTERN_CONTENT(),
+    source: { source: "EXECUTION", identity: hex64("7") },
+    scope: { repository: hex64("6") },
+    trust: "UNVERIFIED",
+    validity: { status: "CURRENT", validityTree: NA2 },
+    lifecycle: { events: [] },
+    timestamps: { createdAt: "2026-09-08T00:00:00.000Z", updatedAt: "2026-09-08T00:00:00.000Z" },
+    evidence: { manifestDigest: hex64("8"), items: [] },
+    security: { scanResult: "clean", ingestionSource: "test-fixture" },
+    metadata: {},
+  };
+  const merged = { ...rec, ...overrides };
+  merged.subject.contentHash = deriveContentHash(merged.content);
+  merged.recordId = deriveMemoryRecordId(merged);
+  return merged;
+}
+
+test("R2-1. valid PATTERN record accepted (full required-field set)", () => {
+  const v = validateMemoryRecordV1(basePatternRecord(), opts);
+  assert.equal(v.valid, true, JSON.stringify(v.errors));
+  assert.equal(v.derivedIdentity.recordId, basePatternRecord().recordId);
+});
+
+test("R2-2. RECORD_TYPES contains PATTERN after CODE/EXECUTION/DECISION (additive order)", () => {
+  assert.deepEqual([...RECORD_TYPES], ["CODE", "EXECUTION", "DECISION", "PATTERN"]);
+  assert.ok(PATTERN_BOUNDARY_OPERATORS.includes("PATH_PREFIX"));
+  assert.ok(PATTERN_MECHANISM_SIGNATURE_FIELDS.includes("errorClass"));
+  assert.ok(PATTERN_APPLICABILITY_DECISIONS.includes("APPLIES"));
+});
+
+test("R2-3. DECISION/EXECUTION stuffing rejected — incident re-typed as PATTERN keeps SCHEMA_INVALID class", () => {
+  // an EXECUTION-shaped record claiming recordType PATTERN lacks patternId
+  const stuffed = baseExecutionRecord({ recordType: "PATTERN" });
+  const v = validateMemoryRecordV1(stuffed, opts);
+  assert.equal(v.valid, false);
+  assert.ok(v.errors.some((e) => e.includes("recordType_invalid") || e.includes("missing_required") || e.includes("pattern_")));
+});
+
+test("R2-4. missing required PATTERN fields rejected (mechanism / qualification / generation / lineage)", () => {
+  for (const drop of ["mechanismDigest", "qualificationRecordId", "publicationGeneration", "constituentIncidentRecordIds"]) {
+    const rec = basePatternRecord();
+    delete rec.content.data[drop];
+    rec.subject.contentHash = deriveContentHash(rec.content);
+    rec.recordId = deriveMemoryRecordId(rec);
+    const v = validateMemoryRecordV1(rec, opts);
+    assert.equal(v.valid, false, `${drop} must be required`);
+    assert.ok(v.errors.some((e) => e.includes("SCHEMA_INVALID")), drop);
+  }
+});
+
+test("R2-5. vacuous boundary rejected with boundary_vacuous fine code", () => {
+  const emptyApplies = basePatternRecord();
+  emptyApplies.content.data.applicability.appliesWhen = [];
+  emptyApplies.subject.contentHash = deriveContentHash(emptyApplies.content);
+  emptyApplies.recordId = deriveMemoryRecordId(emptyApplies);
+  const v1 = validateMemoryRecordV1(emptyApplies, opts);
+  assert.equal(v1.valid, false);
+  assert.ok(v1.errors.some((e) => e.includes("boundary_vacuous")));
+  const missingBoundary = basePatternRecord();
+  delete missingBoundary.content.data.applicability;
+  missingBoundary.subject.contentHash = deriveContentHash(missingBoundary.content);
+  missingBoundary.recordId = deriveMemoryRecordId(missingBoundary);
+  const v2 = validateMemoryRecordV1(missingBoundary, opts);
+  assert.equal(v2.valid, false);
+  assert.ok(v2.errors.some((e) => e.includes("boundary_vacuous")));
+});
+
+test("R2-6. boundary must be machine-testable (structured ops only — never lexical-similarity)", () => {
+  const rec = basePatternRecord();
+  rec.content.data.applicability.appliesWhen = [{ field: "x", op: "LEXICAL_SIMILAR", value: "y" }];
+  rec.subject.contentHash = deriveContentHash(rec.content);
+  rec.recordId = deriveMemoryRecordId(rec);
+  const v = validateMemoryRecordV1(rec, opts);
+  assert.equal(v.valid, false);
+  assert.ok(v.errors.some((e) => e.includes("boundary_op_invalid")));
+});
+
+test("R2-7. incident-layer raw fields forbidden on PATTERN (two-layer separation)", () => {
+  for (const rawField of ["stdout", "stderr", "rawIncidentPayload", "filesChanged"]) {
+    const rec = basePatternRecord();
+    rec.content.data[rawField] = "raw incident data";
+    rec.subject.contentHash = deriveContentHash(rec.content);
+    rec.recordId = deriveMemoryRecordId(rec);
+    const v = validateMemoryRecordV1(rec, opts);
+    assert.equal(v.valid, false, `${rawField} must be forbidden`);
+    assert.ok(v.errors.some((e) => e.includes("pattern_forbidden_incident_layer_field")), rawField);
+  }
+});
+
+test("R2-8. unknown envelope / unknown boundary fields still rejected (fail-closed unchanged)", () => {
+  const rec = basePatternRecord({ _control: "no" });
+  assert.equal(validateMemoryRecordV1(rec, opts).valid, false);
+  const bad = basePatternRecord();
+  bad.content.data.applicability = { ...bad.content.data.applicability, unknownKey: 1 };
+  bad.subject.contentHash = deriveContentHash(bad.content);
+  bad.recordId = deriveMemoryRecordId(bad);
+  const vb = validateMemoryRecordV1(bad, opts);
+  assert.equal(vb.valid, false);
+  assert.ok(vb.errors.some((e) => e.includes("pattern_boundary_unknown_field")));
+});
+
+test("R2-9. PATTERN identity determinism (same content ⇒ same recordId; tampered identity ⇒ mismatch)", () => {
+  const a = basePatternRecord();
+  const b = basePatternRecord();
+  assert.equal(a.recordId, b.recordId);
+  const t = basePatternRecord();
+  t.recordId = "0".repeat(64);
+  const v = validateMemoryRecordV1(t, opts);
+  assert.equal(v.valid, false);
+  assert.ok(v.errors.some((e) => e.includes("IDENTITY_MISMATCH:recordId")));
+});
+
+test("R2-10. legacy types unchanged (CODE/EXECUTION/DECISION still validate)", () => {
+  assert.equal(validateMemoryRecordV1(baseCodeRecord(), opts).valid, true);
+  assert.equal(validateMemoryRecordV1(baseExecutionRecord(), opts).valid, true);
+  assert.equal(validateMemoryRecordV1(baseDecisionRecord(), opts).valid, true);
+});

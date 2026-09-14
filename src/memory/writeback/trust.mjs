@@ -113,6 +113,21 @@ export const ORIGIN_TRUST_CEILING = Object.freeze({
   executor: "UNVERIFIED",
 });
 
+// R2 PATTERN trust-ladder mapping row ([CT §5] structural mapping, ONE
+// additive row — ladder codes and hold codes unchanged and still enforced):
+//   CANDIDATE ≈ RAW/UNVERIFIED · ADVISORY ≈ VERIFIED ·
+//   REQUIRED_QUESTION ≈ REVIEWED · MANDATORY_GATE ≈ CONFIRMED (Controller-only)
+// R2 stores PATTERNs at the trust their evidence supports; there is NO
+// automatic upward mapping and NO §5 lifecycle edge inside R2
+// (R2_MAY_PROMOTE = NO; ceiling for any R2 write path is VERIFIED).
+export const PATTERN_TRUST_LADDER_MAPPING = Object.freeze({
+  CANDIDATE: ["RAW", "UNVERIFIED"],
+  ADVISORY: ["VERIFIED"],
+  REQUIRED_QUESTION: ["REVIEWED"],
+  MANDATORY_GATE: ["CONFIRMED"],   // Controller-only; never automatic (unchanged rule)
+  R2_WRITE_CEILING: "VERIFIED",    // R2 write paths never exceed VERIFIED
+});
+
 /**
  * Check a candidate's proposed trust against its origin's authority ceiling.
  * Returns { ok, holdCode?, reason? }.
