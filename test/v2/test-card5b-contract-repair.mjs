@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CASE_CONTRACTS, CONTRACTS_BY_ID, applyMutation, PROVENANCE_CLASSIFICATIONS, UNSUPPORTED_PROVENANCE_TERMS } from "../../src/v2/case-contracts.mjs";
 import { evaluateCase, FAILURE_CODES } from "../../src/v2/case-evaluator.mjs";
-import { evaluateScorecardV2 } from "../../src/v2/scorecard-v2.mjs";
+import { evaluateScorecardV2 } from "../../src/orchestration/validators/scorecard-v2.mjs";
 
 const PARENT = { scope: { allowed_paths: ["src/", "test/", "migrations/", "src/auth/", "src/email/", "src/utils/helper.js", "test/utils/"], forbidden_paths: [] } };
 

@@ -7,7 +7,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { buildSystemPrompt, buildUserPrompt, PROMPT_BUILDER_VERSION } from "../src/v2/prompt-builder.mjs";
+import { buildSystemPrompt, buildUserPrompt, PROMPT_BUILDER_VERSION } from "../src/orchestration/validators/prompt-builder.mjs";
 import { TRANSPORT_FREEZE } from "../src/v2/pi-transport-adapter.mjs";
 import { probeSource, PROBE_ORDER } from "./shared/probe-sources.mjs";
 import { scanOracleLeak } from "./card5-static-scans.mjs";
@@ -47,13 +47,13 @@ export function buildCard5CFreezeManifest() {
       "test/pi-v4pro-viability-probe.mjs", "test/test-decompose-ir.mjs", "test/test-direct-structured-transport.mjs",
       "test/test-pi-decomposition-real-eval.mjs"],
     V2_CARD_4_IMPLEMENTATION: ["package.json", "src/decompose-task.mjs", "package-lock.json",
-      "src/v2/ir-schema.mjs", "src/v2/pi-transport-adapter.mjs", "src/v2/semantic-consistency.mjs", "src/v2/structural-validator.mjs",
+      "src/v2/ir-schema.mjs", "src/v2/pi-transport-adapter.mjs", "src/orchestration/validators/semantic-consistency.mjs", "src/orchestration/validators/structural-validator.mjs",
       "test/v2/helpers/scripted-fetch.mjs", "test/v2/test-ir-schema.mjs", "test/v2/test-pi-transport-adapter.mjs", "test/v2/test-structural-validator.mjs"],
-    V2_CARD_5_IMPLEMENTATION: ["src/v2/prompt-builder.mjs", "src/v2/runner.mjs", "src/v2/pipeline.mjs",
+    V2_CARD_5_IMPLEMENTATION: ["src/orchestration/validators/prompt-builder.mjs", "src/v2/runner.mjs", "src/v2/pipeline.mjs",
       "test/v2/test-runner.mjs", "test/v2/test-prompt-builder.mjs", "test/v2/test-pipeline.mjs",
       "scripts/card5-freeze-manifest.mjs", "scripts/card5-live-probe.mjs", "scripts/card5-preflight.mjs",
       "scripts/card5-static-scans.mjs", "scripts/shared/probe-sources.mjs"],
-    V2_CARD_5B_REPAIR: ["src/v2/case-contracts.mjs", "src/v2/case-evaluator.mjs", "src/v2/scorecard-v2.mjs",
+    V2_CARD_5B_REPAIR: ["src/v2/case-contracts.mjs", "src/v2/case-evaluator.mjs", "src/orchestration/validators/scorecard-v2.mjs",
       "test/v2/test-case-evaluator.mjs", "test/v2/test-card5b-contract-repair.mjs",
       "scripts/card5b-provenance-scan.mjs", "scripts/card5b-regression.mjs",
       "/Users/zhengfengqing/aura-plans/autoloop-analysis/v2-card-3-eval-contract-v2-errata-rc1.md",
@@ -93,15 +93,15 @@ export function buildCard5CFreezeManifest() {
     },
     hashes: {
       system_prompt: sha(systemPrompt),
-      prompt_builder: fsha(`${ROOT}/src/v2/prompt-builder.mjs`),
+      prompt_builder: fsha(`${ROOT}/src/orchestration/validators/prompt-builder.mjs`),
       ir_schema: fsha(`${ROOT}/src/v2/ir-schema.mjs`),
       semantic_contract: fsha(`${CONTRACTS_DIR}/v2-card-3-semantic-contract.md`),
       scorecard: fsha(`${CONTRACTS_DIR}/v2-card-3-scorecard-v2.md`),
       eval_contract: fsha(`${CONTRACTS_DIR}/v2-card-3-eval-contract-v2.md`),
       case_contracts: fsha(`${ROOT}/src/v2/case-contracts.mjs`),
       case_evaluator: fsha(`${ROOT}/src/v2/case-evaluator.mjs`),
-      structural_validator: fsha(`${ROOT}/src/v2/structural-validator.mjs`),
-      semantic_validator: fsha(`${ROOT}/src/v2/semantic-consistency.mjs`),
+      structural_validator: fsha(`${ROOT}/src/orchestration/validators/structural-validator.mjs`),
+      semantic_validator: fsha(`${ROOT}/src/orchestration/validators/semantic-consistency.mjs`),
       pipeline: fsha(`${ROOT}/src/v2/pipeline.mjs`),
       runner: fsha(`${ROOT}/src/v2/runner.mjs`),
       transport_adapter: fsha(`${ROOT}/src/v2/pi-transport-adapter.mjs`),

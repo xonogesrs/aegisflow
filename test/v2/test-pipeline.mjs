@@ -21,7 +21,7 @@ function adapterReturningJson(json, hooks) {
     okResponse([sse(deltaReasoning("thinking...")), sse(deltaContent(JSON.stringify(json))),
       sse(usageChunk()), sse(finishChunk("stop")), DONE]),
     { onRequest: (u) => hooks?.onRequest?.(u) });
-  return createPiTransportAdapter({ fetchImpl });
+  return createPiTransportAdapter({ fetchImpl, allowMissingKey: true });
 }
 
 const PASSING_IR = CONTRACTS_BY_ID.E2.accepted_examples[1]; // 5-phase E2（deterministic 測試輸入）
@@ -153,7 +153,7 @@ test("provider error 不觸發第二 request（request count 保持 1）", async
     calls += 1;
     return errorResponse(500, "boom");
   });
-  const adapter = createPiTransportAdapter({ fetchImpl });
+  const adapter = createPiTransportAdapter({ fetchImpl, allowMissingKey: true });
   const r = await runV2Pipeline({
     source: probeSource(E2), parent: PARENT_E2,
     manifest: CONTRACTS_BY_ID.E2.requirements, contract: CONTRACTS_BY_ID.E2, adapter,

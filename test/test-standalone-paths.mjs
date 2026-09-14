@@ -25,7 +25,11 @@ import { writeGenerationManifest, detectMaterialChanges } from "../src/generatio
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "..");
 const OPERATOR_TICK_SH = join(REPO_ROOT, "src", "operator-tick.sh");
-const OPERATOR_TICK_MJS = join(REPO_ROOT, "src", "operator-tick.mjs");
+// P7 subtraction re-point (M38 → OPTIONAL_ORCHESTRATION): operator-tick.mjs
+// moved to src/orchestration/operator/operator-tick.mjs. The fail-closed
+// legacy coverage is unchanged — the spawned file still exits 4 on the
+// legacy path (missing scheduler) and 0 when the feature gate is disabled.
+const OPERATOR_TICK_MJS = join(REPO_ROOT, "src", "orchestration", "operator", "operator-tick.mjs");
 
 function noMissingModuleStackTrace(stderr) {
   return !/Cannot find module/.test(stderr) && !/node:internal\/modules/.test(stderr) && !/at Module\._resolveFilename/.test(stderr);

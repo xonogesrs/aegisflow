@@ -12,7 +12,7 @@ import { writeFileSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPiTransportAdapter, TRANSPORT_FREEZE } from "../src/v2/pi-transport-adapter.mjs";
-import { buildPromptBundle, buildUserPrompt, buildSystemPrompt } from "../src/v2/prompt-builder.mjs";
+import { buildPromptBundle, buildUserPrompt, buildSystemPrompt } from "../src/orchestration/validators/prompt-builder.mjs";
 import { runV2Pipeline } from "../src/v2/pipeline.mjs";
 import { CONTRACTS_BY_ID } from "../src/v2/case-contracts.mjs";
 import { probeSource, probeParent, PROBE_ORDER } from "./shared/probe-sources.mjs";

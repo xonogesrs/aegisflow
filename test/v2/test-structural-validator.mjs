@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validateStructural } from "../../src/v2/structural-validator.mjs";
+import { validateStructural } from "../../src/orchestration/validators/structural-validator.mjs";
 
 function baseEffects(artifact = "forbidden", runtime = "forbidden", external = "forbidden",
   evidence = "none", extra = {}) {

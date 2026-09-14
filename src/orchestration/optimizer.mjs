@@ -1,4 +1,15 @@
-// src/control-plane/optimizer.mjs
+// src/orchestration/optimizer.mjs
+//
+// P7 SUBTRACTION (M25-optimizer → OPTIONAL_ORCHESTRATION) — relocated from
+// src/control-plane/optimizer.mjs by
+// AUTOLOOP-V1-STAGE-G-P7-GOVERNANCE-CENTRIC-SUBTRACTION-IMPLEMENTATION-1.
+// The control-plane COORDINATOR (KEEP_CORE) keeps the budget authority
+// (global split, envelope derivation, allocation binding) and consumes this
+// advisory through an optional seam; when this module is absent the
+// coordinator's deterministic advisory fallback applies. Nothing here is
+// authority: the decision record is a RECOMMENDATION, and the execution
+// sink re-validates admission identity + allocation binding + budget
+// enforcement regardless of what this advisory said.
 //
 // CP-2R1 — bounded deterministic cost optimizer (CP-1 cost-optimizer-contract),
 // repaired for authority/budget fail-closed enforcement.
@@ -31,7 +42,7 @@ import {
   ESCALATION_IN_ENVELOPE,
   OPTIMIZER_HOLDS,
   EXECUTOR_MODEL_ALLOWLIST,
-} from "./contract.mjs";
+} from "../control-plane/contract.mjs";
 import { assertProductionAdmission } from "../admission/admission-gate.mjs";
 import { assertEnvelopeUntampered } from "../budget/envelope.mjs";
 import { deriveExecutorRuntime } from "../admission/policy-projection.mjs";

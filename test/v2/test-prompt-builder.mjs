@@ -6,9 +6,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CASE_CONTRACTS, CONTRACTS_BY_ID } from "../../src/v2/case-contracts.mjs";
-import { buildSystemPrompt, buildUserPrompt, buildPromptBundle, PROMPT_BUILDER_VERSION } from "../../src/v2/prompt-builder.mjs";
+import { buildSystemPrompt, buildUserPrompt, buildPromptBundle, PROMPT_BUILDER_VERSION } from "../../src/orchestration/validators/prompt-builder.mjs";
 
-const BUILDER_SRC = readFileSync(fileURLToPath(new URL("../../src/v2/prompt-builder.mjs", import.meta.url)), "utf8");
+const BUILDER_SRC = readFileSync(fileURLToPath(new URL("../../src/orchestration/validators/prompt-builder.mjs", import.meta.url)), "utf8");
 // 掃描用：去除註解後檢查實際程式碼與 prompt 內容（註解屬文件，不算 prompt 內容）
 const BUILDER_CODE = BUILDER_SRC.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
 

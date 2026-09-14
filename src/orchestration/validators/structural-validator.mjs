@@ -3,7 +3,7 @@
 // Structural validator v2 — 純結構與局部一致性檢查（Scorecard v2 H1/H2/H3/H5/H7/H8/H12）。
 // 不改寫輸入、不加 defaults、不 rename、不補 edge/coverage、不做字串語意推論。
 
-import { validateIRShape, REASON_CODES } from "./ir-schema.mjs";
+import { validateIRShape, REASON_CODES } from "../../v2/ir-schema.mjs";
 
 export const EXECUTION_POLICY_LOCK = Object.freeze({
   executor: "INHERIT_PARENT", reviewer: "EXTERNAL_GPT", multi_model_orchestration: false,

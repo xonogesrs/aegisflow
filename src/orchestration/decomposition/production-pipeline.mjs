@@ -1,4 +1,16 @@
-// src/v2/production-pipeline.mjs
+// src/orchestration/decomposition/production-pipeline.mjs
+//
+// P7 SUBTRACTION (M27/M28/M29 → OPTIONAL_ORCHESTRATION) — relocated from
+// src/v2/production-pipeline.mjs by
+// AUTOLOOP-V1-STAGE-G-P7-GOVERNANCE-CENTRIC-SUBTRACTION-IMPLEMENTATION-1.
+// The production decomposition pipeline is OPTIONAL INTELLIGENCE: the
+// governance core (runAdmittedGraph / lifecycle / budget / evidence) does
+// NOT depend on it. Core entrypoints (src/autoloop.mjs runAutoLoopInternal,
+// src/v2/durable-execution.mjs runDurableAutoLoopInternal) consume this
+// pipeline through an OPTIONAL seam: when the layer is absent the
+// decomposition path fails CLOSED (DECOMPOSITION_UNAVAILABLE → HOLD,
+// DECOMPOSITION_REQUIRED_FOR_CORE_GOVERNANCE = NO — governance is intact
+// without it; decomposition output never grants authority).
 //
 // C2 — Production decomposition pipeline.
 //
@@ -21,11 +33,11 @@
 //  - DECOMPOSED → PASS only when every hard gate passes; the caller then
 //    schedules the DAG.
 
-import { buildPromptBundle } from "./prompt-builder.mjs";
-import { validateIRShape } from "./ir-schema.mjs";
-import { validateStructural } from "./structural-validator.mjs";
-import { validateSemantic } from "./semantic-consistency.mjs";
-import { evaluateScorecardV2 } from "./scorecard-v2.mjs";
+import { buildPromptBundle } from "../validators/prompt-builder.mjs";
+import { validateIRShape } from "../../v2/ir-schema.mjs";
+import { validateStructural } from "../validators/structural-validator.mjs";
+import { validateSemantic } from "../validators/semantic-consistency.mjs";
+import { evaluateScorecardV2 } from "../validators/scorecard-v2.mjs";
 
 export const PRODUCTION_STAGES = Object.freeze([
   "transport", "schema", "decomposition_verdict", "structural", "semantic", "scorecard",

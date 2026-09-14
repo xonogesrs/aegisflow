@@ -23,13 +23,13 @@ import {
   renderPromptSchemaProjection,
   renderDispositionContract,
   renderFormatExample,
-} from "./schema-projection.mjs";
+} from "../../v2/schema-projection.mjs";
 
 // 版本標記：freeze manifest 依此字串識別 prompt builder 版本。
 // Card 5E 修改 → 升版（舊 freeze 之 v2.0.0-rc1-prompt-builder-1 為歷史記錄）。
 export const PROMPT_BUILDER_VERSION = "v2.0.0-rc1-prompt-builder-2";
 
-export { buildPromptSchemaProjection, verifyPromptSchemaParity, PROJECTION_VERSION } from "./schema-projection.mjs";
+export { buildPromptSchemaProjection, verifyPromptSchemaParity, PROJECTION_VERSION } from "../../v2/schema-projection.mjs";
 
 // ── 固定 prose（Card 5 以來逐字保留；唯 IR SCHEMA 草圖與舊 example 由 projection/example 取代）──
 

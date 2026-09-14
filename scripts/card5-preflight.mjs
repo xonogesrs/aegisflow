@@ -34,7 +34,7 @@ function integrityAudit() {
   const staged = git(ROOT, ["diff", "--cached", "--name-only"]);
   if (staged) problems.push(`staged paths not empty: ${staged}`);
   // V1 production routing 不得 import V2
-  for (const f of ["src/lifecycle-runner.mjs", "src/operator-tick.mjs", "src/decompose-task.mjs"]) {
+  for (const f of ["src/lifecycle-runner.mjs", "src/orchestration/operator/operator-tick.mjs", "src/decompose-task.mjs"]) {
     const p = `${ROOT}/${f}`;
     if (!existsSync(p)) continue;
     const t = readFileSync(p, "utf8");

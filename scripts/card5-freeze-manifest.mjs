@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildSystemPrompt, buildUserPrompt, PROMPT_BUILDER_VERSION } from "../src/v2/prompt-builder.mjs";
+import { buildSystemPrompt, buildUserPrompt, PROMPT_BUILDER_VERSION } from "../src/orchestration/validators/prompt-builder.mjs";
 import { TRANSPORT_FREEZE } from "../src/v2/pi-transport-adapter.mjs";
 import { probeSource, PROBE_ORDER } from "./shared/probe-sources.mjs";
 
@@ -36,7 +36,7 @@ export function buildFreezeManifest() {
     prompt_builder_version: PROMPT_BUILDER_VERSION,
     hashes: {
       system_prompt: sha256(systemPrompt),
-      user_prompt_builder_file: fileHash(`${ROOT}/src/v2/prompt-builder.mjs`),
+      user_prompt_builder_file: fileHash(`${ROOT}/src/orchestration/validators/prompt-builder.mjs`),
       ...userPromptHashes,
       ir_schema: fileHash(`${ROOT}/src/v2/ir-schema.mjs`),
       semantic_contract: fileHash(`${CONTRACTS_DIR}/v2-card-3-semantic-contract.md`),

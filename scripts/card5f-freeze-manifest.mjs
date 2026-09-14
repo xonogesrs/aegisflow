@@ -10,7 +10,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { buildSystemPrompt, buildUserPrompt, PROMPT_BUILDER_VERSION } from "../src/v2/prompt-builder.mjs";
+import { buildSystemPrompt, buildUserPrompt, PROMPT_BUILDER_VERSION } from "../src/orchestration/validators/prompt-builder.mjs";
 import { PROJECTION_BEGIN, PROJECTION_END, verifyPromptSchemaParity } from "../src/v2/schema-projection.mjs";
 import { TRANSPORT_FREEZE } from "../src/v2/pi-transport-adapter.mjs";
 import { CONTRACTS_BY_ID } from "../src/v2/case-contracts.mjs";
@@ -49,20 +49,20 @@ const DIRTY_LEDGER = {
     "test/pi-v4pro-viability-probe.mjs", "test/test-decompose-ir.mjs", "test/test-direct-structured-transport.mjs",
     "test/test-pi-decomposition-real-eval.mjs"],
   V2_CARD_4_IMPLEMENTATION: ["src/decompose-task.mjs",
-    "src/v2/pi-transport-adapter.mjs", "src/v2/semantic-consistency.mjs", "src/v2/structural-validator.mjs",
+    "src/v2/pi-transport-adapter.mjs", "src/orchestration/validators/semantic-consistency.mjs", "src/orchestration/validators/structural-validator.mjs",
     "test/v2/helpers/scripted-fetch.mjs", "test/v2/test-ir-schema.mjs", "test/v2/test-pi-transport-adapter.mjs", "test/v2/test-structural-validator.mjs"],
   V2_CARD_5_IMPLEMENTATION: ["src/v2/runner.mjs", "src/v2/pipeline.mjs",
     "test/v2/test-runner.mjs", "test/v2/test-prompt-builder.mjs", "test/v2/test-pipeline.mjs",
     "scripts/card5-freeze-manifest.mjs", "scripts/card5-live-probe.mjs", "scripts/card5-preflight.mjs",
     "scripts/card5-static-scans.mjs", "scripts/shared/probe-sources.mjs"],
-  V2_CARD_5B_REPAIR: ["src/v2/case-contracts.mjs", "src/v2/case-evaluator.mjs", "src/v2/scorecard-v2.mjs",
+  V2_CARD_5B_REPAIR: ["src/v2/case-contracts.mjs", "src/v2/case-evaluator.mjs", "src/orchestration/validators/scorecard-v2.mjs",
     "test/v2/test-case-evaluator.mjs", "test/v2/test-card5b-contract-repair.mjs",
     "scripts/card5b-provenance-scan.mjs", "scripts/card5b-regression.mjs",
     "/Users/zhengfengqing/aura-plans/autoloop-analysis/v2-card-3-eval-contract-v2-errata-rc1.md",
     "/Users/zhengfengqing/aura-plans/autoloop-analysis/v2-card-3-decision-ledger-errata-rc1.md"],
   V2_CARD_5C_NEW: ["scripts/card5c-freeze-manifest.mjs", "scripts/card5c-live-probe.mjs"],
   V2_CARD_5E_IMPLEMENTATION: ["package.json", "package-lock.json",
-    "src/v2/ir-schema.mjs", "src/v2/prompt-builder.mjs", "src/v2/schema-projection.mjs",
+    "src/v2/ir-schema.mjs", "src/orchestration/validators/prompt-builder.mjs", "src/v2/schema-projection.mjs",
     "scripts/card5e-parity-gate.mjs", "test/v2/test-card5e-parity.mjs"],
   V2_CARD_5F_NEW: ["scripts/card5f-freeze-manifest.mjs", "scripts/card5f-live-probe.mjs"],
   UNKNOWN: [],
@@ -152,17 +152,17 @@ export function buildCard5FFreezeManifest(freezeId) {
     },
     hashes: {
       // prompt & schema
-      prompt_builder: fsha(`${ROOT}/src/v2/prompt-builder.mjs`),
+      prompt_builder: fsha(`${ROOT}/src/orchestration/validators/prompt-builder.mjs`),
       ir_schema: fsha(`${ROOT}/src/v2/ir-schema.mjs`),
       schema_projection: fsha(`${ROOT}/src/v2/schema-projection.mjs`),
       system_prompt: sha(systemPrompt),
       // validation
       schema_validator: fsha(`${ROOT}/src/v2/ir-schema.mjs`),
-      structural_validator: fsha(`${ROOT}/src/v2/structural-validator.mjs`),
-      semantic_validator: fsha(`${ROOT}/src/v2/semantic-consistency.mjs`),
+      structural_validator: fsha(`${ROOT}/src/orchestration/validators/structural-validator.mjs`),
+      semantic_validator: fsha(`${ROOT}/src/orchestration/validators/semantic-consistency.mjs`),
       case_evaluator: fsha(`${ROOT}/src/v2/case-evaluator.mjs`),
       scorecard_contract: fsha(`${CONTRACTS_DIR}/v2-card-3-scorecard-v2.md`),
-      scorecard_impl: fsha(`${ROOT}/src/v2/scorecard-v2.mjs`),
+      scorecard_impl: fsha(`${ROOT}/src/orchestration/validators/scorecard-v2.mjs`),
       oracle_leak_scanner: fsha(`${ROOT}/scripts/card5-static-scans.mjs`),
       retired_scanner: fsha(`${ROOT}/scripts/card5b-provenance-scan.mjs`),
       parity_gate: fsha(`${ROOT}/scripts/card5e-parity-gate.mjs`),

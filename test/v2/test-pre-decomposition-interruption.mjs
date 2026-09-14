@@ -519,5 +519,15 @@ test("C4I-20 the phase-output contract is not modified", () => {
   const phaseResponseSha = sha(join(REPO_A, "src/v2/phase-response-contract.mjs"));
   const phaseTaskCardSha = sha(join(REPO_A, "src/v2/phase-task-card.mjs"));
   assert.equal(phaseResponseSha, "d7f35987a2a76de2fde027471bcaa1205ed58ea03436f18b44d11a279ada26df");
-  assert.equal(phaseTaskCardSha, "08bb73aaea96ad87eadc8f2c25056137f6d77f1f4425a7e246983194b8af42f2");
+  // phase-task-card.mjs modified ON PURPOSE by AUTOLOOP-V1-STAGE-C-REGISTRY-
+  // BACKED-TASK-SPECIFIC-TOOL-SELECTION-1: taskCard.toolPolicy is now MINTED
+  // from projectToolSelection (raw caller passthrough removed; bind via
+  // toolSelectionBind) — pin updated to that source state.
+  // Modified ON PURPOSE again by AUTOLOOP-V1-STAGE-C-TOOL-SELECTION-PRODUCTION-
+  // WIRING-1: mintTaskCardToolSelectionBind exported as THE single reusable
+  // mint (graph orchestrator hook + SOP direct runner share it; explicit null
+  // nodeRole = §6.1 direct-execution semantics) and observation failures now
+  // surface as THE frozen RUNTIME_VOCABULARY_DRIFT code (review C4 repair) —
+  // pin updated to that state.
+  assert.equal(phaseTaskCardSha, "fb0f13b2f00358774d3524321d3771fa6ce79ae8a22fe9d5cb63115c109fcd3e");
 });

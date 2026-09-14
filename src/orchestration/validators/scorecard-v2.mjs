@@ -6,7 +6,7 @@
 
 import { validateStructural } from "./structural-validator.mjs";
 import { validateSemantic, frontierOrderingViolations, classifyExtraEdges } from "./semantic-consistency.mjs";
-import { evaluateCase } from "./case-evaluator.mjs";
+import { evaluateCase } from "../../v2/case-evaluator.mjs";
 
 // Advisory 下限（Scorecard v2 §3.2）— 達標即 HOLD
 function advisoryFloorFailures(ir, extraEdges) {

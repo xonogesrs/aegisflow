@@ -18,7 +18,10 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runOptimizer } from "../../src/control-plane/optimizer.mjs";
+// P7 subtraction re-point: the optimizer advisory now lives in the OPTIONAL
+// orchestration layer (src/orchestration/optimizer.mjs); the advisory's own
+// contract is unchanged and is still proven by this suite.
+import { runOptimizer } from "../../src/orchestration/optimizer.mjs";
 import { deriveBudgetEnvelope } from "../../src/budget/envelope.mjs";
 import {
   EXECUTOR_MODEL_ALLOWLIST,

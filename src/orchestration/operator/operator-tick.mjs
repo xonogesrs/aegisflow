@@ -54,21 +54,21 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   C2dHoldError, HOLD, assertNotSymlink, resolveSafeRoot, writeJsonExclusiveCreate,
-} from "./c2d/fs-atomic.mjs";
-import { validateExecutionId } from "./c2d/execution-id.mjs";
-import { collectFingerprint, assertFingerprint } from "./c2d/fingerprint.mjs";
-import { resolveExecDir, readCurrent, currentPath } from "./c2d/checkpoint-store.mjs";
-import { runReadOnlyDiscovery } from "./c2d/read-only-discovery-run.mjs";
-import { acquireLease, releaseLease } from "./c2d/lease.mjs";
-import { permitFromLease } from "./c2d/permit.mjs";
-import { validateContinuity, readIntent } from "./c2d/journal.mjs";
-import { commitMaterializedCandidate, reconcileCommitTransition } from "./c2d/commit-materialized-candidate.mjs";
+} from "../../c2d/fs-atomic.mjs";
+import { validateExecutionId } from "../../c2d/execution-id.mjs";
+import { collectFingerprint, assertFingerprint } from "../../c2d/fingerprint.mjs";
+import { resolveExecDir, readCurrent, currentPath } from "../../c2d/checkpoint-store.mjs";
+import { runReadOnlyDiscovery } from "../../c2d/read-only-discovery-run.mjs";
+import { acquireLease, releaseLease } from "../../c2d/lease.mjs";
+import { permitFromLease } from "../../c2d/permit.mjs";
+import { validateContinuity, readIntent } from "../../c2d/journal.mjs";
+import { commitMaterializedCandidate, reconcileCommitTransition } from "../../c2d/commit-materialized-candidate.mjs";
 import {
   readCandidate, candidatePath, validateCandidate,
   materializeReviewedCandidate, reconcileCandidateTransition,
-} from "./c2d/reviewed-commit-candidate.mjs";
-import { acquireRepositoryMutationLock } from "./c2d/repository-mutation-lock.mjs";
-import { materializationAuthorizationPath } from "./c2d/materialization-authorization.mjs";
+} from "../../c2d/reviewed-commit-candidate.mjs";
+import { acquireRepositoryMutationLock } from "../../c2d/repository-mutation-lock.mjs";
+import { materializationAuthorizationPath } from "../../c2d/materialization-authorization.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCHEDULER = join(HERE, "scheduler-tick-dry.mjs");

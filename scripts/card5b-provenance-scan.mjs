@@ -43,10 +43,10 @@ export function scanRetiredOracle() {
   const logicFiles = [
     "src/v2/case-evaluator.mjs",
     "src/v2/ir-schema.mjs",
-    "src/v2/structural-validator.mjs",
-    "src/v2/semantic-consistency.mjs",
-    "src/v2/scorecard-v2.mjs",
-    "src/v2/prompt-builder.mjs",
+    "src/orchestration/validators/structural-validator.mjs",
+    "src/orchestration/validators/semantic-consistency.mjs",
+    "src/orchestration/validators/scorecard-v2.mjs",
+    "src/orchestration/validators/prompt-builder.mjs",
     "src/v2/runner.mjs",
     "src/v2/pipeline.mjs",
   ];

@@ -19,14 +19,14 @@
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildSystemPrompt, buildUserPrompt, verifyPromptSchemaParity } from "../src/v2/prompt-builder.mjs";
+import { buildSystemPrompt, buildUserPrompt, verifyPromptSchemaParity } from "../src/orchestration/validators/prompt-builder.mjs";
 import {
   PROJECTION_BEGIN, PROJECTION_END, buildPromptSchemaProjection,
   FORMAT_EXAMPLE, EXAMPLE_PARENT, EXAMPLE_MANIFEST,
 } from "../src/v2/schema-projection.mjs";
 import { validateIRShape } from "../src/v2/ir-schema.mjs";
-import { validateStructural } from "../src/v2/structural-validator.mjs";
-import { validateSemantic } from "../src/v2/semantic-consistency.mjs";
+import { validateStructural } from "../src/orchestration/validators/structural-validator.mjs";
+import { validateSemantic } from "../src/orchestration/validators/semantic-consistency.mjs";
 import { scanOracleLeak, scanRetiredMechanisms, verifyDependencyLock } from "./card5-static-scans.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");

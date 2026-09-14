@@ -34,7 +34,21 @@ import {
 } from "./checkpoint-bridge.mjs";
 import { buildDecompositionManifest, DECOMPOSITION_MANIFEST_FORMAT } from "./decomposition-manifest.mjs";
 import { runExecutionOrchestrator } from "./execution-orchestrator.mjs";
-import { runProductionPipeline } from "./production-pipeline.mjs";
+// P7 SUBTRACTION (M27/M28/M29 → OPTIONAL_ORCHESTRATION): the production
+// decomposition pipeline is OPTIONAL INTELLIGENCE, not governance core. It
+// is resolved ONCE at module load through a try/catch dynamic import; when
+// the optional layer is ABSENT the decomposition stage fails CLOSED
+// (DECOMPOSITION_UNAVAILABLE → HOLD) — governance (checkpoints, journal,
+// resume, fingerprints, manifest verification) is fully intact without it.
+// The manifest builder (decomposition-manifest.mjs) is KEEP_CORE: it binds
+// already-produced IR digests into the durable evidence chain and never
+// calls the optional layer.
+let OPTIONAL_PRODUCTION_PIPELINE = null;
+try {
+  OPTIONAL_PRODUCTION_PIPELINE = await import("../orchestration/decomposition/production-pipeline.mjs");
+} catch {
+  OPTIONAL_PRODUCTION_PIPELINE = null; // optional layer absent — fail closed at the decomposition stage
+}
 import { requiresWriterLease } from "./runner.mjs";
 import { assertValidEvidenceRoot } from "../evidence/run-evidence-store.mjs";
 
@@ -176,7 +190,14 @@ const SOURCE_COMPONENTS = [
   "src/lifecycle-runner.mjs",
   "src/v2/runner.mjs",
   "src/v2/pipeline.mjs",
+  // P7 SUBTRACTION (M27/M28/M29): the production pipeline moved to the
+  // OPTIONAL orchestration layer. The fingerprint records the relocation
+  // honestly: the OLD path is retained as a "missing" marker (the resume
+  // re-derivation must see the relocation as a configuration change, not
+  // silently treat the file as gone-and-irrelevant) and the NEW optional
+  // path is hashed when present ("missing" when the layer is absent).
   "src/v2/production-pipeline.mjs",
+  "src/orchestration/decomposition/production-pipeline.mjs",
   "src/v2/execution-orchestrator.mjs",
   "src/v2/phase-task-card.mjs",
   "src/v2/system-delta.mjs",
@@ -184,9 +205,13 @@ const SOURCE_COMPONENTS = [
   "src/v2/durable-execution.mjs",
   "src/v2/ir-schema.mjs",
   "src/v2/structural-validator.mjs",
+  "src/orchestration/validators/structural-validator.mjs",
   "src/v2/semantic-consistency.mjs",
+  "src/orchestration/validators/semantic-consistency.mjs",
   "src/v2/scorecard-v2.mjs",
+  "src/orchestration/validators/scorecard-v2.mjs",
   "src/v2/prompt-builder.mjs",
+  "src/orchestration/validators/prompt-builder.mjs",
   "src/v2/schema-projection.mjs",
   "src/v2/pi-transport-adapter.mjs",
   "src/evidence/run-evidence-store.mjs",
@@ -678,10 +703,16 @@ async function runDurableInner({
   await run.checkpoint({});
 
   // ── Decomposition（one request）──
+  // P7 subtraction: OPTIONAL layer. Absent ⇒ fail-closed HOLD through the
+  // normal DECOMPOSITION_HELD journal path (zero lifecycle calls, zero
+  // adapter calls) — never a fallback decomposition.
   let pipeline;
   try {
+    if (!OPTIONAL_PRODUCTION_PIPELINE?.runProductionPipeline) {
+      throw Object.assign(new Error("optional decomposition layer absent"), { code: "DECOMPOSITION_UNAVAILABLE" });
+    }
     store.appendEvent({ event_type: "DECOMPOSITION_STARTED", stage: "decomposition", payload: {} });
-    pipeline = await runProductionPipeline({
+    pipeline = await OPTIONAL_PRODUCTION_PIPELINE.runProductionPipeline({
       source, parent, manifest, decompositionAdapter,
       hooks: { onStage: hooks.onStage },
     });

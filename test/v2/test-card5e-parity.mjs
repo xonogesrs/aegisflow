@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   buildSystemPrompt, buildPromptBundle, buildPromptSchemaProjection, verifyPromptSchemaParity,
-} from "../../src/v2/prompt-builder.mjs";
+} from "../../src/orchestration/validators/prompt-builder.mjs";
 import {
   PROJECTION_BEGIN, PROJECTION_END, FORMAT_EXAMPLE, EXAMPLE_PARENT, EXAMPLE_MANIFEST,
 } from "../../src/v2/schema-projection.mjs";
@@ -24,10 +24,10 @@ import {
   validateIRShape, PHASE_REQUIRED, PLAN_REQUIRED, DISPOSITION_REQUIRED,
   REQUIRED_EFFECTS, REQUIRED_BOUNDARIES, DISPOSITION_VALUES,
 } from "../../src/v2/ir-schema.mjs";
-import { validateStructural } from "../../src/v2/structural-validator.mjs";
-import { validateSemantic } from "../../src/v2/semantic-consistency.mjs";
+import { validateStructural } from "../../src/orchestration/validators/structural-validator.mjs";
+import { validateSemantic } from "../../src/orchestration/validators/semantic-consistency.mjs";
 import { evaluateCase } from "../../src/v2/case-evaluator.mjs";
-import { evaluateScorecardV2 } from "../../src/v2/scorecard-v2.mjs";
+import { evaluateScorecardV2 } from "../../src/orchestration/validators/scorecard-v2.mjs";
 import { CONTRACTS_BY_ID } from "../../src/v2/case-contracts.mjs";
 import { probeParent, probeSource } from "../../scripts/shared/probe-sources.mjs";
 

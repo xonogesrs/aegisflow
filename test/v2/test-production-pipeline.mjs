@@ -7,7 +7,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { runProductionPipeline } from "../../src/v2/production-pipeline.mjs";
+// P7 subtraction re-point: the production pipeline now lives in the OPTIONAL
+// orchestration layer (src/orchestration/decomposition/production-pipeline.mjs);
+// its contract is unchanged and is still proven by this suite.
+import { runProductionPipeline } from "../../src/orchestration/decomposition/production-pipeline.mjs";
 
 // ── Handcrafted valid DECOMPOSED IR（no case oracle involved）──
 
@@ -191,7 +194,7 @@ test("T7: transport failure → HOLD at transport stage, no request leakage", as
 
 test("T8: production pipeline never invokes the case evaluator", async () => {
   // Source-level: no case oracle imports in the production path.
-  const src = readFileSync(new URL("../../src/v2/production-pipeline.mjs", import.meta.url), "utf8");
+  const src = readFileSync(new URL("../../src/orchestration/decomposition/production-pipeline.mjs", import.meta.url), "utf8");
   assert.ok(!src.includes("case-evaluator"), "production pipeline must not import case-evaluator");
   assert.ok(!src.includes("case-contracts"), "production pipeline must not import case-contracts");
   assert.ok(!src.includes("CONTRACTS_BY_ID"), "production pipeline must not reference eval contracts");

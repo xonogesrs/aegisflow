@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildSystemPrompt, buildUserPrompt } from "../src/v2/prompt-builder.mjs";
+import { buildSystemPrompt, buildUserPrompt } from "../src/orchestration/validators/prompt-builder.mjs";
 import { CASE_CONTRACTS } from "../src/v2/case-contracts.mjs";
 import { probeSource, PROBE_ORDER } from "./shared/probe-sources.mjs";
 
@@ -79,14 +79,14 @@ const RETIRED_TERMS = [
   "repair prompt", "tolerant parse", "substring inference",
 ];
 const SCAN_FILES = [
-  "src/v2/prompt-builder.mjs",
+  "src/orchestration/validators/prompt-builder.mjs",
   "src/v2/runner.mjs",
   "src/v2/pipeline.mjs",
   "src/v2/ir-schema.mjs",
-  "src/v2/structural-validator.mjs",
-  "src/v2/semantic-consistency.mjs",
+  "src/orchestration/validators/structural-validator.mjs",
+  "src/orchestration/validators/semantic-consistency.mjs",
   "src/v2/case-evaluator.mjs",
-  "src/v2/scorecard-v2.mjs",
+  "src/orchestration/validators/scorecard-v2.mjs",
 ];
 
 export function scanRetiredMechanisms() {

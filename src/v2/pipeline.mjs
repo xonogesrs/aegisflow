@@ -19,12 +19,12 @@
 //  - NOT_BENEFICIAL 不產生 actionable phases（runner 不執行）；
 //  - transport request count 保持一（adapter 強制；provider error 不觸發第二 request）。
 
-import { buildPromptBundle } from "./prompt-builder.mjs";
+import { buildPromptBundle } from "../orchestration/validators/prompt-builder.mjs";
 import { validateIRShape } from "./ir-schema.mjs";
-import { validateStructural } from "./structural-validator.mjs";
-import { validateSemantic } from "./semantic-consistency.mjs";
+import { validateStructural } from "../orchestration/validators/structural-validator.mjs";
+import { validateSemantic } from "../orchestration/validators/semantic-consistency.mjs";
 import { evaluateCase } from "./case-evaluator.mjs";
-import { evaluateScorecardV2 } from "./scorecard-v2.mjs";
+import { evaluateScorecardV2 } from "../orchestration/validators/scorecard-v2.mjs";
 import { runDecompositionGraph } from "./runner.mjs";
 
 export const PIPELINE_STAGES = Object.freeze([

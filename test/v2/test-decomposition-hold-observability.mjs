@@ -25,7 +25,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 
 import { runAutoLoopInternal } from "../../src/v2/stack-a-internal.mjs";
-import { validateSemantic } from "../../src/v2/semantic-consistency.mjs";
+import { validateSemantic } from "../../src/orchestration/validators/semantic-consistency.mjs";
 import { buildExecutorCanonicalExample, buildReviewerCanonicalExample } from "../../src/v2/phase-response-contract.mjs";
 import { createScriptedAdapter } from "../../src/adapter/scripted-adapter.mjs";
 import { DECOMP_HOLD_DIAGNOSTICS_LIMITS, boundIrForDiagnostics } from "../../src/v2/durable-execution.mjs";

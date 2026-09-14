@@ -33,7 +33,20 @@
 //  - No case contract / eval oracle / E1–E12 fixture / live-probe helper /
 //    card-5 freeze script as runtime dependency.
 
-import { runProductionPipeline } from "./v2/production-pipeline.mjs";
+// P7 SUBTRACTION (M27/M28/M29 → OPTIONAL_ORCHESTRATION): the production
+// decomposition pipeline is OPTIONAL INTELLIGENCE, not governance core. It
+// is resolved ONCE at module load through a try/catch dynamic import; when
+// the optional layer is ABSENT the decomposition path fails CLOSED below
+// (DECOMPOSITION_UNAVAILABLE → HOLD) — DECOMPOSITION_ABSENT_FAILS_CLOSED =
+// YES, and the governance core (admission / budget / lifecycle / evidence /
+// review) is fully intact without it. Decomposition output never grants
+// authority.
+let OPTIONAL_PRODUCTION_PIPELINE = null;
+try {
+  OPTIONAL_PRODUCTION_PIPELINE = await import("./orchestration/decomposition/production-pipeline.mjs");
+} catch {
+  OPTIONAL_PRODUCTION_PIPELINE = null; // optional layer absent — fail closed at the decomposition stage
+}
 import { runExecutionOrchestrator } from "./v2/execution-orchestrator.mjs";
 import { mintExecutionId } from "./c2d/execution-id.mjs";
 import { runDurableAutoLoopInternal, resumeAutoLoop, resumeAutoLoopInternal } from "./v2/durable-execution.mjs";
@@ -162,7 +175,12 @@ export async function runAutoLoopInternal({
   if (typeof reviewerAdapterFactory !== "function") return hold(AUTOLOOP_HOLD.MISSING_REVIEWER_ADAPTER_FACTORY, executionId);
 
   // ── 1. Production decomposition（one request；no case oracle）──
-  const pipeline = await runProductionPipeline({
+  // P7 subtraction: OPTIONAL layer. Absent ⇒ fail-closed HOLD (zero
+  // lifecycle calls, zero adapter calls) — never a fallback decomposition.
+  if (!OPTIONAL_PRODUCTION_PIPELINE?.runProductionPipeline) {
+    return hold("DECOMPOSITION_UNAVAILABLE", executionId);
+  }
+  const pipeline = await OPTIONAL_PRODUCTION_PIPELINE.runProductionPipeline({
     source,
     parent,
     manifest,
