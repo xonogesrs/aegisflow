@@ -205,12 +205,14 @@ test("rehashed/forged admission is never dispatched (admission enforcement)", as
   assert.equal(results[0].holdCode, OPTIMIZER_HOLDS.CONTRADICTORY_AUTHORITY);
 });
 
-test("fast-path (direct) task is not graph-dispatched (no silent fallback)", async () => {
+test("fast-path (direct) task fail-closes without DI — graph===null silent skip removed", async () => {
   const fast = fastPathAdmission("FAST");
   const { plan } = coordinate({ tasks: [taskInput("fast", fast)] });
   assert.equal(plan.tasks[0].runtime, "direct");
   assert.equal(plan.tasks[0].graph, null);
   const { results } = await executeSequentially({ plan });
+  // Stage B: no DI ⇒ explicit card-mandated HOLD, never a silent skip.
   assert.equal(results[0].dispatched, false);
-  assert.equal(results[0].reason, "direct execution (no graph runtime)");
+  assert.equal(results[0].holdCode, "FAST_PATH_DIRECT_EXECUTION_UNIMPLEMENTED");
+  assert.match(results[0].reason, /FAST_PATH_DIRECT_EXECUTION_UNIMPLEMENTED/);
 });

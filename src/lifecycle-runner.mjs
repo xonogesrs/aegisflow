@@ -373,21 +373,83 @@ export async function runLifecycle({
       reviewEvidence = bundleResult.bundle;
     }
 
-    const reviewerCall = await callAdapter("reviewer", attempt, { reviewEvidence });
-    if (!reviewerCall.ok) return reviewerCall.holdResult;
+    if (typeof hooks.onBeforeReviewer === "function") {
+      const gate = await hooks.onBeforeReviewer({ attempt });
+      if (gate && gate.ok === false) {
+        return hold(gate.holdCode ?? "BUDGET_EXHAUSTED", {
+          attempt,
+          reason: gate.reason ?? "BUDGET_EXHAUSTED: reviewer not invoked",
+        });
+      }
+    }
+
+    // R3: the reviewer adapter is handed the call NOW. The wiring marks the
+    // atomic admission reservation INVOKED so a post-invocation cancel is
+    // impossible and every started attempt must settle.
+    await hooks.onReviewerInvocationStarted?.({ attempt });
+
+    let reviewerCall;
+    try {
+      reviewerCall = await callAdapter("reviewer", attempt, { reviewEvidence });
+    } catch (e) {
+      reviewerCall = {
+        ok: true,
+        result: {
+          status: "error",
+          error: e?.message ?? String(e),
+          stdout: "",
+          stderr: "",
+          signal: null,
+          metadata: {},
+        },
+      };
+    }
+    if (!reviewerCall.ok) {
+      transitions.push({ phase: "reviewer", attempt, status: "error" });
+      await hooks.onReviewerCompleted?.({
+        attempt,
+        verdict: "HOLD",
+        verdictObject: { verdict: "HOLD" },
+        status: "error",
+      });
+      return reviewerCall.holdResult;
+    }
     const reviewerResult = reviewerCall.result;
     transitions.push({ phase: "reviewer", attempt, status: reviewerResult.status });
 
-    if (reviewerResult.status === "error") return hold("REVIEWER_ERROR", { attempt, error: reviewerResult.error });
-    if (reviewerResult.status === "timed_out") return hold("REVIEWER_TIMEOUT", { attempt });
-    if (reviewerResult.status === "aborted") return hold("REVIEWER_ABORTED", { attempt });
+    if (reviewerResult.status === "error" || reviewerResult.status === "timed_out" || reviewerResult.status === "aborted") {
+      const reason = reviewerResult.status === "timed_out"
+        ? "REVIEWER_TIMEOUT"
+        : reviewerResult.status === "aborted"
+          ? "REVIEWER_ABORTED"
+          : "REVIEWER_ERROR";
+      await hooks.onReviewerCompleted?.({
+        attempt,
+        verdict: "HOLD",
+        verdictObject: { verdict: "HOLD" },
+        status: reviewerResult.status,
+      });
+      return hold(reason, { attempt, ...(reviewerResult.status === "error" ? { error: reviewerResult.error } : {}) });
+    }
 
     const verdictParse = parseJsonStrict(reviewerResult.stdout);
     if (!verdictParse.ok) {
+      await hooks.onReviewerCompleted?.({
+        attempt,
+        verdict: "HOLD",
+        verdictObject: { verdict: "HOLD" },
+        status: "invalid",
+      });
       return hold("MALFORMED_REVIEWER_VERDICT", { attempt, reason: "stdout_not_valid_json", detail: verdictParse.error });
     }
     const verdict = normalizeReviewerVerdict(verdictParse.value, taskCard.expectedReviewerModel || "");
     if (isSchemaInvalidVerdict(verdict)) {
+      await hooks.onReviewerCompleted?.({
+        attempt,
+        verdict: "HOLD",
+        verdictObject: verdict,
+        status: "invalid",
+      });
       return hold("MALFORMED_REVIEWER_VERDICT", { attempt, evidence_gaps: verdict.evidence_gaps, summary: verdict.summary });
     }
     transitions.push({
@@ -397,7 +459,9 @@ export async function runLifecycle({
       recommended_next_action: verdict.recommended_next_action,
     });
 
-    // C3 checkpoint hook：reviewer 階段完整完成（verdict 已 normalize）。
+    // C3 checkpoint hook：reviewer 階段完整完成（verdict 已 normalize）.
+    // Canonical verifier_reviewer_attempts settlement: one logical attempt
+    // per real invocation (also fired on error/invalid paths above).
     await hooks.onReviewerCompleted?.({ attempt, verdict: verdict.verdict, verdictObject: verdict });
 
     if (verdict.verdict === "PASS") {
