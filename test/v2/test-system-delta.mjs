@@ -625,7 +625,10 @@ test("C4S-8 binary delta fails closed；no partial success bundle", async () => 
 // ── C4S-9 — secret fail-closed ───────────────────────────────────────────
 
 test("C4S-9 credential pattern blocks the delta；no durable artifact；no echo", async () => {
-  const SYNTH = "synthetic-secret-sentinel-0123456789abcdef";
+  // Sentinel must match a REAL credential shape（SECRET_PATTERNS sk_key）:
+  // the original free-form sentinel matched no pattern, so this fail-closed
+  // proof never fired.
+  const SYNTH = "sk-syntheticsentinelfixed123456";
   const dir = fibonacciFixture();
   try {
     const card = writerCard({ cwd: dir });
