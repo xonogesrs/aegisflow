@@ -36,6 +36,7 @@ import { createColimaReviewerAdapter } from "./colima-reviewer-adapter.mjs";
 import {
   ensureInstance,
   deleteInstance,
+  resolveInstance,
   cleanupStale,
   instanceSocket,
 } from "./colima-runtime.mjs";
@@ -45,6 +46,7 @@ import {
   revokeWorktree,
   captureWorktreeOutput,
 } from "./colima-worktree.mjs";
+import { BudgetHoldError } from "../budget/ledger.mjs";
 import { prepareOwnedScratchRoot, removeOwnedScratchRoot, getScratchAuthorityToken } from "./scratch-ownership.mjs";
 
 export const GRAPH_RESULT_SCHEMA = "autoloop.c3.parallel-graph-result/v1";
@@ -271,12 +273,23 @@ export async function runColimaGraph({
   const scratchNamespace = scratchRoot;
   scratchRoot = prepareOwnedScratchRoot({ scratchRoot: scratchNamespace, executionId, repoPath, authorityToken: scratchAuthorityToken });
   const resolvedScratchAuthorityToken = scratchAuthorityToken ?? getScratchAuthorityToken(scratchRoot);
+  // Instance ownership: a graph run may only tear down an instance it
+  // CREATED. A pre-existing shared profile (machine-level infrastructure,
+  // possibly hosting other work) is never destroyed as a side effect of a
+  // run — that deletion was the root cause of the recurring
+  // "docker socket missing" environment failures.
+  const instancePreExisted = resolveInstance(profile).ok;
   const instance = ensureInstance({ profile, cpus: 2, memory: 2, disk: 20, roMounts: [repoPath], rwMounts: [scratchRoot] });
 
   const worktrees = new Map();        // phase_id -> worktree identity
   const executorResults = new Map();  // phaseExecutionId -> executor result (resultSink)
   const nodeResults = new Map();      // phase_id -> structured node result
   const phaseStartTimes = new Map();  // phase_id -> epoch ms
+  // STAGE-D BUDGET HANDOVER: phases whose dispatch was refused by the §9a
+  // ownership fence NEVER executed — their terminal HOLD node is fence
+  // evidence, not consumption evidence（skipped:true; no settlement — the
+  // reservation was already released by the fence cancellation seam）.
+  const fenceRefusedPhases = new Set(); // phase_id -> refused at dispatch
 
   const captureNodeResult = (phase, { final, attempt, reason }) => {
     const phaseExecId = phaseExecutionId(executionId, phase.phase_id);
@@ -332,6 +345,14 @@ export async function runColimaGraph({
     initialState,
     executorAdapterFactory: execFactory,
     reviewerAdapterFactory: revFactory,
+    // STAGE C PRODUCTION WIRING — THE graph-path bind forwarding. The
+    // authoritative pair comes ONLY from the runAdmittedGraph-validated
+    // inputs of THIS run（frozen admission + allocation-bound budget）, never
+    // from caller hooks or task input. Raw-runner callers without an
+    // admission/allocation（compat surface）stay on the legacy composition.
+    toolSelectionContext: (admission && budget?.allocation)
+      ? { admission, taskAllocation: budget.allocation }
+      : null,
     hooks: {
       expectedExecutorModel: "colima-container",
       expectedExecutorProvider: "colima-container",
@@ -385,16 +406,50 @@ export async function runColimaGraph({
         // journal->checkpoint boundary could land after the adapter call,
         // breaking the durable-first guarantee. Awaiting keeps both the raw
         //（sync）and durable（async）compositions deterministic.
-        await hooks.onPhaseStart?.(phaseId);
+        try {
+          await hooks.onPhaseStart?.(phaseId);
+        } catch (e) {
+          // STAGE-D BUDGET HANDOVER — reservation-cancellation seam for
+          // INTENTIONALLY-REFUSED dispatches: EVERY §9a/§13a gate refusal
+          // carries a CROSS_SESSION_* code and means the operation NEVER
+          // ran. Uniform handling: release the conservative upper-bound
+          // reservation through THE enforcement authority (cancel_reservation
+          // receipt) and mark the phase fence-refused — no phantom
+          // settlement, no orphaned in-flight reservation folding at upper
+          // bound on the next reconstruction. The successor's real execution
+          // then settles the same opKey exactly once. Any other failure keeps
+          // the reservation (conservative upper-bound policy, §6). Rethrow —
+          // the fence itself stays the authority.
+          const code = String(e?.code ?? e?.holdCode ?? "");
+          if (budget?.enforcement && code.startsWith("CROSS_SESSION_")) {
+            budget.enforcement.cancelReservation?.({ opKey: `${executionId}:${phaseId}:0` });
+            fenceRefusedPhases.add(phaseId);
+          }
+          throw e;
+        }
       },
       onPhaseTerminal: async ({ phaseId, final, attempt, reason }) => {
         const phase = (ir.phases || []).find((p) => p.phase_id === phaseId);
         const node = captureNodeResult(phase, { final, attempt, reason });
+        // STAGE-D BUDGET HANDOVER: a §9a fence-refused phase NEVER executed
+        // — its terminal record is fence evidence, not consumption evidence
+        // (skipped:true keeps observeFromResult from counting it; its
+        // reservation was already released at refusal, so there is nothing
+        // to settle — never a phantom charge, never a fabricated release).
+        if (fenceRefusedPhases.has(phaseId)) node.skipped = true;
         // TA-3: settle the operation's reservation with the ACTUAL measured
-        // consumption（upper-bound charge when a meter is unavailable）.
-        if (budget?.enforcement && node) {
+        // consumption. Wall-clock meter = the contract's runner-timing source
+        // （node resultIdentity.latencyMs when the executor produced it, else
+        // the measured node window startedAt→completedAt）— the SAME figure
+        // observeFromResult derives at reconciliation, so settle and evidence
+        // stay in one unit. The pre-dispatch upper bound remains the crash
+        // reservation (§6), not a terminal charge.
+        if (budget?.enforcement && node && !fenceRefusedPhases.has(phaseId)) {
           const opKey = `${executionId}:${phaseId}:0`;
-          const durationMs = node.resultIdentity?.latencyMs ?? null;
+          const lat = Number(node.resultIdentity?.latencyMs);
+          const windowMs = Number.isFinite(node.startedAt) && Number.isFinite(node.completedAt)
+            ? Math.max(0, node.completedAt - node.startedAt) : null;
+          const durationMs = Number.isFinite(lat) ? lat : windowMs;
           const skipped = final === "SKIPPED_DUE_TO_DEPENDENCY" || final === "NOT_RECORDED";
           budget.enforcement.recordConsumption({
             opKey,
@@ -431,9 +486,30 @@ export async function runColimaGraph({
         // orchestrator proceeds to the next boundary.
         onExecutorOutput: async (info) => { await hooks.lifecycle?.onExecutorOutput?.(info); await hooks.onExecutorOutput?.(info); },
         onExecutorCompleted: async (info) => { await hooks.lifecycle?.onExecutorCompleted?.(info); await hooks.onExecutorCompleted?.(info); },
+        onBeforeReviewer: async (info) => {
+          const gate = budget?.enforcement?.admitReviewer?.({ nodeId: info?.phaseId ?? null, attempt: info?.attempt });
+          if (gate && !gate.ok) return gate;
+          const nested = await hooks.lifecycle?.onBeforeReviewer?.(info);
+          if (nested && nested.ok === false) {
+            // R3 §5.3: nested refusal proves the reviewer never started.
+            budget?.enforcement?.cancelReviewerReservation?.({ nodeId: info?.phaseId ?? null, attempt: info?.attempt ?? 0 });
+            return nested;
+          }
+          return { ok: true };
+        },
+        onReviewerInvocationStarted: async (info) => {
+          // R3: reservation RESERVED → INVOKED at the actual invocation seam.
+          const c = budget?.enforcement?.confirmReviewerInvoked?.({ nodeId: info?.phaseId ?? null, attempt: info?.attempt ?? 0 });
+          if (c && !c.ok && !c.duplicate) throw new BudgetHoldError(c.holdCode ?? "BUDGET_AUTHORITY_INVALID", c.reason ?? "reviewer invocation confirmation failed closed");
+          await hooks.lifecycle?.onReviewerInvocationStarted?.(info); await hooks.onReviewerInvocationStarted?.(info);
+        },
         onReviewerCompleted: async (info) => {
-          // TA-3: reviewer/verifier meter.
-          budget?.enforcement?.recordReviewer({ nodeId: info?.phaseId ?? null });
+          // TA-3: one LOGICAL_REVIEW_ATTEMPT per real reviewer invocation.
+          const s = budget?.enforcement?.recordReviewer?.({ nodeId: info?.phaseId ?? null, attempt: info?.attempt ?? 0 });
+          if (s && !s.ok && !s.duplicate) {
+            // R3 review fix: an unsettled real invocation fails the run closed.
+            throw new BudgetHoldError(s.holdCode ?? "BUDGET_AUTHORITY_INVALID", s.reason ?? "reviewer settlement failed closed");
+          }
           await hooks.lifecycle?.onReviewerCompleted?.(info); await hooks.onReviewerCompleted?.(info);
         },
         onRepairRequested: async (info) => {
@@ -627,7 +703,7 @@ export async function runColimaGraph({
     try { revokeWorktree(wt); } catch { /* best effort */ }
   }
   removeOwnedScratchRoot({ scratchRoot: scratchNamespace, executionId, repoPath, authorityToken: resolvedScratchAuthorityToken });
-  if (!preserveInstance) {
+  if (!preserveInstance && !instancePreExisted) {
     deleteInstance(profile);
     cleanup.instanceDeleted = true;
   }

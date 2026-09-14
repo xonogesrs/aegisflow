@@ -17,6 +17,7 @@ import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { rmSync, mkdirSync } from "node:fs";
 import { runColimaGraph } from "../src/runtime/colima-graph-runner.mjs";
+import { resolveInstance } from "../src/runtime/colima-runtime.mjs";
 
 const HOME = homedir();
 const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
@@ -76,6 +77,11 @@ function nodeById(result, id) {
   return n;
 }
 
+// Ownership contract: the runner deletes the instance only when it created
+// it. On a machine with a persistent shared profile, instanceDeleted is
+// false; on a bare machine (runner-created), true.
+const instancePreExisted = resolveInstance(PROFILE).ok;
+
 before(() => mkdirSync(SCRATCH, { recursive: true }));
 after(() => {
   rmSync(SCRATCH, { recursive: true, force: true });
@@ -118,7 +124,7 @@ test("main graph R1||R2||R3 -> W1 -> V1: PASS, parallel readonly, single writer,
   assert.deepEqual(r1.join.map((n) => n.nodeId), ["R1", "R2", "R3", "W1", "V1"]);
   assert.equal(r1.cleanup.containersFound, 0);
   assert.equal(r1.cleanup.worktreesRevoked.length, 0);
-  assert.equal(r1.cleanup.instanceDeleted, true);
+  assert.equal(r1.cleanup.instanceDeleted, !instancePreExisted);
   const headAfter = spawnSync("git", ["-C", REPO_A, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
   assert.equal(headAfter, repoHeadBefore, "repo A head unchanged");
 
@@ -142,7 +148,7 @@ test("upstream HOLD blocks downstream; failure propagation; cleanup", { timeout:
   assert.equal(nodeById(r, "R1").final, "HOLD");
   assert.notEqual(nodeById(r, "D1").final, "PASS", "downstream must not pass when upstream held");
   assert.equal(r.cleanup.containersFound, 0);
-  assert.equal(r.cleanup.instanceDeleted, true);
+  assert.equal(r.cleanup.instanceDeleted, !instancePreExisted);
 });
 
 test("read-only node timeout -> HOLD EXECUTOR_TIMEOUT + deterministic cleanup", { timeout: 600000 }, async (t) => {
@@ -169,7 +175,7 @@ test("graph cancel via AbortSignal -> HOLD + cleanup", { timeout: 600000 }, asyn
   const r = await runColimaGraph({ ir, parent: PARENT, cwd: REPO_A, executionId: "graph-cancel-1", profile: PROFILE, repoPath: REPO_A, scratchRoot: SCRATCH, timeoutMs: 120000, signal: ac.signal });
   assert.equal(r.final, "HOLD");
   assert.equal(r.cleanup.containersFound, 0, "cancel leaves no containers");
-  assert.equal(r.cleanup.instanceDeleted, true);
+  assert.equal(r.cleanup.instanceDeleted, !instancePreExisted);
 });
 
 test("writer lock non-reentrant: W1 -> W2 serialized, never overlapping", { timeout: 600000 }, async (t) => {
