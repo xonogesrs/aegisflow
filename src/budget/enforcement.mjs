@@ -36,6 +36,7 @@ import {
   DEFAULT_OP_WALL_CLOCK_CAP,
   ENFORCED_DIMENSIONS,
   deepFreeze,
+  countLogicalReviewerAttempts,
 } from "./contract.mjs";
 import { deriveBudgetEnvelope, assertEnvelopeUntampered } from "./envelope.mjs";
 import {
@@ -48,6 +49,7 @@ import {
   ledgerReserve,
   ledgerSettle,
   ledgerConfirm,
+  ledgerCancelReservation,
   BudgetHoldError,
 } from "./ledger.mjs";
 
@@ -196,6 +198,9 @@ export function createBudgetEnforcement({ admission, checkpointState = null, par
     // consumption recorded SINCE the resume point（cumulative counters stay
     // in the ledger; the checkpoint carries the pre-crash baseline）.
     _resumeBaseline: checkpointState && checkpointState.counters ? { ...checkpointState.counters } : null,
+    _reviewerSettled: new Set(),
+    _reviewerReservations: new Map(),
+
 
     /** Ledger identity（child binding / evidence fingerprint）. */
     ledgerId() {
@@ -270,6 +275,22 @@ export function createBudgetEnforcement({ admission, checkpointState = null, par
       this._state = this.state();
       return { ok: true, actual: s.actual, state: this._state };
     },
+    /**
+     * STAGE-D BUDGET HANDOVER — cancellation seam for INTENTIONALLY-REFUSED
+     * dispatches at ownership handover（§9a fence）: releases the op's
+     * upper-bound reservation WITHOUT charging it, through THE ledger
+     * authority（cancel_reservation receipt; deterministic on replay）.
+     * Only a live in-flight reservation is cancellable; anything else fails
+     * closed — never a silent no-op, never a fabricated release.
+     */
+    cancelReservation({ opKey } = {}) {
+      if (!opKey || typeof opKey !== "string") {
+        return { ok: false, holdCode: BUDGET_HOLD_CODES.BUDGET_AUTHORITY_INVALID, reason: "BUDGET_AUTHORITY_INVALID: cancelReservation requires the opKey" };
+      }
+      const c = ledgerCancelReservation(this.ledger, opKey);
+      if (c.ok) this._state = this.state();
+      return c;
+    },
 
     /** Record a repair attempt（runtime meter only — B4; NOT the TA-2 repair
      *  budget authority）. */
@@ -279,12 +300,126 @@ export function createBudgetEnforcement({ admission, checkpointState = null, par
       return c;
     },
 
-    /** Record a reviewer / verifier attempt. */
-    recordReviewer({ nodeId = null } = {}) {
-      const c = ledgerConfirm(this.ledger, envelope, { dimension: "verifier_reviewer_attempts", amount: 1, reason: `reviewer:${String(nodeId ?? "node")}` });
-      this._state = this.state();
-      return c;
+    /** Reviewer attempt identity — THE single logical slot key. */
+    _reviewerKey(nodeId, attempt) {
+      return `${String(nodeId ?? "node")}:${Number(attempt ?? 0)}`;
     },
+
+    /** Record a reviewer / verifier LOGICAL_REVIEW_ATTEMPT settlement.
+     *  R3: settles the ATOMIC RESERVATION taken at admitReviewer into
+     *  confirmed consumption (RESERVED|INVOKED → SETTLED). Idempotent per
+     *  (nodeId, attempt). Fails closed for an unknown / wrong reservation
+     *  identity — consumption without a reservation is never valid. */
+    recordReviewer({ nodeId = null, attempt = 0 } = {}) {
+      const key = this._reviewerKey(nodeId, attempt);
+      if (this._reviewerSettled.has(key)) return { ok: true, duplicate: true };
+      const opKey = `reviewer:${key}`;
+      const s = ledgerSettle(this.ledger, envelope, { opKey, actualAmounts: { verifier_reviewer_attempts: 1 } });
+      if (!s.ok) {
+        this._state = this.state();
+        return s;
+      }
+      this._reviewerSettled.add(key);
+      const res = this._reviewerReservations.get(key);
+      if (res && res.state !== "CANCELLED") res.state = "SETTLED";
+      this._state = this.state();
+      return { ok: true, actual: s.actual };
+    },
+
+    /**
+     * Pre-invocation gate for a reviewer attempt — R3 ATOMIC RESERVATION.
+     * Admits ONLY when settled + active reservations < limit; the ledger
+     * reservation is created SYNCHRONOUSLY inside this call（no await between
+     * check and mutation）so a concurrent second caller is rejected before it
+     * may invoke the reviewer. Duplicate identity（same node:attempt）can
+     * never hold two reservations or replay a consumed one.
+     */
+    admitReviewer({ nodeId = null, attempt = 0 } = {}) {
+      if (this._state === "BUDGET_AUTHORITY_INVALID") {
+        return { ok: false, holdCode: BUDGET_HOLD_CODES.BUDGET_AUTHORITY_INVALID, reason: "BUDGET_AUTHORITY_INVALID: enforcement is not authorized to dispatch" };
+      }
+      const key = this._reviewerKey(nodeId, attempt);
+      const opKey = `reviewer:${key}`;
+      const existing = this._reviewerReservations.get(key);
+      if (existing) {
+        // CANCELLED is terminal too: a consumed/cancelled identity never
+        // re-admits — replay requires a NEW attempt identity（R3 review fix）.
+        return {
+          ok: false,
+          holdCode: "BUDGET_RESERVATION_CONFLICT",
+          reason: `BUDGET_RESERVATION_CONFLICT: reviewer reservation ${opKey} already ${existing.state} — one invoke permission per logical attempt; replay requires a new attempt identity`,
+        };
+      }
+      if (this._reviewerSettled.has(key)) {
+        return {
+          ok: false,
+          holdCode: "BUDGET_RESERVATION_CONFLICT",
+          reason: `BUDGET_RESERVATION_CONFLICT: reviewer attempt ${opKey} already settled — replay requires a new attempt identity`,
+        };
+      }
+      if (this.ledger.inFlight[opKey]) {
+        return {
+          ok: false,
+          holdCode: "BUDGET_RESERVATION_CONFLICT",
+          reason: `BUDGET_RESERVATION_CONFLICT: ${opKey} is already reserved in the ledger`,
+        };
+      }
+      // Atomic admission arithmetic: limit - confirmed - reserved >= 1.
+      // Synchronous — no promise yield between the availability check and
+      // the reservation mutation.
+      const r = ledgerReserve(this.ledger, envelope, { opKey, amounts: { verifier_reviewer_attempts: 1 } });
+      if (!r.ok) return r;
+      this._reviewerReservations.set(key, { opKey, state: "RESERVED", reservedAt: new Date().toISOString() });
+      this._state = this.state();
+      return { ok: true, nodeId, attempt: Number(attempt ?? 0), reservationToken: opKey };
+    },
+
+    /**
+     * Invocation confirmation seam（R3）: marks RESERVED → INVOKED. Must be
+     * called by the production wiring at the moment the reviewer adapter is
+     * actually handed the call. Idempotent; fails closed without a live
+     * reservation.
+     */
+    confirmReviewerInvoked({ nodeId = null, attempt = 0 } = {}) {
+      const key = this._reviewerKey(nodeId, attempt);
+      const res = this._reviewerReservations.get(key);
+      if (!res || res.state === "CANCELLED" || !this.ledger.inFlight[res.opKey]) {
+        return { ok: false, holdCode: BUDGET_HOLD_CODES.BUDGET_AUTHORITY_INVALID, reason: `BUDGET_AUTHORITY_INVALID: no active reviewer reservation for ${key}` };
+      }
+      if (res.state === "INVOKED" || res.state === "SETTLED") return { ok: true, duplicate: true };
+      res.state = "INVOKED";
+      return { ok: true };
+    },
+
+    /**
+     * Safe cancellation seam（R3 §5.3）: only a RESERVED（never invoked）
+     * reservation bound to its original identity may be cancelled, once.
+     * INVOKED/SETTLED slots are never released.
+     */
+    cancelReviewerReservation({ nodeId = null, attempt = 0 } = {}) {
+      const key = this._reviewerKey(nodeId, attempt);
+      const res = this._reviewerReservations.get(key);
+      if (!res || !this.ledger.inFlight[res.opKey]) {
+        return { ok: false, holdCode: BUDGET_HOLD_CODES.BUDGET_AUTHORITY_INVALID, reason: `BUDGET_AUTHORITY_INVALID: no cancellable reviewer reservation for ${key}` };
+      }
+      if (res.state !== "RESERVED") {
+        return {
+          ok: false,
+          holdCode: "BUDGET_RESERVATION_CONFLICT",
+          reason: `BUDGET_RESERVATION_CONFLICT: reviewer reservation ${res.opKey} is ${res.state} — cancellation after invocation fails closed`,
+        };
+      }
+      const inflight = this.ledger.inFlight[res.opKey];
+      for (const [d, v] of Object.entries(inflight.amounts ?? {})) {
+        this.ledger.reservations[d] = (this.ledger.reservations[d] ?? 0) - v;
+      }
+      delete this.ledger.inFlight[res.opKey];
+      this.ledger.events.push({ seq: this.ledger.events.length, kind: "cancel_reservation", opKey: res.opKey });
+      res.state = "CANCELLED";
+      this._state = this.state();
+      return { ok: true };
+    },
+
 
     /** Record a retry（attempt beyond the first — same node re-attempt）. */
     recordRetry({ nodeId = null } = {}) {
@@ -374,6 +509,14 @@ export function createBudgetEnforcement({ admission, checkpointState = null, par
       const observed = observeFromResult(result);
       const ledgerCounts = this.ledger.counters;
       const diverged = [];
+      // R3 §5.4: a lifecycle that ends with an active reviewer reservation
+      // fails closed — never silently discarded or counted as consumption.
+      const activeReservations =
+        [...this._reviewerReservations.values()].filter((r) => r.state === "RESERVED" || r.state === "INVOKED").length;
+      const inflightReviewerKeys = Object.keys(this.ledger.inFlight ?? {}).filter((k) => k.startsWith("reviewer:")).length;
+      if (activeReservations > 0 || inflightReviewerKeys > 0) {
+        diverged.push(`verifier_reviewer_attempts:unresolved_reservations=${Math.max(activeReservations, inflightReviewerKeys)}`);
+      }
       for (const d of ENFORCED_DIMENSIONS) {
         if (envelope.dimensions[d]?.limit === null || envelope.dimensions[d]?.limit === undefined) continue;
         const expected = (ledgerCounts[d] ?? 0) - (this._resumeBaseline?.[d] ?? 0);
@@ -428,18 +571,33 @@ function observeFromResult(result) {
   for (const n of nodes) {
     if (!n || typeof n !== "object") continue;
     const final = n.final ?? "NOT_RECORDED";
-    if (final === "SKIPPED_DUE_TO_DEPENDENCY" || final === "NOT_RECORDED") continue;
+    // STAGE-D BUDGET HANDOVER: scheduler-synthesized placeholder results
+    //（colima join completion for never-executed / folded phases）carry
+    // skipped:true — they are NOT runtime evidence of consumption. Counting
+    // them would double-charge a resumed era for work already settled in the
+    // baseline era（or never performed at all）.
+    if (n.skipped === true || final === "SKIPPED_DUE_TO_DEPENDENCY" || final === "NOT_RECORDED") continue;
     nodeCount++;
     if (n.subagentEnvelope || n.subagentResult || n.taskType === "subagent") subagentCount++;
     const attempt = Number(n.attempt ?? 0);
     if (attempt > 0) retryCount += attempt;
-    const lat = n?.resultIdentity?.latencyMs;
-    if (Number.isFinite(lat) && lat >= 0) wallClockMs += lat;
+    // STAGE-D BUDGET HANDOVER: the SAME runner-timing meter the terminal
+    // settlement uses — executor latencyMs, else the node's measured
+    // startedAt→completedAt window. One meter, one unit: settle and
+    // reconcile can only agree when both read the identical figure.
+    const lat = Number(n?.resultIdentity?.latencyMs);
+    if (Number.isFinite(lat) && lat >= 0) {
+      wallClockMs += lat;
+    } else if (Number.isFinite(n?.startedAt) && Number.isFinite(n?.completedAt)) {
+      wallClockMs += Math.max(0, n.completedAt - n.startedAt);
+    }
   }
   // Wall-clock meter: the SUM of measured node latencies is the consistent
   // figure（the ledger settles per-node latencies）. Falls back to the graph
-  // envelope start→completed window only when no node latency was measured.
-  if (wallClockMs === 0) {
+  // envelope start→completed window ONLY when at least one real node ran —
+  // a resumed era with zero executed nodes must observe zero, never the
+  // whole-process window（STAGE-D BUDGET HANDOVER reconciliation fix）.
+  if (wallClockMs === 0 && nodeCount > 0) {
     const started = result.startedAt ? Date.parse(result.startedAt) : null;
     const completed = result.completedAt ? Date.parse(result.completedAt) : null;
     if (Number.isFinite(started) && Number.isFinite(completed)) {
@@ -447,13 +605,11 @@ function observeFromResult(result) {
     }
   }
   let repairCount = 0;
-  let reviewerCount = 0;
   for (const tx of transitions ?? []) {
     for (const lt of tx?.lifecycleTransitions ?? []) {
       const phase = String(lt?.phase ?? "");
       const status = String(lt?.status ?? "");
       if (status.toUpperCase() === "REPAIR" || phase.toUpperCase() === "REPAIR") repairCount++;
-      if (phase === "reviewer" || phase === "reviewer_verdict") reviewerCount++;
     }
   }
   return {
@@ -461,7 +617,7 @@ function observeFromResult(result) {
     node_execution_count: nodeCount,
     sub_agent_execution_count: subagentCount,
     repair_attempt_count: repairCount,
-    verifier_reviewer_attempts: reviewerCount,
+    verifier_reviewer_attempts: countLogicalReviewerAttempts(transitions),
     retry_count: retryCount,
   };
 }

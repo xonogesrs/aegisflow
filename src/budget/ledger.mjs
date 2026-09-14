@@ -182,8 +182,16 @@ export function reconstructBudgetLedger({ envelope, events = [] } = {}) {
       if (!ev.childCounters || typeof ev.childCounters !== "object") return { ok: false, holdCode: "BUDGET_AUTHORITY_INVALID", reason: "reconstruct: merge_child without childCounters" };
       const m = mergeChildCounters(ledger, envelope, ev.childCounters);
       if (!m.ok) return { ok: false, holdCode: m.holdCode, reason: `reconstruct: ${m.reason}` };
+    } else if (ev.kind === "cancel_reservation") {
+      // R3: a cancelled reviewer reservation released its slot at cancel
+      // time; replay releases it identically（deterministic reconstruction）.
+      const res = ledger.inFlight[ev.opKey];
+      if (!res) return { ok: false, holdCode: "BUDGET_AUTHORITY_INVALID", reason: `reconstruct: cancel_reservation for unreserved opKey ${ev.opKey}` };
+      for (const [d, v] of Object.entries(res.amounts ?? {})) {
+        ledger.reservations[d] = (ledger.reservations[d] ?? 0) - v;
+      }
+      delete ledger.inFlight[ev.opKey];
     } else if (ev.kind === "resume_settle_upper_bound") {
-      // already folded into counters by the persisted state; no-op for replay
     } else {
       return { ok: false, holdCode: "BUDGET_AUTHORITY_INVALID", reason: `reconstruct: unknown event kind ${String(ev.kind)}` };
     }
@@ -307,6 +315,26 @@ export function checkpointBudgetLedger(ledger) {
   };
 }
 
+/**
+ * Release an IN-FLIGHT reservation WITHOUT charging it（§6 cancellation
+ * seam for intentionally-refused dispatches — STAGE-D BUDGET HANDOVER）.
+ * The receipt log records the SAME cancel_reservation event kind the R3
+ * reviewer seam already uses, so deterministic reconstruction replays the
+ * release identically. Fail-closed for unknown opKeys（never a silent no-op）.
+ */
+function ledgerCancelReservation(ledger, opKey) {
+  const res = ledger.inFlight?.[opKey];
+  if (!res) {
+    return { ok: false, holdCode: "BUDGET_AUTHORITY_INVALID", reason: `BUDGET_AUTHORITY_INVALID: cancel for unreserved opKey ${opKey}` };
+  }
+  for (const [d, v] of Object.entries(res.amounts ?? {})) {
+    ledger.reservations[d] = (ledger.reservations[d] ?? 0) - v;
+  }
+  delete ledger.inFlight[opKey];
+  ledger.events.push({ seq: ledger.events.length, kind: "cancel_reservation", opKey });
+  return { ok: true };
+}
+
 /** Remaining（unconsumed, unreserved）budget per dimension — child authority. */
 export function remainingBudget(envelope, ledger) {
   const remaining = {};
@@ -318,4 +346,4 @@ export function remainingBudget(envelope, ledger) {
   return remaining;
 }
 
-export { ledgerReserve, ledgerSettle, ledgerConfirm };
+export { ledgerReserve, ledgerSettle, ledgerConfirm, ledgerCancelReservation };

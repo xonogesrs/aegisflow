@@ -25,7 +25,10 @@
 //     repair_attempt_count        — meter: repair lifecycle transitions
 //                                    （INDEPENDENT of the TA-2 repair budget
 //                                    authority — B4）;
-//     verifier_reviewer_attempts  — meter: reviewer lifecycle transitions
+//     verifier_reviewer_attempts  — meter: one LOGICAL_REVIEW_ATTEMPT
+//                                    (one real reviewer invocation;
+//                                    reviewer + reviewer_verdict evidence
+//                                    pair = 1; events are not attempts)
 //     retry_count                 — meter: attempts beyond the first per node
 //   DEFERRED（no reliable meter today — disclosed, never fake-enforced）:
 //     token_budget                — the execution layer reports tokenSource
@@ -155,7 +158,7 @@ export const DIMENSION_METER_MAP = Object.freeze({
   },
   verifier_reviewer_attempts: {
     unit: "count",
-    meterSource: "reviewer lifecycle transitions (phase=reviewer / reviewer_verdict)",
+    meterSource: "LOGICAL_REVIEW_ATTEMPT = one real reviewer invocation (reviewer + reviewer_verdict evidence pair); settled at onReviewerCompleted",
     owner: "execution-orchestrator lifecycle hooks",
     admissionField: "extensions.budget.dimensions.verifier_reviewer_attempts.limit",
     enforcementPoint: "onReviewerCompleted settlement",
@@ -423,4 +426,44 @@ export function effectiveBudgetContract(admission) {
       dimensions: Object.fromEntries(ENFORCED_DIMENSIONS.map((d) => [d, { limit: limits[d] ?? null }])),
     },
   };
+}
+
+export const LOGICAL_REVIEW_ATTEMPT = "LOGICAL_REVIEW_ATTEMPT";
+
+/**
+ * THE single verifier_reviewer_attempts normalizer.
+ *
+ * Evidence events `reviewer` and `reviewer_verdict` remain distinct
+ * lifecycle facts. Budget consumption is one LOGICAL_REVIEW_ATTEMPT
+ * per real invocation, identified by (node, attempt). A pair of
+ * events for the same slot counts as 1. Duplicate publication of the
+ * same slot is ignored. A lone reviewer event (invocation without a
+ * verdict: error / timeout / invalid) still counts as 1. A lone
+ * reviewer_verdict without a reviewer event still counts as 1.
+ *
+ * Accepts either:
+ *   - graph transitions: [{ phaseId, lifecycleTransitions: [...] }]
+ *   - a flat lifecycle event list: [{ phase, attempt, ... }]
+ */
+export function countLogicalReviewerAttempts(transitions) {
+  if (!Array.isArray(transitions) || transitions.length === 0) return 0;
+  const slots = new Set();
+  const ingest = (events, nodeKey) => {
+    for (const lt of events ?? []) {
+      const phase = String(lt?.phase ?? "");
+      if (phase !== "reviewer" && phase !== "reviewer_verdict") continue;
+      const attempt = lt.attempt === undefined || lt.attempt === null ? 0 : lt.attempt;
+      slots.add(`${nodeKey}#${attempt}`);
+    }
+  };
+  const nested = transitions.some((t) => t && Array.isArray(t.lifecycleTransitions));
+  if (nested) {
+    for (let i = 0; i < transitions.length; i++) {
+      const tx = transitions[i];
+      ingest(tx.lifecycleTransitions, tx.phaseId ?? tx.nodeId ?? `tx:${i}`);
+    }
+  } else {
+    ingest(transitions, "direct");
+  }
+  return slots.size;
 }

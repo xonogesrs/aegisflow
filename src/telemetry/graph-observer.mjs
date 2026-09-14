@@ -18,6 +18,7 @@
 import { createTelemetryEvent, TELEMETRY_HOLD_CODES } from "./contract.mjs";
 import { classifyVerification } from "./security.mjs";
 import { TelemetryStoreError } from "./store.mjs";
+import { countLogicalReviewerAttempts } from "../budget/contract.mjs";
 
 function nodeTiming(node) {
   const startedAt = node?.startedAt ? new Date(node.startedAt).toISOString() : null;
@@ -98,7 +99,7 @@ export async function recordGraphTelemetry({ graphResult, closeout = null, store
       fanOut: nodes.length,
       attempts: nodes.reduce((a, n) => a + ((n?.attempt ?? 0) + 1), 0),
       repairCount: (graphResult.transitions ?? []).filter((t) => Array.isArray(t.lifecycleTransitions) && t.lifecycleTransitions.some((lt) => String(lt.status).toUpperCase() === "REPAIR")).length,
-      reviewerCount: (graphResult.transitions ?? []).filter((t) => Array.isArray(t.lifecycleTransitions) && t.lifecycleTransitions.some((lt) => lt.phase === "reviewer" || lt.phase === "reviewer_verdict")).length,
+      reviewerCount: countLogicalReviewerAttempts(graphResult.transitions ?? []),
       skippedNodes: nodes.filter((n) => n?.skipped === true).length,
       finalVerdict: graphResult.final ?? null,
       holdCode: graphResult.holdCode ?? null,
