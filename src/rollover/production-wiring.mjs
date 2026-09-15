@@ -28,6 +28,10 @@ import { sessionIdentityDigest } from "./rollover-authority.mjs";
 import { readCheckpoint } from "../v2/checkpoint-bridge.mjs";
 import { RunEvidenceStore } from "../evidence/run-evidence-store.mjs";
 
+// WP2 canonical rollover executor factory (moved here from admission-gate.mjs
+// — SINGLE definition; the fresh durable path and the successor resume path
+// both derive through THIS function, never a second implementation).
+
 export function admittedProviderBinding(admission) {
   return canonicalizeProviderBinding(admission?.extensions?.rollover?.provider_binding);
 }
@@ -209,7 +213,24 @@ export function observeProviderUsageAndTrigger({ store, admission, usage, execut
  */
 export function automaticTriggerEligible({ rolloverBlock, sourceGeneration }) {
   if (!rolloverBlock || typeof rolloverBlock !== "object") return { eligible: true };
-  if (rolloverBlock.active_rollover_id) return { eligible: false, reason: "a rollover is already active for this window" };
+  // MULTI-SESSION REPAIR-1: `active_rollover_id` is NON-null through the
+  // whole post-commit era (OWNERSHIP_TRANSFER_COMMITTED / ACTIVE_B) until
+  // the retirement progression clears it — but a post-commit state is NOT
+  // an active window for the CURRENT owner generation: the pinned id
+  // belongs to the PREVIOUS transfer. An active window is exactly an ACTIVE
+  // PRE-COMMIT rollover state (the §9a owner-frozen world). Post-commit /
+  // closed-era states are gated by the per-generation intent dedup below,
+  // never by the previous transfer's id. Any UNKNOWN state token fails
+  // closed (ineligible) — never defaults open.
+  const POST_COMMIT_OR_CLOSED = new Set([
+    "OWNERSHIP_TRANSFER_COMMITTED", "ACTIVE_B", "A_RETIREMENT_PENDING",
+    "A_RETIRED", "A_RETIREMENT_CONFIRMED",
+  ]);
+  if (!POST_COMMIT_OR_CLOSED.has(rolloverBlock.state)) {
+    if (rolloverBlock.active_rollover_id) {
+      return { eligible: false, reason: "a rollover is already active for this window" };
+    }
+  }
   const intents = rolloverBlock.intents ?? {};
   for (const intent of Object.values(intents)) {
     if (!intent || typeof intent !== "object") continue;
@@ -601,4 +622,148 @@ export async function resumeAsSuccessor({ persistenceRoot, executionId, binding,
     result.predecessorRetirement = retirementOutcome;
   }
   return result;
+}
+
+// ── WP2 — THE CANONICAL ROLLOVER EXECUTOR FACTORY (single definition) ──────
+// Authority inputs (closed set): the frozen admission record (threshold +
+// rollover config + provider_binding), durable checkpoint truth
+// (CURRENT.rollover owner/candidate), the canonical rollover production
+// wiring (THIS module), the spawn registry capability row matching the
+// admitted binding. A caller- or environment-supplied executor is NEVER
+// accepted (the key is fenced in AUTHORITY_SEAM_RUNNER_KEYS at the
+// admission gate and AUTHORITATIVE_RUN_KEYS at the coordinator; both the
+// fresh durable path and the successor resume path inject THIS derived
+// closure internally). Provider identity is the admitted provider_binding.
+//
+// MULTI-SESSION REPAIR-1 R2 — current owner session identity: the source
+// identity presented at rollover intake MUST be the durable owner-of-record
+// of the CURRENT era, not the original generation-0 source. Derivation:
+//   mirror.owner present (post-first-transfer era)
+//     → opaqueSessionId from mirror.candidate.identity (the REAL spawned
+//       session file identity of the CURRENT owner),
+//       cross-checked: sessionIdentityDigest({...candidate, generation:
+//       owner.session_generation}) == owner.session_identity_digest
+//       == transfers[active|last].to.sessionIdentityDigest (fail closed on
+//       any mismatch — a stale/tampered candidate never presents identity)
+//   mirror.owner absent (generation 0)
+//     → admitted generation-0 source identity
+//       (cfg.source_session_id ?? executionId — unchanged legacy behavior)
+// No ambiguous fallback chain: either the durable owner identity re-derives
+// exactly, or the executor refuses to trigger (never presents a stale id).
+
+/**
+ * REPAIR-1 R2 — derive the CURRENT owner-of-record source identity for ONE
+ * rollover intake from durable mirror truth.
+ *
+ *   mirror.owner present (post-first-transfer era)
+ *     → opaqueSessionId from mirror.candidate.identity (the REAL spawned
+ *       session file identity of the CURRENT owner), cross-checked:
+ *       sessionIdentityDigest({...candidate, generation:
+ *       owner.session_generation}) == owner.session_identity_digest
+ *       == transfers[active|last].to.sessionIdentityDigest — fail closed on
+ *       any mismatch (a stale/tampered candidate never presents identity).
+ *   mirror.owner absent (generation 0)
+ *     → the admitted generation-0 source identity
+ *       (cfg.source_session_id ?? executionId — unchanged legacy behavior).
+ *
+ * No ambiguous fallback chain: either the durable owner identity re-derives
+ * exactly, or the intake is refused (never a stale source id).
+ *
+ * @param {object} p
+ * @param {object|null} p.mirror — CURRENT graph.rollover mirror
+ * @param {object} p.bound — canonicalized admitted provider binding value
+ * @param {object} p.cfg — admission extensions.rollover config
+ * @param {string} p.executionId — the durable execution id (generation-0
+ *   fallback basis only)
+ * @returns {{ ok: true, sourceIdentity: object }
+ *          | { ok: false, code: string, reason: string }}
+ */
+export function deriveCurrentOwnerSourceIdentity({ mirror, bound, cfg, executionId }) {
+  const owner = mirror?.owner ?? null;
+  if (owner && typeof owner.session_identity_digest === "string"
+      && Number.isInteger(owner.session_generation)) {
+    const transferId = mirror.active_rollover_id ?? mirror.last_rollover_id ?? null;
+    const transfer = transferId ? (mirror.transfers?.[transferId] ?? null) : null;
+    const candidate = mirror.candidate?.identity ?? null;
+    if (!transfer || !candidate || typeof candidate.opaqueSessionId !== "string") {
+      return { ok: false, code: "CROSS_SESSION_SUCCESSOR_IDENTITY_INVALID",
+        reason: "current owner era cannot re-derive its spawn identity from durable truth (refusing to present a stale source identity)" };
+    }
+    const ownerDigest = sessionIdentityDigest({
+      adapterKind: bound.adapterKind,
+      providerKind: bound.providerKind,
+      opaqueSessionId: candidate.opaqueSessionId,
+      sessionGeneration: owner.session_generation,
+    });
+    if (ownerDigest !== owner.session_identity_digest
+        || ownerDigest !== transfer.to.sessionIdentityDigest) {
+      return { ok: false, code: "CROSS_SESSION_SUCCESSOR_IDENTITY_INVALID",
+        reason: "durable owner-of-record does not re-derive from the recorded spawn candidate (tampered/mismatched mirror)" };
+    }
+    return { ok: true, sourceIdentity: {
+      adapterKind: bound.adapterKind,
+      providerKind: bound.providerKind,
+      opaqueSessionId: candidate.opaqueSessionId,
+      sessionGeneration: owner.session_generation,
+    } };
+  }
+  return { ok: true, sourceIdentity: {
+    adapterKind: bound.adapterKind,
+    providerKind: bound.providerKind,
+    opaqueSessionId: String(cfg.source_session_id ?? executionId),
+    sessionGeneration: Number(mirror?.owner?.session_generation ?? 0),
+  } };
+}
+
+/**
+ * Derive THE canonical rollover executor for ONE execution.
+ * @param {object} p
+ * @param {object} p.admission — the frozen admission record
+ * @returns {Promise<Function|null>} the authorized executor, or null when
+ *   rollover is not configured on the admission (rollover remains inert —
+ *   the exact legacy same-session semantics).
+ */
+export async function deriveCanonicalRolloverExecutor({ admission }) {
+  const cfg = admission?.extensions?.rollover ?? null;
+  if (!cfg || cfg.enabled !== true) return null;
+  return async function canonicalRolloverRequestExecutor(runner) {
+    // The trigger authority is the RUNNER'S DURABLE OBSERVATION (produced by
+    // the WP1 producer inside the durable graph's between-phase hooks from
+    // provider-reported usage). No observation ⇒ no rollover: A continues if
+    // otherwise legal (WP1 failure policy — never a fabricated trigger).
+    const observation = runner.state?._rolloverObservation ?? null;
+    if (!observation || observation.triggered !== true || typeof observation.triggerEvent !== "object") {
+      return { ok: true, skipped: true, reason: observation?.reason ?? "no automatic trigger observed" };
+    }
+    // Window dedup against DURABLE truth: exactly one eligible trigger per
+    // rollover window (the in-run _rolloverExecuted flag and the ACTIVE
+    // pre-commit fence remain the primary dedupe layers).
+    const mirror = (() => {
+      try { return readCheckpoint(runner.root, runner.executionId).snapshot.graph?.rollover ?? null; }
+      catch { return null; }
+    })();
+    const sourceGeneration = Number(mirror?.owner?.session_generation ?? 0);
+    const eligibility = automaticTriggerEligible({ rolloverBlock: mirror, sourceGeneration });
+    if (!eligibility.eligible) {
+      return { ok: true, skipped: true, reason: eligibility.reason };
+    }
+    const bound = admittedProviderBinding(runner.admission ?? admission);
+    if (!bound.ok) {
+      return { ok: false, code: bound.code, reason: bound.reason };
+    }
+    // Durable-truth source identity (REPAIR-1 R2) — THE single derivation
+    const ident = deriveCurrentOwnerSourceIdentity({
+      mirror, bound: bound.value, cfg, executionId: runner.executionId,
+    });
+    if (!ident.ok) {
+      return { ok: false, code: ident.code, reason: ident.reason };
+    }
+    const intake = createRolloverIntake({
+      triggerEvent: observation.triggerEvent,
+      sourceIdentity: ident.sourceIdentity,
+      rsl3SurfaceDir: cfg.rsl3_surface_dir ?? null,
+      requireEcho: cfg.require_echo !== false,
+    });
+    return intake.run(runner);
+  };
 }

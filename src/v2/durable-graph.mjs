@@ -1625,6 +1625,21 @@ export async function resumeDurableGraph({
     throw e;
   }
 
+  // ── MULTI-SESSION REPAIR-1 R1: THE canonical rollover executor on the
+  //    successor resume path. Generation ≥1 previously resumed with NO
+  //    rolloverRequestExecutor — usage observation machinery and the §9a
+  //    gate were present but the intake could never fire, so B→C could
+  //    never trigger autonomously. Derive the SAME canonical executor the
+  //    initial admitted durable execution uses (single factory in
+  //    src/rollover/production-wiring.mjs) from the re-verified admission
+  //    + durable truth — NEVER from caller opts (the key stays fenced at
+  //    both sinks; this seam accepts no executor parameter at all). ──
+  let rolloverRequestExecutor = null;
+  if (admission && typeof admission === "object" && admission.extensions?.rollover?.enabled === true) {
+    rolloverRequestExecutor = await (await import("../rollover/production-wiring.mjs"))
+      .deriveCanonicalRolloverExecutor({ admission });
+  }
+
   // ── DE-2R: adopt a caller-supplied IR object when it reproduces the
   //    durable decomposition artifact exactly（canonical-equal）. The
   //    production sub-agent resume entry（resumeSubagentGraph）reads the IR
@@ -1799,6 +1814,11 @@ export async function resumeDurableGraph({
     // successor session binding" and the era can never settle into the
     // reconstructed ledger (protected seam wiring; no new authority).
     rolloverSessionBinding,
+    // MULTI-SESSION REPAIR-1 R1: the successor era receives THE canonical
+    // executor derived above (same factory as the initial admitted run) so
+    // B→C can trigger autonomously at a between-phase boundary. Never a
+    // caller parameter — derived here from the re-verified admission.
+    rolloverRequestExecutor,
   });
   run.execDir = execDir;
   run.store = store;
@@ -1819,7 +1839,6 @@ export async function resumeDurableGraph({
   // already folded in）— the first resumed runner view must match it exactly
   //（DE-2 F2/F3: no re-terminalization of recovered / already-passed phases）.
   run.state.phaseStates = { ...initialState.statuses };
-  run.state.phaseAttempts = { ...(snapshot.phase_attempts || {}) };
   run.state.phaseResultHashes = { ...(snapshot.phase_result_hashes || {}) };
   run.state.completedPhaseIds = [...(snapshot.completed_phase_ids || [])];
   run.state.sideEffectIds = { ...(graphMeta.side_effect_ids || {}) };

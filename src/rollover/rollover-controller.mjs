@@ -190,7 +190,20 @@ export async function beginRollover(opts) {
     if (sameRequest) {
       return { ok: true, idempotent: true, rolloverId: existingId, state: rollover0.state };
     }
-    throw new RolloverHoldError("CROSS_SESSION_ROLLOVER_TRIGGER_UNAUTHORIZED", "a different rollover is already active for this owner generation (K1)");
+    // MULTI-SESSION REPAIR-1 — K1 generation-advance exemption: through a
+    // post-commit era the pinned active_rollover_id belongs to the PREVIOUS
+    // transfer (retirement clears it only after the successor completes).
+    // An intake from the CURRENT durable owner-of-record generation is a
+    // GENERATION ADVANCE, not a K1 conflict: the mirror's active id is
+    // rewritten to the new rolloverId below (previous transfer/ACK records
+    // stay preserved under transfers/acks). The owner fence below still
+    // requires the intake to BE the durable owner — never a second front.
+    const generationAdvanced = !!rollover0.owner
+      && Number(rollover0.owner.session_generation) === Number(sourceIdentity.sessionGeneration)
+      && POST_COMMIT_SET.has(rollover0.state);
+    if (!generationAdvanced) {
+      throw new RolloverHoldError("CROSS_SESSION_ROLLOVER_TRIGGER_UNAUTHORIZED", "a different rollover is already active for this owner generation (K1)");
+    }
   }
 
   // T74 sequential refresh-retry: an ABORTED intent for the same logical

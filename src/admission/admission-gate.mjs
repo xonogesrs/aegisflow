@@ -75,72 +75,11 @@ export const AUTHORITY_SEAM_RUNNER_KEYS = Object.freeze([
   // input. Canonical internal injection happens below for graph="durable".
   "rolloverRequestExecutor",
 ]);
-
-/**
- * WP2 — THE canonical internal rollover-request executor derivation for the
- * graph="durable" production path. Authority inputs (closed set):
- *   - the frozen admission record (threshold + rollover config + provider_binding),
- *   - durable checkpoint truth (CURRENT.rollover owner/identity),
- *   - the canonical rollover production wiring (src/rollover/production-wiring.mjs),
- *   - the spawn registry capability row matching the admitted binding.
- * A caller- or environment-supplied executor is NEVER accepted (the key is
- * fenced in AUTHORITY_SEAM_RUNNER_KEYS above; the durable path injects THIS
- * derived closure into runDurableGraph). Provider identity is the admitted
- * provider_binding — never a DeepSeek constant, never an env override.
- * @returns {Function|null} the authorized executor, or null when rollover
- *   is not configured on the admission (rollover remains inert — the exact
- *   legacy same-session semantics).
- */
-async function deriveCanonicalRolloverExecutor({ admission }) {
-  const cfg = admission?.extensions?.rollover ?? null;
-  if (!cfg || cfg.enabled !== true) return null;
-  const { createRolloverIntake, automaticTriggerEligible, admittedProviderBinding } =
-    await import("../rollover/production-wiring.mjs");
-  const { readCheckpoint } = await import("../v2/checkpoint-bridge.mjs");
-  return async function canonicalRolloverRequestExecutor(runner) {
-    // The trigger authority is the RUNNER'S DURABLE OBSERVATION (produced by
-    // the WP1 producer inside the durable graph's between-phase hooks from
-    // provider-reported usage). No observation ⇒ no rollover: A continues if
-    // otherwise legal (WP1 failure policy — never a fabricated trigger).
-    const observation = runner.state?._rolloverObservation ?? null;
-    if (!observation || observation.triggered !== true || typeof observation.triggerEvent !== "object") {
-      return { ok: true, skipped: true, reason: observation?.reason ?? "no automatic trigger observed" };
-    }
-    // Window dedup against DURABLE truth: exactly one eligible trigger per
-    // rollover window (the in-run _rolloverExecuted flag and the ACTIVE
-    // pre-commit fence remain the primary dedupe layers).
-    const mirror = (() => {
-      try { return readCheckpoint(runner.root, runner.executionId).snapshot.graph?.rollover ?? null; }
-      catch { return null; }
-    })();
-    const sourceGeneration = Number(mirror?.owner?.session_generation ?? 0);
-    const eligibility = automaticTriggerEligible({ rolloverBlock: mirror, sourceGeneration });
-    if (!eligibility.eligible) {
-      return { ok: true, skipped: true, reason: eligibility.reason };
-    }
-    const bound = admittedProviderBinding(runner.admission ?? admission);
-    if (!bound.ok) {
-      return { ok: false, code: bound.code, reason: bound.reason };
-    }
-    // Durable-truth source identity: the CURRENT mirror is the owner-of-record
-    // authority. On a fresh A-era run the mirror owner is null — the source
-    // identity then comes from the frozen admission binding (A's own spawn
-    // session identity), never from runner opts or the environment.
-    const sourceIdentity = {
-      adapterKind: bound.value.adapterKind,
-      providerKind: bound.value.providerKind,
-      opaqueSessionId: String(cfg.source_session_id ?? runner.executionId),
-      sessionGeneration: sourceGeneration,
-    };
-    const intake = createRolloverIntake({
-      triggerEvent: observation.triggerEvent,
-      sourceIdentity,
-      rsl3SurfaceDir: cfg.rsl3_surface_dir ?? null,
-      requireEcho: cfg.require_echo !== false,
-    });
-    return intake.run(runner);
-  };
-}
+// WP2: THE canonical internal rollover executor derivation lives in
+// src/rollover/production-wiring.mjs (SINGLE definition — the successor
+// resume path in durable-graph.mjs derives through the SAME factory).
+const deriveCanonicalRolloverExecutor = async ({ admission }) =>
+  (await import("../rollover/production-wiring.mjs")).deriveCanonicalRolloverExecutor({ admission });
 
 /**
  * Validate a per-task allocation BOUND to the admission at the execution
