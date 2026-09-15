@@ -294,7 +294,7 @@ export function createPiRpcAdapter(options = {}) {
     let sawAgentSettled = false;
     let lastAssistantStopReason = null;
     let lastAssistantErrorMessage = null;
-    let protocolError = null;
+    let lastAssistantUsage = null; // P3-U1 authoritative provider usage (message_end)
     let finalText = null;
     let awaitingFinalText = false;
     let spawnError = null;
@@ -353,6 +353,13 @@ export function createPiRpcAdapter(options = {}) {
       if (evt.type === "message_end" && evt.message && evt.message.role === "assistant") {
         lastAssistantStopReason = evt.message.stopReason ?? lastAssistantStopReason;
         lastAssistantErrorMessage = evt.message.errorMessage ?? lastAssistantErrorMessage;
+        // P3-U1-admitted authoritative usage source: the FINAL assistant
+        // message_end carries the pi-ai Usage object (input/output/cacheRead/
+        // cacheWrite/totalTokens). Captured verbatim as provider-reported
+        // facts — never estimated, never summed from message_update deltas.
+        if (evt.message.usage && typeof evt.message.usage === "object") {
+          lastAssistantUsage = evt.message.usage;
+        }
       }
       // message_update diagnostic classification
       if (evt.type === "message_update") {
@@ -494,7 +501,8 @@ export function createPiRpcAdapter(options = {}) {
     const termInfo = await terminateChild(child, { graceMs });
 
     const metadata = {
-      exitCode: childExited ? childExitInfo.code : null,
+      piSessionId: null,
+      providerUsage: lastAssistantUsage, // provider-reported usage or null (NOT_REPORTED)
       childPid,
       spawnedAt,
       lastActivityAt,

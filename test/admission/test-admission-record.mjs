@@ -143,3 +143,91 @@ test("bounded refinement: new facts -> new deterministic admission_id, old prese
   assert.notEqual(f2.admission_id, first.admission_id);
   assert.equal(first.admission_id, refined.admission_id);
 });
+
+const GLM_BINDING = {
+  adapterKind: "pi-builtin",
+  providerKind: "merge-gateway",
+  modelId: "zai/glm-5.3-flash",
+  requiredEnvKeys: ["MERGE_GATEWAY_API_KEY"],
+};
+
+test("valid provider_binding is accepted and included in admission_id", () => {
+  const a = buildTask({
+    extensions: { rollover: { enabled: true, context_occupancy_threshold: 100, provider_binding: GLM_BINDING } },
+  });
+  assert.equal(a.extensions.rollover.provider_binding.modelId, "zai/glm-5.3-flash");
+  assert.equal(deriveAdmissionId(a), a.admission_id);
+});
+
+test("unsupported adapter/provider/model pair is rejected", () => {
+  const rec = buildAdmissionRecord({
+    taskId: "TEST-ADM-1",
+    classification: classify({ dimensionScores: FULL_EVIDENCE, riskSignals: scanRiskSignals("fix one typo in README") }),
+    extensions: {
+      rollover: {
+        enabled: true,
+        context_occupancy_threshold: 100,
+        provider_binding: { ...GLM_BINDING, providerKind: "openai", modelId: "gpt-4" },
+      },
+    },
+  });
+  rec.admission_id = deriveAdmissionId(rec);
+  const v = validateAdmission(rec);
+  assert.equal(v.ok, false);
+  assert.ok(v.errors.some((e) => e.includes("provider_binding") && e.includes("unsupported")));
+});
+
+test("missing modelId on enabled rollover is rejected", () => {
+  const rec = buildAdmissionRecord({
+    taskId: "TEST-ADM-1",
+    classification: classify({ dimensionScores: FULL_EVIDENCE, riskSignals: scanRiskSignals("fix one typo in README") }),
+    extensions: {
+      rollover: {
+        enabled: true,
+        context_occupancy_threshold: 100,
+        provider_binding: { adapterKind: "pi-builtin", providerKind: "merge-gateway", requiredEnvKeys: ["MERGE_GATEWAY_API_KEY"] },
+      },
+    },
+  });
+  rec.admission_id = deriveAdmissionId(rec);
+  const v = validateAdmission(rec);
+  assert.equal(v.ok, false);
+  assert.ok(v.errors.some((e) => e.includes("modelId")));
+});
+
+test("binding mutation changes admission_id", () => {
+  const a = buildTask({
+    extensions: { rollover: { enabled: true, context_occupancy_threshold: 100, provider_binding: GLM_BINDING } },
+  });
+  const mutated = {
+    ...a,
+    extensions: {
+      rollover: {
+        ...a.extensions.rollover,
+        provider_binding: { ...GLM_BINDING, modelId: "deepseek-v4-flash", providerKind: "deepseek", requiredEnvKeys: [] },
+      },
+    },
+  };
+  assert.notEqual(deriveAdmissionId(mutated), a.admission_id);
+});
+
+test("post-admission binding mutation is rejected", () => {
+  const a = buildTask({
+    extensions: { rollover: { enabled: true, context_occupancy_threshold: 100, provider_binding: GLM_BINDING } },
+  });
+  const tampered = {
+    ...a,
+    extensions: {
+      rollover: {
+        ...a.extensions.rollover,
+        provider_binding: { ...GLM_BINDING, modelId: "deepseek-v4-flash", providerKind: "deepseek", requiredEnvKeys: [] },
+      },
+    },
+  };
+  const v = validateAdmission(tampered);
+  assert.equal(v.ok, false);
+  assert.ok(v.errors.some((e) => e.startsWith("admission_id_mismatch")));
+  const drift = assertAdmissionFrozen({ stored: tampered, authoritativeAdmissionId: a.admission_id, authoritativeRecord: tampered });
+  assert.equal(drift.ok, false);
+});
+

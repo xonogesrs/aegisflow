@@ -22,6 +22,8 @@ import { capabilityRegistry, resolveCapabilityId } from "./registry.mjs";
 import { profileFor, RISK_TIERS, SIZE_TIERS } from "./classify.mjs";
 import { projectProfilePolicies, PROFILE_MATRIX } from "./policy-projection.mjs";
 import { normalizeRisk } from "../risk-normalization.mjs";
+import { canonicalizeProviderBinding } from "../rollover/spawn-registry.mjs";
+
 
 export const ADMISSION_SCHEMA = "autoloop.task-admission/v1";
 export const ADMISSION_SCHEMA_VERSION = 1;
@@ -260,6 +262,27 @@ export function validateAdmission(record) {
       }
     } catch (e) {
       errors.push(`risk_signal_class_invalid:${String(e?.message ?? e).slice(0, 80)}`);
+    }
+  }
+
+  // Durable rollover provider binding (admission-only provider authority).
+  // When rollover is enabled, a canonical provider_binding is required and
+  // must name a supported adapter/provider/model combination. Secret values
+  // are forbidden — only required env-key names may be persisted.
+  const rolloverExt = record.extensions?.rollover;
+  if (rolloverExt !== undefined && rolloverExt !== null) {
+    if (typeof rolloverExt !== "object" || Array.isArray(rolloverExt)) {
+      errors.push("rollover_extension_invalid");
+    } else if (rolloverExt.enabled === true) {
+      const bound = canonicalizeProviderBinding(rolloverExt.provider_binding);
+      if (!bound.ok) {
+        errors.push(`provider_binding:${bound.code}:${bound.reason}`);
+      }
+    } else if (rolloverExt.provider_binding !== undefined) {
+      const bound = canonicalizeProviderBinding(rolloverExt.provider_binding);
+      if (!bound.ok) {
+        errors.push(`provider_binding:${bound.code}:${bound.reason}`);
+      }
     }
   }
 

@@ -408,6 +408,10 @@ const AUTHORITATIVE_RUN_KEYS = new Set([
   "rolloverControl", "rolloverSessionBinding", "rolloverTriggerEvent",
   "successorSessionIdentity", "sessionIdentityDigest", "sessionGeneration",
   "spawnSuccessorSession",
+  // STAGE D PRODUCTION WIRING fence (WP2): the mid-run rollover executor is
+  // derived INSIDE runAdmittedGraph from the frozen admission + durable
+  // truth — never accepted from caller options at the execution sink.
+  "rolloverRequestExecutor",
 ]);
 
 /**

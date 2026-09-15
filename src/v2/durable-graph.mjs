@@ -69,6 +69,7 @@ import {
   evaluateCrossSessionResumeGate, throwOnRefusal,
   evaluatePostTransferPublicationAuthority,
 } from "../rollover/resume-gate.mjs";
+import { observeProviderUsageAndTrigger } from "../rollover/production-wiring.mjs";
 
 export const GRAPH_DURABLE_FORMAT_VERSION = "1.0.0";
 
@@ -690,6 +691,26 @@ export class DurableGraphRun {
           reason: reason ?? null,
           graph_generation: self.recovery?.recoveryGeneration ?? 0,
         };
+        // ── WP1: AUTOMATIC CONTEXT TRIGGER PRODUCER (observation point) ──
+        // The provider-reported usage from THIS phase's executor (or null)
+        // is observed DURABLY here. A trigger is produced only from real
+        // provider usage against the frozen admission threshold; an
+        // observation failure is journal observability only — A continues
+        // if otherwise legal. Never a fabricated trigger, never a
+        // RECOVERABLE_SESSION_FAILURE emission.
+        if (self.rolloverRequestExecutor && self.admission) {
+          try {
+            self.state._rolloverObservation = observeProviderUsageAndTrigger({
+              store: self.store,
+              admission: self.admission,
+              usage: src?.providerUsage ?? null,
+              executionId: self.executionId,
+              phaseId,
+            });
+          } catch (e) {
+            self.state._rolloverObservation = { triggered: false, observed: false, reason: `observation error: ${String(e?.code ?? e?.message ?? e).slice(0, 120)}` };
+          }
+        }
         // COMPOSE the caller's own hook（production sub-agent wiring keeps
         // persisting reviewed results + attaching reviewResult）with the same
         // node object the graph runner produced.

@@ -309,6 +309,9 @@ export async function runColimaGraph({
       resultIdentity: executor
         ? { status: executor.status, containerName: executor.containerName, latencyMs: executor.latencyMs }
         : null,
+      // WP1: provider-reported usage from the executor's RPC stream (or null
+      // when the executor surface exposes none — never estimated here).
+      providerUsage: executor?.metadata?.providerUsage ?? null,
       subagentResult: executor?.metadata?.subagent?.result ?? null,
       subagentValidation: executor?.metadata?.subagent?.validation ?? null,
       subagentEnvelope: executor?.metadata?.subagent?.envelope ?? null,

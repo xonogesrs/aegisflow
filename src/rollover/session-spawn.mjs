@@ -23,7 +23,7 @@ import {
   validateCanonicalSessionIdentityFields,
   deriveSpawnReceiptDigest,
 } from "./rollover-authority.mjs";
-import { knownAdapterPairKeys, resolveSpawnAdapter } from "./spawn-registry.mjs";
+import { knownAdapterPairKeys, resolveSpawnAdapter, canonicalizeProviderBinding } from "./spawn-registry.mjs";
 
 export const SPAWN_REQUEST_SCHEMA_VERSION = 1;
 
@@ -31,7 +31,8 @@ const SPAWN_RESULT_STATUSES = ["spawned", "error", "timed_out", "aborted"];
 
 /**
  * Validate the frozen spawn request shape.
- * request := { schemaVersion, adapterKind, providerKind, rolloverId,
+ * request := { schemaVersion, adapterKind, providerKind, modelId,
+ *              requiredEnvKeys, rolloverId,
  *              expectedTargetGeneration, checkpointLocator{root,executionId},
  *              checkpointDigest, taskIdentity, runIdentity, admissionIdentity,
  *              authorityDecisionDigest, spawnDispatchEventId }
@@ -50,6 +51,18 @@ export function validateSpawnRequest(request) {
     if (typeof v !== "string" || v.length === 0) {
       return { ok: false, code: "CROSS_SESSION_SUCCESSOR_IDENTITY_INVALID", reason: `spawn request field ${f} must be non-empty string` };
     }
+  }
+  if (!Array.isArray(request.requiredEnvKeys)) {
+    return { ok: false, code: "CROSS_SESSION_SUCCESSOR_IDENTITY_INVALID", reason: "spawn request field requiredEnvKeys must be an array of key names" };
+  }
+  const binding = canonicalizeProviderBinding({
+    adapterKind: request.adapterKind,
+    providerKind: request.providerKind,
+    modelId: request.modelId,
+    requiredEnvKeys: request.requiredEnvKeys,
+  });
+  if (!binding.ok) {
+    return { ok: false, code: binding.code, reason: binding.reason };
   }
   if (!Number.isInteger(request.expectedTargetGeneration) || request.expectedTargetGeneration < 1) {
     return { ok: false, code: "CROSS_SESSION_GENERATION_MISMATCH", reason: "expectedTargetGeneration must be positive integer" };
