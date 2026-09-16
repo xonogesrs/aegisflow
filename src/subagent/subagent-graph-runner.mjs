@@ -191,6 +191,12 @@ export async function runSubagentGraph({
   // forwarded to runDurableGraph / runColimaGraph so the pre-dispatch gate,
   // settlement and reconciliation run inside the production graph path.
   budget = null,
+  // STAGE D: authorized mid-run rollover intake executor（coordinator-level,
+  // derived by runAdmittedGraph from the frozen admission — NEVER a caller
+  // override; the key is fenced at the admission-gate sink）. Forwarded to
+  // runDurableGraph so the WP1 provider-usage observation + automatic
+  // trigger are reachable through the sub-agent graph path too.
+  rolloverRequestExecutor = null,
 }) {
   const durableExecutionId = durable ? (persistence?.executionId ?? durableExecutionIdFor(executionId)) : null;
 
@@ -267,6 +273,7 @@ export async function runSubagentGraph({
       persistence: { root, executionId: durableExecutionId },
       admission,
       budget,
+      rolloverRequestExecutor,
     });
     return { ...durableResult, executionId, durableExecutionId };
   }

@@ -72,7 +72,8 @@ export const AUTHORITY_SEAM_RUNNER_KEYS = Object.freeze([
   // STAGE D PRODUCTION WIRING fence (WP2): the mid-run rollover executor is
   // derived INSIDE this gate from the frozen admission + durable truth — a
   // caller-supplied substitute would mint successor authority from runtime
-  // input. Canonical internal injection happens below for graph="durable".
+  // input. Canonical internal injection happens below for graph="durable"
+  // and graph="subagent".
   "rolloverRequestExecutor",
 ]);
 // WP2: THE canonical internal rollover executor derivation lives in
@@ -309,11 +310,15 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
   // never re-derives or amends it — A1）; the budget enforcement travels with
   // it so the production runner executes the pre-dispatch → record → post-op
   // chain（and the durable layer persists the ledger checkpoint）.
-  // WP2: the graph="durable" production path receives THE canonical internal
-  // rollover executor derived from the frozen admission + durable truth —
-  // never a caller-supplied closure (fenced above), never an env override.
+  // WP2: the graph="durable" AND graph="subagent" production paths receive
+  // THE canonical internal rollover executor derived from the frozen
+  // admission + durable truth — never a caller-supplied closure (fenced
+  // above), never an env override. The sub-agent path forwards it to
+  // runDurableGraph (the sub-agent runner IS a durable production entry), so
+  // provider-usage observation + the automatic trigger are reachable through
+  // real sub-agent graphs as well.
   let canonicalRolloverExecutor = null;
-  if (graph === "durable") {
+  if (graph === "durable" || graph === "subagent") {
     canonicalRolloverExecutor = await deriveCanonicalRolloverExecutor({ admission });
   }
   const result = await fn({
