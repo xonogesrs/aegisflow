@@ -41,13 +41,11 @@ test("S3: verify gates no longer execute the 3 governance sub-suite entries", ()
   }
   // self-closeout SUITE_LINES / regression claims must not re-present the
   // governance sub-suites as separate suites（audit: SUITE_LINES lie）.
-  for (const script of readdirSync(join(REPO, "scripts")).filter((f) => f.endsWith("-self-closeout.mjs"))) {
-    const src = read(`scripts/${script}`);
-    for (const suite of SUBSET_SUITES) {
-      assert.equal(!!src.match(new RegExp(`SUITE_LINE\(\"${suite}\"\)`)), false, `${script} must not render ${suite} as a separate SUITE_LINE`);
-      assert.equal(!!src.match(new RegExp(`npm run ${suite.replace(":", ":")}`)), false, `${script} must not claim ${suite} as a separate regression entry`);
-    }
-  }
+  // R-04 removal: the 17 one-shot self-closeout wrappers were deleted — the
+  // scan now asserts their ABSENCE so a retired wrapper cannot silently
+  // reappear and re-introduce the parallel-closeout surface.
+  const closeouts = readdirSync(join(REPO, "scripts")).filter((f) => f.endsWith("-self-closeout.mjs"));
+  assert.deepEqual(closeouts, [], "R-04: no one-shot self-closeout wrappers may exist");
 });
 
 test("S3: test:governance npm script covers the 3 sub-suites", () => {
@@ -102,11 +100,16 @@ test("S5: --reuse renders completed verification results WITHOUT executing tests
   }
 });
 
-test("S10: no synthetic hardcoded timestamps remain in self-closeout scripts", () => {
+test("S10: no synthetic hardcoded timestamps remain in closeout-driving scripts", () => {
+  // R-04 removal: the 17 one-shot self-closeout wrappers were deleted. The
+  // historical invariant is preserved against the scripts that still drive
+  // verification/forensic closeout flows — and the wrapper absence itself is
+  // asserted so the parallel-closeout surface cannot silently return.
   const closeouts = readdirSync(join(REPO, "scripts")).filter((f) => f.endsWith("-self-closeout.mjs"));
-  assert.ok(closeouts.length >= 10, "closeout scripts present");
-  for (const f of closeouts) {
-    const src = read(`scripts/${f}`);
+  assert.deepEqual(closeouts, [], "R-04: no one-shot self-closeout wrappers may exist");
+  const drivers = ["scripts/ta2r-verify.mjs", "scripts/ta3-verify.mjs", "scripts/rld2-verify.mjs", "scripts/gov-closeout-bundle.mjs"];
+  for (const f of drivers) {
+    const src = read(f);
     const synthetic = src.match(/startedAt:\s*178\d{9,10}|completedAt:\s*178\d{9,10}/);
     assert.equal(synthetic, null, `${f} must not hardcode synthetic timestamps`);
   }

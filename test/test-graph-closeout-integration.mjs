@@ -4,9 +4,9 @@
 // Graph runner（runColimaGraph → runMandatoryGraphCloseout → runCloseoutGate）.
 //
 // Proves, WITHOUT any manual CLI step:
-//   1. a Graph run marked requiresReview auto-generates + validates its
-//      review bundle before the card may PASS（research card, zero production
-//      diff）
+//   1. a Graph run with a persisted closeout-state record（closeout.statePath,
+//      R-04 canonical seam）auto-generates + validates its review bundle
+//      before the card may PASS（research card, zero production diff）
 //   2. bundle-gate failure downgrades a would-be-PASS graph to HOLD
 //      （fail-closed; no downstream PASS without a validated bundle）
 //   3. the bundle's Repository Integrity keeps `package.json` intact
@@ -27,6 +27,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runColimaGraph } from "../src/runtime/colima-graph-runner.mjs";
 import { validateReviewBundle, REVIEW_BUNDLE_HOLDS } from "../src/governance/review-bundle.mjs";
+import { CLOSEOUT_STATE_SCHEMA, closeoutStatePath, writeCloseoutState } from "../src/governance/closeout-state.mjs";
 
 const HOME = homedir();
 const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
@@ -58,11 +59,14 @@ const researchIr = {
   ],
 };
 
-const baseCloseout = (overrides = {}) => ({
+// R-04 removal: the e2e cases drive closeout through the canonical
+// statePath seam — a persisted closeout-state record is the sole
+// review-required trigger. The record carries the same card metadata the
+// legacy in-memory contract carried; the persisted record is authoritative.
+const baseCloseoutState = (overrides = {}) => ({
+  schema: CLOSEOUT_STATE_SCHEMA,
   requiresReview: true,
-  cardId: "RB-1R-E2E",
-  cardTitle: "Mandatory Closeout E2E",
-  cardType: "research",
+  task: { cardId: "RB-1R-E2E", cardTitle: "Mandatory Closeout E2E", cardType: "research" },
   objective: "prove the mandatory graph closeout gate end to end",
   authorizedScope: ["docs/"],
   unauthorizedScope: ["commit", "push", "merge", "seal"],
@@ -73,6 +77,20 @@ const baseCloseout = (overrides = {}) => ({
   recommendedNextStep: "CBM-2",
   ...overrides,
 });
+
+const writeE2eCloseoutState = (cardId, cardTitle, overrides = {}) => {
+  const outDir = join(OUT, cardId);
+  const state = baseCloseoutState({
+    task: { cardId, cardTitle, cardType: "research" },
+    outDir,
+    diffSummary: "NO_PRODUCTION_DIFF (research card)",
+    ...overrides,
+  });
+  const stPath = closeoutStatePath(outDir);
+  const w = writeCloseoutState({ path: stPath, state });
+  assert.equal(w.ok, true, `closeout-state write failed: ${w.reason}`);
+  return { outDir, statePath: stPath };
+};
 
 before(() => {
   rmSync(SCRATCH, { recursive: true, force: true });
@@ -95,6 +113,9 @@ after(() => {
 });
 
 test("1. research graph with closeout auto-generates a validated bundle WITHOUT CLI; card PASS only after validation", { timeout: 900000 }, async (t) => {
+  // R-04: closeout is triggered by the persisted statePath record, not an
+  // in-memory requiresReview flag.
+  const { outDir, statePath } = writeE2eCloseoutState("RB-1R-E2E", "Mandatory Closeout E2E");
   const r = await runColimaGraph({
     ir: researchIr,
     parent: PARENT,
@@ -104,7 +125,7 @@ test("1. research graph with closeout auto-generates a validated bundle WITHOUT 
     repoPath: REPO_A,
     scratchRoot: SCRATCH,
     timeoutMs: 90000,
-    closeout: { ...baseCloseout(), outDir: OUT, diffSummary: "NO_PRODUCTION_DIFF (research card)" },
+    closeout: { statePath, outDir },
   });
   // card-level final PASS rides on a validated bundle
   assert.equal(r.final, "PASS", `graph PASS (${r.reason})`);
@@ -152,6 +173,9 @@ test("1. research graph with closeout auto-generates a validated bundle WITHOUT 
 });
 
 test("2. bundle-gate failure downgrades a would-be-PASS graph to HOLD（fail-closed; no downstream PASS）", { timeout: 900000 }, async (t) => {
+  // R-04: closeout is triggered by the persisted statePath record, not an
+  // in-memory requiresReview flag.
+  const { outDir, statePath } = writeE2eCloseoutState("RB-1R-E2E-FAIL", "Mandatory Closeout E2E FAIL");
   const r = await runColimaGraph({
     ir: researchIr,
     parent: PARENT,
@@ -161,7 +185,7 @@ test("2. bundle-gate failure downgrades a would-be-PASS graph to HOLD（fail-clo
     repoPath: REPO_A,
     scratchRoot: SCRATCH,
     timeoutMs: 90000,
-    closeout: { ...baseCloseout({ cardId: "RB-1R-E2E-FAIL", cardTitle: "Mandatory Closeout E2E FAIL" }), outDir: OUT },
+    closeout: { statePath, outDir },
     // internal DI（never a CLI flag）: validator rejects -> the PRODUCTION
     // mandatory path must downgrade the graph verdict
     closeoutGate: async () => ({ final: "HOLD", holdCode: REVIEW_BUNDLE_HOLDS.INVALID, reason: "REVIEW_BUNDLE_INVALID:injected" }),

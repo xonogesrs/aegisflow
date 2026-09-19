@@ -440,8 +440,10 @@ test("DE-2 production wiring: every production caller stays durable (no durable:
   // NO production script may opt out of durable execution（durable: false is
   // a documented TEST-ONLY escape hatch）.
   assert.deepEqual(offenders, [], "production scripts must not disable durability");
-  // every production card closeout script invokes the production Graph entry.
-  assert.ok(callers.length >= 8, `expected >=8 production callers, got ${callers.length}: ${callers.join(", ")}`);
+  // R-04 removal: the 17 one-shot self-closeout wrapper scripts (each an
+  // `await runSubagentGraph(` caller) were deleted — the remaining canonical
+  // production callers are the evidence-capture / probe / resume-worker set.
+  assert.ok(callers.length >= 5, `expected >=5 production callers, got ${callers.length}: ${callers.join(", ")}`);
 });
 
 // Real end-to-end proof: runSubagentGraph（production entry）with the DEFAULT

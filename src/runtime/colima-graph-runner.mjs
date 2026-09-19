@@ -29,7 +29,7 @@ import { isRetrievalAuthorized } from "../admission/policy-projection.mjs";
 import { attachBudgetResult } from "../budget/graph-wiring.mjs";
 import { phaseExecutionId } from "../v2/phase-task-card.mjs";
 import { captureChangedPaths } from "../shared/git-diff-utils.mjs";
-import { runMandatoryGraphCloseout, runStateDrivenCloseout } from "../governance/review-bundle.mjs";
+import { runStateDrivenCloseout } from "../governance/review-bundle.mjs";
 import { applyExecutionReviewBarrier as productionExecutionReviewBarrier, deriveExecutionReviewRequirement } from "../governance/execution-review.mjs";
 import { createColimaExecutorAdapter } from "./colima-executor-adapter.mjs";
 import { createColimaReviewerAdapter } from "./colima-reviewer-adapter.mjs";
@@ -101,13 +101,13 @@ export function isWriterPhase(phase) {
  * @param {AbortSignal} [opts.signal]
  * @param {object} [opts.hooks]
  * @param {object} [opts.closeout] — RB-1R mandatory card-level closeout
- *   contract. STRUCTURED field only（never parsed from stdout）:
- *   { requiresReview: true, cardId, cardTitle, cardType, outDir, timeoutMs?,
- *     fileName?, objective?, authorizedScope?, unauthorizedScope?,
- *     designDecisions?, negativeCases?, regression?, regressionSummary?,
- *     executiveSummary?, recommendedNextStep?, repairBudgetMaxAttempts? }.
- *   When requiresReview is true the card CANNOT declare final PASS without a
- *   generated + validated review bundle（runCloseoutGate, fail-closed）.
+ *   contract. R-04 removal: the ONLY supported trigger is the persisted
+ *   state record — { statePath, outDir?, timeoutMs?, fileName?, surfaceDir?,
+ *     agentIdentity? }. The persisted closeout-state record is authoritative
+ *   for requiresReview + identity + scope; the card CANNOT declare final PASS
+ *   without a generated + validated review bundle（runCloseoutGate,
+ *   fail-closed）. The legacy in-memory `requiresReview` trigger was removed
+ *   with R-04 — there is no fallback.
  * @param {Function} [opts.closeoutGate] — internal dependency injection for
  *   tests（defaults to the production runCloseoutGate; never a CLI flag）.
  * @param {Function} [opts.closeoutSourceBuilder] — internal DI（defaults to
@@ -550,7 +550,9 @@ export async function runColimaGraph({
   // verdict. The requirement is admission-derived（authoritative）— the
   // caller's closeout declaration is at most an input, never the authority
   //（RSL2-03）. Publication failure fails closed（HOLD downgrade）.
-  const needsCardCloseout = Boolean(closeout && (closeout.requiresReview === true || closeout.statePath));
+  // R-04 removal: closeout applicability is statePath-only. An in-memory
+  // `closeout.requiresReview` flag no longer triggers the closeout gate.
+  const needsCardCloseout = Boolean(closeout?.statePath);
   const executionReviewRequirement = deriveExecutionReviewRequirement(admission);
   const needsExecutionReview = executionReviewRequirement.required;
   const graphView = (needsCardCloseout || needsExecutionReview)
@@ -569,44 +571,30 @@ export async function runColimaGraph({
       }
     : null;
   let executionReviewResult = { applied: false };
-  // AUTOLOOP_REPORT_LIFECYCLE_REPAIR_1（R3 / R1）: the production hook also
-  // fires from PERSISTED closeout-state（closeout.statePath）— a structured,
-  // machine-readable review-required declaration replaces the need for a
-  // card-specific script. The legacy in-memory `closeout.requiresReview`
-  // path is unchanged（regression）; state-driven runs only when the caller
-  // explicitly declares closeout.statePath.
-  if (needsCardCloseout) {
-    if (closeout.statePath) {
-      // state-driven: the persisted record is authoritative for requiresReview
-      // + identity + scope（idempotent; R2 fail-closed on incomplete metadata）
-      closeoutResult = await runStateDrivenCloseout({
-        statePath: closeout.statePath,
-        graphResult: graphView,
-        repoPath,
-        cwd,
-        outDir: closeout.outDir,
-        timeoutMs: closeout.timeoutMs ?? Math.max(timeoutMs, 30000),
-        fileName: closeout.fileName,
-        gate: closeoutGate,
-        sourceBuilder: closeoutSourceBuilder,
-        evidenceWriter: closeoutEvidenceWriter,
-        surfaceDir: closeout.surfaceDir ?? null,
-        agentIdentity: closeout.agentIdentity ?? null,
-      });
-    } else {
-      closeoutResult = await runMandatoryGraphCloseout({
-        graphResult: graphView,
-        closeout: { ...closeout, executionId },
-        repoPath,
-        cwd,
-        outDir: closeout.outDir,
-        timeoutMs: closeout.timeoutMs ?? Math.max(timeoutMs, 30000),
-        fileName: closeout.fileName,
-        gate: closeoutGate,
-        sourceBuilder: closeoutSourceBuilder,
-        evidenceWriter: closeoutEvidenceWriter,
-      });
-    }
+  // AUTOLOOP_REPORT_LIFECYCLE_REPAIR_1（R3 / R1）: the production hook fires
+  // from PERSISTED closeout-state（closeout.statePath）— a structured,
+  // machine-readable review-required declaration is the ONLY closeout trigger.
+  // The legacy in-memory `closeout.requiresReview` branch（R-04）is removed:
+  // a caller that declares review-required MUST persist a closeout-state
+  // record first. There is no fallback — a legacy invocation without
+  // statePath cannot regain equivalent behavior.
+  if (closeout?.statePath) {
+    // state-driven: the persisted record is authoritative for requiresReview
+    // + identity + scope（idempotent; R2 fail-closed on incomplete metadata）
+    closeoutResult = await runStateDrivenCloseout({
+      statePath: closeout.statePath,
+      graphResult: graphView,
+      repoPath,
+      cwd,
+      outDir: closeout.outDir,
+      timeoutMs: closeout.timeoutMs ?? Math.max(timeoutMs, 30000),
+      fileName: closeout.fileName,
+      gate: closeoutGate,
+      sourceBuilder: closeoutSourceBuilder,
+      evidenceWriter: closeoutEvidenceWriter,
+      surfaceDir: closeout.surfaceDir ?? null,
+      agentIdentity: closeout.agentIdentity ?? null,
+    });
     if (orchestratorResult.final === "PASS" && closeoutResult.final !== "PASS") {
       // Fail-closed: bundle gate failure downgrades the card verdict.
       cardVerdict = "HOLD";
