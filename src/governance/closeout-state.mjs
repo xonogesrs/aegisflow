@@ -291,6 +291,11 @@ export function materializeCloseoutContract(state) {
     outDir: state.outDir,
     repairBudgetMaxAttempts: Number.isInteger(state.repairBudgetMaxAttempts) ? state.repairBudgetMaxAttempts : 1,
     supersedes: state.supersedes ?? null,
+    // R-04 removal: the legacy in-memory contract carried an optional
+    // diffSummary override（bundle §10 Diff Summary）; the persisted
+    // state record carries the same optional field — absent state falls
+    // back to the source builder's derived summary (NOT_APPLICABLE-safe).
+    diffSummary: typeof state.diffSummary === "string" && state.diffSummary.length > 0 ? state.diffSummary : undefined,
     negativeCases: Array.isArray(state.negativeCases) ? state.negativeCases.slice() : [],
     regression: Array.isArray(state.regression) ? state.regression.slice() : [],
     regressionSummary: state.regressionSummary ?? null,
@@ -450,6 +455,30 @@ export function validateGraphEvidence(input, opts = {}) {
     return fail(GRAPH_EVIDENCE_HOLDS.INVALID, ["R12_EVIDENCE_INVALID:transitions_malformed"]);
   }
 
+  // ── GATE G — admission preservation (AUTOLOOP_R12_ADMISSION_SECTION_REGRESSION_REPAIR_1) ──
+  // The runner-shaped graphResult carries the FROZEN admission that governed
+  // the run (colima-graph-runner: `admission: admission ?? null`, validated
+  // fail-closed at the runner entry before any execution). §1.5 Admission
+  // Decision rendering consumes it downstream (buildGraphCloseoutSource).
+  // The original R-12 normalization dropped the field, silently stripping
+  // the admission section from every validated bundle — a rendering-contract
+  // regression, not an authority change. Preservation rules:
+  //   - absent / null  -> normalized result carries admission: null
+  //     (unadmitted graph, canonical runner shape — NOT a fabrication);
+  //   - present        -> must be a non-array object with a non-empty string
+  //     admission_id, else deterministic fail-closed R12 rejection (a
+  //     malformed admission can never enter the bundle; no partial repair,
+  //     no synthesis). The record is carried VERBATIM — the runner already
+  //     validated it against validateAdmission at dispatch; this gate only
+  //     refuses malformed shapes, it does not re-derive or amend authority.
+  const rawAdmission = input.admission ?? null;
+  if (rawAdmission != null && (typeof rawAdmission !== "object" || Array.isArray(rawAdmission))) {
+    return fail(GRAPH_EVIDENCE_HOLDS.INVALID, ["R12_EVIDENCE_INVALID:admission_malformed"]);
+  }
+  if (rawAdmission != null && (typeof rawAdmission.admission_id !== "string" || rawAdmission.admission_id.length === 0)) {
+    return fail(GRAPH_EVIDENCE_HOLDS.INVALID, ["R12_EVIDENCE_INVALID:admission_id_missing"]);
+  }
+
   // ── VALIDATED — normalize into the runner graphResult shape ───────────
   const graphResult = {
     executionId,
@@ -459,6 +488,7 @@ export function validateGraphEvidence(input, opts = {}) {
     scheduler: { ...(input.scheduler ?? {}) },
     nodeResults: rawNodes.map((n) => normalizeNodeResult(n, executionId)),
     transitions: (Array.isArray(input.transitions) ? input.transitions : []).map((t) => ({ ...t })),
+    admission: rawAdmission ?? null,
   };
   return { ok: true, errors: [], graphResult };
 }
