@@ -38,6 +38,7 @@
       "reason": null,
       "startedAt": 1786168800000,
       "completedAt": 1786168805000,
+      "timingSource": "MEASURED",
       "worktreeVerified": null,
       "worktreeRevoked": false,
       "subagentResultStatus": "PASS",
@@ -59,6 +60,7 @@
       "reason": null,
       "startedAt": 1786168800000,
       "completedAt": 1786168805000,
+      "timingSource": "MEASURED",
       "worktreeVerified": null,
       "worktreeRevoked": false,
       "subagentResultStatus": "PASS",
@@ -84,6 +86,7 @@
       "reason": null,
       "startedAt": 1786168805000,
       "completedAt": 1786169610000,
+      "timingSource": "MEASURED",
       "worktreeVerified": true,
       "worktreeRevoked": true,
       "subagentResultStatus": "PASS",
@@ -108,6 +111,7 @@
       "reason": null,
       "startedAt": 1786169610000,
       "completedAt": 1786169615000,
+      "timingSource": "MEASURED",
       "worktreeVerified": null,
       "worktreeRevoked": false,
       "subagentResultStatus": "PASS",
@@ -191,7 +195,7 @@
     }
   ],
   "reviewBinding": {
-    "implementationDigest": "981822a8fb99217ecfbb35aeb6938cb233e2aaa06655344fe41db52bb85a0605",
-    "reviewResultIdentity": "c5bfe1386032bfcdd41181c095984813da2d5fd74abca2a8e4340f3e2df2ec9f"
+    "implementationDigest": "cb900a38484eef3a435f93d0b5ccd8fc5fa1d4072deadf58a94a81f5373119f1",
+    "reviewResultIdentity": "e9db6d9990cce0e8ffaa116302d005576060b4e23d5d82f72bc5ceb57e7f92d4"
   }
 }

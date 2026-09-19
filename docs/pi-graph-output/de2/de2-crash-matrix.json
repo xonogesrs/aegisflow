@@ -1,7 +1,7 @@
 {
   "schema": "autoloop.de2-crash-matrix/v1",
-  "ranAt": "2026-08-08T07:24:23.606Z",
-  "fixtureRepo": "/Users/zhengfengqing/.de2-matrix/fixture-1786173689638",
+  "ranAt": "2026-09-19T06:41:46.670Z",
+  "fixtureRepo": "/Users/zhengfengqing/.de2-matrix/fixture-1789799731861",
   "results": [
     {
       "point": "C0",
@@ -29,9 +29,21 @@
     },
     {
       "point": "C2",
-      "name": "crash after DAG accepted (F1 sub-window)",
+      "name": "crash after DAG accepted (F1 sub-window; ownership must precede)",
       "outcome": "PASS",
-      "detail": "triggered=true resumeFinal=PASS"
+      "detail": "triggered=true ownershipAtCrash=true resumeFinal=PASS mismatch=false"
+    },
+    {
+      "point": "C2P",
+      "name": "crash after ownership before first resumable checkpoint (sliver)",
+      "outcome": "PASS",
+      "detail": "ownedChildrenAtCrash=1 tokenMinted=true resumeFinal=PASS"
+    },
+    {
+      "point": "R7",
+      "name": "stripped ownership artifact on resumable state (negative control)",
+      "outcome": "PASS_FAIL_CLOSED",
+      "detail": "hadOwnership=true resumeFinal=HOLD mismatch=true OWNERSHIP_RESURRECTED=NO"
     },
     {
       "point": "C3",
@@ -53,13 +65,13 @@
     },
     {
       "point": "C6",
-      "name": "crash during writer (mutation done, pre-review) \u2014 fail-closed",
-      "outcome": "PASS",
+      "name": "crash during writer (mutation done, pre-review) — fail-closed",
+      "outcome": "PASS_FAIL_CLOSED",
       "detail": "final=HOLD"
     },
     {
       "point": "C7",
-      "name": "crash after writer mutation / result not checkpointed \u2014 fail-closed",
+      "name": "crash after writer mutation / result not checkpointed — fail-closed",
       "outcome": "PASS",
       "detail": "final=HOLD"
     },
@@ -73,13 +85,13 @@
       "point": "C9",
       "name": "crash during verifier",
       "outcome": "PASS",
-      "detail": "resumeFinal=PASS (verified standalone C9F: recoveryGeneration=1, checkpoint_revision=20, manifest=true); matrix-run failure was colima instance flakiness (verifier container transient error under sequential load)"
+      "detail": "resumeFinal=PASS"
     },
     {
       "point": "C10",
       "name": "crash during repair (budget preserved)",
       "outcome": "PASS",
-      "detail": "triggered=true resumeFinal=HOLD ,\"replayOf\":\"exec_3265c01446e2d5e8687cb5958f4f582c\",\"resumed\":true,\"recovered\":true,\"duplicateSuppressed\":0}\nRESUME_EVIDENCE:{\"checkpoint_revision\":16,\"final_verdict\":\"HOLD\",\"recovery_manifest\":true}\n"
+      "detail": "triggered=true resumeFinal=HOLD ,\"replayOf\":\"exec_915fe80024c611315484b6ffe382c0dc\",\"resumed\":true,\"recovered\":true,\"duplicateSuppressed\":0}\nRESUME_EVIDENCE:{\"checkpoint_revision\":18,\"final_verdict\":\"HOLD\",\"recovery_manifest\":true}\n"
     },
     {
       "point": "C13",
@@ -89,11 +101,7 @@
     }
   ],
   "safety": {
-    "lostCompletedResult": "0 observed \u2014 every resumed run reconstructed completed results from durable truth (C4 duplicateSuppressed=1, C8 ALREADY_APPLIED) or re-ran only uncompleted phases",
-    "duplicateLogicalWriterMutation": "0 \u2014 writer crashes fail closed (C5/C6/C7 RECOVERY_REQUIRED or safe-rerun-before-mutation); C8 ALREADY_APPLIED recovers the result WITHOUT re-running the writer (duplicateSuppressed=1)",
-    "falsePass": "0 \u2014 C10 repair-budget exhaustion HOLDS; no resumed run promoted a HOLD to PASS",
-    "repairBudgetReset": "0 \u2014 C10: repair_budget_used persisted in checkpoint and preserved across resume",
-    "corruptionSilentlyIgnored": "0 \u2014 C15 tampered checkpoint -> SNAPSHOT_CHECKSUM_MISMATCH fail-closed",
-    "note": "recoverability HOLDs that safely fail closed (C5/C6/C7 RECOVERY_REQUIRED) are NOT safety failures per Stage 20"
+    "lostCompletedResult": "0 observed",
+    "note": "each FAIL above is assessed individually; recoverability HOLDs that safely fail closed are not safety failures"
   }
 }

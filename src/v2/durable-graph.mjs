@@ -41,6 +41,7 @@ import { cleanupStale } from "../runtime/colima-runtime.mjs";
 import {
   prepareOwnedScratchRoot,
   getScratchAuthorityToken,
+  removeOwnedScratchRoot,
   normalizeScratchPreservePath,
   ScratchOwnershipError,
 } from "../runtime/scratch-ownership.mjs";
@@ -1047,6 +1048,20 @@ export async function runDurableGraph(opts = {}) {
   if (!ir || !Array.isArray(ir.phases) || ir.phases.length === 0) {
     return terminateGraphRun(run, "HOLD", "GRAPH_IR_REQUIRED");
   }
+
+  // Create owned scratch only after durable graph identity/checkpoint exists
+  // (GRAPH_INPUT_FROZEN + rev-2 checkpoint above) and the IR has validated,
+  // but BEFORE the decomposition IR artifact / DAG_ACCEPTED / the first
+  // resumable checkpoint. Ordering invariant (DE-2 C2 repair): any
+  // resumable durable state implies artifacts/scratch-ownership.json already
+  // exists — a crash in the DAG_ACCEPTED->checkpoint sub-window can never
+  // strand a resumable execution without its scratch ownership authority.
+  // A pre-checkpoint crash cannot leave a recursively-deletable child.
+  const ownedScratchRoot = prepareOwnedScratchRoot({ scratchRoot, executionId: run.executionId, repoPath, authorityToken: requestedScratchAuthorityToken });
+  scratchAuthorityToken = requestedScratchAuthorityToken ?? getScratchAuthorityToken(ownedScratchRoot);
+  if (typeof scratchAuthorityToken !== "string") throw new DurableGraphHoldError("SCRATCH_OWNERSHIP_INVALID", "scratch authority unavailable");
+  store.writeArtifact("scratch-ownership.json", { schema: "autoloop.scratch-authority/v1", authorityToken: scratchAuthorityToken });
+
   store.writeArtifact("decomposition-ir.json", ir);
   run.irSha = buildIrSha256(ir);
   run.dagSha = buildDagFingerprint(ir);
@@ -1078,6 +1093,13 @@ export async function runDurableGraph(opts = {}) {
     promptBuilderVersion: "graph-input-ir",
   });
   if (!manifestResult.ok) {
+    // Ownership was already established (it now precedes the manifest);
+    // this terminal HOLD would otherwise strand the owned scratch child.
+    // Best-effort cleanup ONLY: a cleanup failure never fabricates success
+    // and never changes the authoritative manifest-invalid classification.
+    try {
+      removeOwnedScratchRoot({ scratchRoot, executionId: run.executionId, repoPath, authorityToken: scratchAuthorityToken });
+    } catch { /* best-effort: the DECOMPOSITION_MANIFEST_INVALID HOLD stands */ }
     return terminateGraphRun(run, "HOLD", `DECOMPOSITION_MANIFEST_INVALID:${manifestResult.code}`);
   }
   store.writeArtifact("decomposition-manifest.json", manifestResult.manifest);
@@ -1088,13 +1110,6 @@ export async function runDurableGraph(opts = {}) {
     payload: { format_version: DECOMPOSITION_MANIFEST_FORMAT, manifest_sha256: manifestResult.manifest_id, bytes: manifestResult.bytes },
   });
   await run.checkpoint({});
-
-  // Create owned scratch only after durable graph identity/checkpoint exists.
-  // A pre-checkpoint crash cannot leave a recursively-deletable child.
-  const ownedScratchRoot = prepareOwnedScratchRoot({ scratchRoot, executionId: run.executionId, repoPath, authorityToken: requestedScratchAuthorityToken });
-  scratchAuthorityToken = requestedScratchAuthorityToken ?? getScratchAuthorityToken(ownedScratchRoot);
-  if (typeof scratchAuthorityToken !== "string") throw new DurableGraphHoldError("SCRATCH_OWNERSHIP_INVALID", "scratch authority unavailable");
-  store.writeArtifact("scratch-ownership.json", { schema: "autoloop.scratch-authority/v1", authorityToken: scratchAuthorityToken });
 
   const graphHooks = run.buildGraphHooks(ir);
   try {

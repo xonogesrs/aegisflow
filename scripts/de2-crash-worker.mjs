@@ -143,6 +143,7 @@ async function main() {
       hooks: {},
     });
     console.log(`RESUME_FINAL:${result.final}`);
+    console.log(`RESUME_REASON:${result.reason ?? ""}`);
     console.log(`RESUME_RECOVERY:${JSON.stringify(result.recovery ?? {})}`);
     console.log(`RESUME_EVIDENCE:${JSON.stringify({ checkpoint_revision: result.evidence?.checkpoint_revision, final_verdict: result.evidence?.final_verdict, recovery_manifest: !!result.evidence?.recovery_manifest })}`);
     process.exit(result.final === "PASS" ? 0 : 0); // matrix decides; never hide result

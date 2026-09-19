@@ -69,9 +69,23 @@ function runWorker(cfg) {
     let out = "";
     child.stdout.on("data", (d) => (out += d));
     child.stderr.on("data", (d) => (out += d));
-    child.on("exit", (code, signal) => resolve({ code, signal, out }));
+    child.on("exit", (code, signal) => {
+      workerOutputs.set(cfg.point, out);
+      resolve({ code, signal, out });
+    });
   });
 }
+
+// Diagnostic capture: the resume legs terminalize internally, so a HOLD
+// reason only reaches stdout via RESUME_REASON (or WORKER_ERROR on a throw).
+// report() appends it so matrix FAIL details are actionable.
+const workerOutputs = new Map();
+const reasonOf = (point) => {
+  const out = workerOutputs.get(point) ?? "";
+  return /RESUME_REASON:(.*)/.exec(out)?.[1]?.slice(0, 160)
+    ?? /WORKER_ERROR:(.*)/.exec(out)?.[1]?.slice(0, 160)
+    ?? "none";
+};
 
 const EXEC = () => "exec_" + randomBytes(16).toString("hex");
 
@@ -80,9 +94,9 @@ async function main() {
   const repo = makeFixtureRepo();
   const results = [];
   const report = (point, name, outcome, detail) => {
-    results.push({ point, name, outcome, detail });
-    console.log(`${point} [${outcome}] ${name} — ${detail ?? ""}`);
-    if (!/PASS/.test(outcome)) { /* debug: full output printed on FAIL */ }
+    const full = /PASS/.test(outcome) ? detail : `${detail ?? ""} reason=${reasonOf(point)}`;
+    results.push({ point, name, outcome, detail: full });
+    console.log(`${point} [${outcome}] ${name} — ${full ?? ""}`);
   };
 
   const baseCfg = {
@@ -92,15 +106,22 @@ async function main() {
   };
   mkdirSync(baseCfg.scratchRoot, { recursive: true });
   mkdirSync(baseCfg.persistenceRoot, { recursive: true });
-  // each worker gets its OWN scratch root（runColimaGraph wipes scratch on
-  // cleanup）— allocate per-call, never share.
+  // Scratch ownership binding (durable contract): input.json freezes
+  // scratchRoot per EXECUTION and resumeDurableGraph fail-closes on any
+  // change ("repository or scratch namespace changed"). A resume leg
+  // therefore MUST reuse the SAME scratch namespace its run leg froze —
+  // allocate the scratch root per newExec(), never per leg. Distinct
+  // executions derive distinct owned children under their own namespace.
   const freshCfg = (overrides) => ({
     preserveInstance: true,
     ...baseCfg,
-    scratchRoot: join(HOME, ".de2-matrix", `scratch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`),
     ...overrides,
   });
-  const newExec = () => (baseCfg.executionId = EXEC());
+  const newExec = () => {
+    baseCfg.executionId = EXEC();
+    baseCfg.scratchRoot = join(HOME, ".de2-matrix", `scratch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+    mkdirSync(baseCfg.scratchRoot, { recursive: true });
+  };
 
   // ── C0: clean run ────────────────────────────────────────────────────
   {
@@ -147,15 +168,60 @@ async function main() {
   }
 
   // ── C2: crash after DAG accepted（sub-window）────────────────────────
+  // STRENGTHENED (DE-2 C2 pre-ownership-artifact crash repair): the crash
+  // lands in the DAG_ACCEPTED->checkpoint sub-window AFTER ownership
+  // establishment. Required at crash time: scratch-ownership.json EXISTS.
+  // Fresh resume must PASS with no fingerprint mismatch and no duplicated
+  // authoritative phase work.
   {
     newExec();
     const cfg = freshCfg({ mode: "run" , point: "C2", irVariant: "normal", crashOn: "DAG_ACCEPTED", crashDelayMs: null });
     const rc = await runWorker(cfg);
     const triggered = rc.out.includes("CRASH_TRIGGERED:DAG_ACCEPTED");
+    const ownershipPath = join(baseCfg.persistenceRoot, baseCfg.executionId, "artifacts", "scratch-ownership.json");
+    const ownershipAtCrash = existsSync(ownershipPath);
+    // C2-prime sliver evidence — read BEFORE the resume leg (a completed
+    // resume reclaims the owned child through the normal cleanup path).
+    const marker = ownershipAtCrash ? JSON.parse(readFileSync(ownershipPath, "utf8")) : null;
+    const ownedChildrenBeforeResume = ownershipAtCrash
+      ? readdirSync(join(baseCfg.scratchRoot, ".autoloop-owned")).length
+      : 0;
     const cfgR = freshCfg({ mode: "resume" , point: "C2R" });
     const r = await runWorker(cfgR);
     const final = /RESUME_FINAL:(\w+)/.exec(r.out)?.[1];
-    report("C2", "crash after DAG accepted (F1 sub-window)", triggered && final === "PASS" ? "PASS" : "FAIL", `triggered=${triggered} resumeFinal=${final}`);
+    const mismatch = r.out.includes("RESUME_FINGERPRINT_MISMATCH");
+    report("C2", "crash after DAG accepted (F1 sub-window; ownership must precede)", triggered && ownershipAtCrash && final === "PASS" && !mismatch ? "PASS" : "FAIL", `triggered=${triggered} ownershipAtCrash=${ownershipAtCrash} resumeFinal=${final} mismatch=${mismatch}`);
+
+    // ── C2-prime: the new ordering sliver — crash AFTER ownership
+    // establishment but BEFORE the first resumable checkpoint. The
+    // DAG_ACCEPTED seam fires exactly there (journal event, pre-checkpoint).
+    // Required: ownership artifact exists at crash time; no conflicting
+    // authority is minted on restart; the owned scratch stays bound to the
+    // same execution/repo identity; resume follows the frozen Amendment
+    // behavior (reconstructed-IR resume -> PASS); no arbitrary adoption.
+    const c2pOk = ownershipAtCrash
+      && ownedChildrenBeforeResume === 1
+      && typeof marker?.authorityToken === "string";
+    report("C2P", "crash after ownership before first resumable checkpoint (sliver)", c2pOk && final === "PASS" ? "PASS" : "FAIL", `ownedChildrenAtCrash=${ownedChildrenBeforeResume} tokenMinted=${typeof marker?.authorityToken === "string"} resumeFinal=${final}`);
+  }
+
+  // ── R7 discriminator: resumable state EXISTS + ownership artifact
+  // STRIPPED -> resume must HOLD / fail-closed with the existing
+  // ownership/fingerprint failure, and the artifact must NOT be resurrected
+  // (no resume-time reconstruction, no adoption).
+  {
+    newExec();
+    const cfg = freshCfg({ mode: "run" , point: "R7", irVariant: "normal", crashOn: "PHASE_STARTED", crashDelayMs: null });
+    await runWorker(cfg);
+    const ownershipPath = join(baseCfg.persistenceRoot, baseCfg.executionId, "artifacts", "scratch-ownership.json");
+    const hadOwnership = existsSync(ownershipPath);
+    if (hadOwnership) rmSync(ownershipPath, { force: true });
+    const cfgR = freshCfg({ mode: "resume" , point: "R7R" });
+    const r = await runWorker(cfgR);
+    const final = /RESUME_FINAL:(\w+)/.exec(r.out)?.[1];
+    const mismatch = r.out.includes("RESUME_FINGERPRINT_MISMATCH") || r.out.includes("RESUME_REASON:ORCHESTRATION_EXCEPTION:RESUME_FINGERPRINT_MISMATCH") || /scratch ownership authority missing/.test(r.out);
+    const resurrected = existsSync(ownershipPath);
+    report("R7", "stripped ownership artifact on resumable state (negative control)", hadOwnership && final === "HOLD" && mismatch && !resurrected ? "PASS_FAIL_CLOSED" : "FAIL", `hadOwnership=${hadOwnership} resumeFinal=${final} mismatch=${mismatch} OWNERSHIP_RESURRECTED=${resurrected ? "YES" : "NO"}`);
   }
 
   // ── C3: crash during RO node（PHASE_STARTED R1 sub-window）────────────
@@ -245,6 +311,7 @@ async function main() {
     newExec();
     const cfg = freshCfg({ mode: "run" , point: "C9", irVariant: "normal", crashOn: "PHASE_STARTED", crashOnCount: 3, crashDelayMs: null });
     // V1's PHASE_STARTED is the 3rd（R1, W1, V1）— deterministic mid-verifier.
+    await runWorker(cfg);
     const cfgR = freshCfg({ mode: "resume" , point: "C9R" });
     const r = await runWorker(cfgR);
     const final = /RESUME_FINAL:(\w+)/.exec(r.out)?.[1];
