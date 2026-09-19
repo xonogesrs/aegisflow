@@ -203,13 +203,19 @@ export function generateReviewBundle({ argv, verifyCommands = DEFAULT_VERIFY_COM
   }
   // Prior bundle binding: the recorded prior bundle digest must exist in the
   // archive (Controller-recorded, verifiable).
+  // R-14: the match is DIGEST-VERIFIED — a candidate only counts when its
+  // stated footer digest equals the recomputed content digest AND equals the
+  // expected prior digest. A tampered artifact whose footer lies about its
+  // own content can never satisfy the prior binding.
   if (reviewRound > 1 && priorBundleSha256) {
     let found = false;
     try {
       for (const f of readdirSync(archiveDir)) {
         if (!f.endsWith(".txt")) continue;
         const text = readFileSync(join(archiveDir, f), "utf8");
-        if (bundleDigestFromFile(text) === priorBundleSha256) { found = true; break; }
+        const stated = text.split("\n").reverse().find((l) => l.startsWith("BUNDLE_SHA256"))?.split(":").slice(1).join(":").trim() ?? null;
+        const recomputed = bundleDigestFromFile(text);
+        if (stated && recomputed && stated === recomputed && recomputed === priorBundleSha256) { found = true; break; }
       }
     } catch { /* archive unreadable → fail below */ }
     if (!found) {

@@ -209,7 +209,9 @@ test("3. rotate PASS archives the trio with flat naming and clears Current/", { 
   assert.equal(rot.archived.length, 3, "all three surface files archived");
   const id8 = r.externalReview.delivery.reviewBundleIdentity.slice(0, 8);
   for (const kind of ["review-bundle.txt", "delivery.json", "evidence.json"]) {
-    assert.ok(rot.archived.some((p) => p.endsWith(`20260807-RB-1H-TEST-3-${id8}-PASS-${kind}`)), `archived ${kind}`);
+    // R-14: each archived file carries a content-derived digest8 discriminator
+    // between the verdict and the kind — collision-safe, never overwritten.
+    assert.ok(rot.archived.some((p) => p.includes(`20260807-RB-1H-TEST-3-${id8}-PASS-`) && p.endsWith(`-${kind}`)), `archived ${kind}`);
   }
   assert.equal(rot.cleared, true, "Current/ cleared after rotate");
   assert.ok(!existsSync(join(dir, "review-bundle.txt")), "no residual bundle");

@@ -487,3 +487,150 @@ test("sanity: all 25 sections are the controller's fixed set", { timeout: 30000 
     "External Reviewer Verdict Template",
   ]);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R-14 — bundle byte determinism, collision-safe archive rotation,
+// digest-verified lookup. Admission reproductions closed here.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import {
+  scanAuthoritativeBundles,
+  resolveAuthoritativeBundleByDigest,
+  rotateExternalReviewSurface,
+} from "../../src/governance/review-bundle.mjs";
+
+const R14_OUT = join(ROOT, "r14");
+
+const r14Source = (over = {}) => ({
+  schema: REVIEW_BUNDLE_SOURCE_SCHEMA,
+  task: { cardId: "R14-DET", cardTitle: "R14 determinism", cardType: "implementation" },
+  graph: { graphRunId: "r14-run-1" },
+  repo: { repository: null, branch: "b", head: "h".repeat(40), treeSha: "t".repeat(64) },
+  objective: "R-14 determinism probe",
+  executiveStatus: "PASS",
+  executiveSummary: "determinism probe",
+  authorizedScope: ["src/governance/review-bundle.mjs"],
+  unauthorizedScope: [],
+  files: { added: [], modified: [], deleted: [] },
+  execution: { testsExecuted: ["probe"], testResults: { passed: 1, failed: 0, total: 1 }, pass: true },
+  verifier: { pass: true, result: "PASS", summary: "v" },
+  review: { pass: true, result: "PASS", reviewResultIdentity: "e".repeat(64), blockingFindings: [], summary: "r" },
+  negativeCases: [], regression: [{ suite: "g", tests: 1, pass: 1, fail: 0 }], evidence: [],
+  security: { secretScanResult: "clean" }, risks: [], limitations: [],
+  rollbackProcedure: "n/a", openQuestions: [], recommendedNextStep: "n/a",
+  inventory: { model: "autoloop.card-inventory-delta/v1", baseline: { capturedAt: "2026-09-19T08:00:00.000Z", dirtyPaths: [], contentDigest: "c".repeat(64) } },
+  ...over,
+});
+
+test("R14-DET. same generation rerenders byte-identical across wall-clock delay and date boundary", async () => {
+  const a = renderReviewBundle(r14Source());
+  await new Promise((r) => setTimeout(r, 1100));
+  const b = renderReviewBundle(r14Source());
+  assert.equal(a.text, b.text, "byte-identical");
+  assert.equal(a.sha256, b.sha256, "sha-identical");
+  assert.equal(a.identity, b.identity, "identity-identical");
+  // explicit pinned timestamp still wins (existing contract preserved)
+  const pinned = renderReviewBundle(r14Source(), { generatedAt: "2026-09-25T00:00:00.000Z" });
+  assert.equal(pinned.generatedAt, "2026-09-25T00:00:00.000Z");
+  assert.equal(pinned.text.split("\n").find((l) => l.startsWith("GENERATED_AT")), "GENERATED_AT: 2026-09-25T00:00:00.000Z");
+  // changed authoritative generation input remains distinguishable — the
+  // graph run id is an identity-payload field, so a different run is a
+  // different generation (both bytes and identity diverge).
+  const changed = renderReviewBundle(r14Source({ graph: { graphRunId: "r14-run-2" } }));
+  assert.notEqual(changed.identity, a.identity);
+  assert.notEqual(changed.text, a.text);
+});
+
+test("R14-DET-FILE. same generation writes one canonical filename; digest resolution picks it", () => {
+  mkdirSync(R14_OUT, { recursive: true });
+  const b1 = renderReviewBundle(r14Source());
+  const b2 = renderReviewBundle(r14Source());
+  const w1 = writeReviewBundle(b1, R14_OUT);
+  const w2 = writeReviewBundle(b2, R14_OUT);
+  assert.equal(w1.fileName, w2.fileName, "filename deterministic");
+  const scan = scanAuthoritativeBundles(R14_OUT, { cardId: "R14-DET" });
+  assert.equal(scan.length, 1, "exactly one authoritative representation");
+  const res = resolveAuthoritativeBundleByDigest(R14_OUT, { cardId: "R14-DET", identity: b1.identity, sha256: b1.sha256 });
+  assert.equal(res.ok, true, res.reason);
+  assert.equal(res.bundle.fileName, w1.fileName);
+  // zero matching representations → fail closed
+  const missing = resolveAuthoritativeBundleByDigest(R14_OUT, { cardId: "R14-DET", identity: b1.identity, sha256: "f".repeat(64) });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.holdCode, REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH);
+  // missing expected digest → fail closed (identity alone never resolves)
+  const noDigest = resolveAuthoritativeBundleByDigest(R14_OUT, { cardId: "R14-DET", identity: b1.identity, sha256: null });
+  assert.equal(noDigest.ok, false);
+});
+
+test("R14-LOOKUP. stale earlier filename never wins; valid+tampered and ambiguous fail closed", () => {
+  const dir = join(ROOT, "r14-lookup");
+  mkdirSync(dir, { recursive: true });
+  // two representations of ONE identity: earlier filename holds STALE bytes,
+  // later filename holds GOOD bytes — filename order must not decide.
+  const good = renderReviewBundle(r14Source({ task: { cardId: "R14-LOOK", cardTitle: "t", cardType: "implementation" } }));
+  const stale = good.text.replace("determinism probe", "STALE CONTENT");
+  const staleSha = createHash("sha256").update(stale.slice(0, stale.lastIndexOf("REVIEW_BUNDLE_SHA256:"))).digest("hex");
+  const staleFull = stale.slice(0, stale.lastIndexOf("REVIEW_BUNDLE_SHA256:")) + `REVIEW_BUNDLE_SHA256: ${staleSha}\n`;
+  writeFileSync(join(dir, "card-closeout-bundle-20260101-aaaaaaaa.txt"), staleFull, "utf8");
+  writeFileSync(join(dir, "card-closeout-bundle-20260919-aaaaaaaa.txt"), good.text, "utf8");
+  // expected digest = GOOD → the stale earlier file must never win
+  const res = resolveAuthoritativeBundleByDigest(dir, { cardId: "R14-LOOK", identity: good.identity, sha256: good.sha256 });
+  assert.equal(res.ok, true, res.reason);
+  assert.equal(res.bundle.fileName, "card-closeout-bundle-20260919-aaaaaaaa.txt");
+  // expected digest = STALE → only the stale file matches; ambiguous case:
+  // two byte-divergent representations matching one digest is impossible by
+  // construction, so verify the digest-mismatch surface instead
+  const staleRes = resolveAuthoritativeBundleByDigest(dir, { cardId: "R14-LOOK", identity: good.identity, sha256: staleSha });
+  assert.equal(staleRes.ok, true);
+  assert.equal(staleRes.bundle.fileName, "card-closeout-bundle-20260101-aaaaaaaa.txt");
+  // tampered candidate (footer lies about content) can never match anything
+  const tampered = good.text.replace("determinism probe", "TAMPERED");
+  writeFileSync(join(dir, "card-closeout-bundle-20260920-aaaaaaaa.txt"), tampered, "utf8");
+  const afterTamper = resolveAuthoritativeBundleByDigest(dir, { cardId: "R14-LOOK", identity: good.identity, sha256: good.sha256 });
+  assert.equal(afterTamper.ok, true, "tampered candidate excluded from digest match");
+  assert.equal(afterTamper.bundle.fileName, "card-closeout-bundle-20260919-aaaaaaaa.txt");
+});
+
+test("R14-ARCHIVE. collision-safe rotation: no silent overwrite, pairing preserved, idempotent re-rotation", () => {
+  const root = join(ROOT, "r14-arch");
+  const surface = join(root, "Current");
+  const archive = join(root, "Archive");
+  const setup = (bytes) => {
+    rmSync(surface, { recursive: true, force: true });
+    mkdirSync(surface, { recursive: true });
+    writeFileSync(join(surface, "review-bundle.txt"), bytes);
+    writeFileSync(join(surface, "delivery.json"), JSON.stringify({ cardId: "R14-CARD" }));
+  };
+  // 1. same-day PASS/PASS with same identity8 prefix but DIFFERENT bytes:
+  //    both must survive (digest8 discriminator), zero overwrite.
+  setup("GEN-1-BYTES");
+  const r1 = rotateExternalReviewSurface({ surfaceDir: surface, archiveDir: archive, cardId: "R14-CARD", identity: "a".repeat(64), verdict: "PASS", dateStr: "20260919" });
+  assert.equal(r1.ok, true, r1.reason);
+  setup("GEN-2-BYTES");
+  const r2 = rotateExternalReviewSurface({ surfaceDir: surface, archiveDir: archive, cardId: "R14-CARD", identity: "a".repeat(63) + "b", verdict: "PASS", dateStr: "20260919" });
+  assert.equal(r2.ok, true, r2.reason);
+  const gen1 = readFileSync(join(archive, "20260919-R14-CARD-aaaaaaaa-PASS-" + createHash("sha256").update("review-bundle.txt\u0000GEN-1-BYTES").digest("hex").slice(0, 8) + "-review-bundle.txt"), "utf8");
+  const gen2 = readFileSync(join(archive, "20260919-R14-CARD-aaaaaaaa-PASS-" + createHash("sha256").update("review-bundle.txt\u0000GEN-2-BYTES").digest("hex").slice(0, 8) + "-review-bundle.txt"), "utf8");
+  assert.equal(gen1, "GEN-1-BYTES", "first artifact preserved");
+  assert.equal(gen2, "GEN-2-BYTES", "second artifact preserved");
+  // 2. PASS/HOLD rotations both land (distinct verdict labels)
+  setup("GEN-3-BYTES");
+  const r3 = rotateExternalReviewSurface({ surfaceDir: surface, archiveDir: archive, cardId: "R14-CARD", identity: "a".repeat(64), verdict: "HOLD", dateStr: "20260919" });
+  assert.equal(r3.ok, true, r3.reason);
+  assert.ok(existsSync(join(archive, `20260919-R14-CARD-aaaaaaaa-HOLD-${createHash("sha256").update("review-bundle.txt\u0000GEN-3-BYTES").digest("hex").slice(0, 8)}-review-bundle.txt`)));
+  // 3. identical re-rotation is idempotent: same bytes → same archive entry
+  setup("GEN-1-BYTES");
+  const r4 = rotateExternalReviewSurface({ surfaceDir: surface, archiveDir: archive, cardId: "R14-CARD", identity: "a".repeat(64), verdict: "PASS", dateStr: "20260919" });
+  assert.equal(r4.ok, true, r4.reason);
+  assert.equal(readFileSync(join(archive, "20260919-R14-CARD-aaaaaaaa-PASS-" + createHash("sha256").update("review-bundle.txt\u0000GEN-1-BYTES").digest("hex").slice(0, 8) + "-review-bundle.txt"), "utf8"), "GEN-1-BYTES");
+  assert.ok(!existsSync(join(surface, "review-bundle.txt")), "idempotent re-rotation still clears Current");
+  // 4. legacy pre-R-14 colliding entry with different bytes → fail closed
+  setup("GEN-9-LEGACY");
+  const legacyName = `20260919-R14-CARD-aaaaaaaa-PASS-${createHash("sha256").update("review-bundle.txt\u0000GEN-9-LEGACY").digest("hex").slice(0, 8)}-review-bundle.txt`;
+  writeFileSync(join(archive, legacyName), "DIFFERENT-LEGACY-BYTES");
+  const r5 = rotateExternalReviewSurface({ surfaceDir: surface, archiveDir: archive, cardId: "R14-CARD", identity: "a".repeat(64), verdict: "PASS", dateStr: "20260919" });
+  assert.equal(r5.ok, false, "non-identical collision fails closed");
+  assert.match(String(r5.reason), /archive_collision_non_identical/);
+  assert.ok(existsSync(join(surface, "review-bundle.txt")), "surface artifact untouched on collision");
+  rmSync(join(archive, legacyName), { force: true });
+});

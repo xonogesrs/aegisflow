@@ -87,13 +87,31 @@ if (!flags.findingsFile) {
 const priorFindingsText = readFileSync(flags.findingsFile, "utf8");
 const priorFindingsDigest = sha256Text(priorFindingsText);
 
-// Derive prior bundle digest from the latest archived bundle for this card.
+// Derive prior bundle digest from the archived bundle for this card.
+// R-14: selection is DIGEST-VERIFIED, never filename order — the archived
+// artifact must recompute to a self-consistent REVIEW_BUNDLE_SHA256 footer
+// (bundleDigestFromFile recomputes over the footer-excluded content), and
+// the newest VALID candidate wins. A stale/tampered earlier filename can
+// never bind merely because it sorts last.
 const archiveDir = join(bundleDir, "archive");
 let priorBundleSha256 = "";
 try {
   const files = readdirSync(archiveDir).filter((f) => f.includes(cardId) && f.endsWith(".txt")).sort();
-  if (files.length > 0) {
-    priorBundleSha256 = bundleDigestFromFile(readFileSync(join(archiveDir, files[files.length - 1]), "utf8"));
+  const candidates = [];
+  for (const f of files) {
+    try {
+      const text = readFileSync(join(archiveDir, f), "utf8");
+      const stated = text.split("\n").reverse().find((l) => l.startsWith("BUNDLE_SHA256"))?.split(":").slice(1).join(":").trim() ?? null;
+      const recomputed = bundleDigestFromFile(text);
+      // a self-consistent artifact only: the footer must match the recompute
+      if (stated && stated === recomputed) candidates.push({ f, digest: recomputed });
+    } catch { /* unreadable candidate — never selected */ }
+  }
+  if (candidates.length > 0) {
+    // newest valid representation by filename (dates sort chronologically);
+    // the digest itself is verified, so ordering only breaks ties between
+    // distinct valid generations.
+    priorBundleSha256 = candidates[candidates.length - 1].digest;
   }
 } catch { /* archive unreadable → empty prior */ }
 if (reviewRound > 1 && !priorBundleSha256) {

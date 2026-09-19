@@ -831,13 +831,39 @@ export function rotateExternalReviewSurface({ surfaceDir = null, archiveDir = nu
   if (!ownLock.ok) {
     return { ok: false, reason: ownLock.reason ?? "surface_busy", archived: [] };
   }
+  // R-14 — COLLISION-SAFE ARCHIVE BINDING. The legacy label
+  // (date-card-identity8-verdict) silently overwrote a distinct archived
+  // artifact whenever two generations shared the identity8 prefix or a card
+  // rotated twice with the same verdict, destroying the artifact↔verdict
+  // pairing. Each archived file now carries a short DISCRIMINATOR derived
+  // from the artifact's own content digest (first 8 hex of sha256 over the
+  // exact bytes being archived). An identical re-rotation (same bytes) is
+  // idempotent and reuses the existing archive entry; a collision with
+  // DIFFERENT bytes creates an unambiguous non-destructive representation —
+  // never a silent overwrite.
+  const contentDigest8 = (name, bytes) => sha256Hex(`${name}\u0000${bytes}`).slice(0, 8);
   const archived = [];
   try {
     mkdirSync(arch, { recursive: true });
     for (const name of ["review-bundle.txt", "delivery.json", "evidence.json"]) {
       const src = join(dir, name);
       if (!existsSync(src)) continue;
-      const dest = join(arch, `${label}-${name}`);
+      const bytes = readFileSync(src);
+      const d8 = contentDigest8(name, bytes.toString("utf8"));
+      let dest = join(arch, `${label}-${d8}-${name}`);
+      if (existsSync(dest)) {
+        // Identical bytes → idempotent (same generation re-rotation).
+        if (readFileSync(dest).equals(bytes)) {
+          rmSync(src, { force: true });
+          archived.push(dest);
+          continue;
+        }
+        // Different bytes under the same label+digest8 is impossible
+        // (digest8 is derived from the bytes) — but a name collision with
+        // different content can still occur through a legacy archive entry
+        // written by pre-R-14 code. Fail closed rather than overwrite.
+        return { ok: false, reason: `archive_collision_non_identical:${dest}`, archived };
+      }
       renameSync(src, dest);
       archived.push(dest);
     }
@@ -1647,6 +1673,53 @@ export function generationKeyFromBundleText(text) {
 }
 
 /**
+ * R-14 — DIGEST-VERIFIED IDENTITY RESOLUTION. Filename order is never
+ * authority: resolve one identity against the recorded authoritative content
+ * digest by verifying each candidate's actual bytes. Outcomes:
+ *   exactly one representation whose recomputed content SHA equals the
+ *     expected digest                       → ok:true (the artifact);
+ *   zero matching representations           → ok:false MISSING;
+ *   >1 representation matching the digest   → ok:true only when they are
+ *     byte-identical (idempotent re-render); otherwise ok:false AMBIGUOUS;
+ *   no expected digest provided             → ok:false (identity alone is
+ *     never sufficient — the recorded SHA is mandatory for resolution).
+ */
+export function resolveAuthoritativeBundleByDigest(outDir, { cardId = null, identity = null, sha256 = null } = {}) {
+  if (!identity || !/^[0-9a-f]{64}$/.test(identity)) {
+    return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.MISSING, reason: "REVIEW_BUNDLE_MISSING:identity_absent_or_malformed" };
+  }
+  if (typeof sha256 !== "string" || !/^[0-9a-f]{64}$/.test(sha256)) {
+    return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.MISSING, reason: "REVIEW_BUNDLE_MISSING:expected_bundle_sha256_absent_or_malformed" };
+  }
+  const candidates = scanAuthoritativeBundles(outDir, { cardId }).filter((b) => b.identity === identity);
+  if (candidates.length === 0) {
+    return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.MISSING, reason: "REVIEW_BUNDLE_MISSING:no_authoritative_bundle_matches_recorded_identity" };
+  }
+  const matching = [];
+  for (const c of candidates) {
+    let digest = null;
+    try {
+      digest = bundleContentSha256(c.path);
+    } catch { /* unreadable candidate — not a match */ }
+    if (digest === sha256) matching.push(c);
+  }
+  if (matching.length === 0) {
+    return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:no_bundle_matches_recorded_sha256:${identity.slice(0, 8)}` };
+  }
+  // >1 digest match: accept only when every matching representation is
+  // byte-identical (deterministic re-render / duplicate copy).
+  if (matching.length > 1) {
+    const first = readFileSync(matching[0].path);
+    for (const m of matching.slice(1)) {
+      if (!readFileSync(m.path).equals(first)) {
+        return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.IDENTITY_MISMATCH, reason: `REVIEW_BUNDLE_IDENTITY_MISMATCH:ambiguous_representations:${matching.map((m) => m.fileName).join(",")}` };
+      }
+    }
+  }
+  return { ok: true, bundle: matching[0], matchingCount: matching.length };
+}
+
+/**
  * Scan an outDir for existing authoritative bundles, parsing each one's
  * generation key. Optional cardId filter（never classify other cards' dirs）.
  * Returns array of { cardId, identity, supersededIdentity, generationType,
@@ -2069,9 +2142,35 @@ function renderHeader({ identity, sha256, source, generatedAt }) {
   );
 }
 
-export function renderReviewBundle(source, { generatedAt = new Date().toISOString() } = {}) {
+export function renderReviewBundle(source, { generatedAt } = {}) {
   const errs = validateSource(source);
   if (errs.length) throw new Error(`review_bundle_source_invalid: ${errs.join(";")}`);
+
+  // R-14 — DETERMINISTIC GENERATED_AT. Wall-clock time previously altered the
+  // canonical bytes (and therefore the content SHA + filename) of an
+  // otherwise-identical semantic generation: re-rendering the same generation
+  // on a later date produced a second, byte-divergent representation of ONE
+  // identity. GENERATED_AT is now generation-bound: an explicit caller
+  // timestamp (tests / recorded lineage) wins; otherwise it derives from the
+  // authoritative inputs the generation already carries — the card-start
+  // baseline capture time (machine-captured at card START, generation-bound
+  // by construction), falling back through the closeout contract's appliedAt
+  // and the graph run id. Only when the source carries NO such generation-
+  // bound timestamp does the wall clock apply — and that fallback is then
+  // pinned for the lifetime of the bundle by the bytes it produced.
+  if (generatedAt == null) {
+    // R-14 — DETERMINISTIC GENERATED_AT (generation-bound, never wall-clock
+    // when a binding timestamp exists): an explicit caller timestamp (tests /
+    // recorded lineage) wins; otherwise derive from the card-start baseline
+    // capture time (machine-captured at card START, generation-bound by
+    // construction), then the closeout contract's appliedAt. The bare wall
+    // clock applies ONLY when the source carries no binding timestamp at all.
+    const baselineAt = source.inventory?.baseline?.capturedAt ?? source.baseline?.capturedAt ?? null;
+    const appliedAt = source.closeout?.appliedAt ?? source.appliedAt ?? null;
+    generatedAt = (typeof baselineAt === "string" && baselineAt.length > 0 ? baselineAt : null)
+      ?? (typeof appliedAt === "string" && appliedAt.length > 0 ? appliedAt : null)
+      ?? new Date().toISOString();
+  }
 
   // evidence manifest digest computed from the inventory（never trusted input）
   const evidence = (source.evidence || []).map((e) => ({ path: e.path, sha256: e.sha256 }));
@@ -2665,9 +2764,13 @@ export async function runCloseoutGate({
   }
 
   // 3) generate（bounded; deterministic）
+  // R-14: NO wall-clock generatedAt argument — the renderer derives a
+  // generation-bound GENERATED_AT from the source (baseline capturedAt /
+  // closeout appliedAt); an explicit caller override remains supported via
+  // the generate DI seam.
   let bundle;
   try {
-    bundle = await withTimeout(Promise.resolve().then(() => generate(merged, { generatedAt: new Date().toISOString() })), timeoutMs, "review_bundle_generation");
+    bundle = await withTimeout(Promise.resolve().then(() => generate(merged, {})), timeoutMs, "review_bundle_generation");
   } catch (e) {
     // TA-2R（finding 3 / NEG18）: a template-residue throw（renderReviewBundle
     // fail-closed scan）surfaces as its own hold code, never a generic
@@ -3271,6 +3374,10 @@ export function buildGraphCloseoutSource({ graphResult, closeout, repoPath = nul
           dirtyDigest: closeout.baseline.dirtyDigest ?? null,
           contentDigest: closeout.baseline.contentDigest ?? null,
           dirtyPaths: baselineDirtyPaths,
+          // R-14: the card-start capture time is generation-bound — the
+          // renderer derives GENERATED_AT from it so the same generation
+          // re-renders byte-identically.
+          capturedAt: closeout.baseline.capturedAt ?? null,
           // TA-2R content-v1: card-start content identity travels with the
           // source so the closeout GATE's authoritative collectRepoFacts can
           // re-derive the content-aware delta（single truth）and fail closed
@@ -3694,11 +3801,15 @@ export function verifyAppliedCloseoutBundle({ outDir = null, closeout = null, ca
   if (typeof recordedSha !== "string" || !/^[0-9a-f]{64}$/.test(recordedSha)) {
     return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.MISSING, reason: "REVIEW_BUNDLE_MISSING:recorded_bundle_sha256_absent_or_malformed" };
   }
-  const bundles = scanAuthoritativeBundles(outDir, { cardId });
-  const match = bundles.find((b) => b.identity === identity);
-  if (!match) {
-    return { ok: false, holdCode: REVIEW_BUNDLE_HOLDS.MISSING, reason: "REVIEW_BUNDLE_MISSING:no_authoritative_bundle_matches_recorded_identity" };
+  // R-14 — digest-verified resolution: filename order is never authority.
+  // The recorded bundle SHA (mandatory above) selects exactly one valid
+  // representation; zero matches → MISSING, multiple byte-divergent matches
+  // → AMBIGUOUS, both fail closed.
+  const resolved = resolveAuthoritativeBundleByDigest(outDir, { cardId, identity, sha256: recordedSha });
+  if (!resolved.ok) {
+    return { ok: false, holdCode: resolved.holdCode, reason: resolved.reason };
   }
+  const match = resolved.bundle;
   const validation = validateReviewBundle(match.path, { authorizedDir: outDir, expected: { taskId: cardId ?? undefined } });
   if (!validation.ok) {
     return { ok: false, holdCode: validation.holdCode ?? REVIEW_BUNDLE_HOLDS.INVALID, reason: `${validation.holdCode ?? "REVIEW_BUNDLE_INVALID"}:${validation.errors.join(";").slice(0, 400)}` };

@@ -26,6 +26,7 @@ import { buildChangeInventory } from "../../src/governance/change-inventory.mjs"
 import { candidateDomain } from "../../src/governance/candidate-domain-policy.mjs";
 import { remoteUrlMatchesAuthorizedRepository, productionRemoteMatch } from "../../scripts/shared/gov-args.mjs";
 import { generateReviewBundle } from "../../scripts/gov-review-bundle.mjs";
+import { bundleDigestFromFile } from "../../src/governance/review-context.mjs";
 import { runPushGate } from "../../scripts/gov-push-gate.mjs";
 import { runCommitIntegration } from "../../scripts/gov-commit-integration.mjs";
 import { parseArgs } from "../../scripts/shared/gov-args.mjs";
@@ -544,9 +545,12 @@ test("[neg 6] round 3 must not reset to repair round 1 (history-derived)", (t) =
     "--message", "ck", "--apply",
   ], dir);
   assert.equal(ck.status, 0, ck.stderr);
-  // a prior (round-2) bundle must exist in the archive for the prior binding
+  // a prior (round-2) bundle must exist in the archive for the prior binding.
+  // R-14: the prior artifact must be SELF-CONSISTENT (footer digest equals the
+  // recomputed content digest) — a stub whose footer lies is not selectable.
   mkdirSync(join(outDir, "archive"), { recursive: true });
-  const priorText = "PRIOR BUNDLE R2\nBUNDLE_SHA256 (sha256 of all content above): deadbeef\n";
+  const priorBody = "PRIOR BUNDLE R2\n";
+  const priorText = priorBody + "BUNDLE_SHA256 (sha256 of all content above): " + bundleDigestFromFile(priorBody) + "\n";
   const priorPath = join(outDir, "archive", "20260804T000000Z-" + CARD_ID + "-run-1.txt");
   writeFileSync(priorPath, priorText);
   const findingsFile = join(outDir, "findings-r2.txt");
