@@ -15,28 +15,31 @@ const arg = (name) => { const i = process.argv.indexOf(name); return i >= 0 && p
 const cfg = JSON.parse(readFileSync(arg("--config"), "utf8"));
 
 const SCOPE = "docs/pi-graph-output";
-const PARENT = { scope: { allowed_paths: ["docs/"], forbidden_paths: [".git"] } };
+const PARENT = { scope: { allowed_paths: [SCOPE], forbidden_paths: [".git"] } };
 
-function p1Phase() {
+// Canonical sub-agent phase names (SA-R1 ‖ SA-R2 -> SA-W1 -> SA-V1) — the
+// live production contract keys the writer/verifier agent programs and the
+// review agent onto exactly these node ids.
+function saReadonlyPhase(phaseId, taskType) {
   return {
-    phase_id: "P1",
+    phase_id: phaseId,
     depends_on: [],
     effects: { artifact_mutation: "none" },
     runtime: {
       mode: "subagent",
-      taskType: "count_todos",
-      objective: "read-only count_todos over /src/docs",
-      expect: { stdoutContains: ["SUBAGENT_DONE:count_todos"] },
+      taskType,
+      objective: `read-only ${taskType} over /src/docs`,
+      expect: { stdoutContains: [`SUBAGENT_DONE:${taskType}`] },
       limits: { memoryMiB: 256, timeoutMs: 60000 },
-      sleep: 2,
+      sleep: 1,
       agentRole: "readonly-analyst",
     },
   };
 }
 
-function p2WriterPhase(dependsOn = ["P1"]) {
+function saWriterPhase(dependsOn = ["SA-R1", "SA-R2"]) {
   return {
-    phase_id: "P2",
+    phase_id: "SA-W1",
     depends_on: dependsOn,
     effects: { artifact_mutation: "required", boundaries: { artifact: [SCOPE] } },
     runtime: {
@@ -46,32 +49,32 @@ function p2WriterPhase(dependsOn = ["P1"]) {
       objective: `writer write_report over /work/${SCOPE} using dependency results`,
       expect: { stdoutContains: ["SUBAGENT_DONE:write_report"] },
       limits: { memoryMiB: 256, timeoutMs: 60000 },
-      sleep: 2,
+      sleep: 1,
     },
   };
 }
 
-function p3JoinPhase(dependsOn = ["P2"]) {
+function saVerifierPhase(dependsOn = ["SA-W1"]) {
   return {
-    phase_id: "P3",
+    phase_id: "SA-V1",
     depends_on: dependsOn,
     effects: { artifact_mutation: "none" },
     runtime: {
-      mode: "readonly",
-      joinVerify: true,
-      command: [
-        '[ -f /results/P1.json ] && echo P1_PRESENT || echo P1_MISSING',
-        '[ -f /results/P2.json ] && echo P2_PRESENT || echo P2_MISSING',
-        'grep -q "found" /results/P2.worktree.json && echo CLAIM_CARRIED || echo CLAIM_NOT_CARRIED',
-        'echo JOIN_OK',
-      ].join("; "),
-      expect: { stdoutContains: ["P1_PRESENT", "P2_PRESENT", "CLAIM_CARRIED", "JOIN_OK"] },
+      mode: "subagent",
+      agentRole: "verifier",
+      taskType: "verify_writer",
+      objective: "verify writer SA-W1 diff/tests/scope from /results artifacts",
+      expect: { stdoutContains: ["SUBAGENT_DONE:verify_writer"] },
       limits: { memoryMiB: 256 },
     },
   };
 }
 
-const buildIr = () => ({ verdict: "PASS", phases: [p1Phase(), p2WriterPhase(), p3JoinPhase()], dispositions: [] });
+const buildIr = () => ({
+  verdict: "PASS",
+  phases: [saReadonlyPhase("SA-R1", "count_todos"), saReadonlyPhase("SA-R2", "inventory_markdown"), saWriterPhase(), saVerifierPhase()],
+  dispositions: [],
+});
 
 const common = {
   parent: PARENT,
