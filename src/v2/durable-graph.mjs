@@ -577,23 +577,50 @@ export class DurableGraphRun {
         // runColimaGraph may call hooks positionally（phaseId）or as an event
         // object（{ phaseId }）— normalize both.
         const phaseId = typeof arg === "string" ? arg : arg?.phaseId;
-        // ── STAGE D: authorized mid-run rollover intake. Runs ONCE at a
-        // between-phase safe boundary AFTER at least one completed phase
-        // (quiescence by construction: no executor/reviewer in flight); on
-        // return the §9a gate below refuses all further A-side dispatch —
-        // A's truthful handover-hold outcome.
-        self.state._phaseStartCount = (self.state._phaseStartCount ?? 0) + 1;
+        // ── STAGE D: authorized mid-run rollover intake. Automatic intake
+        // runs at this between-phase onPhaseStart seam ONLY when the graph
+        // is quiescent:
+        //   1. at least one phase is completed（durable completedPhaseIds）;
+        //   2. every OTHER phase is terminal or not-yet-started（pending）
+        //      according to the canonical scheduler state phaseStates —
+        //      i.e. no conflicting executor/reviewer remains in flight;
+        //   3. a missing phase state is NON-terminal（fail closed）.
+        // The canonical terminal vocabulary is the runner's PHASE_STATUS
+        //（passed | held | failed | skipped_due_to_dependency）; pending
+        // phases are simply not yet eligible to run and hold no executor.
+        // The in-flight parallel phase's own start is never quiescent（its
+        // sibling is running）, so the one-shot intake survives the parallel
+        // fan-out and fires at the next genuinely quiescent boundary. A
+        // skipped executor result（no trigger / window ineligible）does NOT
+        // consume the future opportunity; an {ok:false} result does not
+        // either; only an ACCEPTED rollover consumes it. On acceptance the
+        // expectedRevision / rolloverMirror resync belongs to the successful
+        // handover path; on return the §9a gate below refuses all further
+        // A-side dispatch — A's truthful handover-hold outcome.
+        const TERMINAL_PHASE_STATES = new Set(["passed", "held", "failed", "skipped_due_to_dependency"]);
+        const otherStates = Object.entries(self.state.phaseStates ?? {})
+          .filter(([id]) => id !== phaseId);
+        const quiescent = (self.state.completedPhaseIds ?? []).length >= 1
+          && otherStates.every(([, s]) => TERMINAL_PHASE_STATES.has(s) || s === "pending");
         if (typeof self.rolloverRequestExecutor === "function"
             && !self.state._rolloverExecuted
-            && self.state._phaseStartCount > 1) {
-          self.state._rolloverExecuted = true;
-          await self.rolloverRequestExecutor(self);
-          // Handover happened: resync THIS runner's view to durable truth so
-          // any subsequent hold-path publication CASes against the LIVE head
-          // (the authority advanced the chain several revisions).
-          const freshHead = readCheckpoint(self.root, self.executionId);
-          self.state.expectedRevision = freshHead.snapshot.revision;
-          self.state.rolloverMirror = freshHead.snapshot.graph?.rollover ?? null;
+            && quiescent) {
+          const result = await self.rolloverRequestExecutor(self);
+          // Accepted-only consumption: only a real rollover intake（ok &&
+          // not skipped）consumes the one-shot opportunity. A skipped
+          // result（no trigger observed / window ineligible）leaves the
+          // future opportunity available at a later boundary. A thrown
+          // failure keeps its fail-closed propagation semantics（never
+          // swallowed, never a consumption event）.
+          if (result?.ok === true && result?.skipped !== true) {
+            self.state._rolloverExecuted = true;
+            // Handover happened: resync THIS runner's view to durable truth
+            // so any subsequent hold-path publication CASes against the LIVE
+            // head (the authority advanced the chain several revisions).
+            const freshHead = readCheckpoint(self.root, self.executionId);
+            self.state.expectedRevision = freshHead.snapshot.revision;
+            self.state.rolloverMirror = freshHead.snapshot.graph?.rollover ?? null;
+          }
         }
         // ── STAGE D §9a: between-phase dispatch gate. Read the checksummed
         // CURRENT mirror; while an ACTIVE pre-commit rollover freezes the
