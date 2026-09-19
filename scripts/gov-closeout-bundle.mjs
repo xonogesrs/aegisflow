@@ -51,11 +51,10 @@ import {
   runStateDrivenCloseout,
   validateReviewBundle,
   collectRepoFacts,
-  bundleContentSha256,
   REVIEW_BUNDLE_SOURCE_SCHEMA,
   buildExternalReviewState,
   recordDeliveryAttempt,
-  applyExternalReviewVerdict,
+  applyExternalReviewVerdictForDelivery,
   externalReviewComplete,
   cardExternalReviewStatus,
   writeExternalReviewDeliveryRecord,
@@ -279,40 +278,28 @@ if (mode === "apply-verdict") {
     console.error(`verdict_blocked: ${rec.errors.join(";")}`);
     process.exit(1);
   }
-  // R-13（RSL2-06）: the verdict must bind the ACTUAL delivered bytes — never
-  // the delivery record's self-claim. Re-read the authoritative surface bundle
-  //（the review-bundle.txt next to this delivery record）, recompute identity +
-  // content sha, and require them to match the record; a stale or divergent
-  // bundle can never mint a verdict（fail-closed）.
-  const surfaceBundle = join(dirname(recPath), "review-bundle.txt");
-  if (!existsSync(surfaceBundle)) {
-    console.error(`verdict_blocked: surface_bundle_missing:${surfaceBundle}`);
-    process.exit(1);
-  }
-  const bundleText = readFileSync(surfaceBundle, "utf8");
-  const actualIdentity = bundleText.match(/^REVIEW_BUNDLE_IDENTITY:\s*([0-9a-f]{64})$/m)?.[1] ?? null;
-  const actualSha = bundleContentSha256(surfaceBundle);
-  const recordIdentity = rec.state?.delivery?.reviewBundleIdentity ?? null;
-  const recordSha = rec.state?.delivery?.reviewBundleSha256 ?? null;
-  if (!actualIdentity || actualIdentity !== recordIdentity) {
-    console.error(`verdict_blocked: surface_bundle_identity_diverges_from_record:${actualIdentity ? actualIdentity.slice(0, 8) : "none"}!=${recordIdentity ? recordIdentity.slice(0, 8) : "none"}`);
-    process.exit(1);
-  }
-  if (!actualSha || actualSha !== recordSha) {
-    console.error(`verdict_blocked: surface_bundle_sha_diverges_from_record:${actualSha ? actualSha.slice(0, 12) : "none"}!=${recordSha ? recordSha.slice(0, 12) : "none"}`);
-    process.exit(1);
-  }
-  const applied = applyExternalReviewVerdict(rec.state, {
+  // R-13（RSL2-06 + residual repair）: the verdict must bind the ACTUAL
+  // delivered bytes — never the delivery record's self-claim, never caller
+  // expectations. The surface bundle next to this delivery record is freshly
+  // read ONCE, structurally validated (a self-consistent forged artifact
+  // cannot survive canonical validation), and its content SHA, bundle
+  // identity and CARD_ID are derived from those exact bytes and bound against
+  // the record (identity / sha / card). A stale, divergent, wrong-card or
+  // structurally invalid bundle can never mint a verdict（fail-closed）.
+  // Finalized receipts are conflict-fenced: a different verdict against an
+  // already-bound receipt is rejected (new generation via REPAIR/supersedes
+  // is the only change path); the identical verdict is idempotent.
+  const applied = applyExternalReviewVerdictForDelivery({
+    deliveryPath: recPath,
     verdict,
     reviewerIdentity: reviewer,
     reviewedAt,
-    bundleIdentity: actualIdentity,
-    bundleSha256: actualSha,
     agentIdentity: agent,
     findingsDigest: findingsDigest ?? undefined,
   });
   if (!applied.ok) {
-    console.error(`verdict_rejected: ${applied.errors.join(";")}`);
+    const conflict = applied.holdCode === "EXTERNAL_REVIEW_VERDICT_CONFLICT";
+    console.error(`${conflict ? "verdict_conflict" : "verdict_rejected"}: ${applied.errors.join(";")}`);
     process.exit(1);
   }
   const written = writeExternalReviewDeliveryRecord({ outDir: dirname(recPath), state: applied.state, cardId: rec.cardId, fileName: rec.fileName });
@@ -323,6 +310,7 @@ if (mode === "apply-verdict") {
   const guard = cardExternalReviewStatus(applied.state);
   console.log(`verdict=${applied.state.externalReviewStatus} reviewer=${reviewer} reviewedAt=${reviewedAt}`);
   console.log(`externalReviewStatus: ${applied.state.externalReviewStatus}`);
+  if (applied.idempotent) console.log("idempotent: identical verdict re-applied to the same verified artifact");
   console.log(`externalReviewComplete: ${guard.complete}`);
   if (guard.holdCode) console.log(`holdCode: ${guard.holdCode}`);
   process.exit(guard.complete ? 0 : 1);

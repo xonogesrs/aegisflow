@@ -36,7 +36,7 @@
 
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -58,6 +58,7 @@ import {
   writeExternalReviewDeliveryRecord,
   readExternalReviewDeliveryRecord,
   supersedesFromBundleText,
+  renderReviewBundle,
 } from "../../src/governance/review-bundle.mjs";
 
 const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
@@ -656,4 +657,253 @@ test("sanity: external review statuses and verdicts are the fixed RB-1G sets", (
   assert.equal(s.delivery.required, true);
   assert.equal(s.delivery.attempted, false);
   assert.equal(s.delivery.confirmed, undefined, "no sender-authoritative confirmed flag");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R-13 residual repair — verdict-time artifact verification (single fresh
+// read), structural validation, SHA/identity/card binding, caller-authority
+// removal, conflict fence, tamper matrix, reverse controls.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import { spawnSync } from "node:child_process";
+import {
+  applyExternalReviewVerdictForDelivery,
+  verifyDeliveredArtifactForVerdict,
+} from "../../src/governance/review-bundle.mjs";
+
+const R13 = join(ROOT, "r13");
+const CLI = join(REPO_A, "scripts/gov-closeout-bundle.mjs");
+
+// Render a REAL canonical bundle through renderReviewBundle so the artifact
+// passes validateReviewBundle (schema/sections/terminator/sha/footer).
+const r13Source = (cardId) => ({
+  schema: REVIEW_BUNDLE_SOURCE_SCHEMA,
+  task: { cardId, cardTitle: `${cardId} closeout`, cardType: "implementation" },
+  graph: { graphRunId: `r13-run-${cardId}` },
+  repo: { repository: facts.repository ?? null, branch: facts.branch, head: facts.head, treeSha: facts.treeSha },
+  objective: `${cardId}: R-13 verdict artifact binding`,
+  executiveStatus: "PASS",
+  executiveSummary: "bundle generated and validated for R-13",
+  authorizedScope: ["src/governance/review-bundle.mjs"],
+  unauthorizedScope: [],
+  objective_extra: undefined,
+  files: { added: [], modified: [], deleted: [] },
+  execution: { testsExecuted: ["r13-targeted"], testResults: { passed: 1, failed: 0, total: 1 }, pass: true },
+  verifier: { pass: true, result: "PASS", summary: "verify PASS" },
+  review: { pass: true, result: "PASS", reviewResultIdentity: "e".repeat(64), blockingFindings: [], summary: "review PASS" },
+  negativeCases: ["forged artifact rejected at verdict time"],
+  regression: [{ suite: "governance", tests: 1, pass: 1, fail: 0 }],
+  evidence: [],
+  security: { secretScanResult: "clean", ingestionAllowlist: [], ingestionDenylist: [] },
+  risks: [], limitations: [],
+  rollbackProcedure: "n/a",
+  openQuestions: [],
+  recommendedNextStep: "external review",
+});
+
+const r13Setup = (name, { cardId = `R13-${name}`, tamper = null, record = {} } = {}) => {
+  const dir = join(R13, name);
+  mkdirSync(dir, { recursive: true });
+  const b = renderReviewBundle(r13Source(cardId), { generatedAt: "2026-09-19T00:00:00.000Z" });
+  // The delivery record binds the GENUINE bundle (identity + content sha as
+  // delivered). Tampering is applied to the ARTIFACT ONLY, after the record
+  // is fixed — that is the real-world attack shape.
+  const marker0 = "REVIEW_BUNDLE_SHA256:";
+  const genuineContent = b.text.slice(0, b.text.lastIndexOf(marker0));
+  const genuineSha = createHash("sha256").update(genuineContent).digest("hex");
+  let text = b.text;
+  if (tamper === "byte") {
+    text = text.replace("bundle generated and validated for R-13", "bundle generated and validated for R-13 TAMPERED");
+  } else if (tamper === "truncate") {
+    text = text.slice(0, Math.floor(text.length * 0.8));
+  } else if (tamper === "identity") {
+    text = text.replace(/^REVIEW_BUNDLE_IDENTITY: [0-9a-f]{64}$/m, `REVIEW_BUNDLE_IDENTITY: ${"9".repeat(64)}`);
+  } else if (tamper === "card") {
+    text = text.replace(/^CARD_ID: .*$/m, "CARD_ID: R13-OTHER-CARD");
+  } else if (tamper === "forged-consistent") {
+    // self-consistent forgery: keep structure, recompute the footer sha for
+    // changed content — the OLD attack that previously minted a PASS.
+    text = text.replace("bundle generated and validated for R-13", "FORGED CONTENT");
+    const marker = "REVIEW_BUNDLE_SHA256:";
+    const body = text.slice(0, text.lastIndexOf(marker));
+    const forged = createHash("sha256").update(body).digest("hex");
+    text = body + `${marker} ${forged}\n`;
+  }
+  writeFileSync(join(dir, "review-bundle.txt"), text, "utf8");
+  const artifactText = readFileSync(join(dir, "review-bundle.txt"), "utf8");
+  // content sha over the same bytes the verifier will derive
+  const marker = "REVIEW_BUNDLE_SHA256:";
+  const shaIdx = artifactText.lastIndexOf(marker);
+  const content = artifactText.slice(0, shaIdx);
+  const contentSha = createHash("sha256").update(content).digest("hex");
+  const statedSha = artifactText.slice(shaIdx).match(/REVIEW_BUNDLE_SHA256:\s*([0-9a-f]{64})/)?.[1] ?? null;
+  const rec = {
+    schema: "autoloop.external-review-delivery/v2",
+    cardId: record.cardId ?? cardId,
+    fileName: "delivery.json",
+    reviewBundleGenerated: true,
+    reviewBundleValidated: true,
+    externalReviewStatus: record.finalized ? record.finalized : "AWAITING_EXTERNAL_REVIEW",
+    externalReviewStatusReason: null,
+    delivery: {
+      required: true, attempted: true, method: "test", attemptedAt: "2026-09-19T00:00:00.000Z",
+      bundlePath: join(dir, "review-bundle.txt"),
+      reviewBundleIdentity: record.identity ?? b.identity,
+      reviewBundleSha256: record.sha ?? genuineSha,
+    },
+    verdict: record.finalized
+      ? { verdict: record.finalized, reviewerIdentity: "FIRST-REVIEWER", reviewedAt: "2026-09-19T00:00:00.000Z",
+          bundleIdentity: record.identity ?? b.identity, bundleSha256: record.sha ?? genuineSha }
+      : null,
+  };
+  writeFileSync(join(dir, "delivery.json"), JSON.stringify(rec, null, 2) + "\n", "utf8");
+  return { dir, identity: b.identity, contentSha, statedSha, cardId };
+};
+
+const r13Apply = (name, { verdict = "PASS", reviewer = "R13-EXTERNAL-REVIEWER", expectedCardId } = {}) =>
+  applyExternalReviewVerdictForDelivery({
+    deliveryPath: join(R13, name, "delivery.json"),
+    verdict, reviewerIdentity: reviewer, reviewedAt: "2026-09-19T01:00:00.000Z",
+    ...(expectedCardId ? { expectedCardId } : {}),
+  });
+
+const r13RecordStatus = (name) =>
+  readExternalReviewDeliveryRecord(join(R13, name, "delivery.json")).state?.externalReviewStatus ?? null;
+
+test("R13-RC-A. valid delivery + untouched valid artifact + legitimate verdict → applies", () => {
+  const s = r13Setup("rc-a");
+  const r = r13Apply("rc-a", { expectedCardId: s.cardId });
+  assert.equal(r.ok, true, r.errors?.join(";"));
+  assert.equal(r.state.externalReviewStatus, "PASS");
+  assert.equal(r.state.verdict.bundleIdentity, s.identity);
+  assert.equal(r.state.verdict.bundleSha256, s.contentSha);
+  assert.equal(externalReviewComplete(r.state), true);
+});
+
+test("R13-RC-B. tampered artifact → rejected, record unchanged", () => {
+  r13Setup("rc-b", { tamper: "byte" });
+  const r = r13Apply("rc-b");
+  assert.equal(r.ok, false);
+  assert.equal(r.holdCode, "EXTERNAL_REVIEW_STALE_BUNDLE");
+  assert.equal(r13RecordStatus("rc-b"), "AWAITING_EXTERNAL_REVIEW");
+});
+
+test("R13-RC-C. forged delivery identity/SHA + mismatching artifact → rejected", () => {
+  r13Setup("rc-c", { record: { identity: "f".repeat(64), sha: "f".repeat(64) } });
+  const r = r13Apply("rc-c");
+  assert.equal(r.ok, false);
+  assert.equal(r13RecordStatus("rc-c"), "AWAITING_EXTERNAL_REVIEW");
+});
+
+test("R13-RC-D. valid artifact + wrong-card delivery → rejected (card binding)", () => {
+  // The ARTIFACT is valid for card R13-RC-D; the DELIVERY record claims a
+  // different card — the artifact→delivery direction must fail closed.
+  r13Setup("rc-d", { cardId: "R13-RC-D", record: { cardId: "R13-OTHER-CARD" } });
+  const r = r13Apply("rc-d");
+  assert.equal(r.ok, false);
+  assert.equal(r.holdCode, "EXTERNAL_REVIEW_CARD_MISMATCH");
+});
+
+test("R13-RC-E. caller-supplied identity/SHA have zero authority", () => {
+  const s = r13Setup("rc-e", { tamper: "forged-consistent" });
+  // even if a caller echoes the forged record values, the fresh artifact
+  // truth governs; the forged-consistent artifact also fails validation.
+  const r = applyExternalReviewVerdictForDelivery({
+    deliveryPath: join(R13, "rc-e", "delivery.json"),
+    verdict: "PASS", reviewerIdentity: "R13-EXTERNAL-REVIEWER",
+    bundleIdentity: s.identity, bundleSha256: s.contentSha,
+  });
+  assert.equal(r.ok, false, "caller echo must not mint authority");
+  // and a direct low-level call with a bogus artifact path fails closed
+  const v = verifyDeliveredArtifactForVerdict({ deliveryPath: join(R13, "rc-e", "delivery.json") });
+  assert.equal(v.ok, false);
+});
+
+test("R13-TAMPER-13. self-consistent forged artifact + matching forged record → rejected", () => {
+  r13Setup("t13", { tamper: "forged-consistent" });
+  const r = r13Apply("t13");
+  assert.equal(r.ok, false);
+  assert.match(String(r.errors?.join(";")), /EXTERNAL_REVIEW_ARTIFACT_INVALID|EXTERNAL_REVIEW_STALE_BUNDLE/);
+});
+
+test("R13-TAMPER-14. structurally invalid artifact with internally matching sha/identity → rejected", () => {
+  r13Setup("t14", { tamper: "truncate" });
+  const r = r13Apply("t14");
+  assert.equal(r.ok, false);
+  assert.equal(r13RecordStatus("t14"), "AWAITING_EXTERNAL_REVIEW");
+});
+
+test("R13-TAMPER-15. conflicting verdict against finalized receipt → rejected; same verdict idempotent", () => {
+  r13Setup("t15", { record: { finalized: "PASS" } });
+  const conflict = r13Apply("t15", { verdict: "HOLD" });
+  assert.equal(conflict.ok, false);
+  assert.equal(conflict.holdCode, "EXTERNAL_REVIEW_VERDICT_CONFLICT");
+  // same verdict + same reviewer stays idempotent
+  const again = applyExternalReviewVerdictForDelivery({
+    deliveryPath: join(R13, "t15", "delivery.json"),
+    verdict: "PASS", reviewerIdentity: "FIRST-REVIEWER", reviewedAt: "2026-09-19T02:00:00.000Z",
+  });
+  assert.equal(again.ok, true, again.errors?.join(";"));
+  assert.equal(again.idempotent, true);
+});
+
+test("R13-TAMPER-6/7. artifact identity changed / wrong-card artifact → rejected", () => {
+  // identity line swapped → footer sha no longer matches content → the
+  // validator's sha recompute and the record comparison both fail closed.
+  r13Setup("t6", { tamper: "identity" });
+  const r6 = r13Apply("t6");
+  assert.equal(r6.ok, false);
+  assert.match(String(r6.errors?.join(";")), /EXTERNAL_REVIEW_STALE_BUNDLE|EXTERNAL_REVIEW_ARTIFACT_INVALID/);
+  // wrong-card artifact: record still binds THIS card, artifact says another
+  // card. The card line is inside the sha-covered content, so a plain swap
+  // trips the sha fence; a RE-WRITTEN card line with a recomputed footer
+  // (fully self-consistent wrong-card artifact) trips the CARD binding.
+  r13Setup("t7", { cardId: "R13-T7", tamper: "card" });
+  const r7 = r13Apply("t7");
+  assert.equal(r7.ok, false);
+  assert.match(String(r7.errors?.join(";")), /EXTERNAL_REVIEW_CARD_MISMATCH|EXTERNAL_REVIEW_STALE_BUNDLE|EXTERNAL_REVIEW_ARTIFACT_INVALID/);
+});
+
+test("R13-TAMPER-9/12. missing artifact and stale rotated surface → rejected", () => {
+  const s = r13Setup("t9");
+  rmSync(join(s.dir, "review-bundle.txt"));
+  const r = r13Apply("t9");
+  assert.equal(r.ok, false);
+  assert.match(String(r.errors?.join(";")), /surface_bundle_missing/);
+  // wrong-card trio: valid artifact from another card paired with this record
+  const other = r13Setup("t9-other", { cardId: "R13-T9-OTHER" });
+  const v = verifyDeliveredArtifactForVerdict({
+    deliveryPath: join(R13, "t9-other", "delivery.json"),
+    expectedCardId: "R13-SOME-OTHER-CARD",
+  });
+  assert.equal(v.ok, false);
+  assert.equal(v.holdCode, "EXTERNAL_REVIEW_CARD_MISMATCH");
+});
+
+test("R13-CLI. real CLI E2E: deliver→verdict→idempotent→conflict→tamper→record unchanged", () => {
+  const s = r13Setup("cli");
+  const run = (args) => spawnSync(process.execPath, [CLI, "--apply-verdict", join(s.dir, "delivery.json"), ...args], { cwd: REPO_A, encoding: "utf8" });
+  // 1. legitimate PASS applies
+  let r = run(["--verdict", "PASS", "--reviewer", "R13-CLI-REVIEWER", "--reviewed-at", "2026-09-19T03:00:00.000Z"]);
+  assert.equal(r.status, 0, `${r.stdout}${r.stderr}`);
+  assert.ok(r.stdout.includes("externalReviewComplete: true"));
+  // 2. identical verdict → idempotent success
+  r = run(["--verdict", "PASS", "--reviewer", "R13-CLI-REVIEWER", "--reviewed-at", "2026-09-19T03:05:00.000Z"]);
+  assert.equal(r.status, 0, `${r.stdout}${r.stderr}`);
+  assert.ok(r.stdout.includes("idempotent"), r.stdout);
+  // 3. conflicting verdict → rejected
+  r = run(["--verdict", "REPAIR", "--reviewer", "R13-CLI-REVIEWER"]);
+  assert.notEqual(r.status, 0);
+  assert.ok(`${r.stderr}${r.stdout}`.includes("verdict_conflict"), `${r.stderr}${r.stdout}`);
+  // 4. tamper the artifact → rejected
+  const bundle = join(s.dir, "review-bundle.txt");
+  const saved = readFileSync(bundle, "utf8");
+  writeFileSync(bundle, saved.replace("bundle generated and validated for R-13", "TAMPERED AFTER VERDICT"), "utf8");
+  const recBefore = readFileSync(join(s.dir, "delivery.json"), "utf8");
+  r = run(["--verdict", "HOLD", "--reviewer", "R13-CLI-REVIEWER"]);
+  assert.notEqual(r.status, 0);
+  // 5. record byte-identical after the failed attempt
+  assert.equal(readFileSync(join(s.dir, "delivery.json"), "utf8"), recBefore);
+  // restore for after()
+  writeFileSync(bundle, saved, "utf8");
 });

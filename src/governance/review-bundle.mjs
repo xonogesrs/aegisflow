@@ -173,6 +173,10 @@ export const EXTERNAL_REVIEW_HOLDS = Object.freeze({
   STALE_BUNDLE: "EXTERNAL_REVIEW_STALE_BUNDLE",
   SELF_DECLARED: "EXTERNAL_REVIEW_SELF_DECLARED",
   INVALID_VERDICT: "EXTERNAL_REVIEW_INVALID_VERDICT",
+  // R-13 residual repair: verdict-time artifact verification fencing.
+  ARTIFACT_INVALID: "EXTERNAL_REVIEW_ARTIFACT_INVALID",
+  CARD_MISMATCH: "EXTERNAL_REVIEW_CARD_MISMATCH",
+  VERDICT_CONFLICT: "EXTERNAL_REVIEW_VERDICT_CONFLICT",
 });
 
 export const EXTERNAL_REVIEW_DELIVERY_RECORD_SCHEMA = "autoloop.external-review-delivery/v2";
@@ -915,6 +919,192 @@ export function verifyExternalReviewSurface({ surfaceDir = null, expected = {} }
   }
 
   return { ok: errors.length === 0, errors, surfaceDir: dir };
+}
+
+// ---------------------------------------------------------------------------
+// R-13 — verdict-time artifact verification (single fresh read).
+// ---------------------------------------------------------------------------
+
+/**
+ * R-13 — SINGLE-READ VERDICT-TIME ARTIFACT VERIFICATION.
+ *
+ * Residual defect repaired here: a self-consistent forged review artifact
+ * (any content + a recomputed footer SHA) paired with a correspondingly
+ * forged delivery record could previously receive an external verdict,
+ * because verdict application compared record values against a text
+ * extraction without structurally validating the artifact and without
+ * binding its CARD_ID. Delivery-record fields are EXPECTED VALUES — never
+ * proof. Caller-supplied identity/SHA values have ZERO authority.
+ *
+ * One fresh read of the canonical delivered artifact feeds ALL of:
+ *   - structural validation (canonical validateReviewBundle requirements);
+ *   - content SHA derivation (footer-excluded, canonical convention);
+ *   - bundle identity extraction (trusted only AFTER structural validation);
+ *   - artifact card identity extraction.
+ * The result is compared against the delivery record's expected values
+ * (identity / SHA / card) and returned as the verified truth used for
+ * verdict persistence. Fail-closed on every mismatch.
+ *
+ * @param {object} opts
+ *   deliveryPath    — canonical delivery.json beside the artifact.
+ *   expectedCardId  — explicit verdict target card (when the caller knows
+ *                     which card the verdict is for); artifact card must
+ *                     match it as well.
+ *   surfaceBundlePath — optional explicit artifact path (tests); default is
+ *                     review-bundle.txt beside the delivery record.
+ * @returns {{ ok:true, artifact:{ path, text, sha256, identity, cardId } }
+ *          | { ok:false, holdCode, reason }}
+ */
+export function verifyDeliveredArtifactForVerdict({ deliveryPath, expectedCardId = null, surfaceBundlePath = null } = {}) {
+  const rec = readExternalReviewDeliveryRecord(deliveryPath);
+  if (!rec.ok) {
+    return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.STALE_BUNDLE, reason: `EXTERNAL_REVIEW_STALE_BUNDLE:delivery_record_invalid:${rec.errors.join(";")}` };
+  }
+  const delivery = rec.state?.delivery ?? null;
+  const expectedIdentity = delivery?.reviewBundleIdentity ?? null;
+  const expectedSha = delivery?.reviewBundleSha256 ?? null;
+  if (typeof expectedIdentity !== "string" || !/^[0-9a-f]{64}$/.test(expectedIdentity)) {
+    return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.STALE_BUNDLE, reason: "EXTERNAL_REVIEW_STALE_BUNDLE:recorded_bundle_identity_absent_or_malformed" };
+  }
+  if (typeof expectedSha !== "string" || !/^[0-9a-f]{64}$/.test(expectedSha)) {
+    return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.STALE_BUNDLE, reason: "EXTERNAL_REVIEW_STALE_BUNDLE:recorded_bundle_sha_absent_or_malformed" };
+  }
+  const artifactPath = surfaceBundlePath ?? join(dirname(resolve(deliveryPath)), "review-bundle.txt");
+  if (!existsSync(artifactPath)) {
+    return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.ARTIFACT_INVALID, reason: `EXTERNAL_REVIEW_ARTIFACT_INVALID:surface_bundle_missing:${artifactPath}` };
+  }
+  // ── ONE fresh read. Every derivation below consumes THESE exact bytes. ──
+  const text = readFileSync(artifactPath, "utf8");
+  // Content SHA from the SAME fresh bytes (footer-excluded canonical rule).
+  // Compared FIRST: a stale/rotated generation is precisely diagnosed even
+  // when it is also structurally invalid.
+  const linesArr = text.split("\n");
+  const shaLineIdx = [...linesArr].reverse().findIndex((l) => l.trim().startsWith("REVIEW_BUNDLE_SHA256:"));
+  const contentOnly = shaLineIdx >= 0 ? linesArr.slice(0, linesArr.length - 1 - shaLineIdx).join("\n") + "\n" : text;
+  const freshSha = sha256Hex(contentOnly);
+  if (freshSha !== expectedSha) {
+    return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.STALE_BUNDLE, reason: `EXTERNAL_REVIEW_STALE_BUNDLE:surface_bundle_sha_diverges_from_record:${freshSha.slice(0, 12)}!=${expectedSha.slice(0, 12)}` };
+  }
+  // Structural validation over the canonical artifact (validateReviewBundle
+  // re-reads the path internally; the single-read contract is enforced by the
+  // recheck guard below: the bytes we derive values from must be the bytes
+  // that validated — a concurrent rewrite between our read and the
+  // validator's read fails closed). A self-consistent forged artifact
+  // (content + recomputed footer SHA) cannot survive this.
+  const validation = validateReviewBundle(artifactPath, {});
+  if (!validation.ok) {
+    return { ok: false, holdCode: validation.holdCode ?? EXTERNAL_REVIEW_HOLDS.ARTIFACT_INVALID, reason: `EXTERNAL_REVIEW_ARTIFACT_INVALID:${validation.errors.join(";").slice(0, 400)}` };
+  }
+  const recheck = readFileSync(artifactPath, "utf8");
+  if (recheck !== text) {
+    return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.ARTIFACT_INVALID, reason: "EXTERNAL_REVIEW_ARTIFACT_INVALID:artifact_mutated_during_verification" };
+  }
+  // Identity from the SAME fresh bytes — trusted only after structural
+  // validation passed (a forged identity line cannot survive validation).
+  const freshIdentity = text.match(/^REVIEW_BUNDLE_IDENTITY:\s*([0-9a-f]{64})$/m)?.[1] ?? null;
+  if (!freshIdentity || freshIdentity !== expectedIdentity) {
+    return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.STALE_BUNDLE, reason: `EXTERNAL_REVIEW_STALE_BUNDLE:surface_bundle_identity_diverges_from_record:${freshIdentity ? freshIdentity.slice(0, 8) : "none"}!=${expectedIdentity.slice(0, 8)}` };
+  }
+  // Card binding from the SAME fresh bytes.
+  const artifactCardId = text.match(/^CARD_ID:\s*(.+)$/m)?.[1]?.trim() ?? null;
+  if (!artifactCardId) {
+    return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.CARD_MISMATCH, reason: "EXTERNAL_REVIEW_CARD_MISMATCH:artifact_card_id_missing" };
+  }
+  if (rec.cardId && artifactCardId !== rec.cardId) {
+    return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.CARD_MISMATCH, reason: `EXTERNAL_REVIEW_CARD_MISMATCH:artifact_card:${artifactCardId}!=delivery_card:${rec.cardId}` };
+  }
+  if (expectedCardId && artifactCardId !== expectedCardId) {
+    return { ok: false, holdCode: EXTERNAL_REVIEW_HOLDS.CARD_MISMATCH, reason: `EXTERNAL_REVIEW_CARD_MISMATCH:artifact_card:${artifactCardId}!=target_card:${expectedCardId}` };
+  }
+  return {
+    ok: true,
+    artifact: Object.freeze({ path: artifactPath, text, sha256: freshSha, identity: freshIdentity, cardId: artifactCardId }),
+  };
+}
+
+/**
+ * R-13 — ARTIFACT-AWARE VERDICT APPLICATION (the production library seam).
+ *
+ * The low-level applyExternalReviewVerdict is a pure state transition: it
+ * compares caller-supplied identity/SHA against the delivery record and can
+ * therefore be satisfied by a caller that merely echoes the record. Production
+ * callers MUST use this entry point instead: artifact truth is established by
+ * verifyDeliveredArtifactForVerdict (single fresh read + structural validation
+ * + SHA/identity/card binding) BEFORE any state mutation, and the persisted
+ * verdict binds the FRESHLY VERIFIED values — never caller copies.
+ *
+ * Conflict fence: an already-finalized receipt (verdict bound to the current
+ * bundle) cannot be overwritten by a different verdict — a new generation via
+ * REPAIR/supersedes is the only change path. Re-applying the SAME verdict with
+ * the same reviewer semantics over the same verified artifact is idempotent.
+ *
+ * @param {object} opts
+ *   deliveryPath   — canonical delivery.json.
+ *   verdict        — PASS | REPAIR | HOLD
+ *   reviewerIdentity, reviewedAt, agentIdentity, findingsDigest — as in
+ *                    applyExternalReviewVerdict.
+ *   expectedCardId — explicit verdict target card (optional).
+ *   artifact       — optional pre-verified artifact from
+ *                    verifyDeliveredArtifactForVerdict (callers that already
+ *                    verified MUST pass it; the helper re-verifies otherwise).
+ */
+export function applyExternalReviewVerdictForDelivery(opts = {}) {
+  const deliveryPath = opts.deliveryPath ?? null;
+  if (!deliveryPath) {
+    return { ok: false, errors: [`${EXTERNAL_REVIEW_HOLDS.INVALID_VERDICT}:delivery_path_required`], state: null };
+  }
+  const verified = opts.artifact ?? verifyDeliveredArtifactForVerdict({ deliveryPath, expectedCardId: opts.expectedCardId ?? null });
+  if (!verified.ok) {
+    return { ok: false, errors: [verified.reason ?? `${EXTERNAL_REVIEW_HOLDS.ARTIFACT_INVALID}:verification_failed`], state: null, holdCode: verified.holdCode };
+  }
+  const rec = readExternalReviewDeliveryRecord(deliveryPath);
+  if (!rec.ok) {
+    return { ok: false, errors: [`delivery_record_invalid:${rec.errors.join(";")}`], state: null };
+  }
+  const state = rec.state;
+  // Conflict fence: a finalized receipt (verdict bound to the CURRENT bundle)
+  // is immutable except through a new generation. Same verdict + same reviewer
+  // over the same verified artifact stays idempotent.
+  const existing = state?.verdict ?? null;
+  if (existing && typeof existing.bundleIdentity === "string" && existing.bundleIdentity === state.delivery?.reviewBundleIdentity) {
+    const sameVerdict = existing.verdict === opts.verdict
+      && existing.bundleSha256 === verified.artifact.sha256
+      && existing.reviewerIdentity === (opts.reviewerIdentity ?? null);
+    if (!sameVerdict) {
+      return {
+        ok: false,
+        holdCode: EXTERNAL_REVIEW_HOLDS.VERDICT_CONFLICT,
+        errors: [`${EXTERNAL_REVIEW_HOLDS.VERDICT_CONFLICT}:finalized_receipt:${existing.verdict}!=${opts.verdict}`],
+        state: null,
+      };
+    }
+    // Idempotent re-apply: re-run the low-level transition (same inputs) so
+    // the receipt stays deterministic; reviewedAt may refresh.
+    const applied = applyExternalReviewVerdict(state, {
+      verdict: opts.verdict,
+      reviewerIdentity: opts.reviewerIdentity,
+      reviewedAt: opts.reviewedAt ?? new Date().toISOString(),
+      bundleIdentity: verified.artifact.identity,
+      bundleSha256: verified.artifact.sha256,
+      agentIdentity: opts.agentIdentity,
+      findingsDigest: opts.findingsDigest,
+    });
+    if (!applied.ok) return applied;
+    return { ok: true, errors: [], state: applied.state, idempotent: true, artifact: verified.artifact };
+  }
+  const applied = applyExternalReviewVerdict(state, {
+    verdict: opts.verdict,
+    reviewerIdentity: opts.reviewerIdentity,
+    reviewedAt: opts.reviewedAt ?? new Date().toISOString(),
+    // VERDICT BINDING: freshly verified values only — caller identity/SHA
+    // fields are never consulted for authority.
+    bundleIdentity: verified.artifact.identity,
+    bundleSha256: verified.artifact.sha256,
+    agentIdentity: opts.agentIdentity,
+    findingsDigest: opts.findingsDigest,
+  });
+  if (!applied.ok) return applied;
+  return { ok: true, errors: [], state: applied.state, artifact: verified.artifact };
 }
 
 // ---------------------------------------------------------------------------
