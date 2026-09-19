@@ -42,8 +42,15 @@ import { runColimaGraph, isWriterPhase } from "../runtime/colima-graph-runner.mj
 import { runDurableGraph, resumeDurableGraph, DurableGraphHoldError } from "../v2/durable-graph.mjs";
 import { checkpointExists } from "../v2/checkpoint-bridge.mjs";
 import { validateAdmission } from "../admission/admission-record.mjs";
-import { projectEnvelopeFields } from "../admission/policy-projection.mjs";
+import { projectEnvelopeFields, TOOL_SELECTION_SCHEMA } from "../admission/policy-projection.mjs";
 import { createColimaExecutorAdapter } from "../runtime/colima-executor-adapter.mjs";
+// WP1-A2 provider-backed sub-agent execution: the dispatch seam routes
+// admitted sub-agent node execution through THE production provider adapter
+// (createPiRpcAdapter) so the adapter-owned provider session — never agent
+// content, never caller input — is the only usage authority surfaced as
+// metadata.providerUsage on the existing node-result path.
+import { createPiRpcAdapter, DEFAULT_ENV_ALLOWLIST } from "../adapter/pi-rpc-adapter.mjs";
+import { canonicalizeProviderBinding } from "../rollover/spawn-registry.mjs";
 import { createColimaReviewerAdapter } from "../runtime/colima-reviewer-adapter.mjs";
 import { phaseExecutionId } from "../v2/phase-task-card.mjs";
 import { createSubagentExecutorAdapter } from "./subagent-executor-adapter.mjs";
@@ -240,7 +247,7 @@ export async function runSubagentGraph({
     // durableExecutionIdFor）+ exposes durableExecutionId + the recovery /
     // evidence provenance ONLY the durable layer produces.
     const root = persistence?.root ?? join(homedir(), ".autoloop", "durable", durableExecutionId);
-    const { executorAdapterFactory, reviewerAdapterFactory } = buildSubagentAdapterFactories({ profile, repoPath, scratchRoot: ownedScratchRoot, resultsDir, maxRepairAttempts });
+    const { executorAdapterFactory, reviewerAdapterFactory } = buildSubagentAdapterFactories({ profile, repoPath, scratchRoot: ownedScratchRoot, resultsDir, maxRepairAttempts, admission });
     const durableResult = await runDurableGraph({
       ir,
       parent,
@@ -279,7 +286,7 @@ export async function runSubagentGraph({
   }
 
   // ── TEST-ONLY RAW PATH（durable: false）───────────────────────────────
-  const { executorAdapterFactory: rawExecutorFactory, reviewerAdapterFactory: rawReviewerFactory } = buildSubagentAdapterFactories({ profile, repoPath, scratchRoot: ownedScratchRoot, resultsDir, maxRepairAttempts });
+  const { executorAdapterFactory: rawExecutorFactory, reviewerAdapterFactory: rawReviewerFactory } = buildSubagentAdapterFactories({ profile, repoPath, scratchRoot: ownedScratchRoot, resultsDir, maxRepairAttempts, admission });
   return runColimaGraph({
     ir,
     parent,
@@ -385,7 +392,7 @@ export async function resumeSubagentGraph({
   try {
     irFromDisk = JSON.parse(readFileSync(join(root, durableExecutionId, "artifacts", "decomposition-ir.json"), "utf8"));
   } catch { /* handled fail-closed inside resumeDurableGraph */ }
-  const { executorAdapterFactory, reviewerAdapterFactory } = buildSubagentAdapterFactories({ profile, repoPath, scratchRoot: ownedScratchRoot, resultsDir, maxRepairAttempts });
+  const { executorAdapterFactory, reviewerAdapterFactory } = buildSubagentAdapterFactories({ profile, repoPath, scratchRoot: ownedScratchRoot, resultsDir, maxRepairAttempts, admission });
   const admissionDigest_ = admission ? sha256Hex(JSON.stringify({ admission_id: admission.admission_id, size: admission.size, risk: admission.risk, profile: admission.profile })) : null;
   const durableResult = await resumeDurableGraph({
     ir: irFromDisk,
@@ -551,22 +558,49 @@ function buildSubagentGraphHooks({ ir, resultsDir, dependencyExecutionId, hooks,
  * Shared adapter dispatchers for sub-agent graphs — used by BOTH the raw
  * path, the durable production path, and the DE-2R resume entry.
  */
-function buildSubagentAdapterFactories({ profile, repoPath, scratchRoot, resultsDir, maxRepairAttempts }) {
+function buildSubagentAdapterFactories({ profile, repoPath, scratchRoot, resultsDir, maxRepairAttempts, admission = null }) {
   return {
-    executorAdapterFactory: subagentExecutorFactory({ profile, repoPath, scratchRoot, resultsDir, maxRepairAttempts }),
+    executorAdapterFactory: subagentExecutorFactory({ profile, repoPath, scratchRoot, resultsDir, maxRepairAttempts, admission }),
     reviewerAdapterFactory: subagentReviewerFactory({ profile, repoPath, scratchRoot, resultsDir }),
   };
 }
-
 /**
  * Shared executor dispatcher for sub-agent graphs（routes on the phase's
- * runtime spec）— used by BOTH the raw path and the durable production path.
+ * runtime spec）— used by BOTH the raw path, the durable production path,
+ * and the DE-2R resume entry.
  */
-function subagentExecutorFactory({ profile, repoPath, scratchRoot, resultsDir, maxRepairAttempts }) {
-  return ({ resultSink }) => {
+function subagentExecutorFactory({ profile, repoPath, scratchRoot, resultsDir, maxRepairAttempts, admission = null }) {
+  return ({ resultSink, selectionAuthority } = {}) => {
     const roSubagent = createSubagentExecutorAdapter({ profile, repoPath, scratchRoot, resultsDir, resultSink });
     const writerSubagent = createSubagentWriterExecutorAdapter({ profile, repoPath, scratchRoot, resultsDir, resultSink, maxRepairAttempts });
     const roColima = createColimaExecutorAdapter({ profile, repoPath, scratchRoot, resultSink });
+    // ── WP1-A2 PROVIDER-BACKED DISPATCH ──────────────────────────────────
+    // The frozen admission is the ONLY authority that can authorize a
+    // provider-backed sub-agent node: a canonical
+    // admission.extensions.rollover.provider_binding routes the node's
+    // execution through THE production provider adapter
+    // (src/adapter/pi-rpc-adapter.mjs). The adapter-owned provider session
+    // is the sole usage authority: its message_end usage surfaces as
+    // metadata.providerUsage on the EXISTING node-result path
+    // (captureNodeResult -> onPhaseTerminal -> observeProviderUsageAndTrigger).
+    // No estimation, no synthesis, no second representation: when no
+    // binding is admitted the dispatch is unchanged (container-only) and
+    // providerUsage never exists.
+    const providerBinding = canonicalizeProviderBinding(admission?.extensions?.rollover?.provider_binding);
+    const makeProviderAdapter = (wired) => createPiRpcAdapter({
+      piExecutable: process.env.PI_EXECUTABLE || "pi",
+      provider: providerBinding.value.providerKind,
+      model: providerBinding.value.modelId,
+      environmentAllowlist: [...DEFAULT_ENV_ALLOWLIST, ...providerBinding.value.requiredEnvKeys],
+      // STAGE C §7 fence preserved verbatim: the selection authority is
+      // wired ONLY for a wired adapter, and a wired adapter that receives
+      // a non-canonical toolPolicy fails closed before any spawn. Requests
+      // without a canonical selection go to the unwired adapter and keep
+      // the legacy safe default (--no-tools).
+      ...(wired ? { selectionAuthority } : {}),
+    });
+    let wiredProviderAdapter = null;
+    let bareProviderAdapter = null;
     return () => ({
       runAdapter: async (request) => {
         const rt = request.taskCard?.runtime ?? {};
@@ -586,9 +620,65 @@ function subagentExecutorFactory({ profile, repoPath, scratchRoot, resultsDir, m
             metadata: { dependencyConflicts: rt.dependencyConflicts },
           };
         }
-        if (rt.mode === "subagent" && rt.agentRole === "writer") return writerSubagent.runAdapter(request);
-        if (rt.mode === "readonly") return roColima.runAdapter(request);
-        return roSubagent.runAdapter(request);
+        // Provider-backed backing runs BEFORE the container execution and
+        // fails the node closed when the admitted provider session cannot
+        // complete: a provider-backed node without its provider backing is
+        // an execution failure, never a silent container-only fallback.
+        let providerUsage = null;
+        let providerBacked = null;
+        if (providerBinding.ok && request.phase === "executor" && rt.mode === "subagent") {
+          const canonicalSelection = request.toolPolicy?.contractVersion === TOOL_SELECTION_SCHEMA;
+          if (canonicalSelection && wiredProviderAdapter === null) wiredProviderAdapter = makeProviderAdapter(true);
+          if (!canonicalSelection && bareProviderAdapter === null) bareProviderAdapter = makeProviderAdapter(false);
+          const providerResult = await (canonicalSelection ? wiredProviderAdapter : bareProviderAdapter).runAdapter(request);
+          // The ONLY usage authority: the adapter-owned provider session's
+          // own metadata. Agent-authored result content is never consulted.
+          providerUsage = providerResult?.metadata?.providerUsage ?? null;
+          providerBacked = {
+            adapterKind: providerBinding.value.adapterKind,
+            providerKind: providerBinding.value.providerKind,
+            modelId: providerBinding.value.modelId,
+            status: providerResult?.status ?? null,
+          };
+          if (providerResult?.status !== "completed") {
+            const failResult = {
+              status: "error",
+              executionId: request.executionId,
+              error: `PROVIDER_BACKING_FAILED:${providerResult?.status ?? "unknown"}:${String(providerResult?.error ?? "no detail").slice(0, 160)}`,
+              stdout: "",
+              stderr: "",
+              metadata: { providerBacked, providerUsage: null },
+            };
+            resultSink?.(request.executionId, failResult);
+            if (request.taskCard && typeof request.taskCard === "object") {
+              request.taskCard.runtime = request.taskCard.runtime ?? {};
+              request.taskCard.runtime.lastExecutorResult = failResult;
+            }
+            return failResult;
+          }
+        }
+        const result = rt.mode === "subagent" && rt.agentRole === "writer"
+          ? await writerSubagent.runAdapter(request)
+          : rt.mode === "readonly"
+            ? await roColima.runAdapter(request)
+            : await roSubagent.runAdapter(request);
+        if (providerBacked) {
+          // Re-sink the MERGED result: the downstream node-result projection
+          // (captureNodeResult) reads the resultSink channel, and the
+          // lifecycle reviewer reads taskCard.runtime.lastExecutorResult —
+          // both must observe the adapter-owned providerUsage.
+          const merged = {
+            ...result,
+            metadata: { ...(result.metadata ?? {}), providerUsage, providerBacked },
+          };
+          resultSink?.(request.executionId, merged);
+          if (request.taskCard && typeof request.taskCard === "object") {
+            request.taskCard.runtime = request.taskCard.runtime ?? {};
+            request.taskCard.runtime.lastExecutorResult = merged;
+          }
+          return merged;
+        }
+        return result;
       },
     });
   };

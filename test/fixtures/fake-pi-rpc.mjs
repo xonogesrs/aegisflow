@@ -86,7 +86,16 @@ function emitNormalCompletion(phase, attempt) {
   }
   write({
     type: "message_end",
-    message: { role: "assistant", content: [{ type: "text", text }], stopReason: "stop" },
+    message: {
+      role: "assistant",
+      content: [{ type: "text", text }],
+      stopReason: "stop",
+      // TEST-ONLY control: when the harness sets assistantUsage, the fake
+      // session emits a pi-ai Usage object on the FINAL assistant
+      // message_end — the same authoritative channel the real provider
+      // uses (P3-U1). Never emitted without the explicit control.
+      ...(control.assistantUsage ? { usage: control.assistantUsage } : {}),
+    },
   });
   write({ type: "turn_end", message: { role: "assistant", content: [{ type: "text", text }] }, toolResults: [] });
   write({ type: "agent_end", messages: [], willRetry: false });
