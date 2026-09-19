@@ -27,6 +27,8 @@ import { candidateDomain } from "../../src/governance/candidate-domain-policy.mj
 import { remoteUrlMatchesAuthorizedRepository, productionRemoteMatch } from "../../scripts/shared/gov-args.mjs";
 import { generateReviewBundle } from "../../scripts/gov-review-bundle.mjs";
 import { runPushGate } from "../../scripts/gov-push-gate.mjs";
+import { runCommitIntegration } from "../../scripts/gov-commit-integration.mjs";
+import { parseArgs } from "../../scripts/shared/gov-args.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
@@ -70,6 +72,25 @@ function pushGate(argv, dir) {
     return { status: 0, report, stderr: "" };
   } catch (e) {
     return { status: 1, report: null, stderr: `${e.code ?? ""}\n${e.message}` };
+  } finally {
+    if (prev === undefined) delete process.env.AUTOLOOP_PI_GRAPH_OUTPUT;
+    else process.env.AUTOLOOP_PI_GRAPH_OUTPUT = prev;
+  }
+}
+
+// R-11: in-process integration attestation through the same TEST-ONLY env
+// seam as the push gate helper (review-job lives outside the fixture repo)
+// and the same fixture surface. The retired external-review-result.json is
+// never consulted by the migrated gate.
+function integrationAttest(argv, dir) {
+  const prev = process.env.AUTOLOOP_PI_GRAPH_OUTPUT;
+  process.env.AUTOLOOP_PI_GRAPH_OUTPUT = evidenceRootFor(dir);
+  try {
+    const { flags } = parseArgs(argv);
+    const report = runCommitIntegration({ flags, cwd: dir, surfaceDir: join(dir, "out", "surface") });
+    return { status: 0, stdout: JSON.stringify(report, null, 1), report, stderr: "" };
+  } catch (e) {
+    return { status: 1, stdout: "", report: null, stderr: `${e.code ?? ""}\n${e.message}` };
   } finally {
     if (prev === undefined) delete process.env.AUTOLOOP_PI_GRAPH_OUTPUT;
     else process.env.AUTOLOOP_PI_GRAPH_OUTPUT = prev;
@@ -285,15 +306,56 @@ test("e2e: checkpoint → clean bundle → PENDING push blocked → controller P
   assert.notEqual(ingest2.status, 0);
   assert.match(ingest2.stderr, /EXTERNAL_REVIEW_RESULT_NOT_CONTROLLER_OWNED|already exists/i);
 
-  // ── INTEGRATION attestation: verified, NO new commit, HEAD unchanged ──
+  // ── R-11 INTEGRATION attestation chronology (canonical authority) ──
+  // BEFORE canonical PASS: delivery is PENDING, the ingested legacy result
+  // artifact exists (ingested above) — integration must HOLD. The retired
+  // artifact grants nothing (RC1A §7.2).
   const headBefore = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
-  const integration = run("gov-commit-integration.mjs", [
+  const integrationPending = integrationAttest([
+    "--authority-file", authorityPath, "--cwd", dir,
+    "--verification-passed", "true", "--evidence-digest", "e".repeat(64), "--repair-converged", "true",
+  ], dir);
+  assert.notEqual(integrationPending.status, 0, "PENDING delivery must not authorize integration");
+  assert.match(integrationPending.stderr, /DELIVERY_NOT_PASS/);
+  const headStill = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+  assert.equal(headStill, headBefore, "HOLD must not create a commit");
+
+  // AFTER canonical PASS: integration succeeds. The legacy artifact stays
+  // on disk but plays no role; HEAD is unchanged (attestation only).
+  materializeCanonicalEvidence(dir, { status: "PASS" });
+  const integration = integrationAttest([
     "--authority-file", authorityPath, "--cwd", dir,
     "--verification-passed", "true", "--evidence-digest", "e".repeat(64), "--repair-converged", "true",
   ], dir);
   assert.equal(integration.status, 0, integration.stderr);
+  assert.equal(integration.report.integration_ready, true);
+  assert.equal(integration.report.attestation_only, true);
+  assert.equal(integration.report.no_commit_created, true);
   const headAfter = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
   assert.equal(headAfter, headBefore, "integration must NOT create a new commit");
+
+  // IDEMPOTENCE: the exact same attestation repeats with the same outcome,
+  // same authority identity, no mutation.
+  const repeat = integrationAttest([
+    "--authority-file", authorityPath, "--cwd", dir,
+    "--verification-passed", "true", "--evidence-digest", "e".repeat(64), "--repair-converged", "true",
+  ], dir);
+  assert.equal(repeat.status, 0, repeat.stderr);
+  assert.equal(repeat.report.authority_identity, integration.report.authority_identity);
+  assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim(), headBefore);
+
+  // RC-D: tampering the retired artifact cannot revoke the valid canonical
+  // authorization — the migrated gate never reads it.
+  const resultPath = join(outDir, "governance", "external-review-result.json");
+  const tampered = JSON.parse(readFileSync(resultPath, "utf8"));
+  tampered.bundle_sha256 = "0".repeat(64);
+  writeFileSync(resultPath, JSON.stringify(tampered, null, 2));
+  const stillAllowed = integrationAttest([
+    "--authority-file", authorityPath, "--cwd", dir,
+    "--verification-passed", "true", "--evidence-digest", "e".repeat(64), "--repair-converged", "true",
+  ], dir);
+  assert.equal(stillAllowed.status, 0, stillAllowed.stderr);
+  assert.equal(stillAllowed.report.integration_ready, true);
 
   // ── PUSH dry-run now PASSES: canonical delivery PASS bound to the
   // reviewed checkpoint HEAD ──
@@ -311,18 +373,6 @@ test("e2e: checkpoint → clean bundle → PENDING push blocked → controller P
   assert.notEqual(pushBlocked.status, 0);
   assert.match(pushBlocked.stderr, /DELIVERY_VERDICT_UNBOUND/);
 
-  // ── LEGACY result artifact modified → integration blocked (out-of-scope
-  // legacy gate keeps its own digest-bound behavior) ──
-  const resultPath = join(outDir, "governance", "external-review-result.json");
-  const tampered = JSON.parse(readFileSync(resultPath, "utf8"));
-  tampered.bundle_sha256 = "0".repeat(64);
-  writeFileSync(resultPath, JSON.stringify(tampered, null, 2));
-  const blocked = run("gov-commit-integration.mjs", [
-    "--authority-file", authorityPath, "--cwd", dir,
-    "--verification-passed", "true", "--evidence-digest", "e".repeat(64), "--repair-converged", "true",
-  ], dir);
-  assert.notEqual(blocked.status, 0);
-  assert.match(blocked.stderr, /EVIDENCE_IDENTITY_MISMATCH/);
 
   const mainHead = execFileSync("git", ["rev-parse", "main"], { cwd: dir, encoding: "utf8" }).trim();
   assert.equal(mainHead, execFileSync("git", ["rev-parse", "main"], { cwd: dir, encoding: "utf8" }).trim());
