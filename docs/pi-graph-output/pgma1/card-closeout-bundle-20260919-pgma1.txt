@@ -1,0 +1,396 @@
+================================================================================
+AUTOLOOP EXECUTION REVIEW
+================================================================================
+REVIEW_SCHEMA: autoloop.execution-review/v1
+EXECUTION_ID: autoloop-pgma1-closeout-bundle-20260919
+CARD_ID: autoloop-pgma1
+CARD_TITLE: Push/Draft Promotion Gate Authority Migration — Formal Closeout Bundle
+OUTCOME: PASS
+HOLD_CODE: NOT_APPLICABLE
+REASON: NOT_APPLICABLE
+GENERATED_AT: 2026-09-19T05:16:18Z
+ADMISSION_REVIEW_REQUIREMENT: REQUIRED (predecessor AUTOLOOP_PGMA1_CLOSEOUT_BUNDLE_EXTERNAL_REVIEW_1 VERDICT PASS; strength external; external yes)
+
+================================================================================
+1. Requested Task
+================================================================================
+OBJECTIVE: Create exactly one canonical formal closeout bundle for
+autoloop-pgma1, sealing the already-reviewed implementation/evidence lineage
+and making the next delivery step independently verifiable. Governance
+artifact only: no production-code mutation, no PGMA1 repair, no delivery
+record, no promotion, no commit, no push. Pre-existing WIP preserved.
+
+Predecessor authority:
+  AUTOLOOP_PGMA1_CLOSEOUT_BUNDLE_EXTERNAL_REVIEW_1
+  VERDICT = PASS / PGMA1_EXTERNAL_REVIEW = CLOSED
+  PGMA1_PROMOTION_STATE = REVIEW_ACCEPTED_AWAITING_CLOSEOUT
+  PGMA1_CLOSEOUT_BUNDLE = MISSING / PGMA1_DELIVERY_RECORD = MISSING
+  PGMA1_GATE_COUNT = 27/27 / PGMA1_E2E_COUNT = 17/17
+  R11_DISPOSITION = PARTIALLY_CLOSED
+  NEXT_CANONICAL_TASK = AUTOLOOP_PGMA1_CLOSEOUT_BUNDLE_IMPLEMENTATION_1
+
+================================================================================
+2. Repository Identity
+================================================================================
+REPOSITORY: xonogesrs/autoloop
+CANONICAL PATH: /Volumes/NVM2T/Development/repos/autoloop
+BRANCH: governance/rsl2-universal-execution-review-surface
+HEAD AT BUNDLE CREATION: 72f0019d526bc3ec38ff9c7872946d2f586061dd
+BASE OF PGMA1 LINEAGE: 78facaff2200ae5176a74b8deef5f612220d7cde
+PGMA1 BRANCH (historical): governance/push-draft-gate-authority-migration
+HISTORICAL WORKTREE (retired, metadata only):
+  /Volumes/NVM2T/Development/worktrees/autoloop-gate-migration
+  — directory no longer exists; NOT a live authority binding.
+CURRENT WORKTREE WIP: 43 pre-existing entries (multi-session chapter
+  sources, de2 crash-matrix reruns, autoloop-auth1 review-job dirty-lineage
+  reconciliation, risk-register R-11 extension, pre-wp1 probe JSONs, one
+  untracked de2 closeout bundle). None are part of PGMA1 identity.
+
+================================================================================
+3. Work Performed
+================================================================================
+SUMMARY: Governance-artifact creation only. This bundle seals the PGMA1
+review lineage; it does not re-review, repair, deliver, or promote.
+B1: Opening reconciliation — canonical repo/branch/HEAD verified; PGMA1
+    evidence set re-inventoried; no closeout bundle, no delivery record, no
+    promotion record found; no generation newer than g0001 exists anywhere
+    (repo, archive surfaces, evidence tree).
+B2: Format recovery — structure and section conventions reused from the
+    canonical reference
+    docs/pi-graph-output/autoloop-rsl2-handoff-repair-closeout/
+    card-closeout-bundle-20260816-c0ef49d9.txt
+    (autoloop.execution-review/v1 shape); PGMA1-specific fields added only
+    where the frozen closeout contract requires them.
+B3: Digest chain re-verification — every identity/digest referenced below
+    was recomputed from canonical source artifacts at HEAD (see §5/§16).
+B4: Scope check — the only mutation of this card is this bundle file
+    (untracked, new). All WIP preserved byte-for-byte.
+
+================================================================================
+4. Mutations
+================================================================================
+ADDED:
+  - docs/pi-graph-output/pgma1/card-closeout-bundle-20260919-<identity8>.txt
+    (this evidence artifact; untracked)
+MODIFIED:
+  (none)
+DELETED:
+  (none)
+NOTE: No production source, test, delivery surface, review-job, risk
+register, or lifecycle state was touched. COMMIT = NO / PUSH = NO /
+DELIVERY = NO / PROMOTION = NO.
+
+================================================================================
+5. Canonical Identity (Gate 2)
+================================================================================
+CARD_ID: autoloop-pgma1
+RUN_ID: autoloop-pgma1-r1
+GENERATION: g0001
+REVIEW_JOB_ID: autoloop-pgma1.g0001
+REVIEW_JOB_STATE: ACCEPTED
+REVIEW_JOB_STATE_VERSION: 8
+ACCEPTANCE_AUTHORITY: pgma1-closeout-controller-session
+ACCEPTED_AT: 2026-08-16T13:31:21.382Z
+REVIEWER_IDENTITY: pgma1-independent-reviewer
+SPEC_ID: autoloop-pgma1
+SPEC_DIGEST: 7c02bd3a545c88986843936b2c4888cfcca0fc5ae62a3a76c2259cac2972e1ba
+SPEC_PATH: docs/pi-graph-output/pgma1/autoloop-pgma1-card-spec.md
+AUTHORITY_RECORD: docs/pi-graph-output/pgma1/autoloop-pgma1-authority.json
+  (schema autoloop.lifecycle-authorization/v2, issued 2026-08-16T00:00:00Z,
+  authorized_by controller, external_review.required = true)
+SUPERSESSION: none — no autoloop-pgma1.g0002+ exists; g0001 is final.
+
+================================================================================
+6. Candidate Identity (Gate 3)
+================================================================================
+COPIED FROM CANONICAL EVIDENCE (review-job.json == review-verdict.g0001.json
+== review-findings.g0001.json; all three records byte-identical on every
+field below; independently cross-checked, NOT recomputed against current
+unrelated WIP):
+
+  changedTreeIdentity: 62a3cc68dc3b4d71563803956eebd14808cb1493be5cdadab1c184bfb6df0ae6
+  patchSha256:         af9fa27c179ed87443e3d1d03933d0f384230015eb6244b569604c188e7a8b03
+  currentHead:         7e04f4e75f1ddb261d4fa55167c655e5f54069d9
+  baseHead:            78facaff2200ae5176a74b8deef5f612220d7cde
+  repository:          xonogesrs/autoloop
+  branch:              governance/push-draft-gate-authority-migration
+
+Supplementary recompute (predecessor review, throwaway worktree at 7e04f4e
+with branch set): buildChangeInventory reproduced changedTreeIdentity
+62a3cc68… and patchSha256 af9fa27c… exactly — the frozen tuple is
+reproducible from the reviewed commit, independent of today's WIP.
+
+================================================================================
+7. Implementation Lineage (Gate 4)
+================================================================================
+REVIEWED CANDIDATE: 7e04f4e75f1ddb261d4fa55167c655e5f54069d9
+  "feat(governance): PGMA1 canonical promotion gate authority migration"
+  (parent 78facaff; sole commit of the PGMA1 branch)
+LANDED COMMIT: 54ea90aba08bff8d94fe878c0e7526c134bcc02b
+  (same subject; parent 7a7201f; carries concurrent unrelated content —
+  canonical-path cutover — alongside the byte-identical PGMA1 surface)
+
+LINEAGE PROOF (predecessor external review, re-verified at bundle creation):
+  - git diff 7e04f4e..54ea90a restricted to the 7 authorized PGMA1 paths
+    (scripts/gov-push-gate.mjs, scripts/gov-draft-pr.mjs,
+    src/governance/promotion-authority.mjs,
+    test/governance/test-promotion-gate-authority.mjs,
+    test/governance/test-review-unit-e2e.mjs,
+    docs/pi-graph-output/pgma1/*) = 0 lines — authorized surface landed
+    BYTE-IDENTICAL.
+  - 54ea90a IS an ancestor of current HEAD 72f0019
+    (merge-base 54ea90a == 54ea90a; 23 commits since).
+  - Zero material post-landing drift: git diff 54ea90a..HEAD over the five
+    PGMA1 code/test paths = 0 lines; src/governance/promotion-authority.mjs
+    has exactly one commit (54ea90a). Authority dependency modules
+    (external-review.mjs, review-job.mjs, change-inventory.mjs,
+    review-context.mjs, lifecycle-authorization.mjs) — zero diff since
+    landing.
+  - Adjacent governance files changed after landing (pass-oracle,
+    truth-revocation, review-bundle) do not alter the promotion authority
+    chain. Current unrelated worktree WIP is NOT part of PGMA1 identity.
+
+================================================================================
+8. Review Digest Chain (Gate 5)
+================================================================================
+All digests independently recomputed at HEAD and matched against the
+records (no value accepted on assertion alone):
+
+  SPEC_DIGEST      7c02bd3a545c88986843936b2c4888cfcca0fc5ae62a3a76c2259cac2972e1ba
+                   == sha256(docs/pi-graph-output/pgma1/autoloop-pgma1-card-spec.md)
+                   == specDigest in review-job.json AND review-verdict.g0001.json
+  FINDINGS_DIGEST  7029bf093081e2746599d38a0133f1bbd457559958fef099cd2d1ca1bc068c94
+                   == sha256(docs/pi-graph-output/autoloop-pgma1/review-findings.g0001.json)
+                   == findingsDigest in review-job.json AND review-verdict.g0001.json
+  VERDICT_DIGEST   82b897f9aa8e1920e89654954e8fe4cc2bf466a80d7ee25296a1fceff8830d23
+                   == sha256(docs/pi-graph-output/autoloop-pgma1/review-verdict.g0001.json)
+                   == verdictDigest in review-job.json
+  VERDICT VALUE:   PASS (2026-08-16T10:01:42.404Z; summary: "PGMA1 migration
+                   approved after REPAIR resolution; gates verified 27/27 +
+                   e2e 17/17; suite 418 pass / 5 pre-existing env failures
+                   (identical to baseline 78facaf)")
+  FINDINGS VALUE:  4 findings (PGMA1-F1 MAJOR, F2/F3 MINOR, F4 INFO), all
+                   dispositioned resolved (27e1cb6 / 7e04f4e) and covered
+                   by new tests; re-verification PASS.
+  ACCEPTANCE:      review-job state ACCEPTED (stateVersion 8) binds
+                   candidateIdentity + specIdentity + findingsDigest +
+                   verdictDigest; exclusive-create verdict/findings roles;
+                   acceptanceAuthority pgma1-closeout-controller-session.
+
+The PASS is bound to the exact reviewed candidate 7e04f4e and review-job
+autoloop-pgma1.g0001 — not to a generic claim.
+
+================================================================================
+9. Gate Summary (Gate 6)
+================================================================================
+PGMA1_GATE_COUNT = 27/27
+SUITE: test/governance/test-promotion-gate-authority.mjs
+FRESH RUN AT HEAD 72f0019 (2026-09-19, this lineage): 27 pass / 0 fail.
+The suite establishes, fail-closed:
+  - review-job state handling: missing -> REVIEW_JOB_MISSING;
+    not ACCEPTED -> REVIEW_JOB_NOT_ACCEPTED; accepted -> ok.
+  - delivery evidence validation: missing / not-PASS / unbound PASS verdict
+    (DELIVERY_VERDICT_UNBOUND) / bound PASS -> ok; absent cardId rejected
+    (PGMA1-F3 fix).
+  - bundle digest validation: missing bundle / sha mismatch / match.
+  - retired artifact non-authority: a forged external-review-result.json
+    grants NOTHING even with a broken canonical chain (RC1A §7.2).
+  - candidate drift fencing: identity drift -> HOLD
+    CANDIDATE_IDENTITY_MISMATCH; baseHead staleness -> HOLD (PGMA1-F2 fix).
+  - HEAD/base staleness: local HEAD mismatch -> HOLD HEAD_MISMATCH_LOCAL.
+  - idempotent already-satisfied: push gate canonical chain + remote exact
+    -> PROMOTION_ALREADY_SATISFIED (no push); draft gate existing PR
+    binding -> DRAFT_PR_ALREADY_SATISFIED (no re-create).
+  - promotion identity sensitivity: computePromotionIdentity responds to
+    every canonical field.
+
+================================================================================
+10. E2E Summary (Gate 7)
+================================================================================
+PGMA1_E2E_COUNT = 17/17
+SUITE: test/governance/test-review-unit-e2e.mjs
+FRESH RUN AT HEAD 72f0019 (2026-09-19, this lineage): 17 pass / 0 fail.
+PRODUCTION SEAM: the suite imports runPushGate from the ACTUAL production
+module scripts/gov-push-gate.mjs (no mock of the authority chain) and
+exercises the real flow: canonical review chain -> delivery evidence ->
+push/draft gate authority — checkpoint, clean bundle, PENDING push blocked,
+controller PASS, attestation, push dry-run passes, tamper blocks. Remote
+adapters are injected exclusively through the documented test-only
+remotePolicy DI parameter (production CLI path remains strict GitHub-only).
+Fail-closed negative cases are asserted through the production APIs.
+
+================================================================================
+11. Negative Evidence Inventory (Gate 8)
+================================================================================
+  - Retired artifact grants no authority: forged external-review-result.json
+    with broken chain -> HOLD (not read for production acceptance).
+  - Candidate identity drift -> HOLD CANDIDATE_IDENTITY_MISMATCH.
+  - Unbound PASS verdict -> HOLD DELIVERY_VERDICT_UNBOUND.
+  - Tampering blocks: tampered bundle/attestation blocked in E2E flow.
+  - Self-declared PASS flags rejected by the CLIs
+    (RESULT_SELF_DECLARATION_REJECTED).
+  - Executor cannot self-mint promotion PASS via the production API.
+  - Out-of-scope changes fail closed: committed out-of-scope path blocks
+    bundle AND push (GOVERNANCE_SCOPE_EXPANSION_REQUIRED).
+  - Exhausted repair lineage cannot restart improperly: same authority
+    record with a different card_id is a live-binding violation;
+    reauthorization requires a NEW authority record.
+
+================================================================================
+12. R-11 Disposition (Gate 9)
+================================================================================
+R11_DISPOSITION = PARTIALLY_CLOSED
+
+CLOSED BY PGMA1 (push/draft half):
+  scripts/gov-push-gate.mjs and scripts/gov-draft-pr.mjs migrated from the
+  RC1A-retired external-review-result.json (src/governance/external-review.mjs:166-195)
+  to the canonical chain: review-job ACCEPTED + delivery verdict PASS bound
+  to bundle identity/sha + recomputed candidate identity + live
+  branch/remote HEAD exact match; fail-closed HOLD rows 1-7; idempotent
+  already-satisfied rows 9/10; single shared promotion identity between
+  both gates.
+
+STILL OPEN (commit-integration half — explicitly out of PGMA1 scope per
+card spec "Out of Scope"):
+  - scripts/gov-commit-integration.mjs (still reads the retired artifact;
+    verified at HEAD: line ~80 still requires external-review-result)
+  - src/governance/integration-commit-gate.mjs (lines 11-18, 39, 62 still
+    bind the retired artifact schema)
+
+This bundle does NOT claim R-11 = CLOSED. Register update, if any, is a
+later promotion-sequence step, not performed by this card.
+
+================================================================================
+13. Historical Pre-Review Bundle Disclosure (Gate 10)
+================================================================================
+PRE_REVIEW_BUNDLE_GAP_DISCLOSED = YES
+
+DISCLOSURE: The PGMA1 authority record
+(docs/pi-graph-output/pgma1/autoloop-pgma1-authority.json) set
+external_review.require_bundle = true with
+bundle_path docs/pi-graph-output/pgma1/autoloop-pgma1-bundle.txt.
+No such persisted/tracked artifact was ever created — verified across the
+repository, its full git history, ~/Desktop/AutoLoop-Review (Current,
+Archive, Latest and archives), and the external evidence tree.
+
+The accepted g0001 verdict is the review of record: it was minted by the
+controller reviewing PGMA1 directly (the RSL2 closeout bundle of
+2026-08-16 records this: "PGMA1 remains AWAITING_EXTERNAL_REVIEW in the
+Domain B inbox; its verdict is the controller's, minted by reviewing PGMA1
+itself"). The verdict's candidateIdentity, specDigest, findingsDigest, and
+verdictDigest bind that direct review to the exact reviewed candidate and
+are all independently recomputed and matching (§8).
+
+This disclosure is governance lineage transparency, not a runtime failure:
+the canonical-chain gates that PGMA1 itself installed do not consume a
+pre-review bundle, and no evidence depends on the missing artifact. The
+historical review did NOT consume a bundle that never existed.
+
+================================================================================
+14. Known Limitations (Gate 11)
+================================================================================
+  1. DELIVERY jobId/generation BINDING: the delivery schema
+     (autoloop.external-review-delivery/v2) carries no jobId/generation, so
+     the RC1A §17 stale-delivery leg cannot be mechanically enforced; the
+     gates enforce staleness via cardId + branch + candidate identity
+     binding instead. Documented in the card spec ("Known limitation") and
+     review finding PGMA1-F3/F4; a delivery-schema extension is a
+     documented follow-on.
+  2. RETIRED HISTORICAL WORKTREE: the review-time worktree
+     /Volumes/NVM2T/Development/worktrees/autoloop-gate-migration no longer
+     exists. Recorded as historical metadata only (§2/§5); not a live
+     authority binding.
+  3. R-11 COMMIT-INTEGRATION RESIDUAL: see §12 — the commit-integration
+     half remains open, out of PGMA1 scope.
+  4. NON_BLOCKING_POST_REVIEW_DEBT — ENOBUFS in live gate CLI: at current
+     HEAD, running scripts/gov-push-gate.mjs against a large diff fails
+     with "spawnSync git ENOBUFS": buildChangeInventory's full-patch
+     capture (src/governance/change-inventory.mjs:182, git diff
+     base...HEAD) now yields ~3.7 MB against Node's 1 MiB default
+     maxBuffer (the reviewed PGMA1 patch was ~94 KB). The PGMA1 suite
+     passes because fixtures are small. This is a latent scale defect in
+     inventory capture discovered by the predecessor external review;
+     classified NON_BLOCKING_POST_REVIEW_DEBT — NOT repaired by this card,
+     does not invalidate the reviewed PGMA1 conclusion, and must be
+     recorded as separate debt for any future large-diff gate run.
+
+================================================================================
+15. Delivery Target (Gate 12)
+================================================================================
+DELIVERY_TARGET: the canonical external-review delivery surface per RC1A —
+~/Desktop/AutoLoop-Review/Current/ (delivery.json + review-bundle.txt +
+evidence.json), authority src/governance/review-bundle.mjs
+(deliverToExternalReviewSurface / rotateExternalReviewSurface /
+currentSurfaceReviewStatus), archive ~/Desktop/AutoLoop-Review/Archive/.
+
+OCCUPANCY CONSTRAINT: the Current surface is currently occupied by lineage
+AUTOLOOP-V1-STAGE-I-P9-REAL-PROJECT-HANDBACK-1 (delivered 2026-09-12,
+verdict PASS bound to bundle identity 6d2afb9e…). This bundle does NOT
+authorize overwriting that occupant. PGMA1 delivery MUST obey canonical
+surface rotation / ownership semantics (single-owner lock, atomic staged
+publication, archive-before-replace, fail-closed on missing/invalid
+reviews — RSL2/RSL3 invariants). The current occupant must be resolved
+(rotation/archive per its own lineage) before or during PGMA1 delivery,
+through the canonical rotation machinery only.
+
+================================================================================
+16. Promotion Prerequisites (Gate 13)
+================================================================================
+FROZEN SEQUENCE (from AUTOLOOP_PGMA1_CLOSEOUT_BUNDLE_EXTERNAL_REVIEW_1;
+do not collapse):
+  1. closeout bundle created — THIS ARTIFACT (step complete).
+  2. independent bundle review / digest validation
+     (NEXT: AUTOLOOP_PGMA1_CLOSEOUT_BUNDLE_REVIEW_1).
+  3. delivery record created and validated against the bundle identity +
+     sha256.
+  4. promotion through PGMA1's canonical gate (push/draft gate against the
+     PGMA1 lineage; idempotent PROMOTION_ALREADY_SATISFIED /
+     DRAFT_PR_ALREADY_SATISFIED paths exist for the already-landed state).
+  5. R-11 disposition update if required.
+  6. final PGMA1 closeout review.
+
+THIS BUNDLE DOES NOT ITSELF AUTHORIZE PROMOTION. Step 2 must complete
+first.
+
+================================================================================
+17. Change Control Attestation (Gate 14)
+================================================================================
+COMMIT = NO
+PUSH = NO
+DELIVERY = NO
+PROMOTION = NO
+This artifact is prepared for independent review only. It mutates no
+runtime, no lifecycle state, and no surface.
+
+================================================================================
+18. Self-Consistency Verification (Gate 16)
+================================================================================
+Every identity/digest in this bundle was re-verified against canonical
+source artifacts at HEAD 72f0019 immediately before writing:
+  - spec digest 7c02bd3a… == sha256(card-spec.md) == specDigest in
+    review-job.json and review-verdict.g0001.json — MATCH.
+  - findings digest 7029bf09… == sha256(review-findings.g0001.json) ==
+    findingsDigest in review-job.json and review-verdict.g0001.json — MATCH.
+  - verdict digest 82b897f9… == sha256(review-verdict.g0001.json) ==
+    verdictDigest in review-job.json — MATCH.
+  - candidate identity tuple identical across review-job, verdict, and
+    findings; reproduced from commit 7e04f4e by independent recompute —
+    MATCH.
+  - reviewed 7e04f4e -> landed 54ea90a: 0-line diff on authorized paths;
+    54ea90a ancestor of HEAD; zero post-landing drift on the PGMA1 seam —
+    MATCH.
+  - gate count 27/27 and E2E count 17/17: fresh runs at HEAD — MATCH.
+  - R-11 classification PARTIALLY_CLOSED: retired-artifact reads confirmed
+    still present in gov-commit-integration.mjs /
+    integration-commit-gate.mjs at HEAD; push/draft gates confirmed
+    migrated — MATCH.
+No unresolved mismatch.
+
+================================================================================
+19. Next Action
+================================================================================
+NEXT_ACTION: AUTOLOOP_PGMA1_CLOSEOUT_BUNDLE_REVIEW_1 — independent
+validation of this bundle's digest, lineage, and content against canonical
+evidence. Promotion is NOT admissible until that review passes.
+
+=== END OF EXECUTION REVIEW ===
