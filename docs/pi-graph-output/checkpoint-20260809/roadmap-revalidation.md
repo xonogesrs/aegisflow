@@ -24,7 +24,7 @@
 | Planned item | Class | Reason |
 |---|---|---|
 | W1A remainder | MERGE_WITH_OTHER | Scoped W1A repair is recorded complete; remainder is S7/S16 plus historical evidence reconciliation, not a new standalone lane |
-| S7 closeout consolidation | DO_NOW | State-driven closeout is wired and safer; 17 bespoke one-shot wrappers remain reachable |
+| S7 closeout consolidation | DONE | R-04 CLOSED by `AUTOLOOP_R04_WRAPPER_REMOVAL_IMPLEMENTATION_1` (2026-09-20): state-driven closeout is the sole production seam; the 17 one-shot wrappers + 4 one-shot verdict resolvers and the legacy in-memory `requiresReview` branch were removed (no fallback, no tombstones). |
 | S16 telemetry authority/location | RESEARCH_FIRST | Allowed roots do not expose full telemetry; authority and retention contract must be named before implementation |
 | S18 | RESEARCH_FIRST | No bounded source or definition found; keep UNKNOWN rather than invent scope |
 | Capability Integration Inventory | DO_NOW | Current audit confirms wiring gaps; inventory is prerequisite for subtraction and roadmap gating |
