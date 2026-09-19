@@ -35,6 +35,45 @@ export const CLOSEOUT_HOLDS = Object.freeze({
   GRAPH_RESULT_ABSENT: "CLOSEOUT_GRAPH_RESULT_ABSENT",
 });
 
+// ── R-12 closeout acceptance — single canonical graph-evidence validator ───
+//
+// The state-driven closeout may derive authoritative PASS only from
+// STRUCTURALLY VALID, IDENTITY-BOUND, COMPLETE graph evidence for the exact
+// closeout lineage. A caller may provide evidence; a caller may NOT provide
+// authority. ONE validation path serves both the in-memory graphResult
+// entering runStateDrivenCloseout and the disk graph-closeout-evidence/v1
+// loader — no weaker CLI path, no divergent second validator.
+//
+// Fail-closed distinction (GATE 9 NON-PASS SEMANTICS):
+//   INVALID EVIDENCE  — schema/identity/structure violation → deterministic
+//                       rejection (R12_* hold codes); never normalized into
+//                       a plausible-looking result.
+//   VALID NON-PASS    — structurally valid evidence whose authoritative
+//                       outcome is HOLD/FAILED → normal closeout non-PASS
+//                       semantics (source.executiveStatus = the real final;
+//                       the gate returns CARD_OUTCOME:HOLD), never an
+//                       exception that breaks legitimate HOLD flows.
+export const GRAPH_EVIDENCE_SCHEMA = "autoloop.review-bundle.graph-closeout-evidence/v1";
+
+// The terminal node-final vocabulary the canonical runner actually produces
+// (colima-graph-runner statusToFinal). No arbitrary aliases are accepted —
+// GATE 6 NODE NORMALIZATION supports only shapes produced by canonical code.
+export const GRAPH_NODE_FINALS = Object.freeze([
+  "PASS", "HOLD", "FAILED", "SKIPPED_DUE_TO_DEPENDENCY", "NOT_RECORDED",
+]);
+
+// The aggregate-final vocabulary the canonical runner produces.
+export const GRAPH_AGGREGATE_FINALS = Object.freeze(["PASS", "HOLD", "FAILED"]);
+
+// R-12 deterministic hold codes (frozen canonical spellings).
+export const GRAPH_EVIDENCE_HOLDS = Object.freeze({
+  INVALID: "R12_EVIDENCE_INVALID",
+  SCHEMA_MISMATCH: "R12_EVIDENCE_SCHEMA_MISMATCH",
+  CARD_MISMATCH: "R12_EVIDENCE_CARD_MISMATCH",
+  RUN_MISMATCH: "R12_EVIDENCE_RUN_MISMATCH",
+  AGGREGATE_CHILD_CONTRADICTION: "R12_AGGREGATE_CHILD_CONTRADICTION",
+});
+
 // ── RB2R1 — closeout stage machine（descriptive vs authoritative）──────────
 //
 // A persisted closeout record is DESCRIPTIVE CACHED STATE ONLY. No
@@ -272,15 +311,349 @@ export function materializeCloseoutContract(state) {
   return { ok: true, errors: [], contract };
 }
 
+// ── R-12 — SINGLE CANONICAL GRAPH EVIDENCE VALIDATOR ───────────────────────
+//
+// ONE validation path for BOTH the in-memory graphResult entering
+// runStateDrivenCloseout and the disk graph-closeout-evidence/v1 loader
+// (GATE A SHARED_GRAPH_VALIDATOR / GATE P DISK_MEMORY_PARITY). Accepts a
+// graph-evidence structure (runner-shaped or evidence-shaped), validates it
+// structurally + identity-wise, and returns either a VALIDATED, NORMALIZED
+// graphResult or a deterministic fail-closed error — never a partially
+// defaulted shape that could look authoritative.
+//
+// Non-goals: this is NOT a new authority subsystem — it is the pre-oracle
+// seam fence. The PASS oracle, bundle validation and delivery authority are
+// untouched.
+//
+// opts:
+//   expectedCardId    — bind evidence.task.cardId === expectedCardId
+//                       (GATE D CARD_IDENTITY_BINDING; required for
+//                       authoritative use — closeout lineage binding).
+//   expectedGraphRunId — when the closeout lineage records an expected run
+//                       identity, bind equality (GATE E GRAPH_RUN_BINDING;
+//                       replay from a mismatched recorded run fails closed).
+//   requireSchema     — enforce the exact graph-closeout-evidence/v1 schema
+//                       marker on disk evidence (GATE B SCHEMA ENFORCEMENT).
+//
+// Failure mode: { ok:false, holdCode, errors:[...] } — deterministic,
+// machine-checkable, never silent-defaulted.
+export function validateGraphEvidence(input, opts = {}) {
+  const errors = [];
+  const fail = (holdCode, errs) => ({ ok: false, holdCode, errors: errs, graphResult: null });
+
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return fail(GRAPH_EVIDENCE_HOLDS.INVALID, ["R12_EVIDENCE_INVALID:not_an_object"]);
+  }
+
+  // ── GATE B — schema enforcement (disk evidence; exact schema marker) ──
+  if (opts.requireSchema === true) {
+    if (input.schema !== GRAPH_EVIDENCE_SCHEMA) {
+      return fail(GRAPH_EVIDENCE_HOLDS.SCHEMA_MISMATCH, [
+        `R12_EVIDENCE_SCHEMA_MISMATCH:${input.schema == null ? "absent" : String(input.schema)}`,
+      ]);
+    }
+  }
+
+  // ── GATE C — required identity fields (no silent synthesis) ──────────
+  // executionId/graphRunId: a real run identity is MANDATORY. The historical
+  // `graph-unknown` default synthesized an identity for authoritative
+  // evidence — removed (fail closed instead).
+  const executionId = input.executionId ?? input.graphRunId ?? null;
+  if (typeof executionId !== "string" || executionId.length === 0 || executionId === "graph-unknown") {
+    errors.push("R12_EVIDENCE_INVALID:graphRunId_missing_or_reserved_placeholder");
+  }
+  // Aggregate final: MANDATORY. The historical `?? "HOLD"` default let
+  // malformed evidence continue as though it were valid — removed.
+  const final = input.final ?? null;
+  if (typeof final !== "string" || !GRAPH_AGGREGATE_FINALS.includes(final)) {
+    errors.push(`R12_EVIDENCE_INVALID:aggregate_final_missing_or_unknown${final == null ? "" : `:${final}`}`);
+  }
+  if (errors.length > 0) return fail(GRAPH_EVIDENCE_HOLDS.INVALID, errors);
+
+  // ── GATE C/D — required identity fields + card binding ───────────────
+  // requireTaskIdentity (disk evidence): task.cardId is a MANDATORY identity
+  // field of the persisted snapshot — absent/malformed fails closed.
+  // In-memory runner shape: card identity lives in the closeout contract, so
+  // task.cardId is optional HERE but, when present, must MATCH
+  // expectedCardId (a forged claim cannot contradict the lineage).
+  const cardId = input.task && typeof input.task === "object" ? input.task.cardId ?? null : null;
+  if (opts.requireTaskIdentity === true) {
+    if (typeof cardId !== "string" || cardId.length === 0) {
+      return fail(GRAPH_EVIDENCE_HOLDS.INVALID, ["R12_EVIDENCE_INVALID:task_cardId_missing"]);
+    }
+  }
+  if (opts.expectedCardId != null && cardId != null) {
+    if (cardId !== opts.expectedCardId) {
+      return fail(GRAPH_EVIDENCE_HOLDS.CARD_MISMATCH, [
+        `R12_EVIDENCE_CARD_MISMATCH:${cardId}!=${opts.expectedCardId}`,
+      ]);
+    }
+  }
+
+  // ── GATE E — graph run binding ────────────────────────────────────────
+  if (opts.expectedGraphRunId != null && executionId !== opts.expectedGraphRunId) {
+    return fail(GRAPH_EVIDENCE_HOLDS.RUN_MISMATCH, [
+      `R12_EVIDENCE_RUN_MISMATCH:${executionId}!=${opts.expectedGraphRunId}`,
+    ]);
+  }
+
+  // ── GATE F — node normalization (runner/evidence shapes → one form) ───
+  // Accept ONLY the two shapes canonical AutoLoop code produces:
+  //   runner-shaped   graphResult.nodeResults[] (in-memory path)
+  //   evidence-shaped evidence.nodes[] (persisted v1 snapshot)
+  // Arbitrary aliases (nodeResults on disk-only evidence, nodes on runner
+  // input) are NOT broadened acceptance — see normalizeGraphNodes.
+  const rawNodes = normalizeGraphNodes(input);
+  if (rawNodes == null) {
+    return fail(GRAPH_EVIDENCE_HOLDS.INVALID, [
+      "R12_EVIDENCE_INVALID:node_collection_missing_or_malformed",
+    ]);
+  }
+  if (rawNodes.length === 0) {
+    return fail(GRAPH_EVIDENCE_HOLDS.INVALID, ["R12_EVIDENCE_INVALID:node_collection_empty"]);
+  }
+  const seen = new Map();
+  for (const n of rawNodes) {
+    if (!n || typeof n !== "object" || Array.isArray(n)) {
+      return fail(GRAPH_EVIDENCE_HOLDS.INVALID, ["R12_EVIDENCE_INVALID:node_not_object"]);
+    }
+    if (typeof n.nodeId !== "string" || n.nodeId.length === 0) {
+      return fail(GRAPH_EVIDENCE_HOLDS.INVALID, ["R12_EVIDENCE_INVALID:node_nodeId_missing"]);
+    }
+    if (typeof n.final !== "string" || !GRAPH_NODE_FINALS.includes(n.final)) {
+      return fail(GRAPH_EVIDENCE_HOLDS.INVALID, [
+        `R12_EVIDENCE_INVALID:node_final_unknown:${n.nodeId}:${n.final == null ? "null" : String(n.final)}`,
+      ]);
+    }
+    // A node carrying a runner execution identity must belong to THIS run —
+    // cross-run node replay inside one evidence file is a contradiction.
+    if (typeof n.graphExecutionId === "string" && n.graphExecutionId.length > 0 && n.graphExecutionId !== executionId) {
+      return fail(GRAPH_EVIDENCE_HOLDS.RUN_MISMATCH, [
+        `R12_EVIDENCE_RUN_MISMATCH:node:${n.nodeId}:${n.graphExecutionId}!=${executionId}`,
+      ]);
+    }
+    const prev = seen.get(n.nodeId);
+    if (prev && (prev.final !== n.final)) {
+      return fail(GRAPH_EVIDENCE_HOLDS.INVALID, [
+        `R12_EVIDENCE_INVALID:duplicate_conflicting_node:${n.nodeId}:${prev.final}vs${n.final}`,
+      ]);
+    }
+    seen.set(n.nodeId, n);
+  }
+
+  // scheduler must be an object when present (canonical runner always sends
+  // one; evidence snapshots persist it).
+  if (input.scheduler != null && (typeof input.scheduler !== "object" || Array.isArray(input.scheduler))) {
+    return fail(GRAPH_EVIDENCE_HOLDS.INVALID, ["R12_EVIDENCE_INVALID:scheduler_malformed"]);
+  }
+  if (input.transitions != null && !Array.isArray(input.transitions)) {
+    return fail(GRAPH_EVIDENCE_HOLDS.INVALID, ["R12_EVIDENCE_INVALID:transitions_malformed"]);
+  }
+
+  // ── VALIDATED — normalize into the runner graphResult shape ───────────
+  const graphResult = {
+    executionId,
+    final,
+    holdCode: input.holdCode ?? null,
+    reason: input.reason ?? null,
+    scheduler: { ...(input.scheduler ?? {}) },
+    nodeResults: rawNodes.map((n) => normalizeNodeResult(n, executionId)),
+    transitions: (Array.isArray(input.transitions) ? input.transitions : []).map((t) => ({ ...t })),
+  };
+  return { ok: true, errors: [], graphResult };
+}
+
+/**
+ * GATE F — node-collection normalization. Accepts exactly the shapes
+ * canonical AutoLoop code produces:
+ *   - graphResult-shaped input: `nodeResults[]` (colima-graph-runner,
+ *     subagent runner, durable graph — in-memory authority path)
+ *   - evidence-shaped input: `nodes[]` (the persisted
+ *     autoloop.review-bundle.graph-closeout-evidence/v1 snapshot)
+ * Anything else (both present and conflicting, neither present) fails
+ * closed — no alias broadening.
+ */
+function normalizeGraphNodes(input) {
+  const nodeResults = Array.isArray(input.nodeResults) ? input.nodeResults : null;
+  const nodes = Array.isArray(input.nodes) ? input.nodes : null;
+  if (nodeResults && nodes) {
+    // Both shapes present: tolerate only when they are the same collection
+    // length (a runner result that also embedded an evidence view). Any
+    // ambiguity fails closed.
+    return nodeResults.length === nodes.length ? nodeResults : null;
+  }
+  return nodeResults ?? nodes;
+}
+
+/** Normalize one validated node into the canonical runner node-result shape. */
+function normalizeNodeResult(n, executionId) {
+  return {
+    graphExecutionId: typeof n.graphExecutionId === "string" ? n.graphExecutionId : executionId,
+    nodeId: n.nodeId,
+    phaseExecutionId: n.phaseExecutionId ?? null,
+    taskType: n.taskType ?? null,
+    dependencies: Array.isArray(n.dependencies) ? n.dependencies.slice() : [],
+    final: n.final,
+    attempt: n.attempt ?? null,
+    reason: n.reason ?? null,
+    startedAt: n.startedAt ?? null,
+    completedAt: n.completedAt ?? null,
+    skipped: n.skipped === true,
+    cleanup: { worktreeRevoked: n.cleanup?.worktreeRevoked === true || n.worktreeRevoked === true },
+    worktreeIdentity: n.worktreeIdentity && typeof n.worktreeIdentity === "object"
+      ? n.worktreeIdentity
+      : (n.worktreeVerified === true ? { verified: true } : null),
+    subagentResult: n.subagentResult && typeof n.subagentResult === "object"
+      ? n.subagentResult
+      : (n.subagentResultStatus
+        ? { status: n.subagentResultStatus, testResults: n.subagentTestResults ?? null, testsExecuted: ["regenerated from graph evidence"] }
+        : null),
+    reviewResult: n.reviewResult && typeof n.reviewResult === "object"
+      ? n.reviewResult
+      : (n.reviewResultStatus
+        ? {
+            recommendedAction: n.reviewResultStatus,
+            blockingFindings: Array.isArray(n.reviewBlockingFindings) ? n.reviewBlockingFindings.slice() : [],
+            summary: `independent review agent result (${executionId})`,
+          }
+        : null),
+  };
+}
+
+/**
+ * GATE G — GRAPH COMPLETENESS + GATE H — AGGREGATE/CHILD CONSISTENCY.
+ *
+ * For an aggregate PASS the validated graph must be COMPLETE and
+ * CONTRADICTION-FREE against every required node:
+ *   - at least one required node (already enforced: non-empty collection);
+ *   - every required node represented (scheduler.order, when the canonical
+ *     runner exposes it, is the required-node set — completeness is never
+ *     inferred from nodes.length > 0 when stronger information exists);
+ *   - every required node final = PASS;
+ *   - no required node skipped (SKIPPED_DUE_TO_DEPENDENCY / NOT_RECORDED /
+ *     scheduler.skipped / node.skipped);
+ *   - no writer violation on a required node (scheduler.writerViolations);
+ *   - no unresolved blocking condition (per-node review blockingFindings and
+ *     reviewer_verdict transition verdicts);
+ *   - aggregate PASS ⇒ every required child PASS (any FAIL/HOLD/missing/
+ *     unknown/contradictory duplicate prevents PASS —
+ *     R12_AGGREGATE_CHILD_CONTRADICTION).
+ *
+ * Returns { ok:true } or { ok:false, holdCode, errors } — deterministic.
+ * Non-PASS aggregates are NOT validated here (GATE 9: valid evidence with a
+ * non-PASS outcome keeps normal closeout semantics).
+ */
+export function assertGraphAggregateConsistency(graphResult) {
+  const errors = [];
+  const nodes = Array.isArray(graphResult?.nodeResults) ? graphResult.nodeResults : [];
+  const scheduler = graphResult?.scheduler && typeof graphResult.scheduler === "object" ? graphResult.scheduler : {};
+  const byId = new Map(nodes.map((n) => [n.nodeId, n]));
+
+  // Required-node set: scheduler.order when present (the runner's actual
+  // started-phase sequence), else the node collection itself. scheduler.order
+  // entries missing from nodeResults are REQUIRED-BUT-MISSING children.
+  const order = Array.isArray(scheduler.order) ? scheduler.order : null;
+  const requiredIds = order && order.length > 0 ? order : nodes.map((n) => n.nodeId);
+  if (requiredIds.length === 0) {
+    return { ok: false, holdCode: GRAPH_EVIDENCE_HOLDS.AGGREGATE_CHILD_CONTRADICTION, errors: ["R12_AGGREGATE_CHILD_CONTRADICTION:no_required_nodes"] };
+  }
+
+  const nonPass = [];
+  for (const id of requiredIds) {
+    const n = byId.get(id);
+    if (!n) {
+      nonPass.push(`${id}:MISSING`);
+      continue;
+    }
+    if (n.final !== "PASS") nonPass.push(`${id}:${n.final}`);
+  }
+  // Any node present but NOT in the required set with a non-PASS final is
+  // still an unresolved child — it cannot be silently ignored.
+  for (const n of nodes) {
+    if (!requiredIds.includes(n.nodeId) && n.final !== "PASS") nonPass.push(`${n.nodeId}:${n.final}:unrequired`);
+  }
+
+  // No required node skipped.
+  for (const n of nodes) {
+    if (n.final === "SKIPPED_DUE_TO_DEPENDENCY" || n.final === "NOT_RECORDED" || n.skipped === true) {
+      nonPass.push(`${n.nodeId}:${n.final ?? "SKIPPED"}`);
+    }
+  }
+  const skippedList = Array.isArray(scheduler.skipped) ? scheduler.skipped : [];
+  for (const id of skippedList) {
+    if (requiredIds.includes(id)) nonPass.push(`${id}:SKIPPED`);
+  }
+
+  // No writer violation on a required node.
+  const writerViolations = Array.isArray(scheduler.writerViolations) ? scheduler.writerViolations : [];
+  if (writerViolations.length > 0) {
+    for (const v of writerViolations) {
+      const id = typeof v === "string" ? v.split(":")[0] : null;
+      if (id == null || requiredIds.includes(id)) {
+        errors.push(`R12_AGGREGATE_CHILD_CONTRADICTION:writer_violation:${String(v).slice(0, 80)}`);
+      }
+    }
+  }
+
+  // Scheduler truth must agree with an aggregate PASS: a HOLD scheduler
+  // verdict or any non-passed status over a required node contradicts the
+  // claimed aggregate（a caller cannot declare PASS above a scheduler HOLD）.
+  if (scheduler.verdict != null && scheduler.verdict !== "PASS") {
+    errors.push(`R12_AGGREGATE_CHILD_CONTRADICTION:scheduler_verdict:${scheduler.verdict}`);
+  }
+  const statuses = scheduler.statuses && typeof scheduler.statuses === "object" && !Array.isArray(scheduler.statuses)
+    ? scheduler.statuses
+    : {};
+  for (const id of requiredIds) {
+    const s = statuses[id];
+    if (s != null && s !== "passed") {
+      errors.push(`R12_AGGREGATE_CHILD_CONTRADICTION:scheduler_status:${id}:${s}`);
+    }
+  }
+
+  // No unresolved blocking condition on a required node: per-node review
+  // blockingFindings and reviewer_verdict transition verdicts.
+  for (const n of nodes) {
+    const blocking = n.reviewResult?.blockingFindings;
+    if (Array.isArray(blocking) && blocking.length > 0) {
+      nonPass.push(`${n.nodeId}:BLOCKING_FINDINGS`);
+    }
+  }
+  const transitions = Array.isArray(graphResult?.transitions) ? graphResult.transitions : [];
+  for (const tx of transitions) {
+    if (!requiredIds.includes(tx.phaseId)) continue;
+    const verdicts = (tx.lifecycleTransitions ?? []).filter((t) => t.phase === "reviewer_verdict");
+    const last = verdicts[verdicts.length - 1];
+    if (last && last.verdict !== "PASS") nonPass.push(`${tx.phaseId}:REVIEWER_${last.verdict}`);
+  }
+
+  if (nonPass.length > 0) {
+    errors.push(`R12_AGGREGATE_CHILD_CONTRADICTION:${nonPass.slice(0, 8).join(",")}`);
+  }
+  if (errors.length > 0) {
+    return { ok: false, holdCode: GRAPH_EVIDENCE_HOLDS.AGGREGATE_CHILD_CONTRADICTION, errors };
+  }
+  return { ok: true, errors: [] };
+}
+
 /**
  * Reverse-map a persisted graph-closeout evidence snapshot（the
  * autoloop.review-bundle.graph-closeout-evidence/v1 file written by
- * writeGraphCloseoutEvidence）back into the structured graphResult shape the
+ * writeGraphCloseoutEvidence）back into the structured graphResult the
  * closeout gate consumes. This is the SAME authoritative mapping the legacy
  * card-specific closeout scripts hand-rolled — centralized here so no card
  * needs its own reconstruction script. Free-text stdout is never parsed.
+ *
+ * R-12: the loader is now a THIN adapter over the single canonical validator.
+ * The exact v1 schema marker is enforced (GATE B), required identity fields
+ * are mandatory with NO silent defaults (GATE C — no `graph-unknown`, no
+ * default-HOLD), and identity binding (cardId / graphRunId) runs here so
+ * disk evidence can never become authoritative before validation (GATE 6
+ * caller-shaped authority removal). Structural or identity violations return
+ * fail-closed R12_* errors; a VALID snapshot whose aggregate outcome is
+ * non-PASS still loads normally (GATE 9 semantics).
  */
-export function loadGraphResultFromEvidence(evidencePath) {
+export function loadGraphResultFromEvidence(evidencePath, opts = {}) {
   if (!evidencePath || !existsSync(evidencePath)) {
     return { ok: false, errors: ["closeout_evidence_missing"], graphResult: null };
   }
@@ -292,38 +665,16 @@ export function loadGraphResultFromEvidence(evidencePath) {
   if (!ev || typeof ev !== "object") {
     return { ok: false, errors: ["closeout_evidence_not_object"], graphResult: null };
   }
-  const graphResult = {
-    executionId: ev.graphRunId ?? "graph-unknown",
-    final: ev.final ?? "HOLD",
-    holdCode: ev.holdCode ?? null,
-    reason: ev.reason ?? null,
-    scheduler: { ...(ev.scheduler ?? {}) },
-    nodeResults: (Array.isArray(ev.nodes) ? ev.nodes : []).map((n) => ({
-      nodeId: n.nodeId,
-      phaseExecutionId: n.phaseExecutionId ?? null,
-      taskType: n.taskType ?? null,
-      dependencies: Array.isArray(n.dependencies) ? n.dependencies.slice() : [],
-      final: n.final ?? null,
-      attempt: n.attempt ?? null,
-      reason: n.reason ?? null,
-      startedAt: n.startedAt ?? null,
-      completedAt: n.completedAt ?? null,
-      cleanup: { worktreeRevoked: n.worktreeRevoked === true },
-      worktreeIdentity: n.worktreeVerified === true ? { verified: true } : null,
-      subagentResult: n.subagentResultStatus
-        ? { status: n.subagentResultStatus, testResults: n.subagentTestResults ?? null, testsExecuted: ["regenerated from graph evidence"] }
-        : null,
-      reviewResult: n.reviewResultStatus
-        ? {
-            recommendedAction: n.reviewResultStatus,
-            blockingFindings: Array.isArray(n.reviewBlockingFindings) ? n.reviewBlockingFindings.slice() : [],
-            summary: `independent review agent result (${ev.graphRunId ?? "graph"})`,
-          }
-        : null,
-    })),
-    transitions: (Array.isArray(ev.transitions) ? ev.transitions : []).map((t) => ({ ...t })),
-  };
-  return { ok: true, errors: [], graphResult };
+  const v = validateGraphEvidence(ev, {
+    requireSchema: true,
+    requireTaskIdentity: true,
+    expectedCardId: opts.expectedCardId ?? null,
+    expectedGraphRunId: opts.expectedGraphRunId ?? null,
+  });
+  if (!v.ok) {
+    return { ok: false, errors: v.errors, holdCode: v.holdCode, graphResult: null };
+  }
+  return { ok: true, errors: [], graphResult: v.graphResult };
 }
 
 export { sha256Text };

@@ -37,10 +37,21 @@ import {
   REVIEW_BUNDLE_SECTIONS,
   REVIEW_BUNDLE_HOLDS,
   runMandatoryGraphCloseout,
+  runStateDrivenCloseout,
   buildGraphCloseoutSource,
   validateReviewBundle,
   sha256Hex,
 } from "../../src/governance/review-bundle.mjs";
+import {
+  CLOSEOUT_STATE_SCHEMA,
+  GRAPH_EVIDENCE_SCHEMA,
+  GRAPH_EVIDENCE_HOLDS,
+  assertGraphAggregateConsistency,
+  closeoutStatePath,
+  loadGraphResultFromEvidence,
+  validateGraphEvidence,
+  writeCloseoutState,
+} from "../../src/governance/closeout-state.mjs";
 
 const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
 const ROOT = `${tmpdir()}/rb1r-graph-closeout-${process.pid}`;
@@ -207,6 +218,15 @@ const repairGraph = {
 const researchGraph = {
   ...passGraph,
   executionId: "fixture-graph-research-1",
+  // R-12: scheduler.order is the runner's STARTED-phase sequence and every
+  // started phase has a node result（join completeness）— the research IR
+  // never contains W1, so the order drops it too（canonical runner shape;
+  // the closeout validator binds order ⇔ nodeResults）.
+  scheduler: {
+    ...passGraph.scheduler,
+    order: ["R1", "V1"],
+    statuses: { R1: "passed", V1: "passed" },
+  },
   nodeResults: passGraph.nodeResults.filter((n) => n.nodeId !== "W1").map((n) => ({ ...n, worktreeIdentity: null, reviewResult: undefined })),
   transitions: passGraph.transitions.filter((tx) => tx.phaseId !== "W1"),
 };
@@ -523,7 +543,14 @@ test("8. blocking final review -> no PASS（pass closeout with blocking findings
   };
   const r = await run(blocked);
   assert.equal(r.final, "HOLD");
-  assert.ok(r.reason.includes("blocking"), "blocking review blocks PASS closeout");
+  // R-12: the blocking finding is fenced BEFORE the gate — the source builder
+  // downgrades the contradicted aggregate to HOLD and the oracle rejects the
+  // non-PASS independent review（either deterministic surface is fail-closed;
+  // both carry the blocking truth）.
+  assert.ok(
+    /blocking|ORACLE_REQUIRED_CHECK_FAILED@independent-review|AGGREGATE_CHILD_CONTRADICTION/.test(String(r.reason ?? "")),
+    `blocking review blocks PASS closeout (${r.reason})`,
+  );
   assert.notEqual(r.final, "PASS");
 });
 
@@ -576,4 +603,424 @@ test("sanity: graph source schema is the same REVIEW_BUNDLE_SOURCE_SCHEMA as CLI
   const src = buildGraphCloseoutSource({ graphResult: passGraph, closeout: closeoutOpts(OUT) });
   assert.equal(src.schema, REVIEW_BUNDLE_SOURCE_SCHEMA);
   assert.deepEqual([...REVIEW_BUNDLE_SECTIONS], [...REVIEW_BUNDLE_SECTIONS]);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R-12 CLOSEOUT ACCEPTANCE — single canonical graph evidence validator,
+// identity binding, completeness, aggregate/child fencing, reverse controls,
+// negative matrix, disk/memory parity.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const R12_ROOT = `${tmpdir()}/r12-closeout-${process.pid}`;
+const R12_OUT = join(R12_ROOT, "out");
+// Canonical runner-shaped PASS graph (order ⇔ nodeResults bound; the exact
+// shape runColimaGraph's graphView produces).
+const r12RunnerGraph = (cardId, over = {}) => ({
+  executionId: over.executionId ?? `r12-run-${cardId}`,
+  final: over.final ?? "PASS",
+  holdCode: over.holdCode ?? null,
+  reason: over.reason ?? null,
+  scheduler: over.scheduler ?? {
+    verdict: "PASS",
+    order: ["R1", "W1", "V1"],
+    statuses: { R1: "passed", W1: "passed", V1: "passed" },
+    skipped: [],
+    writerViolations: [],
+    leaseHolderAfter: null,
+  },
+  nodeResults: over.nodeResults ?? [
+    { nodeId: "R1", phaseExecutionId: `e_${cardId}_r1`, taskType: "audit", dependencies: [], final: "PASS", attempt: 0, cleanup: { worktreeRevoked: false } },
+    { nodeId: "W1", phaseExecutionId: `e_${cardId}_w1`, taskType: "write", dependencies: ["R1"], final: "PASS", attempt: 0, cleanup: { worktreeRevoked: true }, reviewResult: { status: "PASS", findings: [], blockingFindings: [], recommendedAction: "PASS" } },
+    { nodeId: "V1", phaseExecutionId: `e_${cardId}_v1`, taskType: "verify", dependencies: ["W1"], final: "PASS", attempt: 0, cleanup: { worktreeRevoked: false } },
+  ],
+  transitions: over.transitions ?? [],
+});
+
+const r12Closeout = (cardId, over = {}) => ({
+  schema: CLOSEOUT_STATE_SCHEMA,
+  task: { cardId, cardTitle: `${cardId} title`, cardType: "implementation" },
+  requiresReview: true,
+  outDir: join(R12_OUT, cardId),
+  authorizedScope: ["src/governance/review-bundle.mjs"],
+  unauthorizedScope: [],
+  objective: `${cardId}: R-12 closeout acceptance`,
+  negativeCases: [],
+  regression: [{ suite: "test:governance", tests: 1, pass: 1, fail: 0 }],
+  regressionSummary: "focused",
+  recommendedNextStep: "external review",
+  repairBudgetMaxAttempts: 1,
+  ...over,
+});
+
+const r12Drive = async (cardId, { graphResult = null, graphResultPath = null, state = null, surfaceDir = null } = {}) => {
+  const st = state ?? r12Closeout(cardId);
+  const stPath = closeoutStatePath(st.outDir);
+  writeCloseoutState({ path: stPath, state: st });
+  return runStateDrivenCloseout({
+    statePath: stPath,
+    graphResult,
+    graphResultPath,
+    repoPath: REPO_A,
+    cwd: REPO_A,
+    outDir: st.outDir,
+    timeoutMs: 30000,
+    surfaceDir: surfaceDir ?? join(R12_ROOT, `surface-${cardId}`),
+  });
+};
+
+// ── RC-A — canonical success (runner-shaped, complete, bound) ─────────────
+
+test("R12-RC-A. canonical runner-shaped complete graph → closeout proceeds to PASS", { timeout: 30000 }, async () => {
+  mkdirSync(R12_OUT, { recursive: true });
+  const cardId = "R12-RC-A";
+  const r = await r12Drive(cardId, { graphResult: r12RunnerGraph(cardId) });
+  assert.equal(r.applied, true);
+  assert.equal(r.final, "PASS", `canonical success (${r.holdCode}:${r.reason})`);
+  assert.ok(r.bundlePath && existsSync(r.bundlePath));
+});
+
+// ── RC-B — forged aggregate (missing / HOLD / FAIL / skipped child) ───────
+
+test("R12-RC-B. forged aggregate PASS over missing child → HOLD R12_AGGREGATE_CHILD_CONTRADICTION", { timeout: 30000 }, async () => {
+  const cardId = "R12-RC-B";
+  const forged = r12RunnerGraph(cardId, { nodeResults: r12RunnerGraph(cardId).nodeResults.filter((n) => n.nodeId !== "V1") });
+  const r = await r12Drive(cardId, { graphResult: forged });
+  assert.equal(r.final, "HOLD");
+  assert.equal(r.holdCode, "R12_AGGREGATE_CHILD_CONTRADICTION");
+  assert.ok(r.reason.includes("V1:MISSING"), r.reason);
+});
+
+test("R12-RC-B2. forged aggregate PASS over HOLD child → HOLD", { timeout: 30000 }, async () => {
+  const cardId = "R12-RC-B2";
+  const g = r12RunnerGraph(cardId);
+  g.nodeResults[2].final = "HOLD";
+  const r = await r12Drive(cardId, { graphResult: g });
+  assert.equal(r.final, "HOLD");
+  assert.equal(r.holdCode, "R12_AGGREGATE_CHILD_CONTRADICTION");
+});
+
+test("R12-RC-B3. forged aggregate PASS over FAILED child → HOLD", { timeout: 30000 }, async () => {
+  const cardId = "R12-RC-B3";
+  const g = r12RunnerGraph(cardId);
+  g.nodeResults[1].final = "FAILED";
+  const r = await r12Drive(cardId, { graphResult: g });
+  assert.equal(r.final, "HOLD");
+  assert.equal(r.holdCode, "R12_AGGREGATE_CHILD_CONTRADICTION");
+});
+
+test("R12-RC-B4. forged aggregate PASS over skipped required child → HOLD", { timeout: 30000 }, async () => {
+  const cardId = "R12-RC-B4";
+  const g = r12RunnerGraph(cardId);
+  g.nodeResults[2].final = "SKIPPED_DUE_TO_DEPENDENCY";
+  const r = await r12Drive(cardId, { graphResult: g });
+  assert.equal(r.final, "HOLD");
+  assert.equal(r.holdCode, "R12_AGGREGATE_CHILD_CONTRADICTION");
+});
+
+// ── RC-C — wrong identity ─────────────────────────────────────────────────
+
+test("R12-RC-C. structurally valid PASS evidence bound to the WRONG cardId → HOLD R12_EVIDENCE_CARD_MISMATCH", { timeout: 30000 }, async () => {
+  const cardId = "R12-RC-C";
+  const forged = { ...r12RunnerGraph(cardId), task: { cardId: "R12-OTHER-CARD" } };
+  const r = await r12Drive(cardId, { graphResult: forged });
+  assert.equal(r.final, "HOLD");
+  assert.equal(r.holdCode, "R12_EVIDENCE_CARD_MISMATCH");
+  assert.ok(r.reason.includes("R12-OTHER-CARD"), r.reason);
+});
+
+test("R12-RC-C2. evidence graphRunId conflicting with the recorded lineage → HOLD R12_EVIDENCE_RUN_MISMATCH", { timeout: 30000 }, async () => {
+  const cardId = "R12-RC-C2";
+  const st = r12Closeout(cardId, { expectedGraphRunId: "recorded-run-42" });
+  const forged = r12RunnerGraph(cardId, { executionId: "different-run-99" });
+  const r = await r12Drive(cardId, { graphResult: forged, state: st });
+  assert.equal(r.final, "HOLD");
+  assert.equal(r.holdCode, "R12_EVIDENCE_RUN_MISMATCH");
+});
+
+// ── RC-D — advisory tamper ────────────────────────────────────────────────
+
+test("R12-RC-D. advisory fields tampered → canonical derived result stays authoritative", { timeout: 30000 }, async () => {
+  const cardId = "R12-RC-D";
+  // advisory (non-authoritative) executiveSummary / diffSummary tampering
+  // cannot mint or revoke PASS: the closeout verdict derives from validated
+  // graph truth + the gate, never from caller prose.
+  const g = r12RunnerGraph(cardId);
+  const r = await r12Drive(cardId, {
+    graphResult: g,
+    state: r12Closeout(cardId, { executiveSummary: "FORGED: everything failed, absolutely HOLD" }),
+  });
+  assert.equal(r.final, "PASS", `advisory tamper cannot revoke a valid PASS (${r.holdCode}:${r.reason})`);
+  const txt = readFileSync(r.bundlePath, "utf8");
+  assert.ok(txt.includes("R12-RC-D"), "bundle bound to the card");
+});
+
+// ── Negative matrix — deterministic fail-closed outcomes ──────────────────
+
+test("R12-NEG. negative matrix: 20 deterministic fail-closed cases", { timeout: 60000 }, async () => {
+  mkdirSync(R12_OUT, { recursive: true });
+  const evDir = join(R12_ROOT, "neg-ev");
+  mkdirSync(evDir, { recursive: true });
+  const writeEv = (name, obj) => {
+    const p = join(evDir, `${name}.json`);
+    writeFileSync(p, typeof obj === "string" ? obj : JSON.stringify(obj), "utf8");
+    return p;
+  };
+  const validEvidence = (over = {}) => ({
+    schema: GRAPH_EVIDENCE_SCHEMA,
+    graphRunId: "r12-neg-run",
+    final: "PASS",
+    holdCode: null,
+    reason: null,
+    task: { cardId: "R12-NEG-CARD", cardTitle: "n", cardType: "implementation" },
+    scheduler: { verdict: "PASS", order: ["A", "B"], statuses: { A: "passed", B: "passed" }, skipped: [], writerViolations: [], leaseHolderAfter: null },
+    nodes: [
+      { nodeId: "A", phaseExecutionId: "ea", taskType: "audit", dependencies: [], final: "PASS", attempt: 0, worktreeRevoked: false },
+      { nodeId: "B", phaseExecutionId: "eb", taskType: "write", dependencies: ["A"], final: "PASS", attempt: 0, worktreeRevoked: true, reviewResultStatus: "PASS", reviewBlockingFindings: [] },
+    ],
+    transitions: [],
+    ...over,
+  });
+  const stPath = closeoutStatePath(join(R12_OUT, "R12-NEG-CARD"));
+  writeCloseoutState({ path: stPath, state: r12Closeout("R12-NEG-CARD") });
+  const driveEv = async (p) => runStateDrivenCloseout({
+    statePath: stPath,
+    graphResultPath: p,
+    repoPath: REPO_A,
+    cwd: REPO_A,
+    outDir: join(R12_OUT, "R12-NEG-CARD"),
+    timeoutMs: 30000,
+    surfaceDir: join(R12_ROOT, "surface-neg"),
+  });
+  const expectHold = async (name, p, code, needle) => {
+    const r = await driveEv(p);
+    assert.equal(r.applied, true, `${name}: applied`);
+    assert.notEqual(r.final, "PASS", `${name}: must not PASS`);
+    assert.equal(r.final, "HOLD", `${name}: final=${r.final} reason=${r.reason}`);
+    if (code) assert.equal(r.holdCode, code, `${name}: holdCode=${r.holdCode} reason=${r.reason}`);
+    if (needle) assert.ok(String(r.reason ?? "").includes(needle), `${name}: reason=${r.reason}`);
+  };
+
+  // 1. missing evidence file
+  await expectHold("neg1-missing-file", join(evDir, "does-not-exist.json"), null, "closeout_evidence_missing");
+  // 2. malformed JSON
+  await expectHold("neg2-malformed-json", writeEv("malformed", "{not json"), null, "closeout_evidence_unreadable");
+  // 3. wrong schema
+  await expectHold("neg3-wrong-schema", writeEv("wrong-schema", validEvidence({ schema: "some.other.schema/v9" })), "R12_EVIDENCE_SCHEMA_MISMATCH", null);
+  // 4. missing task.cardId
+  await expectHold("neg4-missing-cardId", writeEv("no-cardid", validEvidence({ task: { cardTitle: "n" } })), "R12_EVIDENCE_INVALID", "task_cardId_missing");
+  // 5. wrong task.cardId
+  await expectHold("neg5-wrong-cardId", writeEv("wrong-cardid", validEvidence({ task: { cardId: "R12-OTHER" } })), "R12_EVIDENCE_CARD_MISMATCH", null);
+  // 6. missing graphRunId
+  await expectHold("neg6-missing-runId", writeEv("no-runid", validEvidence({ graphRunId: undefined })), "R12_EVIDENCE_INVALID", "graphRunId_missing");
+  // 7. missing aggregate final
+  await expectHold("neg7-missing-final", writeEv("no-final", validEvidence({ final: undefined })), "R12_EVIDENCE_INVALID", "aggregate_final_missing");
+  // 8. zero nodes
+  await expectHold("neg8-zero-nodes", writeEv("zero-nodes", validEvidence({ nodes: [] })), "R12_EVIDENCE_INVALID", "node_collection_empty");
+  // 9. missing required node (order lists C)
+  await expectHold("neg9-missing-required", writeEv("missing-required", validEvidence({
+    scheduler: { verdict: "PASS", order: ["A", "B", "C"], statuses: { A: "passed", B: "passed", C: "passed" }, skipped: [], writerViolations: [] },
+  })), "R12_AGGREGATE_CHILD_CONTRADICTION", "C:MISSING");
+  // 10. child FAIL
+  await expectHold("neg10-child-fail", writeEv("child-fail", validEvidence({
+    nodes: validEvidence().nodes.map((n) => (n.nodeId === "B" ? { ...n, final: "FAILED" } : n)),
+  })), "R12_AGGREGATE_CHILD_CONTRADICTION", "B:FAILED");
+  // 11. child HOLD
+  await expectHold("neg11-child-hold", writeEv("child-hold", validEvidence({
+    nodes: validEvidence().nodes.map((n) => (n.nodeId === "B" ? { ...n, final: "HOLD" } : n)),
+  })), "R12_AGGREGATE_CHILD_CONTRADICTION", "B:HOLD");
+  // 12. child unknown final
+  await expectHold("neg12-child-unknown", writeEv("child-unknown", validEvidence({
+    nodes: validEvidence().nodes.map((n) => (n.nodeId === "B" ? { ...n, final: "WEIRD" } : n)),
+  })), "R12_EVIDENCE_INVALID", "node_final_unknown");
+  // 13. duplicate conflicting node
+  await expectHold("neg13-duplicate-conflict", writeEv("dup-conflict", validEvidence({
+    nodes: [...validEvidence().nodes, { nodeId: "B", phaseExecutionId: "eb2", final: "FAILED" }],
+  })), "R12_EVIDENCE_INVALID", "duplicate_conflicting_node");
+  // 14. skipped required node
+  await expectHold("neg14-skipped-required", writeEv("skipped", validEvidence({
+    nodes: validEvidence().nodes.map((n) => (n.nodeId === "B" ? { ...n, final: "SKIPPED_DUE_TO_DEPENDENCY" } : n)),
+  })), "R12_AGGREGATE_CHILD_CONTRADICTION", "B:SKIPPED_DUE_TO_DEPENDENCY");
+  // 15. writer violation
+  await expectHold("neg15-writer-violation", writeEv("writer-violation", validEvidence({
+    scheduler: { verdict: "HOLD", order: ["A", "B"], statuses: { A: "passed", B: "failed" }, skipped: [], writerViolations: ["B: lease held by A"] },
+  })), "R12_AGGREGATE_CHILD_CONTRADICTION", "writer_violation");
+  // 16. blocking finding
+  await expectHold("neg16-blocking-finding", writeEv("blocking", validEvidence({
+    nodes: validEvidence().nodes.map((n) => (n.nodeId === "B" ? { ...n, reviewBlockingFindings: ["FOUND"] } : n)),
+  })), "R12_AGGREGATE_CHILD_CONTRADICTION", "B:BLOCKING_FINDINGS");
+  // 17. aggregate PASS + child non-PASS (scheduler truth contradicts PASS)
+  await expectHold("neg17-aggregate-child", writeEv("agg-child", validEvidence({
+    final: "PASS",
+    scheduler: { verdict: "HOLD", order: ["A", "B"], statuses: { A: "passed", B: "held" }, skipped: [], writerViolations: [] },
+  })), "R12_AGGREGATE_CHILD_CONTRADICTION", "scheduler_status:B:held");
+  // 18. stale/wrong generation — replay from a mismatched recorded run
+  const st2Path = closeoutStatePath(join(R12_OUT, "R12-NEG-GEN"));
+  writeCloseoutState({ path: st2Path, state: r12Closeout("R12-NEG-GEN", { expectedGraphRunId: "gen-run-current" }) });
+  const stale = writeEv("stale-gen", validEvidence({ task: { cardId: "R12-NEG-GEN" }, graphRunId: "gen-run-OLD" }));
+  const r18 = await runStateDrivenCloseout({
+    statePath: st2Path, graphResultPath: stale, repoPath: REPO_A, cwd: REPO_A,
+    outDir: join(R12_OUT, "R12-NEG-GEN"), timeoutMs: 30000, surfaceDir: join(R12_ROOT, "surface-neg"),
+  });
+  assert.equal(r18.final, "HOLD");
+  assert.equal(r18.holdCode, "R12_EVIDENCE_RUN_MISMATCH");
+  // 19. replay from another card
+  const otherCard = writeEv("other-card", validEvidence({ task: { cardId: "R12-SOMEONE-ELSE" } }));
+  await expectHold("neg19-replay-other-card", otherCard, "R12_EVIDENCE_CARD_MISMATCH", null);
+  // 20. caller-declared aggregate PASS without canonical evidence — the
+  //     pre-R12 defect reproducer: bare PASS object with a fake node.
+  const bare = writeEv("bare-pass", { final: "PASS", nodeResults: [{ nodeId: "FAKE", final: "PASS" }] });
+  await expectHold("neg20-bare-pass", bare, "R12_EVIDENCE_SCHEMA_MISMATCH", null);
+});
+
+// ── GATE 9 — non-PASS semantics: valid evidence with HOLD outcome ─────────
+
+test("R12-NONPASS. valid evidence with HOLD outcome → normal closeout non-PASS (not an exception)", { timeout: 30000 }, async () => {
+  const cardId = "R12-NONPASS";
+  const g = r12RunnerGraph(cardId, {
+    final: "HOLD",
+    holdCode: "ORCHESTRATION_HOLD",
+    reason: "phase V1 held",
+    scheduler: { verdict: "HOLD", order: ["R1", "W1", "V1"], statuses: { R1: "passed", W1: "passed", V1: "held" }, skipped: [], writerViolations: [] },
+  });
+  g.nodeResults[2].final = "HOLD";
+  const r = await r12Drive(cardId, { graphResult: g });
+  assert.equal(r.applied, true);
+  assert.equal(r.final, "HOLD", "valid non-PASS evidence keeps closeout semantics");
+  assert.notEqual(r.holdCode, "R12_EVIDENCE_INVALID");
+  assert.notEqual(r.holdCode, "R12_AGGREGATE_CHILD_CONTRADICTION");
+});
+
+// ── GATE P — disk/memory parity ───────────────────────────────────────────
+
+test("R12-PARITY. same semantic evidence via disk path and memory path → same closeout verdict", { timeout: 60000 }, async () => {
+  const cardId = "R12-PARITY";
+  const g = r12RunnerGraph(cardId, { executionId: "r12-parity-run" });
+  // memory path
+  const mem = await r12Drive(`${cardId}-MEM`, { graphResult: g });
+  assert.equal(mem.final, "PASS", `memory path (${mem.holdCode}:${mem.reason})`);
+  // disk path: serialize the SAME semantic evidence to the v1 snapshot and load it
+  const evDir = join(R12_ROOT, "parity");
+  mkdirSync(evDir, { recursive: true });
+  const snapshot = {
+    schema: GRAPH_EVIDENCE_SCHEMA,
+    graphRunId: g.executionId,
+    final: g.final,
+    holdCode: null,
+    reason: null,
+    task: { cardId: `${cardId}-DISK`, cardTitle: "p", cardType: "implementation" },
+    scheduler: g.scheduler,
+    nodes: g.nodeResults.map((n) => ({
+      nodeId: n.nodeId,
+      phaseExecutionId: n.phaseExecutionId,
+      taskType: n.taskType,
+      dependencies: n.dependencies,
+      final: n.final,
+      attempt: n.attempt,
+      worktreeRevoked: n.cleanup?.worktreeRevoked === true,
+      reviewResultStatus: n.reviewResult?.recommendedAction ?? null,
+      reviewBlockingFindings: n.reviewResult?.blockingFindings ?? [],
+    })),
+    transitions: g.transitions,
+  };
+  const evPath = join(evDir, "parity-evidence.json");
+  writeFileSync(evPath, JSON.stringify(snapshot), "utf8");
+  const disk = await r12Drive(`${cardId}-DISK`, { graphResultPath: evPath });
+  assert.equal(disk.final, "PASS", `disk path (${disk.holdCode}:${disk.reason})`);
+  assert.equal(mem.final, disk.final, "parity: same verdict");
+  // parity on rejection: the SAME forged evidence fails identically on both paths
+  const forgedMem = { ...g, nodeResults: g.nodeResults.filter((n) => n.nodeId !== "V1") };
+  const forgedDisk = { ...snapshot, graphRunId: "r12-parity-run", nodes: snapshot.nodes.filter((n) => n.nodeId !== "V1") };
+  const fMem = await r12Drive(`${cardId}-FMEM`, { graphResult: forgedMem });
+  assert.equal(fMem.final, "HOLD");
+  assert.equal(fMem.holdCode, "R12_AGGREGATE_CHILD_CONTRADICTION");
+  const fDiskPath = join(evDir, "forged-parity.json");
+  writeFileSync(fDiskPath, JSON.stringify({ ...forgedDisk, task: { cardId: `${cardId}-FDISK` } }), "utf8");
+  const fDisk = await r12Drive(`${cardId}-FDISK`, { graphResultPath: fDiskPath });
+  assert.equal(fDisk.final, "HOLD");
+  assert.equal(fDisk.holdCode, "R12_AGGREGATE_CHILD_CONTRADICTION", `disk rejection parity (${fDisk.holdCode})`);
+});
+
+// ── Validator unit surface — schema/identity/normalization ────────────────
+
+test("R12-VALID. validator: schema enforcement + identity + normalization + run binding", () => {
+  // schema required on disk evidence
+  const noSchema = validateGraphEvidence({ graphRunId: "g", final: "PASS", nodes: [{ nodeId: "A", final: "PASS" }] }, { requireSchema: true });
+  assert.equal(noSchema.ok, false);
+  assert.equal(noSchema.holdCode, "R12_EVIDENCE_SCHEMA_MISMATCH");
+  // graph-unknown placeholder is never accepted as a run identity
+  const unknown = validateGraphEvidence({ graphRunId: "graph-unknown", final: "PASS", nodes: [{ nodeId: "A", final: "PASS" }] });
+  assert.equal(unknown.ok, false);
+  assert.ok(unknown.errors.some((e) => e.includes("graphRunId_missing_or_reserved_placeholder")));
+  // runner-shaped input normalizes nodeResults
+  const runner = validateGraphEvidence(r12RunnerGraph("V-UNIT"));
+  assert.equal(runner.ok, true);
+  assert.equal(runner.graphResult.nodeResults.length, 3);
+  assert.equal(runner.graphResult.executionId, `r12-run-V-UNIT`);
+  // disk-shaped input normalizes nodes
+  const disk = validateGraphEvidence({
+    schema: GRAPH_EVIDENCE_SCHEMA, graphRunId: "g1", final: "PASS",
+    task: { cardId: "V-UNIT" },
+    nodes: [{ nodeId: "A", final: "PASS" }],
+  }, { requireSchema: true, requireTaskIdentity: true });
+  assert.equal(disk.ok, true);
+  assert.equal(disk.graphResult.nodeResults[0].nodeId, "A");
+  // node with a foreign graphExecutionId → run mismatch
+  const foreign = validateGraphEvidence({
+    graphRunId: "g1", final: "PASS",
+    nodes: [{ nodeId: "A", final: "PASS", graphExecutionId: "OTHER-RUN" }],
+  });
+  assert.equal(foreign.ok, false);
+  assert.equal(foreign.holdCode, "R12_EVIDENCE_RUN_MISMATCH");
+  // non-PASS valid evidence passes structural validation (GATE 9)
+  const held = validateGraphEvidence({ graphRunId: "g2", final: "HOLD", nodes: [{ nodeId: "A", final: "HOLD" }] });
+  assert.equal(held.ok, true);
+  assert.equal(held.graphResult.final, "HOLD");
+});
+
+test("R12-LOADER. loadGraphResultFromEvidence: no silent defaults survive", async () => {
+  const dir = join(R12_ROOT, "loader");
+  mkdirSync(dir, { recursive: true });
+  // missing graphRunId no longer defaults to graph-unknown
+  const p1 = join(dir, "no-run.json");
+  writeFileSync(p1, JSON.stringify({ schema: GRAPH_EVIDENCE_SCHEMA, final: "PASS", task: { cardId: "L" }, nodes: [{ nodeId: "A", final: "PASS" }] }));
+  const l1 = loadGraphResultFromEvidence(p1);
+  assert.equal(l1.ok, false);
+  assert.ok(l1.errors.some((e) => e.includes("graphRunId_missing")));
+  // missing final no longer defaults to HOLD
+  const p2 = join(dir, "no-final.json");
+  writeFileSync(p2, JSON.stringify({ schema: GRAPH_EVIDENCE_SCHEMA, graphRunId: "g", task: { cardId: "L" }, nodes: [{ nodeId: "A", final: "PASS" }] }));
+  const l2 = loadGraphResultFromEvidence(p2);
+  assert.equal(l2.ok, false);
+  assert.ok(l2.errors.some((e) => e.includes("aggregate_final_missing")));
+  // card binding through the loader
+  const p3 = join(dir, "wrong-card.json");
+  writeFileSync(p3, JSON.stringify({
+    schema: GRAPH_EVIDENCE_SCHEMA, graphRunId: "g", final: "PASS",
+    task: { cardId: "OTHER" }, nodes: [{ nodeId: "A", final: "PASS" }],
+  }));
+  const l3 = loadGraphResultFromEvidence(p3, { expectedCardId: "MINE" });
+  assert.equal(l3.ok, false);
+  assert.equal(l3.holdCode, "R12_EVIDENCE_CARD_MISMATCH");
+  // valid evidence with card binding loads
+  const p4 = join(dir, "ok.json");
+  writeFileSync(p4, JSON.stringify({
+    schema: GRAPH_EVIDENCE_SCHEMA, graphRunId: "g", final: "PASS",
+    task: { cardId: "MINE" }, nodes: [{ nodeId: "A", final: "PASS" }],
+  }));
+  const l4 = loadGraphResultFromEvidence(p4, { expectedCardId: "MINE" });
+  assert.equal(l4.ok, true);
+  assert.equal(l4.graphResult.executionId, "g");
+});
+
+test("R12-BUILDER. buildGraphCloseoutSource consumes validated truth only", () => {
+  // forged aggregate PASS over a missing required child → executiveStatus HOLD
+  const forged = r12RunnerGraph("B-UNIT", { nodeResults: r12RunnerGraph("B-UNIT").nodeResults.filter((n) => n.nodeId !== "V1") });
+  const src = buildGraphCloseoutSource({ graphResult: forged, closeout: { cardId: "B-UNIT" } });
+  assert.equal(src.executiveStatus, "HOLD");
+  assert.ok(src.executiveSummary.includes("R-12 aggregate/child contradiction fenced"));
+  // malformed evidence → deterministic throw, never a plausible source
+  assert.throws(() => buildGraphCloseoutSource({ graphResult: { final: "PASS" }, closeout: { cardId: "B-UNIT" } }), /R12_EVIDENCE_INVALID/);
+  // valid runner graph → executiveStatus reflects validated truth
+  const ok = buildGraphCloseoutSource({ graphResult: r12RunnerGraph("B-UNIT"), closeout: { cardId: "B-UNIT" } });
+  assert.equal(ok.executiveStatus, "PASS");
 });

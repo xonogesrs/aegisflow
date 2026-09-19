@@ -486,8 +486,10 @@ test("R13c. closeout-state disposition write failure fails closed (CLOSEOUT_STAT
     final: "PASS",
     holdCode: null,
     reason: null,
-    scheduler: { verdict: "PASS", order: [], statuses: {}, skipped: [], writerViolations: [], leaseHolderAfter: null },
-    nodeResults: [],
+    scheduler: { verdict: "PASS", order: ["A"], statuses: { A: "passed" }, skipped: [], writerViolations: [], leaseHolderAfter: null },
+    nodeResults: [
+      { nodeId: "A", phaseExecutionId: "e_r13c_a", taskType: "audit", dependencies: [], final: "PASS", attempt: 0, cleanup: { worktreeRevoked: false } },
+    ],
     transitions: [],
   };
   const r = await runStateDrivenCloseout({

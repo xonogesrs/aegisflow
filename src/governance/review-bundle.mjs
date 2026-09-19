@@ -37,11 +37,13 @@ import { readReviewJob, findingsPath, verdictPath, updateReviewJob } from "./rev
 import {
   CLOSEOUT_HOLDS,
   CLOSEOUT_STATE_SCHEMA,
+  assertGraphAggregateConsistency,
   closeoutStatePath,
   deriveCloseoutStage,
   loadGraphResultFromEvidence,
   materializeCloseoutContract,
   readCloseoutState,
+  validateGraphEvidence,
   writeCloseoutState,
 } from "./closeout-state.mjs";
 import {
@@ -2902,10 +2904,41 @@ function rmSyncSafe(p) {
  * is never parsed; repo identity stays git-derived by the gate.
  */
 export function buildGraphCloseoutSource({ graphResult, closeout, repoPath = null, cwd = null, evidence = [] } = {}) {
-  const nodes = (graphResult?.nodeResults ?? []).filter(Boolean);
-  const transitions = (graphResult?.transitions ?? []).filter(Boolean);
-  const executionId = graphResult?.executionId ?? "unknown-graph";
-  const graphFinal = graphResult?.final ?? "HOLD";
+  // ── R-12 GATE K — SOURCE BUILDER HARDENING ─────────────────────────────
+  // The builder consumes VALIDATED, NORMALIZED graph evidence only. Raw
+  // caller aggregate status can never bypass consistency checks here:
+  //   - the graphResult must pass the single canonical validator (structure
+  //     + identity + node normalization) — malformed evidence fails closed;
+  //   - an aggregate PASS must be consistent with every required child
+  //     (completeness + aggregate/child consistency) — a forged PASS over
+  //     missing/HOLD/FAIL/skipped/blocked children is downgraded to HOLD
+  //     with the deterministic R12 violation, never rendered as authority;
+  //   - derived source.executiveStatus reflects VALIDATED graph truth, not
+  //     the caller's claimed final.
+  // This is the nearest pre-oracle seam: the PASS oracle downstream consumes
+  // source.executiveStatus / source.review / source.verifier, so the fence
+  // must hold BEFORE derivation.
+  const graphValidation = validateGraphEvidence(graphResult ?? null, {});
+  if (!graphValidation.ok) {
+    throw new Error(`${graphValidation.holdCode ?? "R12_EVIDENCE_INVALID"}:${graphValidation.errors.join(";")}`.slice(0, 400));
+  }
+  const vgr = graphValidation.graphResult;
+  let graphFinal = vgr.final;
+  if (graphFinal === "PASS") {
+    const consistency = assertGraphAggregateConsistency(vgr);
+    if (!consistency.ok) {
+      // Aggregate PASS contradicted by required children → the source can
+      // only ever describe a HOLD. The deterministic violation travels in
+      // the reason so the gate/bundle records WHY authority was withheld.
+      graphFinal = "HOLD";
+    }
+  }
+  const nodes = vgr.nodeResults;
+  const transitions = vgr.transitions;
+  const executionId = vgr.executionId;
+  const aggregateContradiction = vgr.final === "PASS" && graphFinal === "HOLD"
+    ? assertGraphAggregateConsistency(vgr).errors.join(";")
+    : null;
   const allNodesPassed = nodes.length > 0 && nodes.every((n) => n.final === "PASS");
 
   // ── execution（graph-NODE surface only; the regression suites are section
@@ -3164,33 +3197,33 @@ export function buildGraphCloseoutSource({ graphResult, closeout, repoPath = nul
     closeout?.diffSummary,
     allNodesPassed
       ? `Graph ${executionId}: ${nodes.length} node(s) all PASS; ${files.added.length} added / ${files.modified.length} modified / ${files.deleted.length} deleted (worktree outputs)`
-      : `Graph ${executionId}: final ${graphFinal} (${graphResult?.reason ?? ""})`,
+      : `Graph ${executionId}: final ${graphFinal} (${vgr.reason ?? ""})`,
   );
 
   return {
     schema: REVIEW_BUNDLE_SOURCE_SCHEMA,
     task: {
-      cardId: closeout?.cardId ?? graphResult?.executionId ?? "UNKNOWN-CARD",
+      cardId: closeout?.cardId ?? executionId ?? "UNKNOWN-CARD",
       cardTitle: closeout?.cardTitle ?? "Graph card closeout",
       cardType: closeout?.cardType ?? "implementation",
     },
     // TA-2（U）: the admission decision that governed this graph is recorded
     // in the bundle（admission_id + size + risk + profile + capability sets +
     // reasons）— self-contained, no chat dependence.
-    admission: graphResult?.admission
+    admission: vgr.admission
       ? {
-          schema: graphResult.admission.schema ?? "autoloop.task-admission/v1",
-          task_id: graphResult.admission.task_id ?? null,
-          admission_id: graphResult.admission.admission_id ?? null,
-          size: graphResult.admission.size ?? null,
-          risk: graphResult.admission.risk ?? null,
-          profile: graphResult.admission.profile ?? null,
-          repair_budget: graphResult.admission.repair_budget ?? null,
-          evidence_policy: graphResult.admission.evidence_policy ?? null,
-          external_review_required: graphResult.admission.review_policy?.external_review_required ?? null,
-          capabilities: graphResult.admission.capabilities ?? null,
-          reasons: graphResult.admission.reasons ?? null,
-          review_surface_policy: graphResult.admission.review_surface_policy ?? null,
+          schema: vgr.admission.schema ?? "autoloop.task-admission/v1",
+          task_id: vgr.admission.task_id ?? null,
+          admission_id: vgr.admission.admission_id ?? null,
+          size: vgr.admission.size ?? null,
+          risk: vgr.admission.risk ?? null,
+          profile: vgr.admission.profile ?? null,
+          repair_budget: vgr.admission.repair_budget ?? null,
+          evidence_policy: vgr.admission.evidence_policy ?? null,
+          external_review_required: vgr.admission.review_policy?.external_review_required ?? null,
+          capabilities: vgr.admission.capabilities ?? null,
+          reasons: vgr.admission.reasons ?? null,
+          review_surface_policy: vgr.admission.review_surface_policy ?? null,
         }
       : null,
     graph: {
@@ -3205,7 +3238,9 @@ export function buildGraphCloseoutSource({ graphResult, closeout, repoPath = nul
     executiveStatus: graphFinal,
     executiveSummary: firstDefined(
       closeout?.executiveSummary,
-      `${nodes.length} node(s) in ${executionId}; graph final ${graphFinal}; closeout gate ${graphResult?.closeout?.final ?? "pending"}`,
+      aggregateContradiction
+        ? `${nodes.length} node(s) in ${executionId}; graph final ${graphFinal}; R-12 aggregate/child contradiction fenced: ${aggregateContradiction.slice(0, 200)}`
+        : `${nodes.length} node(s) in ${executionId}; graph final ${graphFinal}; closeout gate ${vgr.closeout?.final ?? "pending"}`,
     ),
     authorizedScope: Array.isArray(closeout?.authorizedScope) ? closeout.authorizedScope.slice() : [],
     unauthorizedScope: Array.isArray(closeout?.unauthorizedScope) ? closeout.unauthorizedScope.slice() : [],
@@ -3234,7 +3269,7 @@ export function buildGraphCloseoutSource({ graphResult, closeout, repoPath = nul
     verifier: {
       pass: graphFinal === "PASS",
       result: graphFinal,
-      summary: `scheduler verdict ${graphResult?.scheduler?.verdict ?? graphFinal}; join: ${nodes.map((n) => `${n.nodeId}:${n.final}`).join(" -> ")}`,
+      summary: `scheduler verdict ${vgr.scheduler?.verdict ?? graphFinal}; join: ${nodes.map((n) => `${n.nodeId}:${n.final}`).join(" -> ")}`,
     },
     review,
     repairAttempts,
@@ -3273,7 +3308,7 @@ export function buildGraphCloseoutSource({ graphResult, closeout, repoPath = nul
     regression: Array.isArray(closeout?.regression) ? closeout.regression.slice() : [],
     // TA-3: the structured budget enforcement result（envelope + ledger +
     // reconciliation）travels into the bundle as section 5.5 evidence.
-    budget: graphResult?.budget ?? null,
+    budget: vgr.budget ?? null,
     regressionSummary: firstDefined(closeout?.regressionSummary, "see card evidence"),
     evidence: evidence.map((e) => ({ path: e.path, sha256: e.sha256 })),
     security: {
@@ -3878,16 +3913,56 @@ export async function runStateDrivenCloseout({
 
   // Graph result: authoritative structured metadata only（in-memory result or
   // a persisted graph-closeout evidence snapshot — never free-text stdout）.
-  let gr = graphResult;
-  if (!gr && graphResultPath) {
-    const loaded = loadGraphResultFromEvidence(graphResultPath);
+  //
+  // R-12 — STATE IS PROJECTION, NOT AUTHORITY: BOTH paths now pass through
+  // the ONE canonical graph-evidence validator before any of this evidence
+  // can influence closeout. A caller may provide evidence; a caller may NOT
+  // provide authority:
+  //   - disk evidence: exact graph-closeout-evidence/v1 schema + structure +
+  //     identity binding（cardId against state.task.cardId; graphRunId
+  //     against the recorded lineage when the state carries one）;
+  //   - in-memory graphResult: the SAME structural + identity validation —
+  //     no weaker CLI path, no stronger accidental path.
+  // Structural/identity violations fail closed with deterministic R12_*
+  // hold codes BEFORE any PASS derivation; a VALID non-PASS result keeps
+  // normal closeout semantics (GATE 9).
+  const expectedCardId = state.task?.cardId ?? null;
+  // GATE E — bind against the recorded closeout lineage when the state
+  // records an expected graph/run identity. The current architecture records
+  // graphRunId on the closeout disposition/retry lineage only when present;
+  // no stronger cross-system identifier is invented here.
+  const expectedGraphRunId = typeof state.closeout?.graphRunId === "string" && state.closeout.graphRunId.length > 0
+    ? state.closeout.graphRunId
+    : (typeof state.expectedGraphRunId === "string" && state.expectedGraphRunId.length > 0 ? state.expectedGraphRunId : null);
+  let gr = null;
+  if (graphResult) {
+    const v = validateGraphEvidence(graphResult, { expectedCardId, expectedGraphRunId });
+    if (!v.ok) {
+      return { applied: true, final: "HOLD", holdCode: v.holdCode ?? CLOSEOUT_HOLDS.EVIDENCE_UNREADABLE, reason: `${v.holdCode ?? "R12_EVIDENCE_INVALID"}:${v.errors.join(";")}`.slice(0, 500), statePath };
+    }
+    gr = v.graphResult;
+  } else if (graphResultPath) {
+    const loaded = loadGraphResultFromEvidence(graphResultPath, { expectedCardId, expectedGraphRunId });
     if (!loaded.ok) {
-      return { applied: true, final: "HOLD", holdCode: CLOSEOUT_HOLDS.EVIDENCE_UNREADABLE, reason: `CLOSEOUT_EVIDENCE_UNREADABLE:${loaded.errors.join(";")}`, statePath };
+      const code = loaded.holdCode ?? CLOSEOUT_HOLDS.EVIDENCE_UNREADABLE;
+      return { applied: true, final: "HOLD", holdCode: code, reason: `${code}:${loaded.errors.join(";")}`.slice(0, 500), statePath };
     }
     gr = loaded.graphResult;
   }
   if (!gr) {
     return { applied: true, final: "HOLD", holdCode: CLOSEOUT_HOLDS.GRAPH_RESULT_ABSENT, reason: "CLOSEOUT_GRAPH_RESULT_ABSENT:no_graph_result_or_evidence", statePath };
+  }
+
+  // GATE H — aggregate/child consistency is enforced at the SAME seam for
+  // both paths: an aggregate PASS over missing/HOLD/FAIL/skipped/blocked
+  // required children can never enter the source builder (the contradiction
+  // is fenced BEFORE buildGraphCloseoutSource sees it). Valid non-PASS
+  // evidence skips this check (normal closeout semantics).
+  if (gr.final === "PASS") {
+    const consistency = assertGraphAggregateConsistency(gr);
+    if (!consistency.ok) {
+      return { applied: true, final: "HOLD", holdCode: consistency.holdCode, reason: `${consistency.holdCode}:${consistency.errors.join(";")}`.slice(0, 500), statePath };
+    }
   }
 
   const r = await runMandatoryGraphCloseout({
