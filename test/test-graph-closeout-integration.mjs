@@ -198,3 +198,70 @@ test("2. bundle-gate failure downgrades a would-be-PASS graph to HOLD（fail-clo
   const headAfter = spawnSync("git", ["-C", REPO_A, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
   assert.equal(headAfter, repoHeadBefore, "main repo untouched");
 });
+
+// ── R-01: settlement-return enforcement at the production runner seam ──────
+// A phase refused by the budget pre-dispatch gate never dispatched: it holds
+// no reservation, consumed nothing, and its terminal must be refusal
+// evidence (skipped) — never a phantom settlement whose failure is silently
+// ignored and later misattributed to BUDGET_RECONCILIATION_DIVERGED.
+test("R-01: budget-refused phase settles nothing; authoritative hold code preserved; no reconciliation misattribution", { timeout: 300000 }, async () => {
+  const { classify, scanRiskSignals } = await import("../src/admission/classify.mjs");
+  const { buildAdmissionRecord } = await import("../src/admission/policy-projection.mjs");
+  const { freezeAdmission } = await import("../src/admission/admission-record.mjs");
+  const { createBudgetEnforcement } = await import("../src/budget/enforcement.mjs");
+  const { BUDGET_CONTRACT_SCHEMA } = await import("../src/budget/contract.mjs");
+
+  const FULL_EVIDENCE = {
+    affected_files: { score: 1, reasons: ["single file"] },
+    affected_subsystems: { score: 0, reasons: ["docs only"] },
+    dependency_depth: { score: 0, reasons: ["no deps"] },
+    ambiguity: { score: 0, reasons: ["exact text"] },
+    expected_execution_steps: { score: 0, reasons: ["one edit"] },
+    verification_burden: { score: 0, reasons: ["no tests"] },
+    external_dependencies: { score: 0, reasons: ["none"] },
+    concurrency_potential: { score: 0, reasons: ["none"] },
+    statefulness: { score: 0, reasons: ["stateless"] },
+    rollback_complexity: { score: 0, reasons: ["revert 1 file"] },
+  };
+  const c = classify({ dimensionScores: FULL_EVIDENCE, riskSignals: scanRiskSignals("fix one typo in README") });
+  const rec = buildAdmissionRecord({
+    taskId: "R01-SEAM-TEST",
+    classification: c,
+    mutationScope: ["docs/"],
+    extensions: { budget: { schema: BUDGET_CONTRACT_SCHEMA, version: 1, dimensions: {
+      node_execution_count: { limit: 0 },
+      wall_clock_ms: { limit: 600000 },
+      sub_agent_execution_count: { limit: 1 },
+      repair_attempt_count: { limit: 2 },
+      verifier_reviewer_attempts: { limit: 2 },
+      retry_count: { limit: 2 },
+    } } },
+  });
+  const admission = freezeAdmission(rec);
+  const enc = createBudgetEnforcement({ admission }).enforcement;
+
+  const r = await runColimaGraph({
+    ir: { phases: [roPhase("R01P1", [], 1)] },
+    parent: PARENT,
+    cwd: REPO_A,
+    executionId: "r01-seam-1",
+    profile: PROFILE,
+    repoPath: REPO_A,
+    scratchRoot: SCRATCH,
+    timeoutMs: 90000,
+    budget: { enforcement: enc },
+  });
+  // The authoritative refusal (pre-dispatch gate) must surface as the final
+  // hold code — NOT the downstream reconciliation fence.
+  assert.equal(r.final, "HOLD");
+  assert.notEqual(r.holdCode, "BUDGET_RECONCILIATION_DIVERGED");
+  assert.equal(r.budget?.authorized, true, "budget section attached (enforcement present)");
+  assert.equal(r.budget.reconciliation.diverged.length, 0, `no divergence: ${JSON.stringify(r.budget?.reconciliation?.diverged)}`);
+  assert.equal(r.budget.dimensions.node_execution_count.consumed, 0, "refused phase never settles consumption");
+  // the refused node is refusal evidence, not consumption evidence
+  const node = (r.nodeResults ?? []).find((n) => n.nodeId === "R01P1");
+  assert.ok(node, "refused phase terminal recorded");
+  assert.equal(node.skipped, true, "never-dispatched node is refusal evidence (skipped)");
+  const headAfter = spawnSync("git", ["-C", REPO_A, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+  assert.equal(headAfter, repoHeadBefore, "main repo untouched");
+});

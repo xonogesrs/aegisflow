@@ -290,6 +290,7 @@ export async function runColimaGraph({
   // evidence, not consumption evidence（skipped:true; no settlement — the
   // reservation was already released by the fence cancellation seam）.
   const fenceRefusedPhases = new Set(); // phase_id -> refused at dispatch
+  const dispatchedPhases = new Set(); // phase_id -> passed the budget pre-dispatch gate (holds a reservation)
 
   const captureNodeResult = (phase, { final, attempt, reason }) => {
     const phaseExecId = phaseExecutionId(executionId, phase.phase_id);
@@ -383,6 +384,11 @@ export async function runColimaGraph({
           captureNodeResult(phase, { final: "HOLD", attempt: 0, reason: budgetGate.holdCode ?? "BUDGET_EXHAUSTED" });
           throw new ColimaGraphError(budgetGate.holdCode ?? "BUDGET_EXHAUSTED", budgetGate.reason ?? "budget gate blocked dispatch");
         }
+        // R-01: dispatch success is the settlement precondition. Only a
+        // phase that passed the pre-dispatch gate holds a reservation, so
+        // only such a phase may settle at terminal — a refused/never-started
+        // operation has no reservation and no consumption to record.
+        dispatchedPhases.add(phaseId);
         phaseStartTimes.set(phaseId, Date.now());
         if (isWriterPhase(phase)) {
           const wt = prepareWorktree({ sourceRepo: repoPath, scratchRoot, taskId: phaseId });
@@ -440,6 +446,11 @@ export async function runColimaGraph({
         // reservation was already released at refusal, so there is nothing
         // to settle — never a phantom charge, never a fabricated release).
         if (fenceRefusedPhases.has(phaseId)) node.skipped = true;
+        // R-01: a phase that never passed the budget pre-dispatch gate never
+        // dispatched — it holds no reservation and consumed nothing, so its
+        // terminal record is refusal evidence, not consumption evidence
+        // (skipped:true keeps NEG13 evidence consistent with the ledger).
+        if (budget?.enforcement && node && !fenceRefusedPhases.has(phaseId) && !dispatchedPhases.has(phaseId)) node.skipped = true;
         // TA-3: settle the operation's reservation with the ACTUAL measured
         // consumption. Wall-clock meter = the contract's runner-timing source
         // （node resultIdentity.latencyMs when the executor produced it, else
@@ -447,14 +458,18 @@ export async function runColimaGraph({
         // observeFromResult derives at reconciliation, so settle and evidence
         // stay in one unit. The pre-dispatch upper bound remains the crash
         // reservation (§6), not a terminal charge.
-        if (budget?.enforcement && node && !fenceRefusedPhases.has(phaseId)) {
+        if (budget?.enforcement && node && !fenceRefusedPhases.has(phaseId) && dispatchedPhases.has(phaseId)) {
           const opKey = `${executionId}:${phaseId}:0`;
           const lat = Number(node.resultIdentity?.latencyMs);
           const windowMs = Number.isFinite(node.startedAt) && Number.isFinite(node.completedAt)
             ? Math.max(0, node.completedAt - node.startedAt) : null;
           const durationMs = Number.isFinite(lat) ? lat : windowMs;
           const skipped = final === "SKIPPED_DUE_TO_DEPENDENCY" || final === "NOT_RECORDED";
-          budget.enforcement.recordConsumption({
+          // R-01: the settlement result is AUTHORITATIVE. A failed settlement
+          // on a dispatched operation fails closed here with the ledger's
+          // own hold code — never silently ignored and never misattributed
+          // to the NEG13 reconciliation fence downstream.
+          const settled = budget.enforcement.recordConsumption({
             opKey,
             actualAmounts: {
               node_execution_count: skipped ? null : 1,
@@ -462,6 +477,9 @@ export async function runColimaGraph({
             },
             wallClockMs: durationMs,
           });
+          if (!settled.ok) {
+            throw new BudgetHoldError(settled.holdCode ?? "BUDGET_AUTHORITY_INVALID", settled.reason ?? "budget settlement failed closed");
+          }
           const attemptN = Number(attempt ?? 0);
           if (attemptN > 0) {
             for (let a = 0; a < attemptN; a++) budget.enforcement.recordRetry({ nodeId: phaseId });
