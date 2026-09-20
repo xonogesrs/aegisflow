@@ -19,6 +19,24 @@ If a task mentions AutoLoop, a card, a closeout, or an external-review
 verdict and you are not already in this repo, `cd` here first. You should
 not need to search for this repo's location — you were told it here.
 
+## Starting a session (supported interactive entrypoint)
+
+Interactive Pi sessions for AutoLoop work start through the canonical
+launcher:
+
+```
+bash scripts/pi-autoloop.sh        # or: npm run pi:autoloop
+```
+
+It does two things a bare `pi` invocation does not: it `cd`s into this
+repository before Pi starts (so AGENTS.md discovery loads these operative
+instructions with no manual trust step) and passes `--approve` (project-local
+trust for the run). A bare `pi` launched at an arbitrary cwd is NOT a
+supported AutoLoop entrypoint — outside this repo Pi discovers none of these
+instructions. This is launcher-contract enforcement for the supported
+AutoLoop entrypoint, not OS-wide `pi` prevention: executing the globally
+installed `pi` binary for non-AutoLoop work is outside AutoLoop's boundary.
+
 ## AUTHORITATIVE_SOURCE_FIRST (mandatory)
 
 When you need to know AutoLoop state, read the structured authoritative
