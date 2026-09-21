@@ -1,0 +1,110 @@
+{
+  "schema": "autoloop.wp1-h-fanout/v1",
+  "ranAt": "2026-09-21T04:40:01.054Z",
+  "log": "/var/folders/xz/z021trgs0n16709lm9s9pcc40000gn/T/wp1-h-log-4FnbiD/probe.log",
+  "results": [
+    {
+      "name": "H1",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=PASS"
+        },
+        {
+          "k": "SA-R1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R2_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R3_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-W1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-V1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "DISTINCT_AUTHORED_OUTPUTS",
+          "ok": true,
+          "detail": "distinct=true allPassed=true ids=agent_3a7876,agent_dd2191,agent_c79a3f"
+        },
+        {
+          "k": "WRITER_CONSUMED_ALL_THREE",
+          "ok": true,
+          "detail": "depLines=3 summary=\"analysis summary |  | - dep1 (SA-R1): found 1 file(s) containing TODO under /src/docs | - dep2 (SA-R2): found 2 markdown file(s) under /src/\""
+        },
+        {
+          "k": "IDENTITIES_BOUND",
+          "ok": true,
+          "detail": "bound=true"
+        }
+      ]
+    },
+    {
+      "name": "H9",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=PASS"
+        },
+        {
+          "k": "SA-R1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R2_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R3_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-W1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-V1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "DISTINCT_AUTHORED_OUTPUTS",
+          "ok": true,
+          "detail": "distinct=true allPassed=true ids=agent_e31a30,agent_f4a100,agent_0bb3a6"
+        },
+        {
+          "k": "WRITER_CONSUMED_ALL_THREE",
+          "ok": true,
+          "detail": "depLines=3 summary=\"analysis summary |  | - dep1 (SA-R1): found 1 file(s) containing TODO under /src/docs | - dep2 (SA-R2): found 2 markdown file(s) under /src/\""
+        },
+        {
+          "k": "IDENTITIES_BOUND",
+          "ok": true,
+          "detail": "bound=true"
+        }
+      ]
+    }
+  ],
+  "verdict": "PASS"
+}
