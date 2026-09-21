@@ -713,6 +713,18 @@ export class DurableGraphRun {
         const final = src.final ?? "HOLD";
         const attempt = src.attempt ?? null;
         const reason = src.reason ?? null;
+        // The phase's executor/reviewer window is CLOSED at its terminal
+        // boundary: clear the writer-lease markers THIS runner seeded at
+        // onPhaseStart (durable-execution.mjs parity — its onPhaseTerminal
+        // clears the same fields). Without this the snapshot keeps
+        // writer_phase_active=true after a writer phase passed, and the
+        // NEXT between-phase rollover intake refuses its §7 safe point
+        // ("writer phase active") even though the graph is quiescent —
+        // the successor era could never trigger its own rollover.
+        self.state.activePhase = null;
+        self.state.activeLifecycleStage = null;
+        self.state.writerPhaseActive = false;
+        self.state.writerLeaseHolder = null;
         self.state.pendingResults[phaseId] = {
           final,
           attempt: attempt ?? null,
@@ -975,7 +987,7 @@ function buildGraphResultEnvelope(run, graphResult) {
  *   mode only）. root must be absolute and outside the repo.
  */
 export async function runDurableGraph(opts = {}) {
-  const { persistence, ir, parent, manifest, cwd, repoPath, scratchRoot, maxRepairAttempts, timeoutMs, signal, hooks = {}, closeout, closeoutGate, closeoutSourceBuilder, closeoutEvidenceWriter, memory, telemetry, writeback, dirtyScope = [], preserveInstance = false, profile, executorAdapterFactory, reviewerAdapterFactory, admission = null } = opts;
+  const { persistence, ir, parent, manifest, cwd, repoPath, scratchRoot, maxRepairAttempts, timeoutMs, signal, hooks = {}, closeout, closeoutGate, closeoutSourceBuilder, closeoutEvidenceWriter, memory, telemetry, writeback, dirtyScope = [], preserveInstance = false, profile, executorAdapterFactory, reviewerAdapterFactory, admission = null, scratchPreserve = [] } = opts;
   const requestedScratchAuthorityToken = opts.scratchAuthorityToken ?? null;
   let scratchAuthorityToken = null;
   // TA-3 budget enforcement（production authority — injected by runAdmittedGraph;
@@ -1123,6 +1135,14 @@ export async function runDurableGraph(opts = {}) {
       executorAdapterFactory,
       reviewerAdapterFactory,
       preserveInstance,
+      // WP1 multi-session continuity: a sub-agent graph's persisted results
+      // dir must survive the terminal cleanup — a handover HOLD（A frozen,
+      // B resumes）continues the SAME graph identity and its dependent
+      // phases consume the surviving results. Non-sub-agent graphs keep
+      // full cleanup.
+      scratchPreserve: scratchPreserve.length > 0
+        ? scratchPreserve
+        : (Array.isArray(ir?.phases) && ir.phases.some((p) => p?.runtime?.mode === "subagent") ? ["results"] : []),
       budget,
       // STAGE-D BUDGET HANDOVER: the SAME RSL2 authority, gated on durable
       // ownership truth — a fresh-era process whose ownership transferred
@@ -1189,6 +1209,23 @@ export async function runDurableGraph(opts = {}) {
   }
 
   await run.terminal(final, reason);
+  // WP1 multi-session continuity: the runner's terminal cleanup PRESERVED
+  // the sub-agent results dir for continuation eras. This run reached a REAL
+  // terminal publication（its own lifecycle closeout is the single real
+  // terminal）— no successor era will consume the shared results, so the
+  // whole owned scratch child is now reclaimable. A handover HOLD（branch
+  // above）returns BEFORE this line and keeps the owned root for Session B.
+  // The effective preserve set is the one the RUNNER derived (caller value
+  // or the sub-agent-graph default) — reclaim whenever the runner preserved
+  // anything, not only when the caller declared it.
+  const effectiveScratchPreserve = scratchPreserve.length > 0
+    ? scratchPreserve
+    : (Array.isArray(ir?.phases) && ir.phases.some((p) => p?.runtime?.mode === "subagent") ? ["results"] : []);
+  if (effectiveScratchPreserve.length > 0) {
+    try {
+      removeOwnedScratchRoot({ scratchRoot, executionId: run.executionId, repoPath, authorityToken: scratchAuthorityToken });
+    } catch { /* best-effort: the terminal verdict is already published */ }
+  }
   return buildGraphResultEnvelope(run, run.graphResult);
 }
 
@@ -1751,6 +1788,7 @@ export async function resumeDurableGraph({
     recovered = true;
   }
 
+  let fencedRequeuedPhases = null;
   // ── STAGE-D BUDGET HANDOVER: a between-phase §9a/§13a fence refusal is
   // the HANDOVER itself, never real work. On a POST-TRANSFER resume, phases
   // whose only terminal record is a journaled ROLLOVER_HANDOVER_FENCE (and
@@ -1786,11 +1824,18 @@ export async function resumeDurableGraph({
       }
       if (requeued.length > 0) {
         recovered = true;
+        fencedRequeuedPhases = requeued;
         recoveryActions.push({ action: "HANDOVER_FENCED_PHASES_REQUEUED", phases: [...requeued] });
         // The fenced era never executed these phases; its result.json holds
         // the refusal HOLD, not work evidence. Remove it so the successor's
         // lawful terminal record can be written (exclusive-create) and no
-        // CEDF fold ever mistakes the fence for a real outcome.
+        // CEDF fold ever mistakes the fence for a real outcome. The stale
+        // checkpoint hash PIN must go with it: the pin binds the REFUSAL
+        // artifact, and a successor-era result that hashes differently would
+        // be rejected by the fold gate (RESULT_HASH_MISMATCH) — turning a
+        // lawful post-crash resume into a permanent RECOVERY_REQUIRED hold.
+        // The pins are dropped from the runner state after it is seeded from
+        // the snapshot below (the next checkpoint publishes the cleaned map).
         for (const id of requeued) {
           try { rmSync(join(execDir, "phases", id, "result.json"), { force: true }); } catch { /* best-effort */ }
         }
@@ -1882,6 +1927,10 @@ export async function resumeDurableGraph({
   //（DE-2 F2/F3: no re-terminalization of recovered / already-passed phases）.
   run.state.phaseStates = { ...initialState.statuses };
   run.state.phaseResultHashes = { ...(snapshot.phase_result_hashes || {}) };
+  // WP1: a fence-requeued phase's checkpoint pin binds the fence REFUSAL
+  // artifact (deleted above) — keep the pin map consistent or the fold gate
+  // would reject the successor's real result (RESULT_HASH_MISMATCH).
+  for (const id of fencedRequeuedPhases ?? []) delete run.state.phaseResultHashes[id];
   run.state.completedPhaseIds = [...(snapshot.completed_phase_ids || [])];
   run.state.sideEffectIds = { ...(graphMeta.side_effect_ids || {}) };
   run.state.worktreeInfo = { ...(graphMeta.worktree_info || {}) };
@@ -1929,6 +1978,14 @@ export async function resumeDurableGraph({
       admission,
       durable: { executionAttempt: attempt, recoveryGeneration: gen, resumed: true, replayOf: executionId, recovered, duplicateSuppressed },
       preserveInstance,
+      // WP1 multi-session continuity: the SAME preserve contract the fresh
+      // path forwards — a sub-agent successor era's terminal cleanup must
+      // keep the persisted results dir whenever ANOTHER handover may follow
+      // (B frozen → C resumes). Without this the B-era terminal wipe deletes
+      // results/ and C's first dependent phase finds an empty /results.
+      scratchPreserve: scratchPreserve.length > 0
+        ? scratchPreserve
+        : (Array.isArray(ir?.phases) && ir.phases.some((p) => p?.runtime?.mode === "subagent") ? ["results"] : []),
       // REPAIR-1 §8 defense in depth (RESUMED path): the terminal/RSL3
       // publication seam validates post-transfer ownership on EVERY resume —
       // including OWNERSHIP_TRANSFER_COMMITTED crash windows. A stale A-era
@@ -1979,6 +2036,20 @@ export async function resumeDurableGraph({
   }
 
   await run.terminal(final, reason);
+  // WP1 multi-session continuity: same real-terminal reclaim as the fresh
+  // path — the runner preserved the sub-agent results dir for continuation;
+  // this era published ITS OWN terminal verdict, so the owned scratch child
+  // is reclaimable. A handover HOLD（branch above）returns before this and
+  // keeps the owned root for the successor era. The EFFECTIVE preserve set
+  // (caller value or the sub-agent-graph default) decides.
+  const effectiveScratchPreserveResume = scratchPreserve.length > 0
+    ? scratchPreserve
+    : (Array.isArray(ir?.phases) && ir.phases.some((p) => p?.runtime?.mode === "subagent") ? ["results"] : []);
+  if (effectiveScratchPreserveResume.length > 0) {
+    try {
+      removeOwnedScratchRoot({ scratchRoot, executionId: run.executionId, repoPath, authorityToken: authorityToken });
+    } catch { /* best-effort: the terminal verdict is already published */ }
+  }
   // STAGE-D BUDGET HANDOVER: a resumed metered era settles + reconciles in
   // THE SAME ledger authority it was reconstructed from (NEG13 — divergence
   // is a HOLD). Un-metered resumes keep the exact legacy envelope.

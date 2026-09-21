@@ -123,3 +123,27 @@ Exception: short-lived, self-cleaning, non-authoritative temp worktrees
 (e.g. `src/c2d/mutation-run.mjs` isolated mutation runs, colima per-run
 scratch roots) are ephemeral and must keep using OS temp — do not route them
 through the helper.
+
+## Background jobs — never poll (mandatory)
+
+A long command (`async: true`) delivers its result automatically when it
+completes. The completion notice wakes the agent. Therefore:
+
+- NEVER issue sleep-only background jobs (`sleep N; pgrep …`, `sleep N &&
+  ps …`, any `async` bash whose command is only sleep + status checks) to
+  "check on" another background job. Each poll job is itself a background
+  job whose completion fires a notification — a queue of stale echoes
+  arrives after the real result was already handled. (Observed 2026-09-20:
+  a ~15-minute colima-all run accumulated a dozen poll jobs whose echoes
+  kept arriving after the review verdict was delivered.)
+- The harness blocks such calls (`~/.omp/agent/extensions/no-poll-waits.js`).
+  If blocked, do not rephrase into an equivalent poll — wait for the job's
+  own completion notice instead.
+- While a background job runs, do other independent work (never touch the
+  same shared runtime the job uses — e.g. never run other Colima commands
+  while `test:colima-all` holds the `autoloop-graph` profile; a concurrent
+  mount-fingerprint probe fails the suite mid-run). If nothing remains,
+  yield; the notification resumes you.
+- A bounded wait INSIDE one call is fine: a single foreground `sleep N`, or
+  one `for`/`while` loop that sleeps and does real work — one job, one
+  notification.

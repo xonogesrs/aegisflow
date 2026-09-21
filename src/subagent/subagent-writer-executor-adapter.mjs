@@ -87,6 +87,11 @@ export function buildWriterAgentCommand(taskType) {
   const S = [
     "set -u",
     'mkdir -p /scratch',
+    // WP1 parallel fan-in: the phase's OWN declared depends_on arrive as
+    // the DEPENDENCY_FILES env var (injected by the adapter from the
+    // taskCard). Normalize ONCE before every branch so the shared result
+    // emission block always sees it (set -u: an unbound variable is fatal).
+    'DEPENDENCY_FILES="${DEPENDENCY_FILES:-}"',
     'SCOPE="${WRITER_MUTATION_SCOPE:-docs/pi-graph-output}"',
     'WT_FILE="/work/$SCOPE/summary.md"',
     '[ -n "${AGENT_SLEEP:-}" ] && sleep "$AGENT_SLEEP"',
@@ -111,26 +116,42 @@ export function buildWriterAgentCommand(taskType) {
     '    ;;',
     "  write_report|write_report_repair|write_report_fail)",
     '    mkdir -p "/work/$SCOPE"',
-    '    R1_CLAIM=$(claim /results/SA-R1.json)',
-    '    R2_CLAIM=$(claim /results/SA-R2.json)',
+    // WP1 parallel fan-in: consume EVERY declared dependency result — the
+    // report incorporates one claim line per dependency and the self-test
+    // fails unless ALL of them are present. The dependency list is the
+    // phase's own declared depends_on (host-projected into
+    // DEPENDENCY_FILES), never agent-invented: a missing required child
+    // yields an empty claim line and the self-test fails (fail closed).
+    '    DEP_FILES="${DEPENDENCY_FILES:-}"',
+    '    CLAIM_LINES=""',
+    '    DEP_INDEX=0',
+    '    for _df in $DEP_FILES; do',
+    '      DEP_INDEX=$((DEP_INDEX + 1))',
+    '      _claim=$(claim "/results/$_df.json" 2>/dev/null || true)',
+    '      if [ -n "$_claim" ]; then CLAIM_LINES="${CLAIM_LINES}- dep${DEP_INDEX} (${_df}): ${_claim}\\n"; fi',
+    '    done',
     '    FAIL_INTENT=0',
     `    case "${taskType}" in`,
     "      write_report_fail) FAIL_INTENT=1 ;;",
     '      write_report_repair) [ "${REPAIR_ATTEMPT:-0}" -lt "1" ] && FAIL_INTENT=1 ;;',
     "    esac",
     '    if [ "$FAIL_INTENT" = "1" ]; then',
-    '      printf "analysis summary\\n\\n- todo: %s\\n" "$R1_CLAIM" > "$WT_FILE"',
+    '      printf "analysis summary\\n\\n- todo: only\\n" > "$WT_FILE"',
     '    else',
-    '      printf "analysis summary\\n\\n- todo: %s\\n- markdown: %s\\n" "$R1_CLAIM" "$R2_CLAIM" > "$WT_FILE"',
+    '      printf "analysis summary\\n\\n${CLAIM_LINES}" > "$WT_FILE"',
     '    fi',
-    '    grep -q "markdown:" "$WT_FILE" && TEST_PASSED=1 || TEST_FAILED=1',
+    '    _expected=0; for _df in $DEP_FILES; do _expected=$((_expected + 1)); done',
+    'grep -c "^- dep" "$WT_FILE" >/scratch/.depcnt 2>/dev/null || true',
+
+    'read -r _written < /scratch/.depcnt 2>/dev/null || _written=0',
+    '    if [ "$_expected" -gt 0 ]; then if [ "$_written" -eq "$_expected" ]; then TEST_PASSED=1; else TEST_FAILED=1; fi; else [ -s "$WT_FILE" ] && TEST_PASSED=1 || TEST_FAILED=1; fi',
     '    TEST_TOTAL=1',
     '    if [ "$FAIL_INTENT" = "1" ]; then',
     '      W_STATUS="REPAIR"',
-    '      CLAIM="writer report written but self-test failed (missing markdown claim); repair required"',
+    '      CLAIM="writer report written but self-test failed (missing dependency claims); repair required"',
     '    else',
     '      W_STATUS="PASS"',
-    '      CLAIM="writer report written under $SCOPE/summary.md incorporating dependency claims; self-test passed"',
+    '      CLAIM="writer report written under $SCOPE/summary.md incorporating ALL ${_expected} dependency claims; self-test passed"',
     '    fi',
     '    ;;',
     "  verify_writer)",
@@ -184,8 +205,10 @@ export function buildWriterAgentCommand(taskType) {
     '  echo "  \\"testsExecuted\\": [\\"dependency claims present in report\\", \\"self-test grep markdown claim\\"],"',
     '  echo "  \\"testResults\\": {\\"passed\\": $TEST_PASSED, \\"failed\\": $TEST_FAILED, \\"total\\": $TEST_TOTAL},"',
     '  echo "  \\"claims\\": [\\"$CLAIM\\"],"',
-    '  echo "  \\"evidenceReferences\\": [\\"/results/SA-R1.json\\", \\"/results/SA-R2.json\\"],"',
-    '  echo "  \\"filesInspected\\": [\\"/results/SA-R1.json\\", \\"/results/SA-R2.json\\"],"',
+    '  _EV_REFS=""',
+    '  for _df in $DEPENDENCY_FILES; do _EV_REFS="${_EV_REFS}\\"/results/$_df.json\\", "; done',
+    '  echo "  \\"evidenceReferences\\": [${_EV_REFS%, }],"',
+    '  echo "  \\"filesInspected\\": [${_EV_REFS%, }],"',
     '  echo "  \\"commandsExecuted\\": [\\"task=${AGENT_TASK_TYPE}\\", \\"write under /work mutation scope\\", \\"self-test\\"],"',
     '  echo "  \\"assumptions\\": [\\"worktree mounted rw at /work\\", \\"repo mounted read-only at /src\\", \\"network none\\"],"',
     '  echo "  \\"uncertainties\\": [],"',
@@ -239,8 +262,6 @@ export function buildRepairAgentCommand(taskType) {
     'TEST_FAILED=0',
     'TEST_TOTAL=0',
     'CLAIM=""',
-    'R1_CLAIM=$(claim /results/SA-R1.json 2>/dev/null || true)',
-    'R2_CLAIM=$(claim /results/SA-R2.json 2>/dev/null || true)',
     `case "${taskType}" in`,
     '  repair_report|repair_report_fail)',
     '    mkdir -p "/work/$SCOPE"',
@@ -248,19 +269,31 @@ export function buildRepairAgentCommand(taskType) {
     `case "${taskType}" in`,
     '      repair_report_fail) FAIL_INTENT=1 ;;',
     '    esac',
+    '    DEP_FILES="${DEPENDENCY_FILES:-}"',
+    '    CLAIM_LINES=""',
+    '    DEP_INDEX=0',
+    '    for _df in $DEP_FILES; do',
+    '      DEP_INDEX=$((DEP_INDEX + 1))',
+    '      _claim=$(claim "/results/$_df.json" 2>/dev/null || true)',
+    '      if [ -n "$_claim" ]; then CLAIM_LINES="${CLAIM_LINES}- dep${DEP_INDEX} (${_df}): ${_claim}\\n"; fi',
+    '    done',
     '    if [ "$FAIL_INTENT" = "1" ]; then',
-    '      printf "analysis summary\\n\\n- todo: %s\\n" "$R1_CLAIM" > "$WT_FILE"',
+    '      printf "analysis summary\\n\\n- todo: only\\n" > "$WT_FILE"',
     '    else',
-    '      printf "analysis summary\\n\\n- todo: %s\\n- markdown: %s\\n" "$R1_CLAIM" "$R2_CLAIM" > "$WT_FILE"',
+    '      printf "analysis summary\\n\\n${CLAIM_LINES}" > "$WT_FILE"',
     '    fi',
-    '    grep -q "markdown:" "$WT_FILE" && TEST_PASSED=1 || TEST_FAILED=1',
+    '    _expected=0; for _df in $DEP_FILES; do _expected=$((_expected + 1)); done',
+    'grep -c "^- dep" "$WT_FILE" >/scratch/.depcnt 2>/dev/null || true',
+
+    'read -r _written < /scratch/.depcnt 2>/dev/null || _written=0',
+    '    if [ "$_expected" -gt 0 ]; then if [ "$_written" -eq "$_expected" ]; then TEST_PASSED=1; else TEST_FAILED=1; fi; else [ -s "$WT_FILE" ] && TEST_PASSED=1 || TEST_FAILED=1; fi',
     '    TEST_TOTAL=1',
     '    if [ "$FAIL_INTENT" = "1" ]; then',
     '      W_STATUS="REPAIR"',
-    '      CLAIM="repair attempt did NOT fix the evidence gap (markdown claim still missing); responding to blocking findings"',
+    '      CLAIM="repair attempt did NOT fix the evidence gap (dependency claims still missing); responding to blocking findings"',
     '    else',
     '      W_STATUS="PASS"',
-    '      CLAIM="repair agent fixed the report under $SCOPE/summary.md incorporating both dependency claims; self-test passed"',
+    '      CLAIM="repair agent fixed the report under $SCOPE/summary.md incorporating ALL ${_expected} dependency claims; self-test passed"',
     '    fi',
     '    ;;',
     '  *)',
@@ -284,8 +317,10 @@ export function buildRepairAgentCommand(taskType) {
     '  echo "  \\"testsExecuted\\": [\\"dependency claims present in report\\", \\"self-test grep markdown claim\\"],"',
     '  echo "  \\"testResults\\": {\\"passed\\": $TEST_PASSED, \\"failed\\": $TEST_FAILED, \\"total\\": $TEST_TOTAL},"',
     '  echo "  \\"claims\\": [\\"$CLAIM\\"],"',
-    '  echo "  \\"evidenceReferences\\": [\\"/results/SA-R1.json\\", \\"/results/SA-R2.json\\"],"',
-    '  echo "  \\"filesInspected\\": [\\"/results/SA-R1.json\\", \\"/results/SA-R2.json\\"],"',
+    '  _EV_REFS=""',
+    '  for _df in $DEPENDENCY_FILES; do _EV_REFS="${_EV_REFS}\\"/results/$_df.json\\", "; done',
+    '  echo "  \\"evidenceReferences\\": [${_EV_REFS%, }],"',
+    '  echo "  \\"filesInspected\\": [${_EV_REFS%, }],"',
     '  echo "  \\"commandsExecuted\\": [\\"task=${AGENT_TASK_TYPE}\\\", \\"repair under /work mutation scope\\", \\"self-test\\"],"',
     '  echo "  \\"assumptions\\": [\\"worktree mounted rw at /work\\", \\"repo mounted read-only at /src\\", \\"network none\\"],"',
     '  echo "  \\"uncertainties\\": [],"',
@@ -409,6 +444,9 @@ export function createSubagentWriterExecutorAdapter({ profile, repoPath, scratch
       BASE_COMMIT: baseCommit ?? "",
       WRITER_MUTATION_SCOPE: (mutationScope[0] ?? "docs/pi-graph-output").replace(/^\//, ""),
       REPAIR_ATTEMPT: String(attempt),
+      // WP1 parallel fan-in: the phase's OWN declared depends_on, host-
+      // projected — the writer consumes exactly these persisted results.
+      DEPENDENCY_FILES: Array.isArray(request.taskCard?.dependsOn) ? request.taskCard.dependsOn.join(" ") : "",
       DEPENDENCY_RESULT_IDENTITIES: runtime.dependencyResultIdentities ? JSON.stringify(runtime.dependencyResultIdentities) : "",
       EMIT_MALFORMED: runtime.emitMalformed ? "1" : "0",
       CRASH_AFTER: runtime.crashAfter ? "1" : "0",
@@ -507,6 +545,7 @@ export function createSubagentWriterExecutorAdapter({ profile, repoPath, scratch
       }
     }
 
+    if (process.env.WP1_DEBUG_WRITER && run.status !== "completed") console.error(`WRITER_DEBUG ${nodeId}: run.status=${run.status} stderr=${String(run.stderr ?? "").slice(-300)}`);
     const result = {
       status: run.status,
       executionId: request.executionId,
@@ -524,6 +563,7 @@ export function createSubagentWriterExecutorAdapter({ profile, repoPath, scratch
     if (run.status === "completed" && !validation.ok) {
       result.status = "error";
       result.error = `subagent_writer_result_invalid:${validation.errors.join(";")}`;
+      if (process.env.WP1_DEBUG_WRITER) console.error(`WRITER_DEBUG ${nodeId}: ${result.error}; raw=${String(readFileSync(join(privateScratch, "result.json"), "utf8")).slice(0, 400)}`);
     }
     resultSink?.(request.executionId, result);
     if (request.taskCard && typeof request.taskCard === "object") {

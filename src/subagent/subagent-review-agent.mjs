@@ -67,7 +67,10 @@ export function buildReviewAgentCommand() {
     'for code in ${REVIEW_SEED_BLOCKING:-}; do add_blocking "$code"; done',
     // 1) dependency results（checked only when the writer declared deps）
     'if [ "${DEPENDENCY_COUNT:-0}" != "0" ]; then',
-    '  if [ -f /results/SA-R1.json ] && [ -f /results/SA-R2.json ]; then deps_ok=1; else deps_ok=0; add_blocking DEPS_MISSING; fi',
+    '  deps_ok=1',
+    '  for _df in ${DEPENDENCY_FILES:-}; do',
+    '    [ -f "/results/$_df.json" ] || { deps_ok=0; add_blocking DEPS_MISSING; }',
+    '  done',
     'else deps_ok=1; fi',
     // 2) writer structured result + scope + tests + diff（independent re-check）
     'if [ -f /results/SA-W1.json ]; then',
@@ -88,11 +91,13 @@ export function buildReviewAgentCommand() {
     // 4) actual changed-file content —— claims supported by evidence
     //   （the review agent reads the REAL worktree file, not the writer's claim）
     'if [ -f "$WT_FILE" ]; then',
-    '  grep -q "todo:" "$WT_FILE" && r1_ok=1 || r1_ok=0',
-    '  grep -q "markdown:" "$WT_FILE" && r2_ok=1 || r2_ok=0',
-    'else r1_ok=0; r2_ok=0; add_blocking WORKTREE_CONTENT_MISSING; fi',
-    '[ "$r1_ok" = "1" ] || add_blocking CLAIM_R1_MISSING',
-    '[ "$r2_ok" = "1" ] || add_blocking CLAIM_R2_MISSING',
+    '  _expected=0; for _df in ${DEPENDENCY_FILES:-}; do _expected=$((_expected + 1)); done',
+    'grep -c "^- dep" "$WT_FILE" >/scratch/.depcnt 2>/dev/null || true',
+
+    'read -r _written < /scratch/.depcnt 2>/dev/null || _written=0',
+    '  if [ "$_expected" -gt 0 ]; then if [ "$_written" -eq "$_expected" ]; then r1_ok=1; else r1_ok=0; fi; else [ -s "$WT_FILE" ] && r1_ok=1 || r1_ok=0; fi',
+    'else r1_ok=0; add_blocking WORKTREE_CONTENT_MISSING; fi',
+    '[ "$r1_ok" = "1" ] || add_blocking DEP_CLAIM_GAP',
     // 5) /src read-only boundary（container-level main-repo pollution guard）
     'if touch /src/.review-probe 2>/dev/null; then src_ro=0; add_blocking SRC_WRITABLE; else src_ro=1; fi',
     // 6) verdict: structural failures => HOLD; fixable content/test gaps => REPAIR
@@ -117,7 +122,7 @@ export function buildReviewAgentCommand() {
     '  echo "  \\"findings\\": $BLOCKING_JSON,"',
     '  echo "  \\"blockingFindings\\": $BLOCKING_JSON,"',
     '  echo "  \\"nonBlockingFindings\\": [],"',
-    '  echo "  \\"evidenceChecked\\": [\\"/results/SA-R1.json\\", \\"/results/SA-R2.json\\", \\"/results/SA-W1.json\\", \\"/results/SA-W1.worktree.json\\", \\"$WT_FILE\\", \\"/src read-only boundary\\"],"',
+    '  echo "  \\"evidenceChecked\\": [\\"/results (declared dependency results)\\", \\"/results/SA-W1.json\\", \\"/results/SA-W1.worktree.json\\", \\"$WT_FILE\\", \\"/src read-only boundary\\"],"',
     '  echo "  \\"scopeVerified\\": $SCOPE_VERIFIED,"',
     '  echo "  \\"testsVerified\\": $TESTS_VERIFIED,"',
     '  echo "  \\"claims\\": [\\"$CLAIM\\"],"',
@@ -191,6 +196,9 @@ export function createReviewAgentReviewerAdapter({ profile, repoPath, scratchRoo
       EMIT_MALFORMED: runtime.reviewMalformed ? "1" : "0",
       CRASH_AFTER: runtime.reviewCrashAfter ? "1" : "0",
       DEPENDENCY_COUNT: String(runtime.dependencyResultIdentities?.length ?? 0),
+      // WP1 parallel fan-in: the writer phase's OWN declared depends_on —
+      // the independent review re-checks exactly these persisted results.
+      DEPENDENCY_FILES: Array.isArray(request.taskCard?.dependsOn) ? request.taskCard.dependsOn.join(" ") : "",
       // CEDF: dependency-reconciliation conflicts（space-free codes）are
       // pre-seeded as blocking findings -> structural HOLD verdict.
       REVIEW_SEED_BLOCKING: Array.isArray(runtime.dependencyConflicts) ? runtime.dependencyConflicts.join(" ") : "",

@@ -48,6 +48,7 @@ import {
 } from "./colima-worktree.mjs";
 import { BudgetHoldError } from "../budget/ledger.mjs";
 import { prepareOwnedScratchRoot, removeOwnedScratchRoot, getScratchAuthorityToken } from "./scratch-ownership.mjs";
+import { wipeScratchPreserving } from "../v2/durable-graph.mjs";
 
 export const GRAPH_RESULT_SCHEMA = "autoloop.c3.parallel-graph-result/v1";
 
@@ -138,6 +139,14 @@ export async function runColimaGraph({
   // DE-2 test-harness knob: keep the colima instance alive after cleanup
   //（crash-matrix runs many workers; production default deletes）.
   preserveInstance = false,
+  // WP1 multi-session continuity: relative paths under the owned scratch
+  // root the terminal cleanup must KEEP（the persisted sub-agent results
+  // dir）. Provided by src/v2/durable-graph.mjs for sub-agent graphs: a
+  // handover HOLD（A frozen, B resumes）or any durable continuation needs
+  // the results to survive into the successor era — deleting them here is
+  // exactly the cross-session dependency loss this seam exists to prevent.
+  // Raw callers（no durable layer）leave it empty and keep full cleanup.
+  scratchPreserve = [],
   executorAdapterFactory,
   reviewerAdapterFactory,
   closeout,
@@ -711,7 +720,15 @@ export async function runColimaGraph({
     const wt = worktrees.get(phaseId);
     try { revokeWorktree(wt); } catch { /* best effort */ }
   }
-  removeOwnedScratchRoot({ scratchRoot: scratchNamespace, executionId, repoPath, authorityToken: resolvedScratchAuthorityToken });
+  if (scratchPreserve.length > 0) {
+    // WP1: preserve the declared subtrees（the persisted sub-agent results
+    // dir）and reclaim everything else — the same wipe contract the resume
+    // path uses. The owned root itself stays（the successor era re-derives
+    // and re-owns it through the durable authority token）.
+    wipeScratchPreserving({ scratchRoot: scratchNamespace, executionId, repoPath, preserve: scratchPreserve, authorityToken: resolvedScratchAuthorityToken });
+  } else {
+    removeOwnedScratchRoot({ scratchRoot: scratchNamespace, executionId, repoPath, authorityToken: resolvedScratchAuthorityToken });
+  }
   if (!preserveInstance && !instancePreExisted) {
     deleteInstance(profile);
     cleanup.instanceDeleted = true;

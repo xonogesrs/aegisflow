@@ -18,6 +18,8 @@ import { tmpdir } from "node:os";
 
 import { reconcileChildResults, reconciliationFinding } from "../../src/subagent/result-reconciliation.mjs";
 import { buildSubagentGraphHooks, digestResultsDir } from "../../src/subagent/subagent-graph-runner.mjs";
+import { phaseExecutionId } from "../../src/v2/phase-task-card.mjs";
+import { agentExecutionIdFor } from "../../src/subagent/subagent-contract.mjs";
 import { buildSubagentEnvelope, validateSubagentEnvelope } from "../../src/subagent/subagent-contract.mjs";
 import { buildReviewAgentCommand } from "../../src/subagent/subagent-review-agent.mjs";
 
@@ -181,8 +183,20 @@ test("reconciliationFinding renders space-free blocking codes", () => {
 
 function setupHooks(results, phaseExtras = {}) {
   const resultsDir = mkdtempSync(join(tmpdir(), "cedf-recon-"));
+  const EXEC = "exec_test_0000";
   for (const [name, content] of Object.entries(results)) {
-    writeFileSync(join(resultsDir, `${name}.json`), JSON.stringify(content, null, 2) + "\n");
+    // Production persists the authored-result envelope（WP1 provenance）.
+    writeFileSync(join(resultsDir, `${name}.json`), JSON.stringify({
+      schema_version: "autoloop.subagent.authored-result/v1",
+      executionId: EXEC,
+      phase_id: name,
+      phaseExecutionId: phaseExecutionId(EXEC, name),
+      agentExecutionId: agentExecutionIdFor(EXEC, name),
+      inputContextIdentity: `icid_${name}`,
+      graph_generation: 0,
+      recorded_at: new Date().toISOString(),
+      result: content,
+    }, null, 2) + "\n");
   }
   const ir = {
     phases: [

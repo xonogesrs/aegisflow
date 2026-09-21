@@ -581,7 +581,29 @@ export async function resumeAsSuccessor({ persistenceRoot, executionId, binding,
 
   let result;
   try {
-    result = await dg.resumeDurableGraph({ ...rest, persistenceRoot, executionId, rolloverSessionBinding: binding });
+    // WP1: when the frozen IR is a sub-agent graph（any phase declares
+    // runtime.mode === "subagent"）, compose THE production sub-agent wiring
+    // for the successor era — the SAME definition the fresh path and the
+    // DE-2R resume entry use（buildSubagentGraphHooks + the sub-agent
+    // adapter factories）. Without it the successor era runs bare durable
+    // hooks: the writer's mutationScope is never projected from the
+    // admission（scope gate fails closed on any change）, dependency results
+    // are never persisted/verified, and the /results mount never reaches
+    // verifier phases. Non-subagent graphs keep the exact prior behavior.
+    const composedOpts = await (async () => {
+      try {
+        const ir = rest.ir ?? null;
+        const isSubagentGraph = ir && Array.isArray(ir.phases)
+          && ir.phases.some((p) => p?.runtime?.mode === "subagent");
+        if (!isSubagentGraph) return rest;
+        const { composeSuccessorSubagentGraphOpts } = await import("../subagent/subagent-graph-runner.mjs");
+        return composeSuccessorSubagentGraphOpts({ ...rest, persistenceRoot, executionId });
+      } catch (e) {
+        if (e?.code === "SUBAGENT_SUCCESSOR_COMPOSITION_INVALID") throw e;
+        return rest; // composition is best-effort wiring, never an authority gate
+      }
+    })();
+    result = await dg.resumeDurableGraph({ ...composedOpts, persistenceRoot, executionId, rolloverSessionBinding: binding });
   } catch (e) {
     // Frozen §9 cause table: a ledger reconstruction/reservation-continuity
     // failure at successor resume maps onto CROSS_SESSION_BUDGET_RECONSTRUCTION_FAILED.
@@ -621,6 +643,29 @@ export async function resumeAsSuccessor({ persistenceRoot, executionId, binding,
   if (result && typeof result === "object") {
     result.predecessorRetirement = retirementOutcome;
   }
+  // WP1 multi-session continuity — real-terminal reclaim for the LAST era.
+  // The handover branch inside resumeDurableGraph returns before its own
+  // reclaim whenever the mirror is still OWNERSHIP_TRANSFER_COMMITTED at the
+  // era's terminal (the retirement progression above advances it only after
+  // the return). This era published ITS OWN terminal verdict（RUN_PASSED /
+  // RUN_HELD journaled; final_verdict pinned）and the mirror is now
+  // closed-era — no successor era will consume the shared results, so the
+  // owned scratch child is reclaimable under the durable authority token.
+  try {
+    const finalVerdictPinned = readCheckpoint(persistenceRoot, executionId).snapshot?.final_verdict ?? null;
+    const closedEra = readCheckpoint(persistenceRoot, executionId).snapshot?.graph?.rollover?.state;
+    const CLOSED = new Set(["A_RETIRED", "A_RETIREMENT_CONFIRMED"]);
+    if (finalVerdictPinned && CLOSED.has(closedEra)) {
+      const ownershipArtifact = JSON.parse(readFileSync(join(persistenceRoot, executionId, "artifacts", "scratch-ownership.json"), "utf8"));
+      const { removeOwnedScratchRoot } = await import("../runtime/scratch-ownership.mjs");
+      const scratchRootForReclaim = rest.scratchRoot ?? null;
+      if (typeof scratchRootForReclaim === "string" && scratchRootForReclaim.length > 0) {
+        try {
+          removeOwnedScratchRoot({ scratchRoot: scratchRootForReclaim, executionId, repoPath: rest.repoPath ?? null, authorityToken: ownershipArtifact.authorityToken });
+        } catch { /* best-effort: the terminal verdict is already published */ }
+      }
+    }
+  } catch { /* best-effort observability; never fabricates a verdict */ }
   return result;
 }
 

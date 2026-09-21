@@ -227,7 +227,7 @@ test("review agent cancel via AbortSignal -> HOLD + deterministic cleanup", { ti
 });
 
 test("repair agent out-of-scope write -> HOLD（repair stays inside original mutationScope）", { timeout: 900000 }, async (t) => {
-  const ir = { phases: [writerPhase("SA-W1", { taskType: "write_report_with_gap", repairTaskType: "repair_report", extra: { repairScopeViolation: true } })] };
+  const ir = { phases: [roPhase("SA-R1", "count_todos"), roPhase("SA-R2", "inventory_markdown"), writerPhase("SA-W1", { taskType: "write_report_with_gap", repairTaskType: "repair_report", dependsOn: ["SA-R1", "SA-R2"], extra: { repairScopeViolation: true } })] };
   const r = await runSubagentGraph({ durable: false, ir, parent: PARENT, cwd: REPO_A, executionId: "review-repair-scope-1", profile: PROFILE, repoPath: REPO_A, scratchRoot: SCRATCH, maxRepairAttempts: 1, timeoutMs: 120000 });
   assert.equal(r.final, "HOLD");
   const w1 = nodeById(r, "SA-W1");
@@ -239,7 +239,7 @@ test("repair agent out-of-scope write -> HOLD（repair stays inside original mut
 });
 
 test("repair does not fix tests -> re-review REPAIR -> repair budget exhausted -> HOLD", { timeout: 900000 }, async (t) => {
-  const ir = { phases: [writerPhase("SA-W1", { taskType: "write_report_with_gap", repairTaskType: "repair_report_fail" })] };
+  const ir = { phases: [roPhase("SA-R1", "count_todos"), roPhase("SA-R2", "inventory_markdown"), writerPhase("SA-W1", { taskType: "write_report_with_gap", repairTaskType: "repair_report_fail", dependsOn: ["SA-R1", "SA-R2"] })] };
   const r = await runSubagentGraph({ durable: false, ir, parent: PARENT, cwd: REPO_A, executionId: "review-repair-budget-1", profile: PROFILE, repoPath: REPO_A, scratchRoot: SCRATCH, maxRepairAttempts: 1, timeoutMs: 120000 });
   assert.equal(r.final, "HOLD");
   const w1 = nodeById(r, "SA-W1");

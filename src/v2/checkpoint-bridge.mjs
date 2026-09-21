@@ -90,6 +90,16 @@ export const POST_HEAD_EVENT_SEMANTICS = Object.freeze({
     // A crash leaving these beyond the head is replay-safe: the latest
     // snapshot IS the truth and the resume seam reads it directly.
     "BUDGET_LEDGER_SNAPSHOT",
+    // WP1 automatic trigger producer: the durable usage observation /
+    // observation-failure markers are journaled at the phase-terminal
+    // observation point BEFORE the phase-terminal checkpoint. A crash in
+    // that sub-window leaves them beyond the head; they are pure
+    // observability records whose consequence is re-derivable at the next
+    // boundary (the producer re-observes from live provider usage and the
+    // window-dedup authority is the durable rollover block, never the
+    // usage rows). Replay-safe — never re-journaled, never re-consumed.
+    "PROVIDER_USAGE_OBSERVED",
+    "ROLLOVER_USAGE_OBSERVATION_FAILED",
   ]),
   resumeSafe: new Set([
     // DE-1 F1 examples: journaled before their checkpoint -> post-head on crash

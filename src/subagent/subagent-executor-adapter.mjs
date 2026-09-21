@@ -64,8 +64,8 @@ export function buildAgentCommand(taskType) {
     '    CLAIM="found ${COUNT} markdown file(s) under /src/docs"',
     '    ;;',
     "  verify_writer)",
-    '    DEPS_OK=0',
-    '    [ -f /results/SA-R1.json ] && [ -f /results/SA-R2.json ] && DEPS_OK=1',
+    '    DEPS_OK=1',
+    '    for _df in ${VERIFIER_DEP_FILES:-}; do [ -f "/results/$_df.json" ] || DEPS_OK=0; done',
     '    W_RESULT_OK=0',
     '    [ -f /results/SA-W1.json ] && grep -q \'"status": "PASS"\' /results/SA-W1.json && W_RESULT_OK=1',
     '    W_WT_OK=0',
@@ -193,6 +193,9 @@ export function createSubagentExecutorAdapter({ profile, repoPath, scratchRoot, 
       AGENT_SLEEP: runtime.sleep ? String(runtime.sleep) : "",
       EMIT_MALFORMED: runtime.emitMalformed ? "1" : "0",
       CRASH_AFTER: runtime.crashAfter ? "1" : "0",
+      // WP1 parallel fan-in: the verifier phase's OWN declared depends_on —
+      // the verifier re-checks exactly these persisted results.
+      VERIFIER_DEP_FILES: Array.isArray(request.taskCard?.dependsOn) ? request.taskCard.dependsOn.join(" ") : "",
     };
 
     // RB-SSG（invariants A/G at the execution boundary）: the agent's planned

@@ -15,7 +15,27 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildSubagentGraphHooks, subagentExecutorFactory } from "../../src/subagent/subagent-graph-runner.mjs";
+import { buildSubagentGraphHooks, subagentExecutorFactory, AUTHORED_RESULT_SCHEMA } from "../../src/subagent/subagent-graph-runner.mjs";
+import { phaseExecutionId } from "../../src/v2/phase-task-card.mjs";
+import { agentExecutionIdFor } from "../../src/subagent/subagent-contract.mjs";
+
+const EXEC = "exec_x";
+
+// Production persists the authored-result envelope（WP1 provenance）; the
+// fixture authors the same shape the onPhaseTerminal seam writes.
+function authoredEnvelope(phaseId, payload) {
+  return {
+    schema_version: AUTHORED_RESULT_SCHEMA,
+    executionId: EXEC,
+    phase_id: phaseId,
+    phaseExecutionId: phaseExecutionId(EXEC, phaseId),
+    agentExecutionId: agentExecutionIdFor(EXEC, phaseId),
+    inputContextIdentity: `icid_${phaseId}`,
+    graph_generation: 0,
+    recorded_at: new Date().toISOString(),
+    result: payload,
+  };
+}
 
 function tmp(label) {
   return mkdtempSync(join(tmpdir(), `cedf-conflict-${label}-`));
@@ -48,9 +68,9 @@ test("CEDF R-C: mutating phase self-declaring joinVerify gets NO DUPLICATE_CLAIM
   const resultsDir = tmp("rc-results");
   try {
     for (const w of ["W1", "W2"]) {
-      writeFileSync(join(resultsDir, `${w}.json`), JSON.stringify({ status: "PASS", filesChanged: ["src/a.js"] }));
+      writeFileSync(join(resultsDir, `${w}.json`), JSON.stringify(authoredEnvelope(w, { status: "PASS", filesChanged: ["src/a.js"] })));
     }
-    const hooks = buildSubagentGraphHooks({ ir: IR, resultsDir, dependencyExecutionId: "exec_x", hooks: {} });
+    const hooks = buildSubagentGraphHooks({ ir: IR, resultsDir, dependencyExecutionId: EXEC, hooks: {} });
     hooks.onPhaseStart("V");
     // IR is mutated in place by the hook（production wiring contract）.
     const v = IR.phases.find((p) => p.phase_id === "V");
@@ -75,9 +95,9 @@ test("CEDF R-C: genuine non-mutating join verifier stays exempt from DUPLICATE_C
   };
   const resultsDir = tmp("rc-exempt-results");
   try {
-    writeFileSync(join(resultsDir, "W1.json"), JSON.stringify({ status: "PASS", filesChanged: ["src/a.js"] }));
-    writeFileSync(join(resultsDir, "J.json"), JSON.stringify({ status: "PASS", filesInspected: ["src/a.js"] }));
-    const hooks = buildSubagentGraphHooks({ ir, resultsDir, dependencyExecutionId: "exec_x", hooks: {} });
+    writeFileSync(join(resultsDir, "W1.json"), JSON.stringify(authoredEnvelope("W1", { status: "PASS", filesChanged: ["src/a.js"] })));
+    writeFileSync(join(resultsDir, "J.json"), JSON.stringify(authoredEnvelope("J", { status: "PASS", filesInspected: ["src/a.js"] })));
+    const hooks = buildSubagentGraphHooks({ ir, resultsDir, dependencyExecutionId: EXEC, hooks: {} });
     hooks.onPhaseStart("V");
     const v = ir.phases.find((p) => p.phase_id === "V");
     assert.equal(v.runtime.dependencyReconciliation.verdict, "COHERENT");
