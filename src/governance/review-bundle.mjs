@@ -2684,6 +2684,12 @@ export async function runCloseoutGate({
   // review-bundle-valid + independent-review are ALWAYS required and cannot
   // be removed.
   successContract = null, // declared task success conditions（bound pre-execution）
+  // POST-P4 SEMANTIC DRIFT GATE — the gate-time re-derived digest of the
+  // declared task semantics (computed by materializeCloseoutContract from
+  // the persisted record's own contract bytes). Informational at this layer:
+  // the drift FENCE lives in runStateDrivenCloseout (the binding-point
+  // owner). The gate never trusts a caller-supplied digest for enforcement.
+  successContractDigest = null,
   authorityRevocation = null, // { revoked: true, reason } — fail-closed when set
   // POST-P4 Truth Revocation Cascade — validated revocation EVENTS（or a
   // precomputed { evidenceIds, artifactShas } facts object）from the durable
@@ -3713,6 +3719,12 @@ export async function runMandatoryGraphCloseout({
         // forwarded into THE PASS ORACLE. The executor cannot weaken it at
         // gate time — it arrives from persisted state, not caller output.
         successContract: closeout?.successContract ?? graphResult?.successContract ?? null,
+        // POST-P4 SEMANTIC DRIFT GATE: the gate-time re-derived digest of the
+        // declared semantics (materialized from the persisted record's own
+        // contract bytes). Drift against the declaration-time binding is
+        // already fenced upstream in runStateDrivenCloseout; this forward
+        // lets the gate/oracle layer observe the frozen identity.
+        successContractDigest: closeout?.successContractDigest ?? null,
         timeoutMs,
         fileName,
         // RB2-B2: this IS the formal Review closeout boundary（applicability
@@ -4203,6 +4215,47 @@ export async function runStateDrivenCloseout({
       statePath,
     };
   }
+
+  // POST-P4 SEMANTIC DRIFT GATE — re-derive the declared-semantics digest
+  // from the PERSISTED record's own successContract bytes and compare it
+  // against the digest bound at declaration time. Drift definition (frozen
+  // contract, post-P4 convergence §5): any gate-time divergence between the
+  // bound digest/structure and the live declared contract that is not
+  // accompanied by an authorized successor-generation record. Fail closed:
+  // a drifted contract can never reach the PASS oracle — the oracle would
+  // otherwise evaluate verification evidence against semantics the card's
+  // authority never froze.
+  //
+  // Binding point = THIS persisted record (the oracle's only successContract
+  // source). Change authority = successor-generation machinery only
+  // (createSuccessorReviewJob supersession); an in-place contract mutation
+  // without a successor record IS the drift signal. Absent digest =
+  // no-freeze (legacy records predating the gate keep the pre-Drift status
+  // quo; they are never retro-fenced).
+  if (state.successContractDigest != null) {
+    const liveDigest = materialized.contract.successContractDigest ?? null;
+    if (liveDigest === null) {
+      // The record froze a digest but no longer carries a contract at all —
+      // the declared semantics were deleted in place. Drift by definition.
+      return {
+        applied: true,
+        final: "HOLD",
+        holdCode: CLOSEOUT_HOLDS.SEMANTIC_DRIFT,
+        reason: "SEMANTIC_DRIFT:success_contract_removed_after_digest_binding",
+        statePath,
+      };
+    }
+    if (liveDigest !== state.successContractDigest) {
+      return {
+        applied: true,
+        final: "HOLD",
+        holdCode: CLOSEOUT_HOLDS.SEMANTIC_DRIFT,
+        reason: `SEMANTIC_DRIFT:declared task semantics diverge from the digest bound at closeout-state write time (bound ${String(state.successContractDigest).slice(0, 12)}…, live ${String(liveDigest).slice(0, 12)}…); authorized change only via successor-generation supersession`,
+        statePath,
+      };
+    }
+  }
+
   const contract = {
     ...materialized.contract,
     outDir: outDir ?? materialized.contract.outDir,

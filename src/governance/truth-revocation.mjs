@@ -41,6 +41,12 @@ export const REVOCATION_TRIGGERS = Object.freeze([
   "invariant-violated", // a global invariant now evaluates violated
   "verifier-retraction", // independent verifier retracts prior evidence
   "contract-superseded", // task success contract superseded by a new generation
+  // POST-P4 SEMANTIC DRIFT GATE — the declared task semantics (successContract
+  // digest bound at closeout-state write time) were superseded through the
+  // authorized successor-generation machinery. Consumes the Semantic Drift
+  // Gate's frozen contract (post-P4 convergence §5): drift detection is the
+  // digest fence; this trigger is its downstream revocation consequence.
+  "semantic-source-superseded",
 ]);
 
 /**

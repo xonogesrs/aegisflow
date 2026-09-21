@@ -25,6 +25,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { scanForSecrets, sha256Text } from "../evidence/run-evidence-store.mjs";
+import { digestOf } from "../canonical-digest.mjs";
 
 export const CLOSEOUT_STATE_SCHEMA = "autoloop.closeout-state/v1";
 
@@ -33,6 +34,7 @@ export const CLOSEOUT_HOLDS = Object.freeze({
   METADATA_INCOMPLETE: "CLOSEOUT_METADATA_INCOMPLETE",
   EVIDENCE_UNREADABLE: "CLOSEOUT_EVIDENCE_UNREADABLE",
   GRAPH_RESULT_ABSENT: "CLOSEOUT_GRAPH_RESULT_ABSENT",
+  SEMANTIC_DRIFT: "SEMANTIC_DRIFT",
 });
 
 // ── R-12 closeout acceptance — single canonical graph-evidence validator ───
@@ -178,6 +180,48 @@ export function closeoutStatePath(outDir) {
   return join(resolve(outDir), "closeout-state.json");
 }
 
+// ── POST-P4 SEMANTIC DRIFT GATE — THE semantic source ──────────────────────
+//
+// Frozen research contract
+// (docs/governance/autoloop-post-p4-governance-convergence.md §5):
+//
+//   SEMANTIC_SOURCE          = normalized successContract（declared task
+//                              semantics）+ bound spec digest（spec-identity）
+//                              + admission policy
+//   SEMANTIC_BINDING_POINT   = persisted closeout-state record at write time
+//   SEMANTIC_CHANGE_AUTHORITY= successor-generation machinery only
+//                              (createSuccessorReviewJob supersession);
+//                              in-place contract mutation = drift
+//   MISSING MECHANISM        = successContractDigest bound at declaration
+//                              time and re-derived at gate time
+//   DRIFT DEFINITION         = any gate-time divergence between the bound
+//                              digest and the live declared contract not
+//                              accompanied by an authorized successor record
+//
+// Normalization contract (deterministic; mirrors spec-identity's strictness):
+//   1. the contract must be a plain object (arrays/scalars fail closed);
+//   2. canonical JSON: recursive key-sort, array order preserved, undefined
+//      keys omitted (the repo's single canonicalize() — no second serializer);
+//   3. SHA-256 over the canonical bytes.
+// Drift detection is therefore fully mechanical: hash/structure comparison
+// only. LLM semantic review is reserved for genuine equivalence questions
+// and is NOT needed for this digest seam (frozen research finding).
+
+/**
+ * Canonicalize + digest the declared task success contract.
+ * Deterministic: the same semantic content always yields the same digest,
+ * regardless of key order in the declaring JSON.
+ *
+ * @param {object} successContract — the declared task success contract
+ * @returns {string} 64-hex sha256 of the canonical contract serialization
+ */
+export function successContractDigestOf(successContract) {
+  if (!successContract || typeof successContract !== "object" || Array.isArray(successContract)) {
+    throw new TypeError("successContractDigestOf: contract must be a plain object");
+  }
+  return digestOf(successContract);
+}
+
 function readJson(path) {
   try {
     return { ok: true, value: JSON.parse(readFileSync(path, "utf8")) };
@@ -308,6 +352,17 @@ export function materializeCloseoutContract(state) {
     // checks.
     successContract: state.successContract && typeof state.successContract === "object" && !Array.isArray(state.successContract)
       ? state.successContract
+      : undefined,
+    // POST-P4 SEMANTIC DRIFT GATE — semantic binding point: the digest of
+    // the DECLARED task semantics, derived HERE from the persisted record's
+    // own successContract bytes（never trusted from a caller-supplied
+    // field）. Frozen contract:
+    // docs/governance/autoloop-post-p4-governance-convergence.md §5.
+    // Absent contract ⇒ digest undefined（legacy cards keep their exact
+    // materialized shape; the gate treats absent digest as no-freeze, the
+    // pre-Drift-Gate status quo）.
+    successContractDigest: state.successContract && typeof state.successContract === "object" && !Array.isArray(state.successContract)
+      ? successContractDigestOf(state.successContract)
       : undefined,
     rollbackProcedure: state.rollbackProcedure ?? null,
     openQuestions: Array.isArray(state.openQuestions) ? state.openQuestions.slice() : [],
