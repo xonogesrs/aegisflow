@@ -4,7 +4,7 @@
 // Never a production outcome authority.
 
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   GENESIS_DIGEST,
@@ -48,12 +48,58 @@ export const WINDOW = Object.freeze({
 });
 
 let seq = 0;
+// S16 GC card (Phase G): every fixture root is tracked so a suite-level
+// attestation can prove no temporary material outlives the test process.
+// The tracked set is per-process; the trackedCleanupAttestation helper is
+// the T9-discipline seam (test/learning/test-r2-cross-process.mjs T5).
+const TRACKED_TEST_ROOTS = new Set();
+
+export function trackedTestRoots() {
+  return [...TRACKED_TEST_ROOTS];
+}
+
+export function trackedCleanupAttestation({ remove = true } = {}) {
+  const removed = [];
+  const failed = [];
+  for (const root of TRACKED_TEST_ROOTS) {
+    try {
+      if (remove && existsSync(root)) {
+        rmSync(root, { recursive: true, force: true });
+      }
+      removed.push(root);
+    } catch {
+      failed.push(root);
+    }
+  }
+  TRACKED_TEST_ROOTS.clear();
+  return { removed, failed };
+}
+
 export function createTestRoot(label = "run") {
   seq += 1;
   mkdirSync(TMP_PARENT, { recursive: true, mode: 0o700 });
   const root = join(TMP_PARENT, `${label}-${process.pid}-${Date.now()}-${seq}`);
   mkdirSync(root, { recursive: true, mode: 0o700 });
+  TRACKED_TEST_ROOTS.add(root);
+  registerExitSweep();
   return root;
+}
+
+// Process-exit sweep (S16 GC card Phase G): a fixture root must never
+// outlive the test process that created it. Registered once on first
+// createTestRoot; exit-time failures are swallowed (best-effort reclaim —
+// the trackedCleanupAttestation seam remains the assertable surface).
+let exitSweepRegistered = false;
+function registerExitSweep() {
+  if (exitSweepRegistered) return;
+  exitSweepRegistered = true;
+  process.on("exit", () => {
+    for (const root of TRACKED_TEST_ROOTS) {
+      try {
+        if (existsSync(root)) rmSync(root, { recursive: true, force: true });
+      } catch { /* best-effort at exit */ }
+    }
+  });
 }
 
 export function makeIdentities(label = "t") {

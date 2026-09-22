@@ -40,8 +40,21 @@ function git(repo, args) {
 // valid execution id（mintExecutionId format: exec_ + 32 hex）
 const EXEC = "exec_" + "0a".repeat(16);
 
+// S16 GC card (Phase G): every temp dir this suite creates is tracked and
+// reclaimed at process exit — no temporary material may outlive the run.
+const TMP_TRACKED = new Set();
+function trackTmp(dir) {
+  TMP_TRACKED.add(dir);
+  return dir;
+}
+process.on("exit", () => {
+  for (const dir of TMP_TRACKED) {
+    try { rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort at exit */ }
+  }
+});
+
 function makeFixtureRepo() {
-  const dir = mkdtempSync(join(tmpdir(), "de2-test-repo-"));
+  const dir = trackTmp(mkdtempSync(join(tmpdir(), "de2-test-repo-")));
   git(dir, ["init", "-q", "-b", "main"]);
   git(dir, ["config", "user.email", "de2@test"]);
   git(dir, ["config", "user.name", "de2"]);
@@ -78,11 +91,11 @@ test("DE-2 F1: post-head events are classified semantically; unknown fails close
 // ── F2/F3: resumed runner view must not re-terminalize passed phases ────
 test("DE-2 F2/F3: seeding _lastRunnerStatuses prevents duplicate terminal journaling on resume", async (t) => {
   const repo = makeFixtureRepo();
-  const persistenceRoot = mkdtempSync(join(tmpdir(), "de2-persist-"));
+  const persistenceRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-persist-")));
   try {
     const run = new DurableGraphRun({
       ir: IR, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }],
-      cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-scratch-")),
+      cwd: repo, repoPath: repo, scratchRoot: trackTmp(mkdtempSync(join(tmpdir(), "de2-scratch-"))),
       maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {},
       persistence: { root: persistenceRoot, executionId: EXEC },
     });
@@ -112,7 +125,7 @@ test("DE-2 F2/F3: seeding _lastRunnerStatuses prevents duplicate terminal journa
     // seed _lastRunnerStatuses from persisted phase_states (the F2/F3 fix).
     const run2 = new DurableGraphRun({
       ir: IR, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }],
-      cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-scratch2-")),
+      cwd: repo, repoPath: repo, scratchRoot: trackTmp(mkdtempSync(join(tmpdir(), "de2-scratch2-"))),
       maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {},
       persistence: { root: persistenceRoot, executionId: EXEC },
       recovery: { executionAttempt: 2, recoveryGeneration: 1, resumed: true, replayOf: EXEC, recovered: false, duplicateSuppressed: 0 },
@@ -135,7 +148,7 @@ test("DE-2 F2/F3: seeding _lastRunnerStatuses prevents duplicate terminal journa
     // reproduced defect）. Regression proof: the unseeded resume THROWS.
     const run3 = new DurableGraphRun({
       ir: IR, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }],
-      cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-scratch3-")),
+      cwd: repo, repoPath: repo, scratchRoot: trackTmp(mkdtempSync(join(tmpdir(), "de2-scratch3-"))),
       maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {},
       persistence: { root: persistenceRoot, executionId: EXEC },
     });
@@ -180,7 +193,7 @@ test("DE-2 Stage 8: writer side-effect identity is deterministic and per-phase",
 
 // ── Stage 7/9/10: interrupted-writer classification ─────────────────────
 test("DE-2 Stage 7/9/10: interrupted writer is classified from durable truth, never guessed", () => {
-  const execDir = mkdtempSync(join(tmpdir(), "de2-writer-"));
+  const execDir = trackTmp(mkdtempSync(join(tmpdir(), "de2-writer-")));
   const snapshot = { writer_phase_active: true };
   const graphMeta = { side_effect_ids: { W: "sid-1" }, worktree_info: { W: { worktreeDir: join(execDir, "wt"), verified: false } } };
   try {
@@ -250,8 +263,8 @@ test("DE-2 production resume: permitted-dirty policy accepts frozen set + graph 
 // ── DurableGraphRun state machine（no colima; temp repo + real store）───
 test("DE-2 DurableGraphRun: journal + checkpoint + resume reconstruction on a temp repo", async (t) => {
   const repo = makeFixtureRepo();
-  const persistenceRoot = mkdtempSync(join(tmpdir(), "de2-sm-"));
-  const scratchRoot = mkdtempSync(join(tmpdir(), "de2-sm-scratch-"));
+  const persistenceRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-sm-")));
+  const scratchRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-sm-scratch-")));
   const executionId = EXEC;
   try {
     const run = new DurableGraphRun({
@@ -304,11 +317,11 @@ test("DE-2 DurableGraphRun: journal + checkpoint + resume reconstruction on a te
 // ── recovery manifest shape（Stage 27）───────────────────────────────────
 test("DE-2 Stage 27: recovery manifest is machine-readable and carries no content blobs", async (t) => {
   const repo = makeFixtureRepo();
-  const persistenceRoot = mkdtempSync(join(tmpdir(), "de2-rm-"));
+  const persistenceRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-rm-")));
   try {
     const run = new DurableGraphRun({
       ir: IR, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }],
-      cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-rm-scratch-")),
+      cwd: repo, repoPath: repo, scratchRoot: trackTmp(mkdtempSync(join(tmpdir(), "de2-rm-scratch-"))),
       maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {},
       persistence: { root: persistenceRoot, executionId: EXEC },
       recovery: { executionAttempt: 2, recoveryGeneration: 1, resumed: true, replayOf: EXEC, recovered: true, duplicateSuppressed: 1 },
@@ -335,12 +348,12 @@ import { join as j2 } from "node:path";
 
 test("DE-2 Stage 28: resume rejects tampered checkpoint / foreign repo / invalid identity", async (t) => {
   const repo = makeFixtureRepo();
-  const persistenceRoot = mkdtempSync(join(tmpdir(), "de2-sec-"));
+  const persistenceRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-sec-")));
   const execId = "exec_" + "12".repeat(16);
   try {
     const run = new DurableGraphRun({
       ir: IR, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }],
-      cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-sec-scratch-")),
+      cwd: repo, repoPath: repo, scratchRoot: trackTmp(mkdtempSync(join(tmpdir(), "de2-sec-scratch-"))),
       maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {},
       persistence: { root: persistenceRoot, executionId: execId },
     });
@@ -363,14 +376,14 @@ test("DE-2 Stage 28: resume rejects tampered checkpoint / foreign repo / invalid
     writeFileSync(curPath, good.slice(0, Math.floor(good.length / 2)) + "TAMPERED");
     let err1 = null;
     try {
-      await resumeDurableGraph({ persistenceRoot, executionId: execId, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }], cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-sec-scratch2-")), maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {}, dirtyScope: [] });
+      await resumeDurableGraph({ persistenceRoot, executionId: execId, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }], cwd: repo, repoPath: repo, scratchRoot: trackTmp(mkdtempSync(join(tmpdir(), "de2-sec-scratch2-"))), maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {}, dirtyScope: [] });
     } catch (e) { err1 = e?.code ?? e?.message; }
     assert.match(String(err1 ?? ""), /CHECKSUM|CORRUPT|MISMATCH|RESUME_FINGERPRINT/i, "tampered checkpoint must fail closed");
 
     // 2. invalid execution identity -> rejected（no path traversal possible）
     let err2 = null;
     try {
-      await resumeDurableGraph({ persistenceRoot, executionId: "../../etc/passwd", parent: { scope: {} }, manifest: [], cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-sec-scratch3-")), maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {}, dirtyScope: [] });
+      await resumeDurableGraph({ persistenceRoot, executionId: "../../etc/passwd", parent: { scope: {} }, manifest: [], cwd: repo, repoPath: repo, scratchRoot: trackTmp(mkdtempSync(join(tmpdir(), "de2-sec-scratch3-"))), maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {}, dirtyScope: [] });
     } catch (e) { err2 = e?.code ?? e?.message; }
     assert.match(String(err2 ?? ""), /INVALID_EXECUTION_ID|RESUME_FINGERPRINT/i, "path-traversal execution id must be rejected");
   } finally {
@@ -453,8 +466,8 @@ test("DE-2 production wiring: every production caller stays durable (no durable:
 // colima pipeline（tiny readonly graph）exactly like the crash matrix.
 test("DE-2 production wiring: runSubagentGraph default durable -> checkpoints/journal/evidence; resume complete", { timeout: 600000 }, async (t) => {
   const repo = makeFixtureRepo();
-  const persistenceRoot = mkdtempSync(join(tmpdir(), "de2-wiring-persist-"));
-  const scratchRoot = mkdtempSync(join(tmpdir(), "de2-wiring-scratch-"));
+  const persistenceRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-wiring-persist-")));
+  const scratchRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-wiring-scratch-")));
   const logicalId = "de2-production-wiring-run-1";
   const durableId = durableExecutionIdFor(logicalId);
   const roCommand = (nodeId) => `true; echo "${nodeId}_DONE"; touch /src/.de2-probe 2>&1 && echo SRC_WRITABLE || echo SRC_WRITE_DENIED`;
@@ -548,7 +561,7 @@ test("DE-2 production wiring: runSubagentGraph default durable -> checkpoints/jo
 //（quiescence gate + accepted-only consumption）it PASSES.
 test("WP1 parallel fan-out: rollover intake defers through in-flight parallel start and fires exactly once at the quiescent SA-W1 boundary", { timeout: 120000 }, async (t) => {
   const repo = makeFixtureRepo();
-  const persistenceRoot = mkdtempSync(join(tmpdir(), "de2-wp1-parallel-persist-"));
+  const persistenceRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-parallel-persist-")));
   try {
     const PARALLEL_IR = {
       verdict: "PASS",
@@ -562,7 +575,7 @@ test("WP1 parallel fan-out: rollover intake defers through in-flight parallel st
     };
     const run = new DurableGraphRun({
       ir: PARALLEL_IR, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }],
-      cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-wp1-parallel-scratch-")),
+      cwd: repo, repoPath: repo, scratchRoot: trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-parallel-scratch-"))),
       maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {},
       persistence: { root: persistenceRoot, executionId: EXEC },
     });
@@ -658,11 +671,11 @@ test("WP1 parallel fan-out: rollover intake defers through in-flight parallel st
 // leave the future opportunity available（skipped result does not consume）.
 test("WP1 quiescent boundary without a trigger: executor runs, reports skipped, future opportunity remains available", { timeout: 120000 }, async (t) => {
   const repo = makeFixtureRepo();
-  const persistenceRoot = mkdtempSync(join(tmpdir(), "de2-wp1-skip-persist-"));
+  const persistenceRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-skip-persist-")));
   try {
     const run = new DurableGraphRun({
       ir: IR, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }],
-      cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-wp1-skip-scratch-")),
+      cwd: repo, repoPath: repo, scratchRoot: trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-skip-scratch-"))),
       maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {},
       persistence: { root: persistenceRoot, executionId: EXEC },
     });
@@ -719,11 +732,11 @@ test("WP1 quiescent boundary without a trigger: executor runs, reports skipped, 
 // above-threshold observation may still trigger.
 test("WP1 N3 below-threshold usage: skipped at the boundary, later above-threshold observation triggers", { timeout: 120000 }, async (t) => {
   const repo = makeFixtureRepo();
-  const persistenceRoot = mkdtempSync(join(tmpdir(), "de2-wp1-n3-persist-"));
+  const persistenceRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-n3-persist-")));
   try {
     const run = new DurableGraphRun({
       ir: IR, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }],
-      cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-wp1-n3-scratch-")),
+      cwd: repo, repoPath: repo, scratchRoot: trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-n3-scratch-"))),
       maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {},
       persistence: { root: persistenceRoot, executionId: EXEC },
     });
@@ -772,11 +785,11 @@ test("WP1 N3 below-threshold usage: skipped at the boundary, later above-thresho
 // N4/N5: exactly-once semantics over duplicate boundaries.
 test("WP1 N4/N5 accepted intake at a legitimate boundary: exactly one rollover across duplicate/replay boundaries", { timeout: 120000 }, async (t) => {
   const repo = makeFixtureRepo();
-  const persistenceRoot = mkdtempSync(join(tmpdir(), "de2-wp1-n45-persist-"));
+  const persistenceRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-n45-persist-")));
   try {
     const run = new DurableGraphRun({
       ir: IR, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }],
-      cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-wp1-n45-scratch-")),
+      cwd: repo, repoPath: repo, scratchRoot: trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-n45-scratch-"))),
       maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {},
       persistence: { root: persistenceRoot, executionId: EXEC },
     });
@@ -824,11 +837,11 @@ test("WP1 N4/N5 accepted intake at a legitimate boundary: exactly one rollover a
 // must never re-drive a second successor.
 test("WP1 N6 rollover already active: executor skips, no duplicate successor, opportunity closed by durable dedup", { timeout: 120000 }, async (t) => {
   const repo = makeFixtureRepo();
-  const persistenceRoot = mkdtempSync(join(tmpdir(), "de2-wp1-n6-persist-"));
+  const persistenceRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-n6-persist-")));
   try {
     const run = new DurableGraphRun({
       ir: IR, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }],
-      cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-wp1-n6-scratch-")),
+      cwd: repo, repoPath: repo, scratchRoot: trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-n6-scratch-"))),
       maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {},
       persistence: { root: persistenceRoot, executionId: EXEC },
     });
@@ -873,11 +886,11 @@ test("WP1 N6 rollover already active: executor skips, no duplicate successor, op
 // beginRollover fence）; the seam propagates it without consuming.
 test("WP1 N7 stale generation: {ok:false} executor result is not a consumption event", { timeout: 120000 }, async (t) => {
   const repo = makeFixtureRepo();
-  const persistenceRoot = mkdtempSync(join(tmpdir(), "de2-wp1-n7-persist-"));
+  const persistenceRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-n7-persist-")));
   try {
     const run = new DurableGraphRun({
       ir: IR, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }],
-      cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-wp1-n7-scratch-")),
+      cwd: repo, repoPath: repo, scratchRoot: trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-n7-scratch-"))),
       maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {},
       persistence: { root: persistenceRoot, executionId: EXEC },
     });
@@ -922,11 +935,11 @@ test("WP1 N7 stale generation: {ok:false} executor result is not a consumption e
 // scheduler never re-enters, and _rolloverExecuted is run-local.
 test("WP1 N8 terminal task: no lifecycle reopen after terminal publication", { timeout: 120000 }, async (t) => {
   const repo = makeFixtureRepo();
-  const persistenceRoot = mkdtempSync(join(tmpdir(), "de2-wp1-n8-persist-"));
+  const persistenceRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-n8-persist-")));
   try {
     const run = new DurableGraphRun({
       ir: IR, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }],
-      cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-wp1-n8-scratch-")),
+      cwd: repo, repoPath: repo, scratchRoot: trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-n8-scratch-"))),
       maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {},
       persistence: { root: persistenceRoot, executionId: EXEC },
     });
@@ -974,12 +987,14 @@ test("WP1 N8 terminal task: no lifecycle reopen after terminal publication", { t
 // primary exactly-once authority.
 test("WP1 N9 crash/replay: resumed run re-derives the boundary from durable truth; no duplicate rollover", { timeout: 120000 }, async (t) => {
   const repo = makeFixtureRepo();
-  const persistenceRoot = mkdtempSync(join(tmpdir(), "de2-wp1-n9-persist-"));
+  const persistenceRoot = trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-n9-persist-")));
+  const scratch1 = trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-n9-scratch-")));
+  const scratch2 = trackTmp(mkdtempSync(join(tmpdir(), "de2-wp1-n9-scratch2-")));
   try {
     // ── attempt 1: quiescent boundary reached, intake accepted, then crash
     const run1 = new DurableGraphRun({
       ir: IR, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }],
-      cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-wp1-n9-scratch-")),
+      cwd: repo, repoPath: repo, scratchRoot: scratch1,
       maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {},
       persistence: { root: persistenceRoot, executionId: EXEC },
     });
@@ -1064,7 +1079,7 @@ test("WP1 N9 crash/replay: resumed run re-derives the boundary from durable trut
     // ── attempt 2: fresh process resumes from durable truth ──
     const run2 = new DurableGraphRun({
       ir: IR, parent: { scope: {} }, manifest: [{ requirement_id: "r1", text: "x" }],
-      cwd: repo, repoPath: repo, scratchRoot: mkdtempSync(join(tmpdir(), "de2-wp1-n9-scratch2-")),
+      cwd: repo, repoPath: repo, scratchRoot: scratch2,
       maxRepairAttempts: 1, timeoutMs: 60000, signal: undefined, hooks: {},
       persistence: { root: persistenceRoot, executionId: EXEC },
       recovery: { executionAttempt: 2, recoveryGeneration: 1, resumed: true, replayOf: EXEC, recovered: false, duplicateSuppressed: 0 },
@@ -1114,5 +1129,7 @@ test("WP1 N9 crash/replay: resumed run re-derives the boundary from durable trut
   } finally {
     rmSync(repo, { recursive: true, force: true });
     rmSync(persistenceRoot, { recursive: true, force: true });
+    rmSync(scratch1, { recursive: true, force: true });
+    rmSync(scratch2, { recursive: true, force: true });
   }
 });

@@ -613,6 +613,11 @@ test("sanity: graph source schema is the same REVIEW_BUNDLE_SOURCE_SCHEMA as CLI
 
 const R12_ROOT = `${tmpdir()}/r12-closeout-${process.pid}`;
 const R12_OUT = join(R12_ROOT, "out");
+// S16 GC card (Phase G): the R12 fixture root is reclaimed at process exit —
+// no temporary material may outlive the suite.
+process.on("exit", () => {
+  try { rmSync(R12_ROOT, { recursive: true, force: true }); } catch { /* best-effort */ }
+});
 // Canonical runner-shaped PASS graph (order ⇔ nodeResults bound; the exact
 // shape runColimaGraph's graphView produces).
 const r12RunnerGraph = (cardId, over = {}) => ({
