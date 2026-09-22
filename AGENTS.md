@@ -60,6 +60,13 @@ for a status string.
 - "What's a card's closeout state / requiresReview / evidence?"
   → read `src/governance/closeout-state.mjs`'s `readCloseoutState()` against
   that card's own `outDir`.
+- "What did a graph run actually do?" (read-only operator view of a run:
+  status, phases, rollover transitions, provider usage, diagnostics) →
+  `node scripts/autoloop-operator.mjs --run <graphRunId> [--json] [--root <dir>]`.
+  READ ONLY / advisory — it performs zero writes and no production authority
+  consumes its output; safe against active, completed, partially retained,
+  telemetry-disabled, and unknown runs. Structured answer:
+  `src/telemetry/operator-report.mjs`.
 - Anything else structured (admission, budget, evidence manifests) has an
   equivalent module under `src/governance/`, `src/admission/`, or
   `src/budget/` — read the module, don't grep for its output.
