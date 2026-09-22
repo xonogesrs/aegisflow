@@ -30,6 +30,10 @@ import { validateAdmission, assertAdmissionFrozen, deriveAdmissionId } from "./a
 import { createBudgetEnforcement } from "../budget/enforcement.mjs";
 import { attachBudgetResult } from "../budget/graph-wiring.mjs";
 import { digestOf } from "../canonical-digest.mjs";
+// R-06: THE shared production telemetry seam (canonical location wiring +
+// default-on instrumentation + explicit-disable). Resolved once per
+// production run in runAdmittedGraph below.
+import { resolveProductionTelemetryWiring, attachTelemetryDisposition } from "../telemetry/production-observer.mjs";
 
 
 export const PRODUCTION_GATE_HOLDS = Object.freeze({
@@ -306,6 +310,25 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
   }
   const enforcement = enforcementResult.enforcement;
 
+  // ── R-06: canonical production telemetry (default-on, authority-fenced) ──
+  // ONE shared seam: the run-scoped telemetry state is resolved HERE through
+  // resolveTelemetryStateRoot (S16 canonical namespace / validated override)
+  // and forwarded to the runner — no per-caller instrumentation, no private
+  // persistent root, no repo-local fallback. telemetry:false is the explicit
+  // disable; anything falsy means default-on. A telemetry failure degrades
+  // to a diagnostic disposition on the result envelope and NEVER changes
+  // admission / budget / lifecycle / verdict semantics (S16 §C/§J).
+  const telemetryRunId = String(runnerOpts.executionId ?? admission.admission_id ?? "");
+  const telemetryResolution = await resolveProductionTelemetryWiring({
+    telemetryOpt: runnerOpts.telemetry,
+    graphRunId: telemetryRunId,
+    generation: 0,
+  });
+  const productionTelemetry = telemetryResolution.wiring;
+  if (telemetryResolution.disposition) {
+    runnerOpts.telemetryDisposition = telemetryResolution.disposition;
+  }
+
   // The frozen admission is forwarded UNCHANGED（the runner consumes it; it
   // never re-derives or amends it — A1）; the budget enforcement travels with
   // it so the production runner executes the pre-dispatch → record → post-op
@@ -325,8 +348,17 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
     ...runnerOpts,
     admission,
     budget: { ...(budget ?? {}), enforcement },
+    // R-06: the resolved telemetry wiring (canonical object) OR explicit
+    // false (disable) — never undefined, so runner-side default resolution
+    // cannot re-enable a disabled run.
+    telemetry: productionTelemetry ?? false,
     ...(canonicalRolloverExecutor ? { rolloverRequestExecutor: canonicalRolloverExecutor } : {}),
   });
+  // R-06: attach the telemetry disposition to the envelope (observability
+  // only; the disposition never rewrites any other field).
+  if (telemetryResolution.disposition) {
+    attachTelemetryDisposition(result, telemetryResolution.disposition);
+  }
   // Finalize + reconcile（NEG13）: the runner's runtime evidence and the
   // ledger MUST agree; divergence is a HOLD, never a warning-only event.
   return attachBudgetResult(result, enforcement);

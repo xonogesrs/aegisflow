@@ -56,6 +56,11 @@ export const TELEMETRY_EVENT_TYPES = Object.freeze([
   // CBM-4: governed memory write-back observation（counters + identities
   // ONLY — never memory content）; additive, existing semantics unchanged.
   "memory.writeback",
+  // R-06: canonical production lifecycle observability — ONE bounded event
+  // type covering the operational timeline (dispatch / phase start/terminal /
+  // provider usage / rollover / dependency consumption / retry / resume /
+  // final state). Observability ONLY: never an input to any authority gate.
+  "lifecycle.observed",
 ]);
 
 export const TOKEN_SOURCES = Object.freeze(["NOT_REPORTED", "PROVIDER_REPORTED"]);
@@ -63,6 +68,26 @@ export const TOKEN_SOURCES = Object.freeze(["NOT_REPORTED", "PROVIDER_REPORTED"]
 // NOT_REPORTED. Estimates would be fabricated cost data（card stage 2）.
 
 export const VERIFICATION_CLASSIFICATIONS = Object.freeze(["canonical", "full", "targeted", "focused"]);
+
+// R-06: bounded stage vocabulary for lifecycle.observed events. Unknown
+// stages fail validation — the timeline cannot smuggle arbitrary labels.
+export const LIFECYCLE_OBSERVED_STAGES = Object.freeze([
+  "run.admitted",          // production gate accepted the run (admission identity)
+  "run.start",             // graph run started
+  "phase.dispatch",        // budget pre-dispatch gate passed; dispatch begins
+  "phase.start",           // phase started
+  "phase.terminal",        // phase reached terminal state
+  "provider.usage",        // provider-reported usage observed for a phase
+  "phase.repair",          // repair requested for a phase
+  "dependency.consumed",   // phase consumed persisted dependency results
+  "rollover.observed",     // provider usage observed against the rollover window
+  "rollover.triggered",    // automatic rollover trigger produced
+  "rollover.request",      // rollover intake dispatched (successor requested)
+  "rollover.handover",     // ownership transfer committed / handover hold
+  "resume.start",          // resumed era started (crash/resume or successor)
+  "run.final",             // terminal verdict published
+  "run.closeout",          // closeout state emitted
+]);
 
 export const TELEMETRY_STORE_STATUSES = Object.freeze(["AVAILABLE", "UNAVAILABLE", "INVALID"]);
 
@@ -193,6 +218,20 @@ export function createTelemetryEvent({ graphRunId, eventType, sequence = 0, occu
       durationMs: null,
       classification: null,
     },
+    // R-06 lifecycle observability（bounded identity fields ONLY — never
+    // artifact bodies, never authority data）:
+    //   - stage: bounded vocabulary (see LIFECYCLE_OBSERVED_STAGES)
+    //   - sessionId / generation: the durable session/generation identity
+    //     this event belongs to（rollover / resume distinction）
+    //   - outcome: bounded outcome token for the stage
+    //   - detail: bounded string detail（hold codes / reasons, ≤160 chars）
+    lifecycle: {
+      stage: null,
+      sessionId: null,
+      generation: null,
+      outcome: null,
+      detail: null,
+    },
     // CBM-4 write-back observation（counters + identities; never content）
     writeback: {
       attemptedCount: null,
@@ -267,6 +306,8 @@ export function validateTelemetryEventV1(event) {
     // TA-2（X）: admission quality telemetry（admission_id / profile / size /
     // risk + overkill / under-classification inputs）.
     "admission",
+    // R-06: lifecycle observability（bounded stage vocabulary）.
+    "lifecycle",
   ])));
   if (event.schema !== TELEMETRY_EVENT_SCHEMA) errors.push(`schema_mismatch:${String(event.schema)}`);
   if (event.schemaVersion !== TELEMETRY_EVENT_SCHEMA_VERSION) errors.push(`schemaVersion_mismatch:${String(event.schemaVersion)}`);
@@ -364,6 +405,28 @@ export function validateTelemetryEventV1(event) {
 
   const vf = event.verification ?? null;
   errors.push(...checkObjectShape(vf, "verification", new Set(["suite", "tests", "passed", "failed", "durationMs", "classification"])));
+
+  // R-06 lifecycle observability allowlist（bounded vocabulary; identity
+  // fields only）.
+  const lc = event.lifecycle ?? null;
+  errors.push(...checkObjectShape(lc, "lifecycle", new Set(["stage", "sessionId", "generation", "outcome", "detail"])));
+  if (lc) {
+    if (lc.stage !== null && lc.stage !== undefined && !LIFECYCLE_OBSERVED_STAGES.includes(lc.stage)) {
+      errors.push(`lifecycle_stage_invalid:${String(lc.stage)}`);
+    }
+    if (lc.sessionId !== null && lc.sessionId !== undefined && (typeof lc.sessionId !== "string" || lc.sessionId.length > 128)) {
+      errors.push("lifecycle_sessionId_invalid");
+    }
+    if (lc.generation !== null && lc.generation !== undefined && (!Number.isInteger(lc.generation) || lc.generation < 0)) {
+      errors.push("lifecycle_generation_invalid");
+    }
+    if (lc.outcome !== null && lc.outcome !== undefined && (typeof lc.outcome !== "string" || lc.outcome.length > 64)) {
+      errors.push("lifecycle_outcome_invalid");
+    }
+    if (lc.detail !== null && lc.detail !== undefined && (typeof lc.detail !== "string" || lc.detail.length > 160)) {
+      errors.push("lifecycle_detail_invalid");
+    }
+  }
 
   const wb = event.writeback ?? null;
   errors.push(...checkObjectShape(wb, "writeback", new Set([

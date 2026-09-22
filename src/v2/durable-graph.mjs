@@ -38,6 +38,9 @@ import {
 import { buildDecompositionManifest, DECOMPOSITION_MANIFEST_FORMAT } from "./decomposition-manifest.mjs";
 import { runColimaGraph } from "../runtime/colima-graph-runner.mjs";
 import { cleanupStale } from "../runtime/colima-runtime.mjs";
+// R-06: telemetry disposition attach（observability only; never mutates any
+// other envelope field — see src/telemetry/production-observer.mjs）.
+import { attachTelemetryDisposition } from "../telemetry/production-observer.mjs";
 import {
   prepareOwnedScratchRoot,
   getScratchAuthorityToken,
@@ -278,7 +281,7 @@ export function resumeDirtyAllowed({ currentPorcelain, permittedDigest, dirtySco
  * Owns the durable state machine ONLY; never scheduler / topology / policy.
  */
 export class DurableGraphRun {
-  constructor({ ir, parent, manifest, cwd, repoPath, scratchRoot, maxRepairAttempts, timeoutMs, signal, hooks, persistence, recovery = null, dirtyScope = [], admission = null, budget = null, rolloverRequestExecutor = null, rolloverSessionBinding = null }) {
+  constructor({ ir, parent, manifest, cwd, repoPath, scratchRoot, maxRepairAttempts, timeoutMs, signal, hooks, persistence, recovery = null, dirtyScope = [], admission = null, budget = null, rolloverRequestExecutor = null, rolloverSessionBinding = null, telemetry = null }) {
     const identity = validateRunIdentity(persistence.executionId);
     this.ir = ir ?? null;
     this.parent = parent;
@@ -326,10 +329,19 @@ export class DurableGraphRun {
     // canonical tool selection was minted from（budget.allocation injected by
     // runAdmittedGraph）; drives commitment persistence at phase boundaries.
     this.selectionAllocation = budget?.allocation ?? null;
-    // STAGE-D BUDGET HANDOVER: crash-consistent ledger persistence reads the
-    // LIVE enforcement at every checkpoint（same object the runner settles
-    // into — never a second meter）.
+    // STAGE-D BUDGET HANDOVER: the metered ledger must be crash-consistent
+    // with every checkpoint（a successor killed mid-era MUST NOT roll back
+    // to a stale budget-ledger.json on the next resume). The cumulative
+    // snapshot rides THE append-only journal (the artifact is
+    // exclusive-create / immutable by the sealed evidence model); the resume
+    // seam reads the LATEST snapshot. Same single ledger authority — never a
+    // second meter. (The budget ledger is AUTHORITATIVE DURABLE STATE — not
+    // telemetry — per cost-optimizer-contract §2.1 / S16 §C.)
     this.budgetRef = budget ?? null;
+    // R-06: the canonical telemetry wiring (observer + lifecycle emitter)
+    // forwarded by runAdmittedGraph / the durable entries; the emitter is
+    // generation/session-aware and best-effort only.
+    this.telemetry = telemetry ?? null;
 
     // DE-2 recovery provenance（Stage 14/26）: executionAttempt /
     // recoveryGeneration / replayOf / resumed / recovered /
@@ -606,6 +618,7 @@ export class DurableGraphRun {
         if (typeof self.rolloverRequestExecutor === "function"
             && !self.state._rolloverExecuted
             && quiescent) {
+          self.telemetry?.lifecycle?.emit?.("rollover.request", { outcome: "DISPATCHING", detail: "quiescent-boundary rollover intake" });
           const result = await self.rolloverRequestExecutor(self);
           // Accepted-only consumption: only a real rollover intake（ok &&
           // not skipped）consumes the one-shot opportunity. A skipped
@@ -621,6 +634,12 @@ export class DurableGraphRun {
             const freshHead = readCheckpoint(self.root, self.executionId);
             self.state.expectedRevision = freshHead.snapshot.revision;
             self.state.rolloverMirror = freshHead.snapshot.graph?.rollover ?? null;
+            // R-06: ownership handover observability（durable transfer block
+            // remains the authority — timeline event only）.
+            self.telemetry?.lifecycle?.emit?.("rollover.handover", {
+              outcome: "OWNERSHIP_TRANSFER_COMMITTED",
+              detail: `rolloverId=${String(result?.rolloverId ?? freshHead.snapshot.graph?.rollover?.last_rollover_id ?? "unknown").slice(0, 64)}`,
+            });
           }
         }
         // ── STAGE D §9a: between-phase dispatch gate. Read the checksummed
@@ -747,6 +766,20 @@ export class DurableGraphRun {
               executionId: self.executionId,
               phaseId,
             });
+            // R-06: rollover observation / trigger observability（the durable
+            // usage row + rollover block remain THE authority; these events
+            // are timeline-only）.
+            const obs = self.state._rolloverObservation ?? null;
+            if (obs?.observed === true) {
+              self.telemetry?.lifecycle?.emit?.("rollover.observed", {
+                phaseId, outcome: "OBSERVED", detail: `occupancy=${obs.occupancy ?? null}`,
+              });
+            }
+            if (obs?.triggered === true) {
+              self.telemetry?.lifecycle?.emit?.("rollover.triggered", {
+                phaseId, outcome: "TRIGGERED", detail: String(obs.triggerEvent?.trigger ?? "CONTEXT_THRESHOLD_REACHED"),
+              });
+            }
           } catch (e) {
             self.state._rolloverObservation = { triggered: false, observed: false, reason: `observation error: ${String(e?.code ?? e?.message ?? e).slice(0, 120)}` };
           }
@@ -862,6 +895,15 @@ export class DurableGraphRun {
   async terminal(final, reason) {
     this.finalVerdict = final;
     this.finalReason = reason;
+    // R-06: terminal verdict observability（the durable RUN_* journal row +
+    // manifest remain THE terminal authority — timeline event only）.
+    try {
+      this.telemetry?.lifecycle?.emit?.("run.final", {
+        outcome: final,
+        detail: reason ?? null,
+        generation: this.recovery?.recoveryGeneration ?? 0,
+      });
+    } catch { /* never a terminal failure */ }
     let checkpoint = null;
     try {
       this.store.appendEvent({ event_type: TERMINAL_EVENT_FOR[final] || "RUN_HELD", stage: "terminal", payload: { reason: reason ?? null } });
@@ -1012,6 +1054,8 @@ export async function runDurableGraph(opts = {}) {
     budget,
     rolloverRequestExecutor,
     rolloverSessionBinding,
+    // R-06: canonical telemetry wiring (observer + lifecycle emitter).
+    telemetry,
   });
   const store = new RunEvidenceStore({
     root: resolvedRoot,
@@ -1056,6 +1100,9 @@ export async function runDurableGraph(opts = {}) {
   await run.checkpoint({});
   store.appendEvent({ event_type: "GRAPH_INPUT_FROZEN", stage: "input", payload: { input_fingerprint: run.inputFingerprint } });
   await run.checkpoint({});
+  // R-06: run-start observability（best-effort; the durable GRAPH_CREATED
+  // journal row remains the authority record — never a second truth source）.
+  telemetry?.lifecycle?.emit?.("run.start", { outcome: "STARTED", detail: run.executionId });
 
   if (!ir || !Array.isArray(ir.phases) || ir.phases.length === 0) {
     return terminateGraphRun(run, "HOLD", "GRAPH_IR_REQUIRED");
@@ -1198,14 +1245,14 @@ export async function runDurableGraph(opts = {}) {
   const handoverStates = new Set(["OWNERSHIP_TRANSFER_COMMITTED"]); // ACTIVE_B era owns terminal publication
   const mirrorState = run.state.rolloverMirror?.state ?? null;
   if (mirrorState && handoverStates.has(mirrorState)) {
-    return {
+    return attachTelemetryDisposition({
       ...buildGraphResultEnvelope(run, run.graphResult),
       final: "HOLD",
       stage: "rollover_handover",
       holdCode: "CROSS_SESSION_ROLLOVER_IN_PROGRESS_A_FROZEN",
       reason: `CROSS_SESSION_ROLLOVER_HANDOVER:${reason ?? "GRAPH_HOLD"}`,
       handedOver: true,
-    };
+    }, run.graphResult?.telemetry ?? { observed: null, events: 0, holdCode: null, stateRoot: run.telemetry?.store?.stateRoot ?? null });
   }
 
   await run.terminal(final, reason);
@@ -1226,7 +1273,15 @@ export async function runDurableGraph(opts = {}) {
       removeOwnedScratchRoot({ scratchRoot, executionId: run.executionId, repoPath, authorityToken: scratchAuthorityToken });
     } catch { /* best-effort: the terminal verdict is already published */ }
   }
-  return buildGraphResultEnvelope(run, run.graphResult);
+  // R-06: closeout observability（the durable closeout/evidence surfaces
+  // remain THE closeout authority — timeline event only）.
+  try {
+    telemetry?.lifecycle?.emit?.("run.closeout", {
+      outcome: run.graphResult?.closeout?.applied === true ? (run.graphResult?.closeout?.final ?? final) : "NOT_APPLIED",
+      detail: run.graphResult?.closeout?.bundlePath ?? null,
+    });
+  } catch { /* never a closeout failure */ }
+  return attachTelemetryDisposition(buildGraphResultEnvelope(run, run.graphResult), run.graphResult?.telemetry ?? { observed: null, events: 0, holdCode: null, stateRoot: run.telemetry?.store?.stateRoot ?? null });
 }
 
 async function terminateGraphRun(run, final, reason) {
@@ -1906,10 +1961,23 @@ export async function resumeDurableGraph({
     // B→C can trigger autonomously at a between-phase boundary. Never a
     // caller parameter — derived here from the re-verified admission.
     rolloverRequestExecutor,
+    // R-06: canonical telemetry wiring — the RESUMED era re-opens the SAME
+    // run-scoped store and appends to the SAME lifecycle stream（generation
+    // distinguishes the eras; init replay is idempotent）.
+    telemetry,
   });
   run.execDir = execDir;
   run.store = store;
   run.root = persistenceRoot;
+  // R-06: resume observability（durable RESUME_VALIDATED journal row remains
+  // the authority; generation distinguishes the eras in the timeline）.
+  try {
+    telemetry?.lifecycle?.emit?.("resume.start", {
+      outcome: resumed ? "RESUMED" : "CONTINUED",
+      generation: gen,
+      detail: `attempt=${attempt} replayOf=${executionId}`,
+    });
+  } catch { /* never a resume failure */ }
   run.repoFingerprint = expectedFp;
   run.inputFingerprint = snapshot.input_fingerprint;
   run.configurationFingerprint = snapshot.configuration_fingerprint;
@@ -2025,14 +2093,14 @@ export async function resumeDurableGraph({
   const handoverStates = new Set(["OWNERSHIP_TRANSFER_COMMITTED"]); // ACTIVE_B era owns terminal publication
   const mirrorState = run.state.rolloverMirror?.state ?? null;
   if (mirrorState && handoverStates.has(mirrorState)) {
-    return {
+    return attachTelemetryDisposition({
       ...buildGraphResultEnvelope(run, run.graphResult),
       final: "HOLD",
       stage: "rollover_handover",
       holdCode: "CROSS_SESSION_ROLLOVER_IN_PROGRESS_A_FROZEN",
       reason: `CROSS_SESSION_ROLLOVER_HANDOVER:${reason ?? "GRAPH_HOLD"}`,
       handedOver: true,
-    };
+    }, run.graphResult?.telemetry ?? { observed: null, events: 0, holdCode: null, stateRoot: run.telemetry?.store?.stateRoot ?? null });
   }
 
   await run.terminal(final, reason);
@@ -2054,7 +2122,9 @@ export async function resumeDurableGraph({
   // THE SAME ledger authority it was reconstructed from (NEG13 — divergence
   // is a HOLD). Un-metered resumes keep the exact legacy envelope.
   const envelope = buildGraphResultEnvelope(run, run.graphResult);
-  return resumedBudgetEnforcement ? attachBudgetResult(envelope, resumedBudgetEnforcement) : envelope;
+  return resumedBudgetEnforcement
+    ? attachBudgetResult(attachTelemetryDisposition(envelope, run.graphResult?.telemetry ?? { observed: null, events: 0, holdCode: null, stateRoot: run.telemetry?.store?.stateRoot ?? null }), resumedBudgetEnforcement)
+    : attachTelemetryDisposition(envelope, run.graphResult?.telemetry ?? { observed: null, events: 0, holdCode: null, stateRoot: run.telemetry?.store?.stateRoot ?? null });
 }
 
 // ── CEDF freshness fencing ──────────────────────────────────────────────────

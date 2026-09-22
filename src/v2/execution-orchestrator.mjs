@@ -83,6 +83,9 @@ export async function runExecutionOrchestrator({
   // canonical selector and the executor factory receives the ONE selection
   // authority. Absent (null) ⇒ unchanged legacy composition behavior.
   toolSelectionContext = null,
+  // R-06: canonical production lifecycle emitter（best-effort observability
+  // only — never an input to any scheduling/authority decision）.
+  lifecycleEmit = null,
 } = {}) {
   // Fail-closed input gates, before any adapter/lifecycle call.
   if (typeof executorAdapterFactory !== "function") {
@@ -175,6 +178,8 @@ export async function runExecutionOrchestrator({
       }
     }
     try {
+      // R-06: phase start observability（best-effort; never an authority input）.
+      lifecycleEmit?.("phase.start", { phaseId, outcome: "STARTED" });
       await hooks.onPhaseStart?.({ phaseId });
       const taskCard = buildPhaseTaskCard({
         phase,
@@ -259,6 +264,13 @@ export async function runExecutionOrchestrator({
         })),
       });
       await hooks.onPhase?.({ phaseId, final: lifecycle.final, attempt: lifecycle.attempt });
+      // R-06: phase terminal observability（best-effort; never an authority input）.
+      lifecycleEmit?.("phase.terminal", {
+        phaseId,
+        attempt: lifecycle.attempt,
+        outcome: lifecycle.final,
+        detail: lifecycle.reason ?? null,
+      });
       await hooks.onPhaseTerminal?.({
         phaseId,
         final: lifecycle.final,

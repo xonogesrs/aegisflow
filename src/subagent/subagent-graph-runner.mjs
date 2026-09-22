@@ -397,7 +397,7 @@ export async function runSubagentGraph({
       // colima prep）— the production sub-agent wiring keeps running inside
       // the durable layer. Fresh run: durable graph generation is 0（the
       // initial era）; resume stamps recovery_generation + 1.
-      hooks: buildSubagentGraphHooks({ ir, resultsDir, dependencyExecutionId: durableExecutionId, hooks, admission, admissionDigest: admissionDigest_, durableGraphGeneration: 0 }),
+      hooks: buildSubagentGraphHooks({ ir, resultsDir, dependencyExecutionId: durableExecutionId, hooks, admission, admissionDigest: admissionDigest_, durableGraphGeneration: 0, telemetry }),
       closeout,
       closeoutGate,
       closeoutSourceBuilder,
@@ -440,7 +440,7 @@ export async function runSubagentGraph({
     closeoutEvidenceWriter,
     // Same shared sub-agent wiring as the durable path（dependency
     // identities keyed to the logical executionId, raw-runner semantics）.
-    hooks: buildSubagentGraphHooks({ ir, resultsDir, dependencyExecutionId: executionId, hooks, admission, admissionDigest: admissionDigest_, durableGraphGeneration: 0 }),
+    hooks: buildSubagentGraphHooks({ ir, resultsDir, dependencyExecutionId: executionId, hooks, admission, admissionDigest: admissionDigest_, durableGraphGeneration: 0, telemetry }),
     executorAdapterFactory: rawExecutorFactory,
     reviewerAdapterFactory: rawReviewerFactory,
     scratchAuthorityToken,
@@ -567,7 +567,7 @@ export async function resumeSubagentGraph({
     maxRepairAttempts,
     timeoutMs,
     signal,
-    hooks: buildSubagentGraphHooks({ ir: irFromDisk, resultsDir, dependencyExecutionId: durableExecutionId, hooks, admission, admissionDigest: admissionDigest_, durableGraphGeneration: resumedGeneration }),
+    hooks: buildSubagentGraphHooks({ ir: irFromDisk, resultsDir, dependencyExecutionId: durableExecutionId, hooks, admission, admissionDigest: admissionDigest_, durableGraphGeneration: resumedGeneration, telemetry }),
     closeout,
     closeoutGate,
     closeoutSourceBuilder,
@@ -673,6 +673,9 @@ export function composeSuccessorSubagentGraphOpts(opts) {
     resultsDir: callerResultsDir = null,
     executorAdapterFactory = null,
     reviewerAdapterFactory = null,
+    // R-06: canonical telemetry wiring forwarded through the composed opts so
+    // the successor era emits into the SAME run-scoped stream.
+    telemetry = null,
   } = opts;
   if (typeof persistenceRoot !== "string" || persistenceRoot.length === 0
       || typeof executionId !== "string" || executionId.length === 0
@@ -705,7 +708,7 @@ export function composeSuccessorSubagentGraphOpts(opts) {
   rebindSurvivingResultsForEra({ root: persistenceRoot, executionId, resultsDir, ir: opts.ir ?? null, generation: durableGraphGeneration });
   return {
     ...opts,
-    hooks: buildSubagentGraphHooks({ ir: opts.ir ?? null, resultsDir, dependencyExecutionId: executionId, hooks, admission, admissionDigest: admissionDigest_, durableGraphGeneration }),
+    hooks: buildSubagentGraphHooks({ ir: opts.ir ?? null, resultsDir, dependencyExecutionId: executionId, hooks, admission, admissionDigest: admissionDigest_, durableGraphGeneration, telemetry }),
     executorAdapterFactory: executorAdapterFactory ?? factories.executorAdapterFactory,
     reviewerAdapterFactory: reviewerAdapterFactory ?? factories.reviewerAdapterFactory,
     // DE-2R parity: the successor era's resume wipe must keep the persisted
@@ -738,7 +741,7 @@ export function composeSuccessorSubagentGraphOpts(opts) {
  *   generation（recovery_generation）this era executes under, stamped into
  *   persisted result provenance（WP1 authoritative-result provenance）.
  */
-function buildSubagentGraphHooks({ ir, resultsDir, dependencyExecutionId, hooks, admission = null, admissionDigest = null, durableGraphGeneration = null }) {
+function buildSubagentGraphHooks({ ir, resultsDir, dependencyExecutionId, hooks, admission = null, admissionDigest = null, durableGraphGeneration = null, telemetry = null }) {
   const phases = () => ir?.phases || [];
   const phaseFor = (phaseId) => phases().find((p) => p.phase_id === phaseId);
   return {
@@ -759,6 +762,14 @@ function buildSubagentGraphHooks({ ir, resultsDir, dependencyExecutionId, hooks,
         // blockingFindings -> reviewer HOLD / governance PASS-closeout
         // block）so conflicting siblings are never silently chained.
         if ((phase.depends_on ?? []).length > 0) {
+          // R-06: dependency consumption observability（identity fields only;
+          // the provenance/fold gates remain THE dependency authority）.
+          telemetry?.lifecycle?.emit?.("dependency.consumed", {
+            phaseId,
+            outcome: "CONSUMING",
+            detail: (phase.depends_on ?? []).join(",") || null,
+            generation: Number.isInteger(durableGraphGeneration) ? durableGraphGeneration : 0,
+          });
           // WP1 authoritative-result provenance: verify EVERY persisted
           // dependency record's envelope BEFORE binding it as prerequisite
           // context. The consumer's durable graph generation is this era's

@@ -161,9 +161,18 @@ export async function runColimaGraph({
   executionReviewSurfaceDir = null,
   executionReviewArchiveDir = null,
   memory = null,
-  // COST-1 passive telemetry observer（OPT-IN）. Runs AFTER the graph result
-  // + closeout gate are final; failures are swallowed and degrade to a
-  // telemetry.availability event — they NEVER change task semantics.
+  // COST-1 passive telemetry observer（R-06: DEFAULT-ON via runAdmittedGraph）.
+  // Shapes:
+  //   { observer, store?, verification?, lifecycle? } — canonical wiring from
+  //     src/telemetry/production-observer.mjs（observer = post-result COST-1
+  //     recordGraphTelemetry; lifecycle = mid-run lifecycle.observed emitter）.
+  //   { observer, ... } — caller-supplied legacy opt-in wiring (compat).
+  //   false — explicit disable（observable: result.telemetryDisabled）.
+  //   null/undefined — raw-runner compat surface（no production path reaches
+  //     here undefined: runAdmittedGraph always resolves the seam）.
+  // The observer runs AFTER the graph result + closeout gate are final;
+  // failures are swallowed and degrade to a telemetry.availability disposition
+  // — they NEVER change task semantics (authority fence: S16 §C).
   telemetry = null,
   // CBM-4 governed memory write-back（OPT-IN）: { store, telemetryStore,
   // reviewIdentity, verifierIdentity, expectedRepository }. Runs AFTER the
@@ -337,7 +346,21 @@ export async function runColimaGraph({
   };
 
   const execFactory = executorAdapterFactory
-    ? executorAdapterFactory({ resultSink: (execId, result) => executorResults.set(execId, result) })
+    ? executorAdapterFactory({ resultSink: (execId, result) => {
+        executorResults.set(execId, result);
+        // R-06: provider-reported usage observability（the SAME adapter-owned
+        // channel the rollover producer consumes; never estimated; emitted
+        // ONLY when the provider surface actually reported usage）.
+        const usage = result?.metadata?.providerUsage ?? null;
+        if (usage && typeof usage === "object") {
+          telemetry?.lifecycle?.emit?.("provider.usage", {
+            phaseId: execId,
+            attempt: 0,
+            outcome: "PROVIDER_REPORTED",
+            detail: `input=${Number(usage.input ?? 0)} output=${Number(usage.output ?? 0)} cacheRead=${Number(usage.cacheRead ?? 0)} cacheWrite=${Number(usage.cacheWrite ?? 0)}`,
+          });
+        }
+      } })
     : () => createColimaExecutorAdapter({
         profile,
         repoPath,
@@ -366,6 +389,10 @@ export async function runColimaGraph({
     toolSelectionContext: (admission && budget?.allocation)
       ? { admission, taskAllocation: budget.allocation }
       : null,
+    // R-06: the mid-run lifecycle emitter from the canonical production
+    // telemetry wiring（undefined on raw/test callers without wiring — every
+    // emission is best-effort inside the emitter; never an authority input）.
+    lifecycleEmit: typeof telemetry?.lifecycle?.emit === "function" ? telemetry.lifecycle.emit : null,
     hooks: {
       expectedExecutorModel: "colima-container",
       expectedExecutorProvider: "colima-container",
@@ -377,6 +404,13 @@ export async function runColimaGraph({
       onPhaseStart: async ({ phaseId }) => {
         const phase = (ir.phases || []).find((p) => p.phase_id === phaseId);
         if (!phase) return;
+        // R-06: dispatch observability（budget pre-dispatch gate passed —
+        // best-effort, never an authority input）.
+        telemetry?.lifecycle?.emit?.("phase.dispatch", {
+          phaseId,
+          outcome: "DISPATCHED",
+          detail: phase?.runtime?.mode ?? null,
+        });
         // TA-3: budget pre-dispatch gate FIRST — BEFORE any worktree / scratch
         // setup or executor invocation（fail-closed: an exhausted / invalid
         // budget never dispatches and never performs setup work）. The
@@ -515,7 +549,9 @@ export async function runColimaGraph({
         //（evidence artifact writes + checkpoint）and must land before the
         // orchestrator proceeds to the next boundary.
         onExecutorOutput: async (info) => { await hooks.lifecycle?.onExecutorOutput?.(info); await hooks.onExecutorOutput?.(info); },
-        onExecutorCompleted: async (info) => { await hooks.lifecycle?.onExecutorCompleted?.(info); await hooks.onExecutorCompleted?.(info); },
+        onExecutorCompleted: async (info) => {
+          await hooks.lifecycle?.onExecutorCompleted?.(info); await hooks.onExecutorCompleted?.(info);
+        },
         onBeforeReviewer: async (info) => {
           const gate = budget?.enforcement?.admitReviewer?.({ nodeId: info?.phaseId ?? null, attempt: info?.attempt });
           if (gate && !gate.ok) return gate;
@@ -547,6 +583,13 @@ export async function runColimaGraph({
           // budget authority; never merged into it）.
           budget?.enforcement?.recordRepair({ nodeId: info?.phaseId ?? null });
           await hooks.lifecycle?.onRepairRequested?.(info); await hooks.onRepairRequested?.(info);
+          // R-06: repair observability（best-effort; never an authority input）.
+          telemetry?.lifecycle?.emit?.("phase.repair", {
+            phaseId: info?.phaseId ?? null,
+            attempt: info?.attempt ?? null,
+            outcome: "REPAIR_REQUESTED",
+            detail: info?.reason ?? null,
+          });
         },
         onSystemDeltaReady: async (info) => { await hooks.lifecycle?.onSystemDeltaReady?.(info); await hooks.onSystemDeltaReady?.(info); },
       },

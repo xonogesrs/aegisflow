@@ -61,6 +61,8 @@ export const GC_PLAN_STATUSES = Object.freeze([
 const ROTATED_CHUNK_RE = /^telemetry-(\d+)\.jsonl$/;
 /** Active telemetry stream file (protected while the run is not terminal). */
 const ACTIVE_CHUNK_NAME = "telemetry.jsonl";
+/** R-06: run-scoped telemetry init marker (src/telemetry/production-observer.mjs). */
+const INIT_MARKER_NAME = "telemetry-init.json";
 
 // ── Errors ──────────────────────────────────────────────────────────────────
 
@@ -508,6 +510,13 @@ function planRunNamespace({ nsRoot, graphRunId, lifecycle, rotatedChunkKeep, now
       // bounded-historical; it is retained with the rotated window (the
       // newest observability) — reclaiming it would erase the run's tail.
       plan.PROTECTED.push({ path: e.path, reason: "ACTIVE_STREAM_RETAINED_POST_WINDOW", bytes: e.bytes });
+      continue;
+    }
+    if (name === INIT_MARKER_NAME) {
+      // R-06: the run's telemetry-init marker (autoloop.telemetry-init/v1) —
+      // run-identity observability bound to the store; retained with the
+      // active stream, never a deletion candidate.
+      plan.PROTECTED.push({ path: e.path, reason: "TELEMETRY_INIT_MARKER_RETAINED", bytes: e.bytes });
       continue;
     }
     const cls = classifyRotatedChunk({ path: e.path, keep: rotatedChunkKeep, validChunks });
