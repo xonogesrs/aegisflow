@@ -635,10 +635,14 @@ export class DurableGraphRun {
             self.state.expectedRevision = freshHead.snapshot.revision;
             self.state.rolloverMirror = freshHead.snapshot.graph?.rollover ?? null;
             // R-06: ownership handover observability（durable transfer block
-            // remains the authority — timeline event only）.
+            // remains the authority — timeline event only）. R-07: the
+            // successor GENERATION is observed identity data (bounded) so
+            // the operator surface can expose the era transition without
+            // reading durable truth.
             self.telemetry?.lifecycle?.emit?.("rollover.handover", {
               outcome: "OWNERSHIP_TRANSFER_COMMITTED",
-              detail: `rolloverId=${String(result?.rolloverId ?? freshHead.snapshot.graph?.rollover?.last_rollover_id ?? "unknown").slice(0, 64)}`,
+              generation: Number(freshHead.snapshot.graph?.rollover?.owner?.session_generation ?? 0),
+              detail: `rolloverId=${String(result?.rolloverId ?? freshHead.snapshot.graph?.rollover?.last_rollover_id ?? "unknown").slice(0, 64)} successorGen=${String(freshHead.snapshot.graph?.rollover?.owner?.session_generation ?? "unknown")}`,
             });
           }
         }

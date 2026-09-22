@@ -10,3 +10,4 @@ export * from "./budgets.mjs";
 export * from "./source-map.mjs";
 export * from "./graph-observer.mjs";
 export * from "./production-observer.mjs";
+export * from "./operator-report.mjs";

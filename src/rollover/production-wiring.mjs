@@ -558,6 +558,30 @@ export async function resumeAsSuccessor({ persistenceRoot, executionId, binding,
   const rc = await import("./rollover-controller.mjs");
   const rb = await import("./rollover-authority.mjs");
 
+  // R-07: successor-era telemetry continuity (bounded repair). The
+  // successor era previously ran WITHOUT the canonical R-06 telemetry
+  // wiring (bootstrapSuccessorSession is not the admission gate, so no
+  // wiring was ever resolved for it) — the era emitted nothing into the
+  // run-scoped store and the operator surface could not observe it. The
+  // canonical seam is the SAME run-scoped store (S16 §5): re-open it
+  // through buildProductionTelemetryWiring (idempotent init — the store
+  // already exists from era A) and forward the wiring so era B appends to
+  // the SAME lifecycle stream. Emissions remain best-effort observability
+  // (Phase D authority fence): init failure degrades, never blocks the
+  // resume. Callers that pass their own telemetry wiring keep it (compat).
+  if (rest.telemetry == null) {
+    try {
+      const { buildProductionTelemetryWiring } = await import("../telemetry/production-observer.mjs");
+      const owner = readCheckpoint(persistenceRoot, executionId).snapshot?.graph?.rollover?.owner ?? null;
+      const built = buildProductionTelemetryWiring({
+        graphRunId: executionId,
+        sessionId: owner?.session_identity_digest ?? null,
+        generation: Number.isInteger(owner?.session_generation) && owner.session_generation >= 0 ? owner.session_generation : 0,
+      });
+      if (built.ok) rest.telemetry = built.wiring;
+    } catch { /* telemetry degradation is never a resume failure (S16 §J) */ }
+  }
+
   // Pre-check against durable truth, then publish ACTIVE_B entry BEFORE any
   // phase dispatch (C14 ordering: commit → ACTIVE_B entry → first dispatch).
   const verified = readCheckpoint(persistenceRoot, executionId);
