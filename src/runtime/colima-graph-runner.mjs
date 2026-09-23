@@ -40,6 +40,7 @@ import {
   cleanupStale,
   instanceSocket,
 } from "./colima-runtime.mjs";
+import { acquireColimaProfileLock } from "./colima-profile-lock.mjs";
 import {
   prepareWorktree,
   verifyWorktree,
@@ -47,7 +48,7 @@ import {
   captureWorktreeOutput,
 } from "./colima-worktree.mjs";
 import { BudgetHoldError } from "../budget/ledger.mjs";
-import { prepareOwnedScratchRoot, removeOwnedScratchRoot, getScratchAuthorityToken } from "./scratch-ownership.mjs";
+import { prepareOwnedScratchRoot, removeOwnedScratchRoot, getScratchAuthorityToken, planOwnedScratchRoot } from "./scratch-ownership.mjs";
 import { wipeScratchPreserving } from "../v2/durable-graph.mjs";
 
 export const GRAPH_RESULT_SCHEMA = "autoloop.c3.parallel-graph-result/v1";
@@ -286,6 +287,19 @@ export async function runColimaGraph({
     }
   }
 
+  // ── F/G single-flight: serialize mutating/reconciling operations on the
+  // shared Colima profile (AUTOLOOP_BACKGROUND_WAITER_COALESCING_AND_PROFILE_
+  // SINGLEFLIGHT_1). Ordering invariant: scratch-namespace VALIDATION runs
+  // first (fail-closed ScratchOwnershipError before anything else, the
+  // P0-RS1 contract), then the profile lock is acquired with ZERO filesystem
+  // effect (a busy profile fails closed without stranding an owned child),
+  // then the owned scratch child is created and machine work proceeds.
+  // Released in the finally below — on every terminal path (PASS / HOLD /
+  // exception), after instance cleanup has completed. A crashed holder is
+  // recovered through the forensic orphan reclaim of c2d/lock.mjs.
+  planOwnedScratchRoot({ scratchRoot, executionId, repoPath });
+  const profileLock = acquireColimaProfileLock({ profile, actorId: executionId, sessionId: `pid:${process.pid}` });
+  try {
   // `scratchRoot` is caller-supplied namespace only. All mounts and cleanup
   // use one deterministic, marker-bound child owned by this execution.
   const scratchNamespace = scratchRoot;
@@ -897,4 +911,19 @@ export async function runColimaGraph({
   // low-level call）the result carries budget.authorized:false — the compat
   // surface is explicitly NOT a production budget-authorized path（NEG14）.
   return attachBudgetResult(result, budget?.enforcement ?? null);
+  } finally {
+    // D (terminal cancellation at the resource layer): the profile is free
+    // exactly when this operation's machine work (instance + containers) is
+    // done — never while a poll/waiter could still observe mid-run state.
+    // Release failure never masks the real outcome: a leaked record is
+    // forensically reclaimable (dead-pid) and surfaces as
+    // COLIMA_PROFILE_LOCK_RECLAIM_UNPROVEN for the next acquirer.
+    try {
+      profileLock.release();
+    } catch (e) {
+      if (result && typeof result === "object") {
+        result.profileLockRelease = { ok: false, holdCode: e.code ?? null, reason: String(e?.message ?? e).slice(0, 200) };
+      }
+    }
+  }
 }

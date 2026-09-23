@@ -57,6 +57,19 @@ export function planInstanceAction() { return { action: INSTANCE_ACTION.REUSE, h
 export function assertSingleWritableMount(m) { return m[0]; }
 export function roundTripProbe() { return { ok: false, error: "e1-shim refused" }; }
 export function ensureInstance() { throw new ColimaRuntimeError("e1: colima ensureInstance refused by fixture isolation rule 3"); }
+// Profile single-flight lock (AUTOLOOP_BACKGROUND_WAITER_COALESCING_AND_
+// PROFILE_SINGLEFLIGHT_1): inert under E1 isolation — zero VM lifecycle means
+// zero profile contention; no real lock file is created or consulted.
+export const COLIMA_PROFILE_LOCK_HOLD = Object.freeze({
+  BUSY: "HOLD / COLIMA_PROFILE_BUSY",
+  NOT_TEST_OWNED: "HOLD / COLIMA_PROFILE_LOCK_NOT_TEST_OWNED",
+  RECLAIM_UNPROVEN: "HOLD / COLIMA_PROFILE_LOCK_RECLAIM_UNPROVEN",
+  RELEASE_OWNER_MISMATCH: "HOLD / COLIMA_PROFILE_LOCK_RELEASE_OWNER_MISMATCH",
+});
+export function colimaProfileLockPath(profile) { return "/e1-shim-refused/autoloop-locks/colima-profile-" + profile + ".lock"; }
+export function acquireColimaProfileLock({ profile = "autoloop-graph" } = {}) {
+  return { profile, path: colimaProfileLockPath(profile), record: {}, reclaimed: false, release() { return { durability_capability: "full", durability_reasons: [] }; } };
+}
 export function stopInstance() { /* no VM lifecycle under E1 */ }
 export function deleteInstance() { /* no VM lifecycle under E1 */ }
 export function assertMountAllowlist() { /* no-op under E1 shim */ }

@@ -182,6 +182,7 @@ import {
 import { mkdtempSync, symlinkSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { C2dHoldError } from "../src/c2d/fs-atomic.mjs";
 
 const FP_A = { location: "/tmp/suite-a", writable: true };
 const FP_B = { location: "/tmp/suite-b", writable: true };
@@ -513,3 +514,130 @@ test("R2A28 authority returns the normalized validated mount path", () => {
   assert.equal(assertSingleWritableMount(["/tmp/suite-a"]), "/tmp/suite-a");
   assert.equal(assertSingleWritableMount(["/tmp/suite-a/"]), "/tmp/suite-a");
 });
+
+// ── F/G profile single-flight (AUTOLOOP_BACKGROUND_WAITER_COALESCING_AND_
+// PROFILE_SINGLEFLIGHT_1) ──────────────────────────────────────────────────
+// The lock module is standalone (no colima-runtime import) so the E1/E2
+// isolation shims stay link-clean; the profile allowlist mirrors
+// AUTOLOOP_TEST_PROFILES and parity is asserted below.
+
+import {
+  acquireColimaProfileLock,
+  colimaProfileLockPath,
+  COLIMA_PROFILE_LOCK_HOLD,
+  COLIMA_PROFILE_LOCK_ALLOWED,
+  COLIMA_PROFILE_LOCK_DEFAULT_ROOT,
+} from "../src/runtime/colima-profile-lock.mjs";
+import { mkdirSync, readFileSync as readLockFileSync, rmSync as rmLockDirSync } from "node:fs";
+
+function lockTestRoot(t) {
+  const dir = mkdtempSync(join(tmpdir(), "profile-lock-"));
+  t.after(() => rmLockDirSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+test("F/G parity: lock allowlist mirrors AUTOLOOP_TEST_PROFILES exactly", () => {
+  assert.deepEqual([...COLIMA_PROFILE_LOCK_ALLOWED].sort(), [...AUTOLOOP_TEST_PROFILES].sort());
+  assert.equal(COLIMA_PROFILE_LOCK_DEFAULT_ROOT, `${CANONICAL_COLIMA_HOME}/autoloop-locks`);
+});
+
+test("F/G lock path is per-profile under the lock root", () => {
+  assert.equal(
+    colimaProfileLockPath("autoloop-graph", "/locks"),
+    "/locks/colima-profile-autoloop-graph.lock",
+  );
+});
+
+test("F/G unowned profile refuses to lock (mirrors the ensureInstance fence)", (t) => {
+  const root = lockTestRoot(t);
+  for (const profile of ["default", "autoloop-graph2", "autoloop-grap", "some-user-profile", "", undefined]) {
+    assert.throws(
+      () => acquireColimaProfileLock({ profile, root }),
+      (e) => e instanceof C2dHoldError && e.code === COLIMA_PROFILE_LOCK_HOLD.NOT_TEST_OWNED,
+      `profile ${String(profile)} must be refused`,
+    );
+  }
+});
+
+test("F/G single-flight: second acquirer on the same profile gets COLIMA_PROFILE_BUSY; distinct profiles never contend", (t) => {
+  const root = lockTestRoot(t);
+  const first = acquireColimaProfileLock({ profile: "autoloop-graph", actorId: "graph-A", sessionId: "sess-A", root });
+  assert.equal(first.profile, "autoloop-graph");
+  assert.equal(first.reclaimed, false);
+  // same profile -> BUSY (never a wait, never a steal)
+  assert.throws(
+    () => acquireColimaProfileLock({ profile: "autoloop-graph", actorId: "graph-B", sessionId: "sess-B", root }),
+    (e) => e instanceof C2dHoldError && e.code === COLIMA_PROFILE_LOCK_HOLD.BUSY,
+  );
+  // the durable record names the holder for forensics
+  const rec = JSON.parse(readLockFileSync(first.path, "utf8"));
+  assert.equal(rec.actor_id, "graph-A");
+  assert.equal(rec.lock_kind, "colima_profile");
+  assert.equal(rec.process_id, process.pid);
+  // distinct profile -> independent (card NON-GOAL: don't serialize independent work)
+  const other = acquireColimaProfileLock({ profile: "autoloop-w1", actorId: "graph-B", sessionId: "sess-B", root });
+  other.release();
+  first.release();
+});
+
+test("F/G release frees the profile; released handle cannot release again; forged handle cannot release", (t) => {
+  const root = lockTestRoot(t);
+  const h = acquireColimaProfileLock({ profile: "autoloop-c3", actorId: "a", root });
+  h.release();
+  // profile is free: a second acquirer succeeds
+  const h2 = acquireColimaProfileLock({ profile: "autoloop-c3", actorId: "b", root });
+  h2.release();
+  // double release on the issued handle fails closed
+  assert.throws(
+    () => h.release(),
+    (e) => e instanceof C2dHoldError && e.code === COLIMA_PROFILE_LOCK_HOLD.RELEASE_OWNER_MISMATCH,
+  );
+  // a copied handle is not the capability
+  const copy = { ...h2, release: h2.release };
+  assert.throws(
+    () => copy.release(),
+    (e) => e instanceof C2dHoldError && e.code === COLIMA_PROFILE_LOCK_HOLD.RELEASE_OWNER_MISMATCH,
+  );
+});
+
+test("F/G crash recovery: same-host dead-pid orphan is reclaimed; cross-host orphan is NOT", (t) => {
+  const root = lockTestRoot(t);
+  const fixed = {
+    lock_kind: "colima_profile",
+    execution_id: "colima-profile-lock",
+    checkpoint_id: "profile",
+    chain_id: "profile",
+    lease_id: "none",
+    lease_revision: 0,
+    expected_head: "none",
+    acquired_at: new Date(Date.now() - 60000).toISOString(),
+  };
+  // same-host orphan (dead pid)
+  const localPath = colimaProfileLockPath("autoloop-graph", root);
+  mkdirSync(root, { recursive: true });
+  writeLockFileSync(localPath, JSON.stringify({
+    format_version: "1.0.0", lock_id: "lock_orphan_local", ...fixed,
+    actor_id: "dead-run", session_id: "dead-sess",
+    process_id: 999999999, host_identity: hostname(),
+    repository_identity: "colima-profile:autoloop-graph", worktree_identity: "colima-profile:autoloop-graph",
+  }, null, 2) + "\n");
+  const reclaimed = acquireColimaProfileLock({ profile: "autoloop-graph", actorId: "new", root });
+  assert.equal(reclaimed.reclaimed, true);
+  reclaimed.release();
+
+  // cross-host orphan: never reclaimed, fails closed
+  const remotePath = colimaProfileLockPath("autoloop-w2", root);
+  writeLockFileSync(remotePath, JSON.stringify({
+    format_version: "1.0.0", lock_id: "lock_orphan_remote", ...fixed,
+    actor_id: "remote-run", session_id: "remote-sess",
+    process_id: 4242, host_identity: "some-other-host",
+    repository_identity: "colima-profile:autoloop-w2", worktree_identity: "colima-profile:autoloop-w2",
+  }, null, 2) + "\n");
+  assert.throws(
+    () => acquireColimaProfileLock({ profile: "autoloop-w2", actorId: "new", root }),
+    (e) => e instanceof C2dHoldError && e.code === COLIMA_PROFILE_LOCK_HOLD.RECLAIM_UNPROVEN,
+  );
+});
+
+import { writeFileSync as writeLockFileSync } from "node:fs";
+import { hostname } from "node:os";

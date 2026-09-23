@@ -145,11 +145,22 @@ completes. The completion notice wakes the agent. Therefore:
   kept arriving after the review verdict was delivered.)
 - The harness blocks such calls (`~/.omp/agent/extensions/no-poll-waits.js`).
   If blocked, do not rephrase into an equivalent poll — wait for the job's
-  own completion notice instead.
+  own completion notice instead. The block covers every command whose parts
+  are only sleeps, pure status checks, and pure output filters
+  (grep/awk/sort/… pipelines included) — `sleep N; ps aux | grep … | wc -l`
+  is a poll job and is blocked (AUTOLOOP_BACKGROUND_DEDUP_AUDIT_1,
+  2026-09-23: a dozen such status-check-tailed waiters drained as stale
+  post-terminal echoes after the verdict was already delivered).
+- Colima profile single-flight is enforced in code
+  (`src/runtime/colima-profile-lock.mjs`): a graph/pipeline run holds the
+  profile lock from before `ensureInstance` until terminal cleanup, so a
+  second mutating/reconciling operation on the same profile fails closed
+  with `HOLD / COLIMA_PROFILE_BUSY` instead of interleaving stop/start.
 - While a background job runs, do other independent work (never touch the
   same shared runtime the job uses — e.g. never run other Colima commands
-  while `test:colima-all` holds the `autoloop-graph` profile; a concurrent
-  mount-fingerprint probe fails the suite mid-run). If nothing remains,
+  while `test:colima-all` holds the `autoloop-graph` profile; the lock makes
+  an accidental overlap fail fast with `COLIMA_PROFILE_BUSY` instead of
+  failing mid-suite, but the discipline is unchanged). If nothing remains,
   yield; the notification resumes you.
 - A bounded wait INSIDE one call is fine: a single foreground `sleep N`, or
   one `for`/`while` loop that sleeps and does real work — one job, one

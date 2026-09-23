@@ -37,6 +37,7 @@ import {
   instanceSocket,
   CARD_LABEL,
 } from "./colima-runtime.mjs";
+import { acquireColimaProfileLock } from "./colima-profile-lock.mjs";
 import { createColimaExecutorAdapter } from "./colima-executor-adapter.mjs";
 import { createColimaReviewerAdapter } from "./colima-reviewer-adapter.mjs";
 import {
@@ -102,6 +103,11 @@ export async function runColimaTask({
   const phaseExecId = phaseExecutionId(runExecutionId, phaseId);
   const startedAt = new Date().toISOString();
 
+  // ── F/G single-flight (AUTOLOOP_BACKGROUND_WAITER_COALESCING_AND_PROFILE_
+  // SINGLEFLIGHT_1): the profile lock is held from BEFORE the instance
+  // reconcile (any colima start/stop) until the terminal cleanup completes.
+  const profileLock = acquireColimaProfileLock({ profile, actorId: runExecutionId, sessionId: `pid:${process.pid}` });
+  try {
   // 1. pinned instance with explicit mounts (repo ro + scratch rw; NO whole-$HOME)
   const instance = ensureInstance({ profile, cpus: 2, memory: 2, disk: 20, roMounts: [repoPath], rwMounts: [scratchRoot] });
 
@@ -211,6 +217,16 @@ export async function runColimaTask({
     }
   }
   return result;
+  } finally {
+    // Profile is free exactly when instance + container work is done.
+    try {
+      profileLock.release();
+    } catch (e) {
+      if (result && typeof result === "object") {
+        result.profileLockRelease = { ok: false, holdCode: e.code ?? null, reason: String(e?.message ?? e).slice(0, 200) };
+      }
+    }
+  }
 }
 
 export { CARD_LABEL };
