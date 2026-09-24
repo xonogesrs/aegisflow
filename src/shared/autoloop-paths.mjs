@@ -179,14 +179,29 @@ export function autoloopDefault(...segments) {
   return join(autoloopHome(), ...segments);
 }
 
-/** Resolve one root: explicit env value (strictly validated) or portable default. */
+/**
+ * Resolve one root: explicit env value (strictly validated) or portable default.
+ *
+ * DEFAULT vs CONFIGURED is a real semantic distinction here:
+ *
+ *   - a CONFIGURED root is returned exactly as given (after validation), so a
+ *     security-relevant path is never silently rewritten;
+ *   - a DEFAULT root is resolved through the deepest EXISTING prefix, because a
+ *     platform may reach a home directory through a symlink (macOS
+ *     `/tmp` → `/private/tmp`, `/var` → `/private/var`) and consumers compare
+ *     roots as path prefixes. Two defaults resolved from the same
+ *     AUTOLOOP_HOME must agree, or one fails the other's boundary check.
+ *
+ * Making this uniform is what keeps `<AUTOLOOP_HOME>/learning` and
+ * `<AUTOLOOP_HOME>/learning/scratch` mutually consistent on such a platform;
+ * canonicalizing only one of them was the defect this rule removes.
+ */
 function resolveRoot({ env, envName, defaultRelative, home }) {
   const configured = env?.[envName];
   if (typeof configured === "string" && configured.trim().length > 0) {
     return assertStateRootAllowed(configured, { env, home });
   }
-  const fallback = join(autoloopHome({ env, home }), ...defaultRelative);
-  return resolve(fallback);
+  return canonicalizeExistingPrefix(resolve(join(autoloopHome({ env, home }), ...defaultRelative)));
 }
 
 /**
@@ -231,20 +246,12 @@ export function resolveLearningRoot({ env = process.env, home = homedir() } = {}
  * Sandbox scratch root for fixtures.
  * Default: <AUTOLOOP_HOME>/learning/scratch — deliberately inside the learning
  * storage namespace, because the learning fixtures record their scratch paths
- * as storage identities that must satisfy the learning-root boundary.
+ * as storage identities that must satisfy the learning-root boundary. Both
+ * defaults are canonicalized identically by `resolveRoot`, so that boundary
+ * holds on a platform whose home directory is reached through a symlink.
  */
 export function resolveScratchRoot({ env = process.env, home = homedir() } = {}) {
-  const configured = env?.[SCRATCH_ROOT_ENV];
-  const root = resolveRoot({ env, envName: SCRATCH_ROOT_ENV, defaultRelative: ["learning", "scratch"], home });
-  // Storage consumers reject a symlink COMPONENT anywhere in a root (a symlink
-  // can be repointed after validation). A platform whose home directory is
-  // itself reached through a symlink — macOS `/tmp` → `private/tmp`, and any
-  // `$HOME` under it — would otherwise make the DEFAULT scratch root unusable.
-  // Resolving the default is therefore correct; an EXPLICITLY configured root
-  // is returned unchanged so a symlinked configuration still fails loudly at
-  // the consumer rather than being silently rewritten.
-  if (typeof configured === "string" && configured.trim().length > 0) return root;
-  return canonicalizeExistingPrefix(root);
+  return resolveRoot({ env, envName: SCRATCH_ROOT_ENV, defaultRelative: ["learning", "scratch"], home });
 }
 
 /**
@@ -293,7 +300,9 @@ function resolveOverrideOr({ env, envName, defaultRelative, home }) {
     }
     return resolve(configured.trim());
   }
-  return resolve(join(autoloopHome({ env, home }), ...defaultRelative));
+  // Same default/configured rule as resolveRoot: a default is canonicalized so
+  // every surface derived from one AUTOLOOP_HOME names the same directory.
+  return canonicalizeExistingPrefix(resolve(join(autoloopHome({ env, home }), ...defaultRelative)));
 }
 
 /** External-review inbox (at most one card awaiting a verdict). */
