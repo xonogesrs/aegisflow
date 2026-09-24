@@ -30,9 +30,10 @@ let pointerTempSequence = 0;
 // that aren't here, runner_control_flow and scope_matcher now point at their
 // real standalone equivalents (lifecycle-runner.mjs, c2d/mutation-scope.mjs);
 // executor_prompt/reviewer_prompt/facts_schema have no standalone equivalent
-// yet and are left with an empty pattern list, matching the existing
-// not-yet-wired entries (model_family, authority_policy, candidate_derivation)
-// below.
+// yet are left with an empty pattern list, matching the remaining
+// not-yet-wired entries (model_family, authority_policy) below.
+// candidate_derivation is now WIRED: AUTOLOOP_AUTONOMOUS_EVOLUTION_LOOP_
+// COMPLETION_1 landed the derivation at src/evolution/candidate.mjs.
 const MATERIAL_CHANGE_PATTERNS = [
   { type: "runner_control_flow", patterns: ["lifecycle-runner.mjs"] },
   { type: "reviewer_normalization", patterns: ["normalize-reviewer-json.mjs"] },
@@ -43,7 +44,7 @@ const MATERIAL_CHANGE_PATTERNS = [
   { type: "scope_matcher", patterns: ["c2d/mutation-scope.mjs"] },
   { type: "authority_policy", patterns: [] },
   { type: "facts_schema", patterns: [] },
-  { type: "candidate_derivation", patterns: [] },
+  { type: "candidate_derivation", patterns: ["evolution/candidate.mjs"] },
 ];
 
 const COMPONENT_REGISTRY = {

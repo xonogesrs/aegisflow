@@ -38,6 +38,7 @@
     "test:c4q": "node --test test/v2/test-harness-owned-evidence.mjs",
     "test:c4s": "node --test test/v2/test-system-delta.mjs",
     "test:governance": "node --test test/governance/*.mjs",
+    "test:evolution": "node --test test/evolution/*.mjs",
     "test:control-plane": "node --test test/control-plane/*.mjs",
     "test:search-scope": "node --test test/admission/test-search-scope-governor.mjs",
     "test:pi-command-admission": "node --test test/admission/test-pi-command-admission.mjs",

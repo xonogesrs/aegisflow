@@ -67,9 +67,20 @@ for a status string.
   consumes its output; safe against active, completed, partially retained,
   telemetry-disabled, and unknown runs. Structured answer:
   `src/telemetry/operator-report.mjs`.
+- "What has the autonomous evolution loop done?" (read-only evolution view:
+  policy, circuit breaker, triggers, candidates, reviews, canary, rollbacks)
+  → `node scripts/evolution-operator.mjs [--store <dir>] [--json]`. READ ONLY
+  / advisory — zero writes, no production authority consumes its output.
+  Structured answer: `src/evolution/operator-view.mjs`.
+  Kill switch: `node scripts/evolution-kill-switch.mjs --store <dir>
+  --suspend|--resume|--status` (AUTO_EVOLUTION = ENABLED | SUSPENDED;
+  SUSPENDED blocks new evolution cycles only — NORMAL_OPERATION, telemetry
+  and in-flight execution are untouched). Production policy issuance:
+  `node scripts/evolution-issue-policy.mjs --store <dir>`. Production store:
+  `/Volumes/NVM2T/Development/evidence/autoloop-evolution`.
 - Anything else structured (admission, budget, evidence manifests) has an
-  equivalent module under `src/governance/`, `src/admission/`, or
-  `src/budget/` — read the module, don't grep for its output.
+  equivalent module under `src/governance/`, `src/admission/`, `src/budget/`,
+  or `src/evolution/` — read the module, don't grep for its output.
 
 ## Verification scope (hard rule)
 

@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "autoloop.evolution-policy/v1",
+  "title": "AutoLoop Autonomous Evolution Policy (preauthorization)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "authority_type", "policy_id", "policy_digest", "policy_name",
+    "scope_patterns", "forbidden_patterns", "allowed_commands",
+    "validation_plan_id", "validation_plan", "budget",
+    "issued_by", "authorization_ref", "issued_at", "expires_at",
+    "forbidden_risk_classes"
+  ],
+  "properties": {
+    "schema": { "const": "autoloop.evolution-policy/v1" },
+    "authority_type": { "const": "evolution_policy" },
+    "policy_id": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "policy_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "policy_name": { "type": "string", "minLength": 1 },
+    "risk_classes_allowed": { "type": "array", "items": { "enum": ["LOW", "MEDIUM", "HIGH"] } },
+    "scope_patterns": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "forbidden_patterns": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "allowed_commands": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "validation_plan_id": { "type": "string", "minLength": 1 },
+    "validation_plan": {
+      "type": "object",
+      "required": ["commands"],
+      "properties": {
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["cmd", "args"],
+            "properties": {
+              "cmd": { "type": "string", "minLength": 1 },
+              "args": { "type": "array", "items": { "type": "string" } },
+              "timeout_ms": { "type": "integer", "minimum": 1 },
+              "env_allowlist": { "type": "array", "items": { "type": "string" } },
+              "required": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "required": ["max_mutation_runs", "max_wall_clock_ms_per_run", "max_evolutions_per_window", "window_ms"],
+      "properties": {
+        "max_mutation_runs": { "type": "integer", "minimum": 0 },
+        "max_wall_clock_ms_per_run": { "type": "integer", "minimum": 0 },
+        "max_evolutions_per_window": { "type": "integer", "minimum": 0 },
+        "window_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "issued_by": { "type": "string", "minLength": 1 },
+    "authorization_ref": { "type": "string", "minLength": 1 },
+    "issued_at": { "type": "string" },
+    "expires_at": { "type": "string" },
+    "generation": { "type": "integer", "minimum": 0 },
+    "forbidden_risk_classes": { "type": "array", "items": { "type": "string" } }
+  }
+}

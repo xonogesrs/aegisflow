@@ -34,6 +34,13 @@ import { digestOf } from "../canonical-digest.mjs";
 // default-on instrumentation + explicit-disable). Resolved once per
 // production run in runAdmittedGraph below.
 import { resolveProductionTelemetryWiring, attachTelemetryDisposition } from "../telemetry/production-observer.mjs";
+// PRODUCTION ACTIVATION (evolution §C): the post-result evolution trigger
+// observer. Same wiring shape as R-06 telemetry: fail-open observability
+// attached AFTER the runner returns — it NEVER changes admission, budget,
+// lifecycle, closeout, verdict, or promotion semantics, and it mints NO
+// authority (a fired signal becomes a candidate only through the separate
+// evolution loop entry, never inline in a production run).
+import { observeRunForEvolutionTriggers, attachEvolutionObservation } from "../evolution/production-observer.mjs";
 
 
 export const PRODUCTION_GATE_HOLDS = Object.freeze({
@@ -358,6 +365,27 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
   // only; the disposition never rewrites any other field).
   if (telemetryResolution.disposition) {
     attachTelemetryDisposition(result, telemetryResolution.disposition);
+  }
+  // PRODUCTION ACTIVATION (evolution §C): post-result trigger observation
+  // over the run's durable evidence journal. The observation is read-only
+  // over the journal, kill-switch aware, and fail-open: an observer failure
+  // degrades to an absent/empty observation and NEVER blocks NORMAL_OPERATION.
+  // Only a QUALIFIED signal (≥ the class's minimum evidence count inside its
+  // window) surfaces here; the downstream candidate/mutation pipeline is a
+  // separate entry — a single failure never mutates anything.
+  try {
+    const evolutionStoreRoot = runnerOpts.evolutionStoreRoot ?? null;
+    const observation = observeRunForEvolutionTriggers({
+      evidenceRoot: runnerOpts.persistence?.root ?? null,
+      executionId: result?.executionId ?? runnerOpts.executionId ?? null,
+      graphRunId: telemetryRunId,
+      thresholds: runnerOpts.evolutionThresholds ?? {},
+      storeRoot: evolutionStoreRoot,
+    });
+    attachEvolutionObservation(result, observation);
+  } catch {
+    // Evolution observation failure is observability only (card §C: the
+    // observer must never block NORMAL_OPERATION).
   }
   // Finalize + reconcile（NEG13）: the runner's runtime evidence and the
   // ledger MUST agree; divergence is a HOLD, never a warning-only event.
