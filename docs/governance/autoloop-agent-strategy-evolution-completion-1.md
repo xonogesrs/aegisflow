@@ -123,7 +123,7 @@ floor requires it):
 | governance | 573/573 PASS |
 | telemetry + budget | 215/215 PASS |
 | rollover | 53/53 PASS |
-| v2 full | see note below |
+| v2 full (canonical `COLIMA_HOME`, `--test-concurrency=1`, uncontended) | 661/661 PASS |
 | `npm run check` | PASS |
 
 ### A test-harness race found while establishing the v2 floor
@@ -134,7 +134,8 @@ published their ack with a plain `writeFileSync` while the parent gated the kill
 on `existsSync` → `readFileSync` → `JSON.parse` with no retry, so a read inside
 the create-then-write window threw `SyntaxError: Unexpected end of JSON input`
 from `waitForMarker`. It presented as a different subtest failing each run (R7
-once, R3 twice) — a race, not a regression.
+once, R3 twice) — a race, not a regression. The v2 floor above was subsequently
+re-run alone and passed 661/661 with zero failures.
 
 Reproduced on an isolated harness with the identical patterns (7993 torn reads
 in 4 s, same message); zero after the fix. Fix landed separately
