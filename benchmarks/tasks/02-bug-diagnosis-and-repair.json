@@ -1,0 +1,24 @@
+{
+  "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+  "task_id": "02-bug-diagnosis-and-repair",
+  "title": "Diagnose and fix an off-by-one boundary bug",
+  "instruction": "In the repository at the current working directory, the test suite in test/spec.test.mjs is failing. Read src/range.mjs, find the defect, and fix it. The intended documented behaviour is written in the comment above the function. Change only src/range.mjs; do not modify the test.",
+  "acceptance": {
+    "test_command": [
+      "node",
+      "--test",
+      "test/spec.test.mjs"
+    ],
+    "expect_exit_code": 0
+  },
+  "fixture": {
+    "files": {
+      "src/range.mjs": "// inclusiveRange(start, end) returns every integer from start to end INCLUSIVE.\n// Example: inclusiveRange(1, 4) === [1, 2, 3, 4].\nexport function inclusiveRange(start, end) {\n  const out = [];\n  for (let i = start; i < end; i += 1) {\n    out.push(i);\n  }\n  return out;\n}\n",
+      "test/spec.test.mjs": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { inclusiveRange } from \"../src/range.mjs\";\n\ntest(\"range is inclusive at both ends\", () => {\n  assert.deepEqual(inclusiveRange(1, 4), [1, 2, 3, 4]);\n});\n\ntest(\"range of one element\", () => {\n  assert.deepEqual(inclusiveRange(7, 7), [7]);\n});\n\ntest(\"empty when start is past end\", () => {\n  assert.deepEqual(inclusiveRange(5, 4), []);\n});\n",
+      "package.json": "{\n  \"name\": \"bench-fixture\",\n  \"private\": true,\n  \"type\": \"module\"\n}\n"
+    },
+    "expected_changed_paths": [
+      "src/range.mjs"
+    ]
+  }
+}

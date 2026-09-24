@@ -1,0 +1,19 @@
+{
+  "schema": "autoloop.benchmark-results-provenance/v1",
+  "generated_at": "2026-09-24T15:55:13.032Z",
+  "raw_files": [
+    {
+      "file": "AUTOLOOP_FRESH.jsonl",
+      "runs": 35
+    },
+    {
+      "file": "CONTROL.jsonl",
+      "runs": 35
+    },
+    {
+      "file": "LEARNING_PERIOD.jsonl",
+      "runs": 35
+    }
+  ],
+  "baseline": "CONTROL"
+}

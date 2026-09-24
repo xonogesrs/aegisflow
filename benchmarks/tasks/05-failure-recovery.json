@@ -1,0 +1,24 @@
+{
+  "task_class": "FAILURE_AND_RECOVERY",
+  "task_id": "05-failure-recovery",
+  "title": "Repair a first attempt that violates the stated contract",
+  "instruction": "In the repository at the current working directory, src/parse.mjs contains an implementation that does not match its documented contract. The contract is: `parseCount(text)` returns the non-negative integer parsed from a decimal string, throws a TypeError if the argument is not a string, and throws a RangeError if the string is not a valid non-negative integer (including negative numbers, empty strings, and anything with a fractional or non-numeric part). Fix src/parse.mjs so the whole suite in test/spec.test.mjs passes. Do not modify the test.",
+  "acceptance": {
+    "test_command": [
+      "node",
+      "--test",
+      "test/spec.test.mjs"
+    ],
+    "expect_exit_code": 0
+  },
+  "fixture": {
+    "files": {
+      "src/parse.mjs": "export function parseCount(text) {\n  // First attempt: happy path only.\n  return Number(text);\n}\n",
+      "test/spec.test.mjs": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { parseCount } from \"../src/parse.mjs\";\n\ntest(\"parses a valid non-negative integer\", () => {\n  assert.equal(parseCount(\"0\"), 0);\n  assert.equal(parseCount(\"42\"), 42);\n  assert.equal(parseCount(\" 7 \"), 7);\n});\n\ntest(\"rejects non-strings with TypeError\", () => {\n  assert.throws(() => parseCount(42), TypeError);\n  assert.throws(() => parseCount(null), TypeError);\n  assert.throws(() => parseCount(undefined), TypeError);\n});\n\ntest(\"rejects invalid numbers with RangeError\", () => {\n  for (const bad of [\"\", \"  \", \"-1\", \"1.5\", \"abc\", \"12x\", \"0x10\", \"1e3\"]) {\n    assert.throws(() => parseCount(bad), RangeError, `expected RangeError for ${JSON.stringify(bad)}`);\n  }\n});\n",
+      "package.json": "{\n  \"name\": \"bench-fixture\",\n  \"private\": true,\n  \"type\": \"module\"\n}\n"
+    },
+    "expected_changed_paths": [
+      "src/parse.mjs"
+    ]
+  }
+}

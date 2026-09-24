@@ -1,0 +1,18 @@
+{
+  "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+  "task_id": "01-straightforward-implementation",
+  "title": "Add a pure function with a documented contract",
+  "instruction": "In the repository at the current working directory, open src/math.mjs. Add and export a function `clamp(value, min, max)` that returns `value` limited to the inclusive range [min, max]. It must throw a RangeError if min > max. Do not change any other function. Use the file-editing tool; do not paste the whole file back as text.",
+  "acceptance": {
+    "test_command": ["node", "--test", "test/math.test.mjs"],
+    "expect_exit_code": 0
+  },
+  "fixture": {
+    "files": {
+      "src/math.mjs": "export function add(a, b) {\n  return a + b;\n}\n",
+      "test/math.test.mjs": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { add, clamp } from \"../src/math.mjs\";\n\ntest(\"add still works\", () => {\n  assert.equal(add(2, 3), 5);\n});\n\ntest(\"clamp limits to the inclusive range\", () => {\n  assert.equal(clamp(5, 1, 10), 5);\n  assert.equal(clamp(-3, 1, 10), 1);\n  assert.equal(clamp(99, 1, 10), 10);\n  assert.equal(clamp(1, 1, 10), 1);\n  assert.equal(clamp(10, 1, 10), 10);\n});\n\ntest(\"clamp rejects an inverted range\", () => {\n  assert.throws(() => clamp(5, 10, 1), RangeError);\n});\n",
+      "package.json": "{\n  \"name\": \"bench-fixture\",\n  \"private\": true,\n  \"type\": \"module\"\n}\n"
+    },
+    "expected_changed_paths": ["src/math.mjs"]
+  }
+}

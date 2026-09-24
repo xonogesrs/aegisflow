@@ -1,0 +1,24 @@
+{
+  "task_class": "CONTEXT_PRESSURE",
+  "task_id": "06-context-pressure",
+  "title": "Fix a defect inside a large module without disturbing the rest",
+  "instruction": "In the repository at the current working directory, src/big.mjs is a large module whose test suite in test/spec.test.mjs has exactly one failing assertion. Find the single defective function and fix it. You must not change any other function's behaviour: the rest of the suite must keep passing. Change only src/big.mjs.",
+  "acceptance": {
+    "test_command": [
+      "node",
+      "--test",
+      "test/spec.test.mjs"
+    ],
+    "expect_exit_code": 0
+  },
+  "fixture": {
+    "files": {
+      "src/big.mjs": "// A deliberately large module: 40 exported helpers. Exactly one is wrong.\n\nexport function op1(a, b) {\n  return a + b * 1;\n}\n\nexport function op2(a, b) {\n  return a + b * 2;\n}\n\nexport function op3(a, b) {\n  return a + b * 3;\n}\n\nexport function op4(a, b) {\n  return a + b * 4;\n}\n\nexport function op5(a, b) {\n  return a + b * 5;\n}\n\nexport function op6(a, b) {\n  return a + b * 6;\n}\n\nexport function op7(a, b) {\n  return a + b * 7;\n}\n\nexport function op8(a, b) {\n  return a + b * 8;\n}\n\nexport function op9(a, b) {\n  return a + b * 9;\n}\n\nexport function op10(a, b) {\n  return a + b * 10;\n}\n\nexport function op11(a, b) {\n  return a + b * 11;\n}\n\nexport function op12(a, b) {\n  return a + b * 12;\n}\n\nexport function op13(a, b) {\n  return a + b * 13;\n}\n\nexport function op14(a, b) {\n  return a + b * 14;\n}\n\nexport function op15(a, b) {\n  return a + b * 15;\n}\n\nexport function op16(a, b) {\n  return a + b * 16;\n}\n\nexport function op17(a, b) {\n  return a + b * 17;\n}\n\nexport function op18(a, b) {\n  return a + b * 18;\n}\n\nexport function op19(a, b) {\n  return a + b * 19;\n}\n\nexport function op20(a, b) {\n  return a + b * 20;\n}\n\nexport function op21(a, b) {\n  return a + b * 21;\n}\n\nexport function op22(a, b) {\n  return a + b * 22;\n}\n\nexport function op23(a, b) {\n  return a + b * 23;\n}\n\nexport function op24(a, b) {\n  return a + b * 24;\n}\n\nexport function op25(a, b) {\n  return a + b * 25;\n}\n\nexport function op26(a, b) {\n  return a + b * 26;\n}\n\nexport function op27(a, b) {\n  return a;\n}\n\nexport function op28(a, b) {\n  return a + b * 28;\n}\n\nexport function op29(a, b) {\n  return a + b * 29;\n}\n\nexport function op30(a, b) {\n  return a + b * 30;\n}\n\nexport function op31(a, b) {\n  return a + b * 31;\n}\n\nexport function op32(a, b) {\n  return a + b * 32;\n}\n\nexport function op33(a, b) {\n  return a + b * 33;\n}\n\nexport function op34(a, b) {\n  return a + b * 34;\n}\n\nexport function op35(a, b) {\n  return a + b * 35;\n}\n\nexport function op36(a, b) {\n  return a + b * 36;\n}\n\nexport function op37(a, b) {\n  return a + b * 37;\n}\n\nexport function op38(a, b) {\n  return a + b * 38;\n}\n\nexport function op39(a, b) {\n  return a + b * 39;\n}\n\nexport function op40(a, b) {\n  return a + b * 40;\n}\n",
+      "test/spec.test.mjs": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport * as big from \"../src/big.mjs\";\n\ntest(\"every helper matches its specification\", () => {\n  for (let i = 1; i <= 40; i += 1) {\n    const fn = big[\"op\" + i];\n    assert.equal(typeof fn, \"function\", \"op\" + i + \" must be exported\");\n    if (i === 27) {\n      // op27 is specified as the product of its arguments.\n      assert.equal(fn(6, 7), 42, \"op27(6,7)\");\n      assert.equal(fn(3, 3), 9, \"op27(3,3)\");\n    } else {\n      assert.equal(fn(2, 3), 2 + 3 * i, \"op\" + i + \"(2,3)\");\n    }\n  }\n});\n",
+      "package.json": "{\n  \"name\": \"bench-fixture\",\n  \"private\": true,\n  \"type\": \"module\"\n}\n"
+    },
+    "expected_changed_paths": [
+      "src/big.mjs"
+    ]
+  }
+}

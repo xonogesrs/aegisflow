@@ -1,0 +1,68 @@
+{
+  "schema": "autoloop.benchmark-manifest/v1",
+  "generated_at": "2026-09-24T15:30:58.403Z",
+  "node_version": "v26.8.1",
+  "platform": "darwin/arm64",
+  "runs_per_arm_per_task": 5,
+  "arms": [
+    "AUTOLOOP_FRESH"
+  ],
+  "task_ids": [
+    "01-straightforward-implementation",
+    "02-bug-diagnosis-and-repair",
+    "03-multi-file-change",
+    "04-decomposition-required",
+    "05-failure-recovery",
+    "06-context-pressure",
+    "07-route-sensitive-reasoning"
+  ],
+  "strategy_store_root": "/tmp/empty-strategy-store",
+  "strategy_store_populated": false,
+  "supported_routes": [
+    "deepseek/deepseek-v4-flash",
+    "merge-gateway/zai/glm-5.3-flash"
+  ],
+  "route_override": "merge-gateway/zai/glm-5.3-flash",
+  "exploration_repair_attempts": null,
+  "exploration_note": "no exploration override: this arm runs the arm's own strategy resolution",
+  "route_AUTOLOOP_FRESH": "merge-gateway/zai/glm-5.3-flash",
+  "route_source_AUTOLOOP_FRESH": "EXPLICIT",
+  "prior_runs": [
+    {
+      "generated_at": "2026-09-24T13:54:35.464Z",
+      "arms": [
+        "CONTROL"
+      ],
+      "runs_per_arm_per_task": 5,
+      "task_ids": [
+        "01-straightforward-implementation",
+        "02-bug-diagnosis-and-repair",
+        "03-multi-file-change",
+        "04-decomposition-required",
+        "05-failure-recovery",
+        "06-context-pressure",
+        "07-route-sensitive-reasoning"
+      ],
+      "route_override": "merge-gateway/zai/glm-5.3-flash",
+      "exploration_repair_attempts": null
+    },
+    {
+      "generated_at": "2026-09-24T14:57:08.671Z",
+      "arms": [
+        "LEARNING_PERIOD"
+      ],
+      "runs_per_arm_per_task": 5,
+      "task_ids": [
+        "01-straightforward-implementation",
+        "02-bug-diagnosis-and-repair",
+        "03-multi-file-change",
+        "04-decomposition-required",
+        "05-failure-recovery",
+        "06-context-pressure",
+        "07-route-sensitive-reasoning"
+      ],
+      "route_override": "merge-gateway/zai/glm-5.3-flash",
+      "exploration_repair_attempts": 2
+    }
+  ]
+}

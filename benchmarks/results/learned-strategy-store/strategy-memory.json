@@ -1,0 +1,4067 @@
+{
+  "schema": "autoloop.evolution-strategy-memory/v1",
+  "version": 1,
+  "observations": [
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_1d5e30de36534beca93cea32fc34c4fa298b6aef",
+      "at": "2026-09-24T15:30:42.561Z",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "execution_id": "exec_bench_0618cfc03d1e8f41f0cb74c5",
+      "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+      "graph_run_id": null,
+      "attribution_digest": "1ff56ae6c90c91f896aef0bf2fc86527ef61bea9993871a8a0cdd159e0c631a5",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 21191,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_0618cfc03d1e8f41f0cb74c5",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "01-straightforward-implementation",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+        "execution_id": "exec_bench_0618cfc03d1e8f41f0cb74c5"
+      },
+      "observation_digest": "af3ae7ad91f0c2e79165ab2e765e479ae771e92201ec450353c05d09f2b14a17"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_214f56233cdd0fc3b260a28d56bacaeb1e051edf",
+      "at": "2026-09-24T15:30:42.562Z",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "execution_id": "exec_bench_4a83f3fa757cbb9614ab7671",
+      "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+      "graph_run_id": null,
+      "attribution_digest": "74da4cd3f9e8cfa11d3920dd7529ff0c8acdc294150052600767189043596af2",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19147,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_4a83f3fa757cbb9614ab7671",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "01-straightforward-implementation",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+        "execution_id": "exec_bench_4a83f3fa757cbb9614ab7671"
+      },
+      "observation_digest": "8d860a7f441cacbb72c89ed16eda0f221b2f9f56172c8a56e700d6888e7e1675"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_ec1223d13e8b90b396fc86cf1119f0cfc61e6069",
+      "at": "2026-09-24T15:30:42.562Z",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "execution_id": "exec_bench_d70e2befb37d84a57f8aed03",
+      "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+      "graph_run_id": null,
+      "attribution_digest": "44b86fa5c886212c04ff7e618d284d0f05a2a2c4b5a2551545710c31f2c5d037",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19876,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_d70e2befb37d84a57f8aed03",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "01-straightforward-implementation",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+        "execution_id": "exec_bench_d70e2befb37d84a57f8aed03"
+      },
+      "observation_digest": "391095b49034646b14309beb5cd75f57331c89f05568ecc2ff03517aa587ced0"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_bf0819e8525fb7999e0313872cbea36562ab8352",
+      "at": "2026-09-24T15:30:42.563Z",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "execution_id": "exec_bench_8e2926ecd263105a2df7d2cf",
+      "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+      "graph_run_id": null,
+      "attribution_digest": "0de8e3ece0caf03af2037ad680d880d281eb12cbbbd94f12b21d02cb7659382d",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20187,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_8e2926ecd263105a2df7d2cf",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "01-straightforward-implementation",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+        "execution_id": "exec_bench_8e2926ecd263105a2df7d2cf"
+      },
+      "observation_digest": "8f72a38fe88c54047dc0f42b675b2128330d52f44bf0e23727886d29c2848f98"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_33d329c0f510bfc714e69d64bc963a7226194455",
+      "at": "2026-09-24T15:30:42.563Z",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "execution_id": "exec_bench_1a2755ae32f1fb1aafd99457",
+      "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+      "graph_run_id": null,
+      "attribution_digest": "24b89f2198e5aed12a6095097030cdb4dd47007b2987f5400bf7b05d548450fe",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20043,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_1a2755ae32f1fb1aafd99457",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "01-straightforward-implementation",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+        "execution_id": "exec_bench_1a2755ae32f1fb1aafd99457"
+      },
+      "observation_digest": "17ed3edfa0ea4cb6c36f519259177fe1c64bdfa5bb7796fffcaafc82b0ff0063"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_d6284732d92b619e5765a7aa56804a39120f8d3b",
+      "at": "2026-09-24T15:30:42.563Z",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "execution_id": "exec_bench_371dc75eb0519ebe3fa3817a",
+      "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+      "graph_run_id": null,
+      "attribution_digest": "65aa0b334e0f3e2afc137d3f5c9766f6cda2a139180283f2db505298f9024640",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 18923,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_371dc75eb0519ebe3fa3817a",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "02-bug-diagnosis-and-repair",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+        "execution_id": "exec_bench_371dc75eb0519ebe3fa3817a"
+      },
+      "observation_digest": "4335917734c9dbdb43fe219a0dc51d85c89221bd6a7ef9ea551830d3f6658509"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_df3b209a9f77d1a5bd0b60baf28bc6e352a123d8",
+      "at": "2026-09-24T15:30:42.563Z",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "execution_id": "exec_bench_6808bac03cb1de14f6f10a00",
+      "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+      "graph_run_id": null,
+      "attribution_digest": "eb65e565e794adbdf0e725bd5e53e83d78c9d3ca30597ab6e1f8d5e7ad11b63a",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 18932,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_6808bac03cb1de14f6f10a00",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "02-bug-diagnosis-and-repair",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+        "execution_id": "exec_bench_6808bac03cb1de14f6f10a00"
+      },
+      "observation_digest": "1ea66969eeb4953b0adf5639063b4c0be5f6ac4c69354b88e272b5deeebadbc5"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_0887f68f67e31ddc59b642fbbc3aa86ca8ba7a29",
+      "at": "2026-09-24T15:30:42.564Z",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "execution_id": "exec_bench_0631fc1bcca004502e6f4240",
+      "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+      "graph_run_id": null,
+      "attribution_digest": "a366f1ad1722a27b531b69aaa389a3bbc47e483aef3f2fcac96da48588989e3a",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19382,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_0631fc1bcca004502e6f4240",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "02-bug-diagnosis-and-repair",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+        "execution_id": "exec_bench_0631fc1bcca004502e6f4240"
+      },
+      "observation_digest": "5f095708c452208037c845afa19f259134b1c2586571df807ccfe6f850265ff4"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_180855e0d976ad23fd67a8a45ed53f5c1108a590",
+      "at": "2026-09-24T15:30:42.564Z",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "execution_id": "exec_bench_ade207b09f06d8fedcd5dacd",
+      "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+      "graph_run_id": null,
+      "attribution_digest": "cf4b333f478d13c169782ef61a45acf58552e460da85027aff6a41863cf2bb18",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20023,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_ade207b09f06d8fedcd5dacd",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "02-bug-diagnosis-and-repair",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+        "execution_id": "exec_bench_ade207b09f06d8fedcd5dacd"
+      },
+      "observation_digest": "553b380ff20a4cd7709ffd6260fc469ec90903aa78feb34e1fa8b60295ba0976"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_f3c8ef9f4966fb96ce36d79dc28ad2a0586f7bd3",
+      "at": "2026-09-24T15:30:42.564Z",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "execution_id": "exec_bench_45ae620547cf8cad8cda52da",
+      "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+      "graph_run_id": null,
+      "attribution_digest": "e549cae82818db46df66f6c24d03b332df1c97bf32ce6cde8a7e3c1e0a8d18f6",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 26003,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_45ae620547cf8cad8cda52da",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "02-bug-diagnosis-and-repair",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+        "execution_id": "exec_bench_45ae620547cf8cad8cda52da"
+      },
+      "observation_digest": "191addd9df75fb3bbc3efc16f80a545ed76539452f4d7b5c93e34c4a5f8add3e"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_42653b9c1bda84521a8720d25bbf7cce098d7a70",
+      "at": "2026-09-24T15:30:42.565Z",
+      "task_class": "MULTI_FILE_CHANGE",
+      "execution_id": "exec_bench_cfd0b821ad5ca085cec7fe9c",
+      "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+      "graph_run_id": null,
+      "attribution_digest": "ec6f890f3d729ba6259c3cee84bb7acb62e4559d86b8ae8f25a4d73f0e74d607",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 21343,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_cfd0b821ad5ca085cec7fe9c",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MULTI_FILE_CHANGE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "03-multi-file-change",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+        "execution_id": "exec_bench_cfd0b821ad5ca085cec7fe9c"
+      },
+      "observation_digest": "97de9feb1b8f477400db21214076921f014187bace6fcd933c96e46969948844"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_981e0843b59c25e2ab36e547a32e2e3870541ae4",
+      "at": "2026-09-24T15:30:42.565Z",
+      "task_class": "MULTI_FILE_CHANGE",
+      "execution_id": "exec_bench_1f23eea5cada194f121f1ddb",
+      "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+      "graph_run_id": null,
+      "attribution_digest": "ff7db77a30b56a2d50179d894f7e75967841447d91657d89357d4020a010be7c",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 21509,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_1f23eea5cada194f121f1ddb",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MULTI_FILE_CHANGE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "03-multi-file-change",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+        "execution_id": "exec_bench_1f23eea5cada194f121f1ddb"
+      },
+      "observation_digest": "bccc93d8db366f2fffa27ff542554a3fb33c83eac9e2272fd986bdc2ce42729b"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_d6f9cc47062b86766ebaff177437df4c88dd5aa5",
+      "at": "2026-09-24T15:30:42.565Z",
+      "task_class": "MULTI_FILE_CHANGE",
+      "execution_id": "exec_bench_df1facd4186595e5a917b55f",
+      "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+      "graph_run_id": null,
+      "attribution_digest": "fbc47797da8afa3d4238110c337a7cdcc846ad0ed82c2fc088db721529db0a04",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20301,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_df1facd4186595e5a917b55f",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MULTI_FILE_CHANGE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "03-multi-file-change",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+        "execution_id": "exec_bench_df1facd4186595e5a917b55f"
+      },
+      "observation_digest": "58c06024be1aacf1b98dc277bd3ba5f8c622546314af334bda8f2d8e32eec1b2"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_1d15d4d73ce677d38ce62a348fc11a86d6f404c7",
+      "at": "2026-09-24T15:30:42.566Z",
+      "task_class": "MULTI_FILE_CHANGE",
+      "execution_id": "exec_bench_aef738fdaecb1ab69c453d73",
+      "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+      "graph_run_id": null,
+      "attribution_digest": "980c8d8d2a7d2e823d773077fc8929571d4957a1c0d3fba8e9a34db3be919c7e",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 21318,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_aef738fdaecb1ab69c453d73",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MULTI_FILE_CHANGE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "03-multi-file-change",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+        "execution_id": "exec_bench_aef738fdaecb1ab69c453d73"
+      },
+      "observation_digest": "b998633267b1602cc2c9829b75b3bb6bba7c46468a7d1ce859f36199b1ecdc13"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_5f4dbe7c15433254a6f816bae4a960f25d6d424d",
+      "at": "2026-09-24T15:30:42.566Z",
+      "task_class": "MULTI_FILE_CHANGE",
+      "execution_id": "exec_bench_251ee5d929aefb20ad8b4df0",
+      "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+      "graph_run_id": null,
+      "attribution_digest": "89892d31544e9ede940784fea3691f5a8165391de0cbd9906deebad9db80f83f",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20835,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_251ee5d929aefb20ad8b4df0",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MULTI_FILE_CHANGE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "03-multi-file-change",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+        "execution_id": "exec_bench_251ee5d929aefb20ad8b4df0"
+      },
+      "observation_digest": "ab0a4048a4be28b7e56d685f4653dfff9d6e067f477a0de89baaf33affd1ce4f"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_abb2fdb61c21b941450b2139f671a0d22f9d7879",
+      "at": "2026-09-24T15:30:42.566Z",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "execution_id": "exec_bench_70ca27ecf171ce902bceeda1",
+      "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+      "graph_run_id": null,
+      "attribution_digest": "4d8356340fbda99b76d0ca9862ad3e9f717d79f75046ed35cb6507002778ce0f",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20160,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_70ca27ecf171ce902bceeda1",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "DECOMPOSITION_REQUIRED",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "04-decomposition-required",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+        "execution_id": "exec_bench_70ca27ecf171ce902bceeda1"
+      },
+      "observation_digest": "ad61e10246edf453d681597f9b94be62359803746f095596575ec9fe11904954"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_517d2a12192393b2bdf140ad2779ae3a216f1265",
+      "at": "2026-09-24T15:30:42.566Z",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "execution_id": "exec_bench_2a29a8146a07b1e667d23253",
+      "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+      "graph_run_id": null,
+      "attribution_digest": "2079640a3a7dbadc281f7f25bff41fc4bdf5a02fe0e17ac7a9f9bd22eafdd6ae",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20520,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_2a29a8146a07b1e667d23253",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "DECOMPOSITION_REQUIRED",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "04-decomposition-required",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+        "execution_id": "exec_bench_2a29a8146a07b1e667d23253"
+      },
+      "observation_digest": "fcdd0125a3710a42f8cf9410dd00ef7b49d0b3c53d8668bcab99bb589ff29937"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_fa625a0422eb738f928e75c4607f34896ab51290",
+      "at": "2026-09-24T15:30:42.567Z",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "execution_id": "exec_bench_b24d3e01f6197c5f8a5f46a6",
+      "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+      "graph_run_id": null,
+      "attribution_digest": "286ce8223f67f383aacc8679f123cbeb1f4bcd3aac53e96bbced71ddf2c5252a",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19842,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_b24d3e01f6197c5f8a5f46a6",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "DECOMPOSITION_REQUIRED",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "04-decomposition-required",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+        "execution_id": "exec_bench_b24d3e01f6197c5f8a5f46a6"
+      },
+      "observation_digest": "c11166e0f1d683d87349946c87967fe5100c3125b29b11adf532d62343629aea"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_a828a053b07905e3d920148b01ba5510efce0c0e",
+      "at": "2026-09-24T15:30:42.567Z",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "execution_id": "exec_bench_a3a07f7ae2c6664c5311c214",
+      "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+      "graph_run_id": null,
+      "attribution_digest": "35fcbf3a800cd444b963e3c512b3cf432a6c6e9b9d185fc0568dd883fa320a99",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19976,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_a3a07f7ae2c6664c5311c214",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "DECOMPOSITION_REQUIRED",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "04-decomposition-required",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+        "execution_id": "exec_bench_a3a07f7ae2c6664c5311c214"
+      },
+      "observation_digest": "269efaf45366e9366575a0e6af6a2f4223d2926008f81cecb2338e14a53f28c9"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_e79b61ec1c55ac8009380cef85a90aea9c88001c",
+      "at": "2026-09-24T15:30:42.568Z",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "execution_id": "exec_bench_6f78a2d235ff554847f74946",
+      "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+      "graph_run_id": null,
+      "attribution_digest": "f6015029e5f84d51b6c27d2c2f256fde52151645f4915ca6e24b3ddcf2bc3fac",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19646,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_6f78a2d235ff554847f74946",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "DECOMPOSITION_REQUIRED",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "04-decomposition-required",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+        "execution_id": "exec_bench_6f78a2d235ff554847f74946"
+      },
+      "observation_digest": "d158f3fb2a616f87e8e6505d2bffdc8a9078befb11c02412b330487e4f54aaec"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_2ef702994e9d6dd8ded0de776679d1bdacf11ba9",
+      "at": "2026-09-24T15:30:42.568Z",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "execution_id": "exec_bench_97780b51d2f9e9ee869cb131",
+      "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+      "graph_run_id": null,
+      "attribution_digest": "45cbb75cc6bd841083beaef6f536fcc8b9b8047e3bdb0754bfa457b5dc773a77",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19395,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_97780b51d2f9e9ee869cb131",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "FAILURE_AND_RECOVERY",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "05-failure-recovery",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+        "execution_id": "exec_bench_97780b51d2f9e9ee869cb131"
+      },
+      "observation_digest": "b81b5575c3c965797dc8b782935592e5884917f5a2b604dde25143b1949bcc0c"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_d0f3cf82da706797bb586dea495ac4ade0606920",
+      "at": "2026-09-24T15:30:42.569Z",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "execution_id": "exec_bench_a2366d7f0ce1d7647532df52",
+      "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+      "graph_run_id": null,
+      "attribution_digest": "f64ef388818a7ee28f956eed9a065e4738a6aedaed0ff42c4623c129d9615b2a",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19956,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_a2366d7f0ce1d7647532df52",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "FAILURE_AND_RECOVERY",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "05-failure-recovery",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+        "execution_id": "exec_bench_a2366d7f0ce1d7647532df52"
+      },
+      "observation_digest": "b1517695e79eb484132cfb7d3e584bf5b2cd29cd39ce79a5db1d4e2f1b6f96a5"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_96b25765b2b08ac4cc5028aa2f5abcd20d64a815",
+      "at": "2026-09-24T15:30:42.569Z",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "execution_id": "exec_bench_6ae9b4f587812920fd825629",
+      "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+      "graph_run_id": null,
+      "attribution_digest": "11c8a6c3dd043f9e629ca1effb678d832bdf712e3f37df329c5fe35c923bd5bc",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20884,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_6ae9b4f587812920fd825629",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "FAILURE_AND_RECOVERY",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "05-failure-recovery",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+        "execution_id": "exec_bench_6ae9b4f587812920fd825629"
+      },
+      "observation_digest": "6339da7f047a98e533e1c89c3c61ead8c3fd0ad71d40f7f7d73d60e2ceb2852e"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_509524a9286fc4206fb225366f9de3acc82645be",
+      "at": "2026-09-24T15:30:42.569Z",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "execution_id": "exec_bench_5f8821bbcbbb0e8cb5b58f2e",
+      "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+      "graph_run_id": null,
+      "attribution_digest": "00688b410192903cb0ba2b00008c71d97a4854c7fa11551bc71182c5366b0cf7",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20095,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_5f8821bbcbbb0e8cb5b58f2e",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "FAILURE_AND_RECOVERY",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "05-failure-recovery",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+        "execution_id": "exec_bench_5f8821bbcbbb0e8cb5b58f2e"
+      },
+      "observation_digest": "8860d31c1c1f4806174889473b455a8bc407850430b76dd1a2a09327bef81c34"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_0b465a7ce14d334147284f7718874b43dfb4ff3f",
+      "at": "2026-09-24T15:30:42.570Z",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "execution_id": "exec_bench_86215cdb4d224c4ee8a66f41",
+      "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+      "graph_run_id": null,
+      "attribution_digest": "af81b7936b4bd20411a6fb465e2c210ad682adc52fb9fbd324adee96fa20a906",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 26710,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_86215cdb4d224c4ee8a66f41",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "FAILURE_AND_RECOVERY",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "05-failure-recovery",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+        "execution_id": "exec_bench_86215cdb4d224c4ee8a66f41"
+      },
+      "observation_digest": "52da6ade9f361b0e45fa4c421d3da381c66cfa079e7eebb5865991d1ecb528d1"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_6a1a10dd74242f49fbe27cb77070580b5761c7cf",
+      "at": "2026-09-24T15:30:42.570Z",
+      "task_class": "CONTEXT_PRESSURE",
+      "execution_id": "exec_bench_c5ee0ed32c91f38eef90deb5",
+      "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+      "graph_run_id": null,
+      "attribution_digest": "c62daae8e6bfdee6a9655003f97112b23a7283b01a522c87b918c2b44fbd378a",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 21150,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_c5ee0ed32c91f38eef90deb5",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "CONTEXT_PRESSURE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "06-context-pressure",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+        "execution_id": "exec_bench_c5ee0ed32c91f38eef90deb5"
+      },
+      "observation_digest": "636a7242ec2b72c0cdec6fc0f57b8cc03862eba9f729abcbe431388c9cd59914"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_af8831e07e49405f4305f41741e9aac84e48df27",
+      "at": "2026-09-24T15:30:42.570Z",
+      "task_class": "CONTEXT_PRESSURE",
+      "execution_id": "exec_bench_215be3e0705f6c8a384f6795",
+      "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+      "graph_run_id": null,
+      "attribution_digest": "9a4a42a403f077b60823823563247ebc8983d8c7ba7e7590b5050c767c78026b",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19455,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_215be3e0705f6c8a384f6795",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "CONTEXT_PRESSURE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "06-context-pressure",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+        "execution_id": "exec_bench_215be3e0705f6c8a384f6795"
+      },
+      "observation_digest": "e8e4b947dd049dbdf46d52ab3030165c1d7a4b6601a8ef72e2b0312b0161935e"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_c62bdfd1e3013ea165cdb7ac80c017a696cff3f0",
+      "at": "2026-09-24T15:30:42.571Z",
+      "task_class": "CONTEXT_PRESSURE",
+      "execution_id": "exec_bench_04fc67aed1f22b07dc2d71c3",
+      "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+      "graph_run_id": null,
+      "attribution_digest": "8eb29913f267705632a99bb05885ba30d3e8bb7d5624e405e151e9d9ce651092",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19677,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_04fc67aed1f22b07dc2d71c3",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "CONTEXT_PRESSURE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "06-context-pressure",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+        "execution_id": "exec_bench_04fc67aed1f22b07dc2d71c3"
+      },
+      "observation_digest": "f25ccc33202687368a74c634e7e93c2cd15d976d55419794b71ecf253fa9885d"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_26163b0a746f0e88702ee26107cabc6936450200",
+      "at": "2026-09-24T15:30:42.571Z",
+      "task_class": "CONTEXT_PRESSURE",
+      "execution_id": "exec_bench_765d57ceaba19a75b64fbdf6",
+      "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+      "graph_run_id": null,
+      "attribution_digest": "92c23fc30603ca0d514c63d91204eb2b64d0773e8f14a18e96178430278a6cb8",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19954,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_765d57ceaba19a75b64fbdf6",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "CONTEXT_PRESSURE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "06-context-pressure",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+        "execution_id": "exec_bench_765d57ceaba19a75b64fbdf6"
+      },
+      "observation_digest": "34be36f666afc32fe7bb8979557a24079fa7acfc2df81121d7e2acb0232b3877"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_86584229ac60253cf7080dda09e5fac2259efc43",
+      "at": "2026-09-24T15:30:42.571Z",
+      "task_class": "CONTEXT_PRESSURE",
+      "execution_id": "exec_bench_dcb795ce6becc2f7bbaa403b",
+      "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+      "graph_run_id": null,
+      "attribution_digest": "f5e960e04a401eb7209fe80de52e5de99b881b2b0b97cc1790b60334a6dc595f",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 40122,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_dcb795ce6becc2f7bbaa403b",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "CONTEXT_PRESSURE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "06-context-pressure",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+        "execution_id": "exec_bench_dcb795ce6becc2f7bbaa403b"
+      },
+      "observation_digest": "18acb0802b685048fe98184e942e54091fa21aa189a7f4aec5d82aab82bed3cf"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_e8cc46bfd5b2bb7fe3b9833a822c4fbfc232e620",
+      "at": "2026-09-24T15:30:42.572Z",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "execution_id": "exec_bench_dc1182466f625d737002aaa4",
+      "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+      "graph_run_id": null,
+      "attribution_digest": "e2ff82759a848f76f0a631a95cff0ed3be61ed17a06c061b0f3dff58562fffca",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 21297,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_dc1182466f625d737002aaa4",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MODEL_ROUTE_SENSITIVE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "07-route-sensitive-reasoning",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+        "execution_id": "exec_bench_dc1182466f625d737002aaa4"
+      },
+      "observation_digest": "2b2abb62da02398314e6760764d1fdd10676ed266e2b83f79f868a0c20320685"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_eb562c5342595b9dbffee19dfa50c421ed35c892",
+      "at": "2026-09-24T15:30:42.572Z",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "execution_id": "exec_bench_1aac87b622aaa1b4baaff2a0",
+      "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+      "graph_run_id": null,
+      "attribution_digest": "9138250520240f3fc5aeb490d6f01092f2a68896a4bcf0040f92ab71551a3b0a",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20362,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_1aac87b622aaa1b4baaff2a0",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MODEL_ROUTE_SENSITIVE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "07-route-sensitive-reasoning",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+        "execution_id": "exec_bench_1aac87b622aaa1b4baaff2a0"
+      },
+      "observation_digest": "8caa48c3e75b61a659126901c7f7a4ddbfaff73b62ec2d9f1ff1c927b4948d7c"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_aa8a6478d31152975519ed78244a38ffdfc8c161",
+      "at": "2026-09-24T15:30:42.573Z",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "execution_id": "exec_bench_a5b5a3dcd16c75fab31b4087",
+      "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+      "graph_run_id": null,
+      "attribution_digest": "8a173e532252252cdc18e583fc9bf45902a357749e33b10d8043d3e779e78948",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19475,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_a5b5a3dcd16c75fab31b4087",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MODEL_ROUTE_SENSITIVE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "07-route-sensitive-reasoning",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+        "execution_id": "exec_bench_a5b5a3dcd16c75fab31b4087"
+      },
+      "observation_digest": "0a2756038a7b65fa39401baac5a7e34680361de87af9e654f47743881b6ecbd9"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_862aaffd2b73f1ff3e261e49235ca22a5827a6bf",
+      "at": "2026-09-24T15:30:42.573Z",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "execution_id": "exec_bench_2922ac6e8f5c9d7a3449f58b",
+      "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+      "graph_run_id": null,
+      "attribution_digest": "98357f818d94c0d45477ebcdfab1964194fff0cda8d7d3591b481d0c7ff5e393",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 22137,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_2922ac6e8f5c9d7a3449f58b",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MODEL_ROUTE_SENSITIVE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "07-route-sensitive-reasoning",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+        "execution_id": "exec_bench_2922ac6e8f5c9d7a3449f58b"
+      },
+      "observation_digest": "b61c0d2730b0b378c9705608b39b64213307aa66f209385eac27ee68ebf7a152"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_73a444522c2ecfc30a59ee38b7013eddb366766a",
+      "at": "2026-09-24T15:30:42.574Z",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "execution_id": "exec_bench_efcefd1dff049b1123c931fd",
+      "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+      "graph_run_id": null,
+      "attribution_digest": "a9604a0bb82db0927292fb0cd6a5199817e9237e37085ec9fd2b32edbf527794",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 35576,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=2",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_efcefd1dff049b1123c931fd",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MODEL_ROUTE_SENSITIVE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "07-route-sensitive-reasoning",
+          "LEARNING_PERIOD"
+        ],
+        "journal_events": 3,
+        "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+        "execution_id": "exec_bench_efcefd1dff049b1123c931fd"
+      },
+      "observation_digest": "285d439ed7491b9e1159eda132e3866d27495b3710f19407355927920986eed9"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_c48d3ebe7a8ff56a3fd22ad85b51e1fce2979b66",
+      "at": "2026-09-24T15:30:51.980Z",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "execution_id": "exec_bench_689493a0d0c738399d6199f0",
+      "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+      "graph_run_id": null,
+      "attribution_digest": "8c7d44c69bc5ecbed8edccd93dca600199cac8b6c8149ff09f8b1ad25bc9b05d",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20130,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_689493a0d0c738399d6199f0",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "01-straightforward-implementation",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+        "execution_id": "exec_bench_689493a0d0c738399d6199f0"
+      },
+      "observation_digest": "9362c367f91e86c67678f5fd5f12ed26bcaf892becf0941a04a84cf94588acc5"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_ba1425663f06cc2f865628397e384601173848b6",
+      "at": "2026-09-24T15:30:51.982Z",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "execution_id": "exec_bench_eee142773eb1780c7068641a",
+      "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+      "graph_run_id": null,
+      "attribution_digest": "65dd66e4235714856cf3958bd382adb5b492181ad6295f8cd5fccbc40ae05b4c",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20478,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_eee142773eb1780c7068641a",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "01-straightforward-implementation",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+        "execution_id": "exec_bench_eee142773eb1780c7068641a"
+      },
+      "observation_digest": "b9e2111ece038888f6efb7be542c0a5874731106a79252ab4d76e005c922e12f"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_04dab89bee3f150b734fe8a177fbf16923d861ea",
+      "at": "2026-09-24T15:30:51.984Z",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "execution_id": "exec_bench_3df9f5149fffce03688365f1",
+      "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+      "graph_run_id": null,
+      "attribution_digest": "4e5ca279a6cea9ab84aef63d522cd34ff47d15ba29aa5f3b2f4ca70caae5d9c6",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 21179,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_3df9f5149fffce03688365f1",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "01-straightforward-implementation",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+        "execution_id": "exec_bench_3df9f5149fffce03688365f1"
+      },
+      "observation_digest": "fc4f32b6ceda392c01cc23e92f6ce113a8552e867b8900c210742481bc3e1599"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_0978adf3f5b9c8133271e62d7bd54b4d116a8ff4",
+      "at": "2026-09-24T15:30:51.986Z",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "execution_id": "exec_bench_27827c4dd966381600cfac77",
+      "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+      "graph_run_id": null,
+      "attribution_digest": "15c89035e589035eb0c70ee1538c378fd9a3bf0828ec3a543e48599129afddbf",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20670,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_27827c4dd966381600cfac77",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "01-straightforward-implementation",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+        "execution_id": "exec_bench_27827c4dd966381600cfac77"
+      },
+      "observation_digest": "7efe39a49e45c15f917ad9e4257b1a8df4940e61de03febd241fbf0db4e526f8"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_101e402f92c826ad4d0d634b03ef8db7de47d405",
+      "at": "2026-09-24T15:30:51.987Z",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "execution_id": "exec_bench_6ef99f1e17ab1d3925a0ea9c",
+      "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+      "graph_run_id": null,
+      "attribution_digest": "2b28e63201d4601948ff1bc48f90b118fe0e8cfa10fa9806e6c4861dd8694421",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20320,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_6ef99f1e17ab1d3925a0ea9c",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "01-straightforward-implementation",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "47bffb0ebfe93387597968af13109bf9690ffcb9c95aa6f2342b656674f18849",
+        "execution_id": "exec_bench_6ef99f1e17ab1d3925a0ea9c"
+      },
+      "observation_digest": "033f2dbccddc5cb96fca7eac651fdf427c82b6fd90838560f9b97e8ddb44d9dd"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_89ee717c6420c6e7338ed55ad71c53faf91e111a",
+      "at": "2026-09-24T15:30:51.988Z",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "execution_id": "exec_bench_552e02632d09b6c246bd2920",
+      "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+      "graph_run_id": null,
+      "attribution_digest": "668c774b19072b0bd52eb97ed9211c4a3580ec23aff24f236dc24f20d556a719",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 18966,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_552e02632d09b6c246bd2920",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "02-bug-diagnosis-and-repair",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+        "execution_id": "exec_bench_552e02632d09b6c246bd2920"
+      },
+      "observation_digest": "c3caf1d02f278764f82be7dd801b337a761520e2e29a2e7d06aad8afec644d12"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_c55840918c1557d086af8e60cad48dc018f1a191",
+      "at": "2026-09-24T15:30:51.988Z",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "execution_id": "exec_bench_7eb6cd1eb86bb853091e294a",
+      "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+      "graph_run_id": null,
+      "attribution_digest": "b1a31c34e6e52dc0f117204848ff1dab1518d8cb45421da842feb9e0e1ee7f48",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 18811,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_7eb6cd1eb86bb853091e294a",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "02-bug-diagnosis-and-repair",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+        "execution_id": "exec_bench_7eb6cd1eb86bb853091e294a"
+      },
+      "observation_digest": "6486ada34a08cf94e20348d1b606de2ab12d303e6d304a5139bf44134233308e"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_33b80179661685bbefc29c207b6b678d9960e717",
+      "at": "2026-09-24T15:30:51.990Z",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "execution_id": "exec_bench_196b6c034b82472edb69ffa4",
+      "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+      "graph_run_id": null,
+      "attribution_digest": "60d0d02e82321f78d3067cc64a67168c06e47ba26cf9418c6b416c026bae1698",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19652,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_196b6c034b82472edb69ffa4",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "02-bug-diagnosis-and-repair",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+        "execution_id": "exec_bench_196b6c034b82472edb69ffa4"
+      },
+      "observation_digest": "1a12c6d98796d39790727afd68ceb0e3d516ab0e9c96b49d8946e8738bfd5515"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_079f52a52d24e2ce7aabb2e1a17db1e880f2c894",
+      "at": "2026-09-24T15:30:51.990Z",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "execution_id": "exec_bench_4d282b629d9a8899c1994c43",
+      "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+      "graph_run_id": null,
+      "attribution_digest": "629e0c5ff7468e5d5cf7363c09fefdef0ce412061b46e1e64e71c6b83e7cb5a1",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19659,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_4d282b629d9a8899c1994c43",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "02-bug-diagnosis-and-repair",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+        "execution_id": "exec_bench_4d282b629d9a8899c1994c43"
+      },
+      "observation_digest": "4a813eb8ac1546f05580b60044910a4c51402e8cc7ba35a667eab433f1c12cb2"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_0ffa38075af45eaecf2be6f3a62932ff9cd4628f",
+      "at": "2026-09-24T15:30:51.991Z",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "execution_id": "exec_bench_017431cd2ad11049161e8a83",
+      "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+      "graph_run_id": null,
+      "attribution_digest": "aaa4601897d92129652198839c122b821981685c7281235cb97a67e60c592404",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19708,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_017431cd2ad11049161e8a83",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "02-bug-diagnosis-and-repair",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "7e9ee82f79a53de83bcd75bf0cb572d99c353db303daf0039bd1d88b28c1798e",
+        "execution_id": "exec_bench_017431cd2ad11049161e8a83"
+      },
+      "observation_digest": "3b6e76ab996bd3605784314197d7bb3658bbf36769d339bde42d8e6dfbd43871"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_d476058fa8bfaf59b1d868b5a610400303bd868b",
+      "at": "2026-09-24T15:30:51.991Z",
+      "task_class": "MULTI_FILE_CHANGE",
+      "execution_id": "exec_bench_07e1cdff0fa7b0aafc29f443",
+      "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+      "graph_run_id": null,
+      "attribution_digest": "97f09a0b4c882526c2b5b07c3ffa1249b7e69414e717e4088e90112df18de7db",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 22117,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_07e1cdff0fa7b0aafc29f443",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MULTI_FILE_CHANGE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "03-multi-file-change",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+        "execution_id": "exec_bench_07e1cdff0fa7b0aafc29f443"
+      },
+      "observation_digest": "6f0b1775e45ef644c63dd05fcfbeb282f2d822461399b8c1fd9eb33ad316ccf3"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_60688df02fc616f804c84b623c74ee56b0a5b46f",
+      "at": "2026-09-24T15:30:51.992Z",
+      "task_class": "MULTI_FILE_CHANGE",
+      "execution_id": "exec_bench_10c86b90a9bd60c5ef1f016d",
+      "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+      "graph_run_id": null,
+      "attribution_digest": "5fb4ec75718d2983130040c0d6b3829a8c3255b71e504cc69e487b6bda640b6f",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 21020,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_10c86b90a9bd60c5ef1f016d",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MULTI_FILE_CHANGE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "03-multi-file-change",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+        "execution_id": "exec_bench_10c86b90a9bd60c5ef1f016d"
+      },
+      "observation_digest": "53c7a688c828f6a79b5e3ca850ba6e463bdbcd673b8ddfb9bff5a451f6560982"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_b42d8f39524699959a10cdfcda456378b0315245",
+      "at": "2026-09-24T15:30:51.992Z",
+      "task_class": "MULTI_FILE_CHANGE",
+      "execution_id": "exec_bench_e38df4b530684b4202685d9d",
+      "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+      "graph_run_id": null,
+      "attribution_digest": "ba7666e8d8d76ce8aec3681ea6b7f10619edb5cfd5241316f62e958896bbfa42",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20580,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_e38df4b530684b4202685d9d",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MULTI_FILE_CHANGE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "03-multi-file-change",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+        "execution_id": "exec_bench_e38df4b530684b4202685d9d"
+      },
+      "observation_digest": "9b72af7196df1216f543fc22986483c051169cfa20db14885ee50edec4634d83"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_b659c76f9d2138e952c0130fdefa034408a23142",
+      "at": "2026-09-24T15:30:51.993Z",
+      "task_class": "MULTI_FILE_CHANGE",
+      "execution_id": "exec_bench_15638970de1106e674c40493",
+      "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+      "graph_run_id": null,
+      "attribution_digest": "be7a7e150e013f7ca9609732613128938b88361dba870bc91e7009d0090e4442",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 23623,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_15638970de1106e674c40493",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MULTI_FILE_CHANGE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "03-multi-file-change",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+        "execution_id": "exec_bench_15638970de1106e674c40493"
+      },
+      "observation_digest": "cd4f9f876f457fc7dfb7c5246764699250b5017f9f2b3a5be14df9132b4539ba"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_f5c9dbcc5dea3849b99759558d7da4cd0f9746fc",
+      "at": "2026-09-24T15:30:51.993Z",
+      "task_class": "MULTI_FILE_CHANGE",
+      "execution_id": "exec_bench_be98a949d68720993d92e794",
+      "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+      "graph_run_id": null,
+      "attribution_digest": "e47047e72a2aa6500a8ef6454e440d590042929448aecc795ac2374096cbf7ac",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 21568,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_be98a949d68720993d92e794",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MULTI_FILE_CHANGE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "03-multi-file-change",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "3539d79f49b4d1851e5b1dc66230d286374d9625113b759ecab3ca4bd2c3bdb3",
+        "execution_id": "exec_bench_be98a949d68720993d92e794"
+      },
+      "observation_digest": "aada42b56f35787fb2724ded95e02feba679d8ffe351a506eda26c9ab2e53eb6"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_89d7872a6698175620f17f1840e827cbbaba171a",
+      "at": "2026-09-24T15:30:51.994Z",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "execution_id": "exec_bench_b6cef36e9a5c2f82f100df2c",
+      "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+      "graph_run_id": null,
+      "attribution_digest": "27dcc6ea96ec19f353036d55be0dfa99a62280943ad246e88efcb03d220cb556",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19905,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_b6cef36e9a5c2f82f100df2c",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "DECOMPOSITION_REQUIRED",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "04-decomposition-required",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+        "execution_id": "exec_bench_b6cef36e9a5c2f82f100df2c"
+      },
+      "observation_digest": "a4fbfc4939a2a803961403a26570f60c73d87640dd9b99fc81c7648ebcb59233"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_d3997ab4792391dd69efe2f45a184bcec3a8eab7",
+      "at": "2026-09-24T15:30:51.995Z",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "execution_id": "exec_bench_2113d4a16c9b669256a732f2",
+      "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+      "graph_run_id": null,
+      "attribution_digest": "5cb35acf54c875416a665b02e288efed3de0b095ad218155b93c9df375fab498",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19376,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_2113d4a16c9b669256a732f2",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "DECOMPOSITION_REQUIRED",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "04-decomposition-required",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+        "execution_id": "exec_bench_2113d4a16c9b669256a732f2"
+      },
+      "observation_digest": "fdcf10920038a5bb7f9aa6ffc77a4f2e576c0dad1461d23fc9878b23e5ec03b7"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_52e865f028f6462b52a9f58d9e15ec96b3d19053",
+      "at": "2026-09-24T15:30:51.996Z",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "execution_id": "exec_bench_228c736fb68462875d44a6f1",
+      "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+      "graph_run_id": null,
+      "attribution_digest": "43842e572d89d0c55c808e13ce0907737b3509749ba357f69aaf43037befbf2d",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19450,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_228c736fb68462875d44a6f1",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "DECOMPOSITION_REQUIRED",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "04-decomposition-required",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+        "execution_id": "exec_bench_228c736fb68462875d44a6f1"
+      },
+      "observation_digest": "814617bf9d6977461ab089dbd5984dc6494f48ab8a56bb7c84fb8a7983f709a0"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_73802579743f787b29fe80b9c9ce4f6f39169f37",
+      "at": "2026-09-24T15:30:51.997Z",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "execution_id": "exec_bench_d8a5656f0a7cbc504538c392",
+      "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+      "graph_run_id": null,
+      "attribution_digest": "c3244c13c9413d3f4caf4ab8910278d04ca42c9b45d92f7c4dcfbabd31b82be2",
+      "outcome": "HOLD",
+      "succeeded": false,
+      "held": true,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 11338,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_d8a5656f0a7cbc504538c392",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "DECOMPOSITION_REQUIRED",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "HOLD",
+        "terminal_hold_code": "MUTATION_SCOPE_VIOLATION",
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "04-decomposition-required",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+        "execution_id": "exec_bench_d8a5656f0a7cbc504538c392"
+      },
+      "observation_digest": "98acbeecf0155b661e7b876d0b138042c0854094f78fabb5b5a10382d8d6c56a"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_fc3bf38e11a1e3e6cb51dd4319be3a9fbd51cbbf",
+      "at": "2026-09-24T15:30:51.998Z",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "execution_id": "exec_bench_1b17da1bd2f2590a3724a013",
+      "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+      "graph_run_id": null,
+      "attribution_digest": "b53f81f6bee617ce62236ad1ee0366152c9141bf662d7e6c4a67763ba484d4b0",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19688,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_1b17da1bd2f2590a3724a013",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "DECOMPOSITION_REQUIRED",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "04-decomposition-required",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "174bbe38a5b66a990a8f41d151e74abba4ccd63508539087483673fbf294083f",
+        "execution_id": "exec_bench_1b17da1bd2f2590a3724a013"
+      },
+      "observation_digest": "67c851c99226d24d5ebafa7509f633b73ada476e9f9c8e44f976c5869edb41f6"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_d2a995522871e1571d05b07a62e0852200797211",
+      "at": "2026-09-24T15:30:51.998Z",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "execution_id": "exec_bench_1332e973fef2cfc28fd6ddc6",
+      "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+      "graph_run_id": null,
+      "attribution_digest": "a4113d07facd02869991b7cba5ef10e6607a2a94a606a42d912001bb94874c03",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 21071,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_1332e973fef2cfc28fd6ddc6",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "FAILURE_AND_RECOVERY",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "05-failure-recovery",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+        "execution_id": "exec_bench_1332e973fef2cfc28fd6ddc6"
+      },
+      "observation_digest": "275c6ee574530821c1ddbe1f853bedb418319ee2c90f1cc2d1c591ab3ce408ab"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_f44098b81ec66ef047f190ce668e10cca6201baa",
+      "at": "2026-09-24T15:30:51.999Z",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "execution_id": "exec_bench_b42ed27e0cd39101f5f3c9d0",
+      "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+      "graph_run_id": null,
+      "attribution_digest": "160edbc4c4faf98c8fcfcc9d2c346b05893dd35e1e9e38559a2c99296d2a5a4d",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19889,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_b42ed27e0cd39101f5f3c9d0",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "FAILURE_AND_RECOVERY",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "05-failure-recovery",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+        "execution_id": "exec_bench_b42ed27e0cd39101f5f3c9d0"
+      },
+      "observation_digest": "1cfc75b066c4409d4573b9e130d127c686aad9f4a9a3f86c11af77f3364f1bf8"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_32654cc661c48f1d0fee52507f960adbc2f49acf",
+      "at": "2026-09-24T15:30:51.999Z",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "execution_id": "exec_bench_1024174187c04db446d23ddc",
+      "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+      "graph_run_id": null,
+      "attribution_digest": "f3081b1861443921be2d36d90d53cbd84b84cdcefbf54e2d48d34632a2325fb1",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19962,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_1024174187c04db446d23ddc",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "FAILURE_AND_RECOVERY",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "05-failure-recovery",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+        "execution_id": "exec_bench_1024174187c04db446d23ddc"
+      },
+      "observation_digest": "b51d5fb04ba6defad1d771f9829daf398a17dd80b7068b16b7cdd35fc6bc5f50"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_14ad8c150e0e524ab5621b22782ceccdbc1a4192",
+      "at": "2026-09-24T15:30:52.001Z",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "execution_id": "exec_bench_7cf8b78de6e0d03a39579316",
+      "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+      "graph_run_id": null,
+      "attribution_digest": "cbae51dea9fa9d68274d1101101d56618b1b8f90c6e4c4133deb5b093118cfd0",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20521,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_7cf8b78de6e0d03a39579316",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "FAILURE_AND_RECOVERY",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "05-failure-recovery",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+        "execution_id": "exec_bench_7cf8b78de6e0d03a39579316"
+      },
+      "observation_digest": "ff097663363198ad554835d124e9dcc0d9f7e6e1c3d7ddce323b9bded5bc70c1"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_e6738925446ccd9a31f1a119418f17b7e9eb35dc",
+      "at": "2026-09-24T15:30:52.002Z",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "execution_id": "exec_bench_261bf84984bf754fc19b65c7",
+      "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+      "graph_run_id": null,
+      "attribution_digest": "9924cc7986a5e2a68e4e9e712911452cfdf84daa7f0a6f9029b0f4bc44cbdfe6",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20807,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_261bf84984bf754fc19b65c7",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "FAILURE_AND_RECOVERY",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "05-failure-recovery",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "7139403cff4e9e981383549e656959c506f0f00b9a049c5abc867a53ccf16ad9",
+        "execution_id": "exec_bench_261bf84984bf754fc19b65c7"
+      },
+      "observation_digest": "e472a97550ce5b8995503030d9af643050b30b63006899ac7663bb25658e4a5e"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_1b228c66cea2bbb9610ea968443a9890b15316c0",
+      "at": "2026-09-24T15:30:52.002Z",
+      "task_class": "CONTEXT_PRESSURE",
+      "execution_id": "exec_bench_29cc0f19db2b10a4edfbdffd",
+      "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+      "graph_run_id": null,
+      "attribution_digest": "fcb834b0871524919e8e0b709dc97f8b8fed4a400515b2266319e4f76b876b99",
+      "outcome": "HOLD",
+      "succeeded": false,
+      "held": true,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19053,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_29cc0f19db2b10a4edfbdffd",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "CONTEXT_PRESSURE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "HOLD",
+        "terminal_hold_code": "REPAIR_BUDGET_EXHAUSTED",
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "06-context-pressure",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+        "execution_id": "exec_bench_29cc0f19db2b10a4edfbdffd"
+      },
+      "observation_digest": "89529f5b92fe748cecb196ec02ad655d6169c1ee32af9ff3ae870aaa3b7ff947"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_8e5a312c38ae32f8ff6a6f689b5aab879dfe1251",
+      "at": "2026-09-24T15:30:52.003Z",
+      "task_class": "CONTEXT_PRESSURE",
+      "execution_id": "exec_bench_100aba12b9853ed6a9b99339",
+      "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+      "graph_run_id": null,
+      "attribution_digest": "a84bdff0ea4e921b5c671b87ea8fab5ca27304cfaecfc8802cfa0d112764db00",
+      "outcome": "HOLD",
+      "succeeded": false,
+      "held": true,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20810,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_100aba12b9853ed6a9b99339",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "CONTEXT_PRESSURE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "HOLD",
+        "terminal_hold_code": "REPAIR_BUDGET_EXHAUSTED",
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "06-context-pressure",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+        "execution_id": "exec_bench_100aba12b9853ed6a9b99339"
+      },
+      "observation_digest": "d3851e69e632533d598a6294a3e04688b7337a39c05ac6a63090d2a8f9d9c9d8"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_caa9fcc448d0eea4ffd9e6fd179e37f5d1548ebe",
+      "at": "2026-09-24T15:30:52.004Z",
+      "task_class": "CONTEXT_PRESSURE",
+      "execution_id": "exec_bench_b3cf93aade843c5fcc21704a",
+      "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+      "graph_run_id": null,
+      "attribution_digest": "3983cffaf0f9e0d162d0e7c0b3fdda8ef1138b9235f494ee93450af882a3d506",
+      "outcome": "HOLD",
+      "succeeded": false,
+      "held": true,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 19530,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_b3cf93aade843c5fcc21704a",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "CONTEXT_PRESSURE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "HOLD",
+        "terminal_hold_code": "REPAIR_BUDGET_EXHAUSTED",
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "06-context-pressure",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+        "execution_id": "exec_bench_b3cf93aade843c5fcc21704a"
+      },
+      "observation_digest": "6ff78a99e5393f887b78d9ee334b22df98dbb3df2531cc27bc30ffcc28378bf3"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_b4e77679cf0a9aed76ce5c6f2d307fc9c6bdc2d2",
+      "at": "2026-09-24T15:30:52.004Z",
+      "task_class": "CONTEXT_PRESSURE",
+      "execution_id": "exec_bench_c663ba2c347ea29e0c2b7409",
+      "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+      "graph_run_id": null,
+      "attribution_digest": "3289d141f7d4cd4e11504977274c1733b3ceab2f90a9e1ab3a4d4666fefda0cc",
+      "outcome": "HOLD",
+      "succeeded": false,
+      "held": true,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 21521,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_c663ba2c347ea29e0c2b7409",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "CONTEXT_PRESSURE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "HOLD",
+        "terminal_hold_code": "REPAIR_BUDGET_EXHAUSTED",
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "06-context-pressure",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+        "execution_id": "exec_bench_c663ba2c347ea29e0c2b7409"
+      },
+      "observation_digest": "5a9c093f980fb28409f99e58140b26298492a049da6e849cd6414a9e85936f7f"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_e12663b91e9ae482f40ac9a1feff9486eaca983d",
+      "at": "2026-09-24T15:30:52.005Z",
+      "task_class": "CONTEXT_PRESSURE",
+      "execution_id": "exec_bench_819e1e6bc20c2275bec637ae",
+      "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+      "graph_run_id": null,
+      "attribution_digest": "d5242bc6ba0422b8a8b5b408391d23389e69733cb5e1529d0146498c7ddd0c52",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 18891,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_819e1e6bc20c2275bec637ae",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "CONTEXT_PRESSURE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "06-context-pressure",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "740791c760dbb2a58989d551ed657ab2274c47fc85a57f213983ab211912ce83",
+        "execution_id": "exec_bench_819e1e6bc20c2275bec637ae"
+      },
+      "observation_digest": "af2a6eae935814a1a1650fa281014142474c8a168b14a5b94b3a82b3b64a7b12"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_380264bada9ff1853c9b19b0f3691e7fb5a3a33d",
+      "at": "2026-09-24T15:30:52.006Z",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "execution_id": "exec_bench_08fe5c572b77f1de30fca9e7",
+      "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+      "graph_run_id": null,
+      "attribution_digest": "a58110f5e395e46257bd7260d470ac13943104f4112b4a3e24d73581b0611969",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 22699,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_08fe5c572b77f1de30fca9e7",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MODEL_ROUTE_SENSITIVE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "07-route-sensitive-reasoning",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+        "execution_id": "exec_bench_08fe5c572b77f1de30fca9e7"
+      },
+      "observation_digest": "e0e0d04a270225ef8c041215f6e3ffad47f9b972e0b5aabfe294a8d27d9a367a"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_c6bb3c0cf31258a62d67a4353b0d6d9c2c4b024d",
+      "at": "2026-09-24T15:30:52.006Z",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "execution_id": "exec_bench_60bdbbc45cf85cfe1cb2051c",
+      "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+      "graph_run_id": null,
+      "attribution_digest": "c7618a3100294452118431890ac42581cefc8c27ee8cddb62d6bdd364304a35a",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 24193,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_60bdbbc45cf85cfe1cb2051c",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MODEL_ROUTE_SENSITIVE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "07-route-sensitive-reasoning",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+        "execution_id": "exec_bench_60bdbbc45cf85cfe1cb2051c"
+      },
+      "observation_digest": "f7166e3d2ca29635f3c5f516d75ab59d242053fc1b734e7f6b77a6be3d8db039"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_b7d45c71edbcd222d065fc2286ccb4f6c439ed27",
+      "at": "2026-09-24T15:30:52.008Z",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "execution_id": "exec_bench_ba7f8334389d1ceffd9bac8d",
+      "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+      "graph_run_id": null,
+      "attribution_digest": "bd06eb5825f4e3c2e6a4ec40732217305d5aca94b505ac78fe958936a513c59b",
+      "outcome": "HOLD",
+      "succeeded": false,
+      "held": true,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 23194,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_ba7f8334389d1ceffd9bac8d",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MODEL_ROUTE_SENSITIVE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "HOLD",
+        "terminal_hold_code": "REPAIR_BUDGET_EXHAUSTED",
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "07-route-sensitive-reasoning",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+        "execution_id": "exec_bench_ba7f8334389d1ceffd9bac8d"
+      },
+      "observation_digest": "7c37357bf652577f9d6e99cfff3e69ec83663d258fb6a6716789c91682815f00"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_87e35d89fd40dc961483187ae7eddc3cd0a917cf",
+      "at": "2026-09-24T15:30:52.008Z",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "execution_id": "exec_bench_ded50d172c30d72447043ca5",
+      "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+      "graph_run_id": null,
+      "attribution_digest": "9b2ba9feb1390c421e0fc4990275d0088c571ecc43594da9d8e9f8638f6abcea",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 23459,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_ded50d172c30d72447043ca5",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MODEL_ROUTE_SENSITIVE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "07-route-sensitive-reasoning",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+        "execution_id": "exec_bench_ded50d172c30d72447043ca5"
+      },
+      "observation_digest": "20d9f269e853dd6f6ec05be1ca56b5aaa4c5c417fb7e7995040a490f21cfb9f3"
+    },
+    {
+      "schema": "autoloop.evolution-strategy-observation/v1",
+      "version": 1,
+      "observation_id": "sobs_5f78cf234c8b20285914f172fec8157881dff38c",
+      "at": "2026-09-24T15:30:52.010Z",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "execution_id": "exec_bench_37263e1cde945f1a4e02d0a4",
+      "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+      "graph_run_id": null,
+      "attribution_digest": "a5d6231c60262a3cab90197a340b58999f53bd05e0fcc5d33045be0aeaf0bcc8",
+      "outcome": "PASS",
+      "succeeded": true,
+      "held": false,
+      "repairs": 0,
+      "max_attempt": 0,
+      "latency_ms": null,
+      "occupancy_avg": 20511,
+      "occupancy_samples": 1,
+      "fanout": null,
+      "phase_count": 1,
+      "generation": null,
+      "strategy": {
+        "MODEL_ROUTING": "merge-gateway/zai/glm-5.3-flash",
+        "DECOMPOSITION": "max_phases_1",
+        "CONTEXT_ALLOCATION": "BAND_90_100",
+        "RETRY_REPAIR": "max_attempts=0",
+        "FANOUT_PARALLELISM": null,
+        "TOOL_SELECTION": "fs.grep+fs.list+fs.read+fs.write-scratch",
+        "PROMPT_EVOLUTION": null
+      },
+      "attribution_identity": {
+        "agent_identity": {
+          "phase_ids": [
+            "P1"
+          ],
+          "stages": []
+        },
+        "parent_identity": "exec_bench_37263e1cde945f1a4e02d0a4",
+        "provider": null,
+        "model": null,
+        "adapter_kind": null,
+        "task_class": "MODEL_ROUTE_SENSITIVE",
+        "decomposition_identity": "a266e5891788e2f55766f8dc",
+        "terminal_outcome": "PASS",
+        "terminal_hold_code": null,
+        "generation": null
+      },
+      "provenance": {
+        "evidence_refs": [
+          "07-route-sensitive-reasoning",
+          "CONTROL"
+        ],
+        "journal_events": 3,
+        "admission_id": "8f776a68fc16761e135908268c3370c4a30b696985228eccd1e7c25e8fc11e5b",
+        "execution_id": "exec_bench_37263e1cde945f1a4e02d0a4"
+      },
+      "observation_digest": "c0250cbea27c86128baeb427ed9cab5724f72c96d13c595a18f02c139080c571"
+    }
+  ],
+  "updated_at": "2026-09-24T15:30:52.010Z"
+}

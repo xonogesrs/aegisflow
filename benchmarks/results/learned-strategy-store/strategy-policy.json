@@ -1,0 +1,969 @@
+{
+  "schema": "autoloop.evolution-strategy-policy/v1",
+  "version": 1,
+  "generation": 42,
+  "active": {
+    "BUG_DIAGNOSIS_AND_REPAIR": {
+      "RETRY_REPAIR": {
+        "dimension": "RETRY_REPAIR",
+        "value": "max_attempt_0",
+        "params": {
+          "max_attempts": 0
+        },
+        "candidate_id": "bench-learned-BUG_DIAGNOSIS_AND_REPAIR-RETRY_REPAIR",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 22,
+        "at": "2026-09-24T15:30:52.017Z"
+      },
+      "MODEL_ROUTING": {
+        "dimension": "MODEL_ROUTING",
+        "value": "merge-gateway/zai/glm-5.3-flash",
+        "params": {
+          "route": "merge-gateway/zai/glm-5.3-flash"
+        },
+        "candidate_id": "bench-learned-BUG_DIAGNOSIS_AND_REPAIR-MODEL_ROUTING",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 23,
+        "at": "2026-09-24T15:30:52.018Z"
+      },
+      "TOOL_SELECTION": {
+        "dimension": "TOOL_SELECTION",
+        "value": "139b70a0dfa8129d63243c23",
+        "params": {
+          "canonical_tool_ids": [
+            "fs.grep",
+            "fs.list",
+            "fs.read",
+            "fs.write-scratch"
+          ]
+        },
+        "candidate_id": "bench-learned-BUG_DIAGNOSIS_AND_REPAIR-TOOL_SELECTION",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 24,
+        "at": "2026-09-24T15:30:52.018Z"
+      }
+    },
+    "CONTEXT_PRESSURE": {
+      "RETRY_REPAIR": {
+        "dimension": "RETRY_REPAIR",
+        "value": "max_attempt_2",
+        "params": {
+          "max_attempts": 2
+        },
+        "candidate_id": "bench-learned-CONTEXT_PRESSURE-RETRY_REPAIR",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 25,
+        "at": "2026-09-24T15:30:52.019Z"
+      },
+      "MODEL_ROUTING": {
+        "dimension": "MODEL_ROUTING",
+        "value": "merge-gateway/zai/glm-5.3-flash",
+        "params": {
+          "route": "merge-gateway/zai/glm-5.3-flash"
+        },
+        "candidate_id": "bench-learned-CONTEXT_PRESSURE-MODEL_ROUTING",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 26,
+        "at": "2026-09-24T15:30:52.019Z"
+      },
+      "TOOL_SELECTION": {
+        "dimension": "TOOL_SELECTION",
+        "value": "139b70a0dfa8129d63243c23",
+        "params": {
+          "canonical_tool_ids": [
+            "fs.grep",
+            "fs.list",
+            "fs.read",
+            "fs.write-scratch"
+          ]
+        },
+        "candidate_id": "bench-learned-CONTEXT_PRESSURE-TOOL_SELECTION",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 27,
+        "at": "2026-09-24T15:30:52.020Z"
+      }
+    },
+    "DECOMPOSITION_REQUIRED": {
+      "RETRY_REPAIR": {
+        "dimension": "RETRY_REPAIR",
+        "value": "max_attempt_2",
+        "params": {
+          "max_attempts": 2
+        },
+        "candidate_id": "bench-learned-DECOMPOSITION_REQUIRED-RETRY_REPAIR",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 28,
+        "at": "2026-09-24T15:30:52.020Z"
+      },
+      "MODEL_ROUTING": {
+        "dimension": "MODEL_ROUTING",
+        "value": "merge-gateway/zai/glm-5.3-flash",
+        "params": {
+          "route": "merge-gateway/zai/glm-5.3-flash"
+        },
+        "candidate_id": "bench-learned-DECOMPOSITION_REQUIRED-MODEL_ROUTING",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 29,
+        "at": "2026-09-24T15:30:52.021Z"
+      },
+      "TOOL_SELECTION": {
+        "dimension": "TOOL_SELECTION",
+        "value": "139b70a0dfa8129d63243c23",
+        "params": {
+          "canonical_tool_ids": [
+            "fs.grep",
+            "fs.list",
+            "fs.read",
+            "fs.write-scratch"
+          ]
+        },
+        "candidate_id": "bench-learned-DECOMPOSITION_REQUIRED-TOOL_SELECTION",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 30,
+        "at": "2026-09-24T15:30:52.021Z"
+      }
+    },
+    "FAILURE_AND_RECOVERY": {
+      "RETRY_REPAIR": {
+        "dimension": "RETRY_REPAIR",
+        "value": "max_attempt_0",
+        "params": {
+          "max_attempts": 0
+        },
+        "candidate_id": "bench-learned-FAILURE_AND_RECOVERY-RETRY_REPAIR",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 31,
+        "at": "2026-09-24T15:30:52.021Z"
+      },
+      "MODEL_ROUTING": {
+        "dimension": "MODEL_ROUTING",
+        "value": "merge-gateway/zai/glm-5.3-flash",
+        "params": {
+          "route": "merge-gateway/zai/glm-5.3-flash"
+        },
+        "candidate_id": "bench-learned-FAILURE_AND_RECOVERY-MODEL_ROUTING",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 32,
+        "at": "2026-09-24T15:30:52.022Z"
+      },
+      "TOOL_SELECTION": {
+        "dimension": "TOOL_SELECTION",
+        "value": "139b70a0dfa8129d63243c23",
+        "params": {
+          "canonical_tool_ids": [
+            "fs.grep",
+            "fs.list",
+            "fs.read",
+            "fs.write-scratch"
+          ]
+        },
+        "candidate_id": "bench-learned-FAILURE_AND_RECOVERY-TOOL_SELECTION",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 33,
+        "at": "2026-09-24T15:30:52.022Z"
+      }
+    },
+    "MODEL_ROUTE_SENSITIVE": {
+      "RETRY_REPAIR": {
+        "dimension": "RETRY_REPAIR",
+        "value": "max_attempt_2",
+        "params": {
+          "max_attempts": 2
+        },
+        "candidate_id": "bench-learned-MODEL_ROUTE_SENSITIVE-RETRY_REPAIR",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 34,
+        "at": "2026-09-24T15:30:52.022Z"
+      },
+      "MODEL_ROUTING": {
+        "dimension": "MODEL_ROUTING",
+        "value": "merge-gateway/zai/glm-5.3-flash",
+        "params": {
+          "route": "merge-gateway/zai/glm-5.3-flash"
+        },
+        "candidate_id": "bench-learned-MODEL_ROUTE_SENSITIVE-MODEL_ROUTING",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 35,
+        "at": "2026-09-24T15:30:52.023Z"
+      },
+      "TOOL_SELECTION": {
+        "dimension": "TOOL_SELECTION",
+        "value": "139b70a0dfa8129d63243c23",
+        "params": {
+          "canonical_tool_ids": [
+            "fs.grep",
+            "fs.list",
+            "fs.read",
+            "fs.write-scratch"
+          ]
+        },
+        "candidate_id": "bench-learned-MODEL_ROUTE_SENSITIVE-TOOL_SELECTION",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 36,
+        "at": "2026-09-24T15:30:52.023Z"
+      }
+    },
+    "MULTI_FILE_CHANGE": {
+      "RETRY_REPAIR": {
+        "dimension": "RETRY_REPAIR",
+        "value": "max_attempt_0",
+        "params": {
+          "max_attempts": 0
+        },
+        "candidate_id": "bench-learned-MULTI_FILE_CHANGE-RETRY_REPAIR",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 37,
+        "at": "2026-09-24T15:30:52.024Z"
+      },
+      "MODEL_ROUTING": {
+        "dimension": "MODEL_ROUTING",
+        "value": "merge-gateway/zai/glm-5.3-flash",
+        "params": {
+          "route": "merge-gateway/zai/glm-5.3-flash"
+        },
+        "candidate_id": "bench-learned-MULTI_FILE_CHANGE-MODEL_ROUTING",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 38,
+        "at": "2026-09-24T15:30:52.024Z"
+      },
+      "TOOL_SELECTION": {
+        "dimension": "TOOL_SELECTION",
+        "value": "139b70a0dfa8129d63243c23",
+        "params": {
+          "canonical_tool_ids": [
+            "fs.grep",
+            "fs.list",
+            "fs.read",
+            "fs.write-scratch"
+          ]
+        },
+        "candidate_id": "bench-learned-MULTI_FILE_CHANGE-TOOL_SELECTION",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 39,
+        "at": "2026-09-24T15:30:52.025Z"
+      }
+    },
+    "STRAIGHTFORWARD_IMPLEMENTATION": {
+      "RETRY_REPAIR": {
+        "dimension": "RETRY_REPAIR",
+        "value": "max_attempt_0",
+        "params": {
+          "max_attempts": 0
+        },
+        "candidate_id": "bench-learned-STRAIGHTFORWARD_IMPLEMENTATION-RETRY_REPAIR",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 40,
+        "at": "2026-09-24T15:30:52.025Z"
+      },
+      "MODEL_ROUTING": {
+        "dimension": "MODEL_ROUTING",
+        "value": "merge-gateway/zai/glm-5.3-flash",
+        "params": {
+          "route": "merge-gateway/zai/glm-5.3-flash"
+        },
+        "candidate_id": "bench-learned-STRAIGHTFORWARD_IMPLEMENTATION-MODEL_ROUTING",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 41,
+        "at": "2026-09-24T15:30:52.025Z"
+      },
+      "TOOL_SELECTION": {
+        "dimension": "TOOL_SELECTION",
+        "value": "139b70a0dfa8129d63243c23",
+        "params": {
+          "canonical_tool_ids": [
+            "fs.grep",
+            "fs.list",
+            "fs.read",
+            "fs.write-scratch"
+          ]
+        },
+        "candidate_id": "bench-learned-STRAIGHTFORWARD_IMPLEMENTATION-TOOL_SELECTION",
+        "risk_floor": "LOW",
+        "evidence_digest": null,
+        "generation": 42,
+        "at": "2026-09-24T15:30:52.026Z"
+      }
+    }
+  },
+  "history": [
+    {
+      "kind": "ACTIVATE",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "dimension": "RETRY_REPAIR",
+      "value": "max_attempt_2",
+      "params": {
+        "max_attempts": 2
+      },
+      "candidate_id": "bench-learned-BUG_DIAGNOSIS_AND_REPAIR-RETRY_REPAIR",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 1,
+      "at": "2026-09-24T15:30:42.575Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "dimension": "MODEL_ROUTING",
+      "value": "merge-gateway/zai/glm-5.3-flash",
+      "params": {
+        "route": "merge-gateway/zai/glm-5.3-flash"
+      },
+      "candidate_id": "bench-learned-BUG_DIAGNOSIS_AND_REPAIR-MODEL_ROUTING",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 2,
+      "at": "2026-09-24T15:30:42.575Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "dimension": "TOOL_SELECTION",
+      "value": "139b70a0dfa8129d63243c23",
+      "params": {
+        "canonical_tool_ids": [
+          "fs.grep",
+          "fs.list",
+          "fs.read",
+          "fs.write-scratch"
+        ]
+      },
+      "candidate_id": "bench-learned-BUG_DIAGNOSIS_AND_REPAIR-TOOL_SELECTION",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 3,
+      "at": "2026-09-24T15:30:42.576Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "CONTEXT_PRESSURE",
+      "dimension": "RETRY_REPAIR",
+      "value": "max_attempt_2",
+      "params": {
+        "max_attempts": 2
+      },
+      "candidate_id": "bench-learned-CONTEXT_PRESSURE-RETRY_REPAIR",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 4,
+      "at": "2026-09-24T15:30:42.576Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "CONTEXT_PRESSURE",
+      "dimension": "MODEL_ROUTING",
+      "value": "merge-gateway/zai/glm-5.3-flash",
+      "params": {
+        "route": "merge-gateway/zai/glm-5.3-flash"
+      },
+      "candidate_id": "bench-learned-CONTEXT_PRESSURE-MODEL_ROUTING",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 5,
+      "at": "2026-09-24T15:30:42.577Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "CONTEXT_PRESSURE",
+      "dimension": "TOOL_SELECTION",
+      "value": "139b70a0dfa8129d63243c23",
+      "params": {
+        "canonical_tool_ids": [
+          "fs.grep",
+          "fs.list",
+          "fs.read",
+          "fs.write-scratch"
+        ]
+      },
+      "candidate_id": "bench-learned-CONTEXT_PRESSURE-TOOL_SELECTION",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 6,
+      "at": "2026-09-24T15:30:42.577Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "dimension": "RETRY_REPAIR",
+      "value": "max_attempt_2",
+      "params": {
+        "max_attempts": 2
+      },
+      "candidate_id": "bench-learned-DECOMPOSITION_REQUIRED-RETRY_REPAIR",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 7,
+      "at": "2026-09-24T15:30:42.577Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "dimension": "MODEL_ROUTING",
+      "value": "merge-gateway/zai/glm-5.3-flash",
+      "params": {
+        "route": "merge-gateway/zai/glm-5.3-flash"
+      },
+      "candidate_id": "bench-learned-DECOMPOSITION_REQUIRED-MODEL_ROUTING",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 8,
+      "at": "2026-09-24T15:30:42.578Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "dimension": "TOOL_SELECTION",
+      "value": "139b70a0dfa8129d63243c23",
+      "params": {
+        "canonical_tool_ids": [
+          "fs.grep",
+          "fs.list",
+          "fs.read",
+          "fs.write-scratch"
+        ]
+      },
+      "candidate_id": "bench-learned-DECOMPOSITION_REQUIRED-TOOL_SELECTION",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 9,
+      "at": "2026-09-24T15:30:42.578Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "dimension": "RETRY_REPAIR",
+      "value": "max_attempt_2",
+      "params": {
+        "max_attempts": 2
+      },
+      "candidate_id": "bench-learned-FAILURE_AND_RECOVERY-RETRY_REPAIR",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 10,
+      "at": "2026-09-24T15:30:42.579Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "dimension": "MODEL_ROUTING",
+      "value": "merge-gateway/zai/glm-5.3-flash",
+      "params": {
+        "route": "merge-gateway/zai/glm-5.3-flash"
+      },
+      "candidate_id": "bench-learned-FAILURE_AND_RECOVERY-MODEL_ROUTING",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 11,
+      "at": "2026-09-24T15:30:42.579Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "dimension": "TOOL_SELECTION",
+      "value": "139b70a0dfa8129d63243c23",
+      "params": {
+        "canonical_tool_ids": [
+          "fs.grep",
+          "fs.list",
+          "fs.read",
+          "fs.write-scratch"
+        ]
+      },
+      "candidate_id": "bench-learned-FAILURE_AND_RECOVERY-TOOL_SELECTION",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 12,
+      "at": "2026-09-24T15:30:42.579Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "dimension": "RETRY_REPAIR",
+      "value": "max_attempt_2",
+      "params": {
+        "max_attempts": 2
+      },
+      "candidate_id": "bench-learned-MODEL_ROUTE_SENSITIVE-RETRY_REPAIR",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 13,
+      "at": "2026-09-24T15:30:42.579Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "dimension": "MODEL_ROUTING",
+      "value": "merge-gateway/zai/glm-5.3-flash",
+      "params": {
+        "route": "merge-gateway/zai/glm-5.3-flash"
+      },
+      "candidate_id": "bench-learned-MODEL_ROUTE_SENSITIVE-MODEL_ROUTING",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 14,
+      "at": "2026-09-24T15:30:42.580Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "dimension": "TOOL_SELECTION",
+      "value": "139b70a0dfa8129d63243c23",
+      "params": {
+        "canonical_tool_ids": [
+          "fs.grep",
+          "fs.list",
+          "fs.read",
+          "fs.write-scratch"
+        ]
+      },
+      "candidate_id": "bench-learned-MODEL_ROUTE_SENSITIVE-TOOL_SELECTION",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 15,
+      "at": "2026-09-24T15:30:42.580Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "MULTI_FILE_CHANGE",
+      "dimension": "RETRY_REPAIR",
+      "value": "max_attempt_2",
+      "params": {
+        "max_attempts": 2
+      },
+      "candidate_id": "bench-learned-MULTI_FILE_CHANGE-RETRY_REPAIR",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 16,
+      "at": "2026-09-24T15:30:42.580Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "MULTI_FILE_CHANGE",
+      "dimension": "MODEL_ROUTING",
+      "value": "merge-gateway/zai/glm-5.3-flash",
+      "params": {
+        "route": "merge-gateway/zai/glm-5.3-flash"
+      },
+      "candidate_id": "bench-learned-MULTI_FILE_CHANGE-MODEL_ROUTING",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 17,
+      "at": "2026-09-24T15:30:42.581Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "MULTI_FILE_CHANGE",
+      "dimension": "TOOL_SELECTION",
+      "value": "139b70a0dfa8129d63243c23",
+      "params": {
+        "canonical_tool_ids": [
+          "fs.grep",
+          "fs.list",
+          "fs.read",
+          "fs.write-scratch"
+        ]
+      },
+      "candidate_id": "bench-learned-MULTI_FILE_CHANGE-TOOL_SELECTION",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 18,
+      "at": "2026-09-24T15:30:42.582Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "dimension": "RETRY_REPAIR",
+      "value": "max_attempt_2",
+      "params": {
+        "max_attempts": 2
+      },
+      "candidate_id": "bench-learned-STRAIGHTFORWARD_IMPLEMENTATION-RETRY_REPAIR",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 19,
+      "at": "2026-09-24T15:30:42.582Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "dimension": "MODEL_ROUTING",
+      "value": "merge-gateway/zai/glm-5.3-flash",
+      "params": {
+        "route": "merge-gateway/zai/glm-5.3-flash"
+      },
+      "candidate_id": "bench-learned-STRAIGHTFORWARD_IMPLEMENTATION-MODEL_ROUTING",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 20,
+      "at": "2026-09-24T15:30:42.583Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "dimension": "TOOL_SELECTION",
+      "value": "139b70a0dfa8129d63243c23",
+      "params": {
+        "canonical_tool_ids": [
+          "fs.grep",
+          "fs.list",
+          "fs.read",
+          "fs.write-scratch"
+        ]
+      },
+      "candidate_id": "bench-learned-STRAIGHTFORWARD_IMPLEMENTATION-TOOL_SELECTION",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 21,
+      "at": "2026-09-24T15:30:42.583Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "dimension": "RETRY_REPAIR",
+      "value": "max_attempt_0",
+      "params": {
+        "max_attempts": 0
+      },
+      "candidate_id": "bench-learned-BUG_DIAGNOSIS_AND_REPAIR-RETRY_REPAIR",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 22,
+      "at": "2026-09-24T15:30:52.017Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "dimension": "MODEL_ROUTING",
+      "value": "merge-gateway/zai/glm-5.3-flash",
+      "params": {
+        "route": "merge-gateway/zai/glm-5.3-flash"
+      },
+      "candidate_id": "bench-learned-BUG_DIAGNOSIS_AND_REPAIR-MODEL_ROUTING",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 23,
+      "at": "2026-09-24T15:30:52.018Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "BUG_DIAGNOSIS_AND_REPAIR",
+      "dimension": "TOOL_SELECTION",
+      "value": "139b70a0dfa8129d63243c23",
+      "params": {
+        "canonical_tool_ids": [
+          "fs.grep",
+          "fs.list",
+          "fs.read",
+          "fs.write-scratch"
+        ]
+      },
+      "candidate_id": "bench-learned-BUG_DIAGNOSIS_AND_REPAIR-TOOL_SELECTION",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 24,
+      "at": "2026-09-24T15:30:52.018Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "CONTEXT_PRESSURE",
+      "dimension": "RETRY_REPAIR",
+      "value": "max_attempt_2",
+      "params": {
+        "max_attempts": 2
+      },
+      "candidate_id": "bench-learned-CONTEXT_PRESSURE-RETRY_REPAIR",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 25,
+      "at": "2026-09-24T15:30:52.019Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "CONTEXT_PRESSURE",
+      "dimension": "MODEL_ROUTING",
+      "value": "merge-gateway/zai/glm-5.3-flash",
+      "params": {
+        "route": "merge-gateway/zai/glm-5.3-flash"
+      },
+      "candidate_id": "bench-learned-CONTEXT_PRESSURE-MODEL_ROUTING",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 26,
+      "at": "2026-09-24T15:30:52.019Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "CONTEXT_PRESSURE",
+      "dimension": "TOOL_SELECTION",
+      "value": "139b70a0dfa8129d63243c23",
+      "params": {
+        "canonical_tool_ids": [
+          "fs.grep",
+          "fs.list",
+          "fs.read",
+          "fs.write-scratch"
+        ]
+      },
+      "candidate_id": "bench-learned-CONTEXT_PRESSURE-TOOL_SELECTION",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 27,
+      "at": "2026-09-24T15:30:52.020Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "dimension": "RETRY_REPAIR",
+      "value": "max_attempt_2",
+      "params": {
+        "max_attempts": 2
+      },
+      "candidate_id": "bench-learned-DECOMPOSITION_REQUIRED-RETRY_REPAIR",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 28,
+      "at": "2026-09-24T15:30:52.020Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "dimension": "MODEL_ROUTING",
+      "value": "merge-gateway/zai/glm-5.3-flash",
+      "params": {
+        "route": "merge-gateway/zai/glm-5.3-flash"
+      },
+      "candidate_id": "bench-learned-DECOMPOSITION_REQUIRED-MODEL_ROUTING",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 29,
+      "at": "2026-09-24T15:30:52.021Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "DECOMPOSITION_REQUIRED",
+      "dimension": "TOOL_SELECTION",
+      "value": "139b70a0dfa8129d63243c23",
+      "params": {
+        "canonical_tool_ids": [
+          "fs.grep",
+          "fs.list",
+          "fs.read",
+          "fs.write-scratch"
+        ]
+      },
+      "candidate_id": "bench-learned-DECOMPOSITION_REQUIRED-TOOL_SELECTION",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 30,
+      "at": "2026-09-24T15:30:52.021Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "dimension": "RETRY_REPAIR",
+      "value": "max_attempt_0",
+      "params": {
+        "max_attempts": 0
+      },
+      "candidate_id": "bench-learned-FAILURE_AND_RECOVERY-RETRY_REPAIR",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 31,
+      "at": "2026-09-24T15:30:52.021Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "dimension": "MODEL_ROUTING",
+      "value": "merge-gateway/zai/glm-5.3-flash",
+      "params": {
+        "route": "merge-gateway/zai/glm-5.3-flash"
+      },
+      "candidate_id": "bench-learned-FAILURE_AND_RECOVERY-MODEL_ROUTING",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 32,
+      "at": "2026-09-24T15:30:52.022Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "FAILURE_AND_RECOVERY",
+      "dimension": "TOOL_SELECTION",
+      "value": "139b70a0dfa8129d63243c23",
+      "params": {
+        "canonical_tool_ids": [
+          "fs.grep",
+          "fs.list",
+          "fs.read",
+          "fs.write-scratch"
+        ]
+      },
+      "candidate_id": "bench-learned-FAILURE_AND_RECOVERY-TOOL_SELECTION",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 33,
+      "at": "2026-09-24T15:30:52.022Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "dimension": "RETRY_REPAIR",
+      "value": "max_attempt_2",
+      "params": {
+        "max_attempts": 2
+      },
+      "candidate_id": "bench-learned-MODEL_ROUTE_SENSITIVE-RETRY_REPAIR",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 34,
+      "at": "2026-09-24T15:30:52.022Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "dimension": "MODEL_ROUTING",
+      "value": "merge-gateway/zai/glm-5.3-flash",
+      "params": {
+        "route": "merge-gateway/zai/glm-5.3-flash"
+      },
+      "candidate_id": "bench-learned-MODEL_ROUTE_SENSITIVE-MODEL_ROUTING",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 35,
+      "at": "2026-09-24T15:30:52.023Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "MODEL_ROUTE_SENSITIVE",
+      "dimension": "TOOL_SELECTION",
+      "value": "139b70a0dfa8129d63243c23",
+      "params": {
+        "canonical_tool_ids": [
+          "fs.grep",
+          "fs.list",
+          "fs.read",
+          "fs.write-scratch"
+        ]
+      },
+      "candidate_id": "bench-learned-MODEL_ROUTE_SENSITIVE-TOOL_SELECTION",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 36,
+      "at": "2026-09-24T15:30:52.023Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "MULTI_FILE_CHANGE",
+      "dimension": "RETRY_REPAIR",
+      "value": "max_attempt_0",
+      "params": {
+        "max_attempts": 0
+      },
+      "candidate_id": "bench-learned-MULTI_FILE_CHANGE-RETRY_REPAIR",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 37,
+      "at": "2026-09-24T15:30:52.024Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "MULTI_FILE_CHANGE",
+      "dimension": "MODEL_ROUTING",
+      "value": "merge-gateway/zai/glm-5.3-flash",
+      "params": {
+        "route": "merge-gateway/zai/glm-5.3-flash"
+      },
+      "candidate_id": "bench-learned-MULTI_FILE_CHANGE-MODEL_ROUTING",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 38,
+      "at": "2026-09-24T15:30:52.024Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "MULTI_FILE_CHANGE",
+      "dimension": "TOOL_SELECTION",
+      "value": "139b70a0dfa8129d63243c23",
+      "params": {
+        "canonical_tool_ids": [
+          "fs.grep",
+          "fs.list",
+          "fs.read",
+          "fs.write-scratch"
+        ]
+      },
+      "candidate_id": "bench-learned-MULTI_FILE_CHANGE-TOOL_SELECTION",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 39,
+      "at": "2026-09-24T15:30:52.025Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "dimension": "RETRY_REPAIR",
+      "value": "max_attempt_0",
+      "params": {
+        "max_attempts": 0
+      },
+      "candidate_id": "bench-learned-STRAIGHTFORWARD_IMPLEMENTATION-RETRY_REPAIR",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 40,
+      "at": "2026-09-24T15:30:52.025Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "dimension": "MODEL_ROUTING",
+      "value": "merge-gateway/zai/glm-5.3-flash",
+      "params": {
+        "route": "merge-gateway/zai/glm-5.3-flash"
+      },
+      "candidate_id": "bench-learned-STRAIGHTFORWARD_IMPLEMENTATION-MODEL_ROUTING",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 41,
+      "at": "2026-09-24T15:30:52.025Z"
+    },
+    {
+      "kind": "ACTIVATE",
+      "task_class": "STRAIGHTFORWARD_IMPLEMENTATION",
+      "dimension": "TOOL_SELECTION",
+      "value": "139b70a0dfa8129d63243c23",
+      "params": {
+        "canonical_tool_ids": [
+          "fs.grep",
+          "fs.list",
+          "fs.read",
+          "fs.write-scratch"
+        ]
+      },
+      "candidate_id": "bench-learned-STRAIGHTFORWARD_IMPLEMENTATION-TOOL_SELECTION",
+      "risk_floor": "LOW",
+      "evidence_digest": null,
+      "generation": 42,
+      "at": "2026-09-24T15:30:52.026Z"
+    }
+  ],
+  "updated_at": "2026-09-24T15:30:52.026Z"
+}

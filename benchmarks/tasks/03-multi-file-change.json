@@ -1,0 +1,28 @@
+{
+  "task_class": "MULTI_FILE_CHANGE",
+  "task_id": "03-multi-file-change",
+  "title": "Thread a new option through three modules",
+  "instruction": "In the repository at the current working directory, add support for an option named `verbose` that must flow from src/config.mjs through src/run.mjs into src/log.mjs. Requirements: (1) src/config.mjs's `loadConfig(input)` must default `verbose` to false when the input omits it; (2) src/run.mjs's `run(input)` must pass `config.verbose` to `emit(message, options)`; (3) src/log.mjs's `emit(message, options)` must return the message unchanged when options.verbose is false, and return the message prefixed with `[verbose] ` when true. Do not change any other behaviour.",
+  "acceptance": {
+    "test_command": [
+      "node",
+      "--test",
+      "test/spec.test.mjs"
+    ],
+    "expect_exit_code": 0
+  },
+  "fixture": {
+    "files": {
+      "src/config.mjs": "export function loadConfig(input = {}) {\n  return {\n    name: input.name ?? \"unnamed\",\n  };\n}\n",
+      "src/log.mjs": "export function emit(message, options = {}) {\n  return message;\n}\n",
+      "src/run.mjs": "import { loadConfig } from \"./config.mjs\";\nimport { emit } from \"./log.mjs\";\n\nexport function run(input) {\n  const config = loadConfig(input);\n  return emit(config.name);\n}\n",
+      "test/spec.test.mjs": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { loadConfig } from \"../src/config.mjs\";\nimport { run } from \"../src/run.mjs\";\nimport { emit } from \"../src/log.mjs\";\n\ntest(\"verbose defaults to false\", () => {\n  assert.equal(loadConfig({ name: \"a\" }).verbose, false);\n  assert.equal(loadConfig().verbose, false);\n});\n\ntest(\"verbose is preserved when supplied\", () => {\n  assert.equal(loadConfig({ name: \"a\", verbose: true }).verbose, true);\n});\n\ntest(\"emit honours the verbose flag\", () => {\n  assert.equal(emit(\"hi\", { verbose: false }), \"hi\");\n  assert.equal(emit(\"hi\", { verbose: true }), \"[verbose] hi\");\n});\n\ntest(\"run threads the flag end to end\", () => {\n  assert.equal(run({ name: \"svc\" }), \"svc\");\n  assert.equal(run({ name: \"svc\", verbose: true }), \"[verbose] svc\");\n});\n",
+      "package.json": "{\n  \"name\": \"bench-fixture\",\n  \"private\": true,\n  \"type\": \"module\"\n}\n"
+    },
+    "expected_changed_paths": [
+      "src/config.mjs",
+      "src/log.mjs",
+      "src/run.mjs"
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "task_class": "DECOMPOSITION_REQUIRED",
+  "task_id": "04-decomposition-required",
+  "title": "Implement three independent but coupled requirements",
+  "instruction": "In the repository at the current working directory, implement all three of the following in src/store.mjs, and satisfy the whole suite in test/spec.test.mjs: (R1) `create()` returns a store whose `size()` is 0; (R2) `set(key, value)` stores a value and `get(key)` returns it, while `get` of an unknown key returns undefined; (R3) `remove(key)` deletes a key and further `get` returns undefined, and `remove` of an unknown key does not throw. All three requirements must hold simultaneously. Do not modify the test.",
+  "acceptance": {
+    "test_command": [
+      "node",
+      "--test",
+      "test/spec.test.mjs"
+    ],
+    "expect_exit_code": 0
+  },
+  "fixture": {
+    "files": {
+      "src/store.mjs": "export function create() {\n  throw new Error(\"not implemented\");\n}\n",
+      "test/spec.test.mjs": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { create } from \"../src/store.mjs\";\n\ntest(\"R1 create size 0\", () => {\n  assert.equal(create().size(), 0);\n});\n\ntest(\"R2 set then get, unknown key undefined\", () => {\n  const s = create();\n  s.set(\"a\", 1);\n  assert.equal(s.get(\"a\"), 1);\n  assert.equal(s.get(\"nope\"), undefined);\n});\n\ntest(\"R3 remove then get undefined, unknown remove safe\", () => {\n  const s = create();\n  s.set(\"a\", 1);\n  s.remove(\"a\");\n  assert.equal(s.get(\"a\"), undefined);\n  assert.doesNotThrow(() => s.remove(\"never\"));\n});\n\ntest(\"R1-R3 hold together\", () => {\n  const s = create();\n  s.set(\"x\", 1);\n  s.set(\"y\", 2);\n  assert.equal(s.size(), 2);\n  s.remove(\"x\");\n  assert.equal(s.size(), 1);\n  assert.equal(s.get(\"y\"), 2);\n});\n",
+      "package.json": "{\n  \"name\": \"bench-fixture\",\n  \"private\": true,\n  \"type\": \"module\"\n}\n"
+    },
+    "expected_changed_paths": [
+      "src/store.mjs"
+    ]
+  }
+}

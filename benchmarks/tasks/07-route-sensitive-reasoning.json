@@ -1,0 +1,24 @@
+{
+  "task_class": "MODEL_ROUTE_SENSITIVE",
+  "task_id": "07-route-sensitive-reasoning",
+  "title": "Reason about an ambiguous requirement and state the assumption",
+  "instruction": "In the repository at the current working directory, implement `formatDuration(seconds)` in src/duration.mjs. The requirement is intentionally under-specified: it must satisfy the suite in test/spec.test.mjs. Before implementing, state your interpretation of the ambiguous parts, then implement it. Change only src/duration.mjs.",
+  "acceptance": {
+    "test_command": [
+      "node",
+      "--test",
+      "test/spec.test.mjs"
+    ],
+    "expect_exit_code": 0
+  },
+  "fixture": {
+    "files": {
+      "src/duration.mjs": "export function formatDuration(seconds) {\n  throw new Error(\"not implemented\");\n}\n",
+      "test/spec.test.mjs": "import { test } from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport { formatDuration } from \"../src/duration.mjs\";\n\ntest(\"zero\", () => {\n  assert.equal(formatDuration(0), \"0s\");\n});\n\ntest(\"seconds only\", () => {\n  assert.equal(formatDuration(45), \"45s\");\n});\n\ntest(\"minutes and seconds, no zero padding\", () => {\n  assert.equal(formatDuration(60), \"1m0s\");\n  assert.equal(formatDuration(61), \"1m1s\");\n  assert.equal(formatDuration(605), \"10m5s\");\n});\n\ntest(\"hours, minutes and seconds\", () => {\n  assert.equal(formatDuration(3600), \"1h0m0s\");\n  assert.equal(formatDuration(3661), \"1h1m1s\");\n  assert.equal(formatDuration(7325), \"2h2m5s\");\n});\n\ntest(\"negative durations are rejected\", () => {\n  assert.throws(() => formatDuration(-1), RangeError);\n});\n\ntest(\"non-integer seconds are rejected\", () => {\n  assert.throws(() => formatDuration(1.5), RangeError);\n  assert.throws(() => formatDuration(\"60\"), TypeError);\n});\n",
+      "package.json": "{\n  \"name\": \"bench-fixture\",\n  \"private\": true,\n  \"type\": \"module\"\n}\n"
+    },
+    "expected_changed_paths": [
+      "src/duration.mjs"
+    ]
+  }
+}
