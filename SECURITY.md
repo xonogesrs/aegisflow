@@ -157,6 +157,24 @@ What it does **not** buy — stated so that it is not mistaken for isolation:
   writer-result validator (`no_changes_no_diff`) and candidate capture
   (`CAPTURE_PRECONDITION_FAILED`) both reject, so it cannot be accepted as work.
 
+## Telemetry deletion containment
+
+Telemetry GC deletes only inside an admitted namespace: the canonical telemetry
+root, or a temp namespace it has resolved and checked. Everything else fails
+closed (`GC_ARBITRARY_ROOT_DELETE`). The admission fence treats `$HOME` as
+forbidden and resolves both the candidate **and** the home boundary to their
+real paths before comparing, so an OS-level path alias cannot disable it — an
+asymmetry there would silently authorize a sweep inside the user's home
+directory.
+
+## Reporting a containment problem
+
+If you believe a containment layer can be bypassed, that is a vulnerability —
+see the top of this document. Include the platform, the `$HOME` canonical form
+(`realpath "$HOME"`), and whether a symlink is involved: an aliased home
+directory is the usual reason a path boundary behaves differently on two
+machines.
+
 ## Handling credentials
 
 - AutoLoop never requires a credential to be placed in this repository.
