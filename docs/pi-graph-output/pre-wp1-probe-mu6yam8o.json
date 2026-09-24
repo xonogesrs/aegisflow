@@ -1,0 +1,57 @@
+{
+  "schema": "autoloop.pre-wp1-probe/v1",
+  "ranAt": "2026-09-18T12:45:53.124Z",
+  "log": "/var/folders/xz/z021trgs0n16709lm9s9pcc40000gn/T/pre-wp1-log-aJTwV4/probe.log",
+  "checks": {
+    "A3_POSITIVE_RUN": {
+      "ok": true,
+      "detail": "final=PASS reason="
+    },
+    "A3_CANONICAL_RESULTS_PRODUCED": {
+      "ok": true,
+      "detail": "mid-run resultsDir after SA-R1=[SA-R1.json] after SA-R2=[SA-R1.json,SA-R2.json]"
+    },
+    "A3_WRITER_ENVELOPE_CARRIED_DEP_IDENTITIES": {
+      "ok": true,
+      "detail": "SA-W1 envelope.dependencyResultIdentities includes SA-R1 + SA-R2"
+    },
+    "A3_WRITER_WORKTREE_CLAIMS_SURVIVE": {
+      "ok": true,
+      "detail": "mid-run resultsDir after SA-W1=[SA-R1.json,SA-R2.json,SA-W1.json,SA-W1.review.json,SA-W1.worktree.json]"
+    },
+    "A3_VERIFIER_INDEPENDENTLY_VERIFIED": {
+      "ok": true,
+      "detail": "SA-V1 PASSED with an independent-verification claim"
+    },
+    "A3_NEGATIVE_DEP_DESTROYED": {
+      "ok": true,
+      "detail": "SA-R1.json removed mid-run=true"
+    },
+    "A3_NEGATIVE_DEPENDENT_FAILED": {
+      "ok": true,
+      "detail": "final=HOLD reason=HOLD"
+    },
+    "A3_NEGATIVE_FAILURE_TRACES_TO_WRITER": {
+      "ok": true,
+      "detail": "SA-W1-level failure journaled=true final=HOLD"
+    },
+    "A4_CRASH_TRIGGERED": {
+      "ok": false,
+      "detail": "worker1 exit=1 out=RUN_FINAL:HOLD"
+    },
+    "A4_RESULTS_SURVIVED_CRASH": {
+      "ok": false,
+      "detail": "pre-resume results=[]"
+    },
+    "A4_RESUME_FINAL": {
+      "ok": false,
+      "detail": "final=HOLD reason=already_terminal"
+    },
+    "A4_VERIFIER_CONSUMED_SURVIVING_RESULTS": {
+      "ok": false,
+      "detail": "SA-V1 passed exactly once=false (SA-W1 re-started=false)"
+    }
+  },
+  "verdict": "HOLD",
+  "firstBreak": "A4_CRASH_TRIGGERED"
+}

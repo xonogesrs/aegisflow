@@ -1,0 +1,29 @@
+{
+  "schema": "autoloop.wp1-f-continuity/v1",
+  "ranAt": "2026-09-21T15:21:46.624Z",
+  "log": "/var/folders/xz/z021trgs0n16709lm9s9pcc40000gn/T/wp1-f-log-MUCwxI/probe.log",
+  "checks": {
+    "F1_SESSION_A_RUN": {
+      "ok": true,
+      "detail": "final=HOLD stage=undefined holdCode=ORCHESTRATION_HOLD reason=HOLD"
+    },
+    "F2_A_USAGE_OBSERVED": {
+      "ok": true,
+      "detail": "PROVIDER_USAGE_OBSERVED events=2 occupancy(1st)=6136"
+    },
+    "F3_A_HANDOVER_HOLD": {
+      "ok": false,
+      "detail": "final=HOLD handedOver=false mirror=undefined"
+    },
+    "F4_A_RESULTS_AUTHORED": {
+      "ok": false,
+      "detail": "authored=[] of [SA-R1,SA-R2]"
+    },
+    "F5_B_BOOTSTRAP": {
+      "ok": false,
+      "detail": "CROSS_SESSION_ROLLOVER_INTENT_MISSING CROSS_SESSION_ROLLOVER_INTENT_MISSING: no canonical rollover block on CURRENT"
+    }
+  },
+  "verdict": "HOLD",
+  "firstBreak": "F3_A_HANDOVER_HOLD"
+}

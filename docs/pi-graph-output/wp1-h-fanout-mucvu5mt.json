@@ -1,0 +1,343 @@
+{
+  "schema": "autoloop.wp1-h-fanout/v1",
+  "ranAt": "2026-09-22T16:22:29.381Z",
+  "log": "/var/folders/xz/z021trgs0n16709lm9s9pcc40000gn/T/wp1-h-log-cmFT6o/probe.log",
+  "results": [
+    {
+      "name": "H1",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=PASS"
+        },
+        {
+          "k": "SA-R1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R2_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R3_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-W1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-V1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "DISTINCT_AUTHORED_OUTPUTS",
+          "ok": true,
+          "detail": "distinct=true allPassed=true ids=agent_ef6e6e,agent_e0393c,agent_546605"
+        },
+        {
+          "k": "WRITER_CONSUMED_ALL_THREE",
+          "ok": true,
+          "detail": "depLines=3 summary=\"analysis summary |  | - dep1 (SA-R1): found 1 file(s) containing TODO under /src/docs | - dep2 (SA-R2): found 2 markdown file(s) under /src/\""
+        },
+        {
+          "k": "IDENTITIES_BOUND",
+          "ok": true,
+          "detail": "bound=true"
+        }
+      ]
+    },
+    {
+      "name": "H2",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=PASS"
+        },
+        {
+          "k": "SA-R1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R2_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R3_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-W1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-V1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "DISTINCT_AUTHORED_OUTPUTS",
+          "ok": true,
+          "detail": "distinct=true allPassed=true ids=agent_ab740f,agent_6fea05,agent_12f817"
+        },
+        {
+          "k": "WRITER_CONSUMED_ALL_THREE",
+          "ok": true,
+          "detail": "depLines=3 summary=\"analysis summary |  | - dep1 (SA-R1): found 1 file(s) containing TODO under /src/docs | - dep2 (SA-R2): found 2 markdown file(s) under /src/\""
+        },
+        {
+          "k": "IDENTITIES_BOUND",
+          "ok": true,
+          "detail": "bound=true"
+        }
+      ]
+    },
+    {
+      "name": "H3",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=PASS"
+        },
+        {
+          "k": "SA-R1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R2_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R3_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-W1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-V1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "DISTINCT_AUTHORED_OUTPUTS",
+          "ok": true,
+          "detail": "distinct=true allPassed=true ids=agent_41138d,agent_a2a56b,agent_55928d"
+        },
+        {
+          "k": "WRITER_CONSUMED_ALL_THREE",
+          "ok": true,
+          "detail": "depLines=3 summary=\"analysis summary |  | - dep1 (SA-R1): found 1 file(s) containing TODO under /src/docs | - dep2 (SA-R2): found 2 markdown file(s) under /src/\""
+        },
+        {
+          "k": "IDENTITIES_BOUND",
+          "ok": true,
+          "detail": "bound=true"
+        }
+      ]
+    },
+    {
+      "name": "H4",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=HOLD holdCode=ORCHESTRATION_HOLD"
+        },
+        {
+          "k": "WRITER_NEVER_PASSED",
+          "ok": true,
+          "detail": "w1=HOLD v1=none"
+        },
+        {
+          "k": "FAIL_CLOSED_FINDING",
+          "ok": true,
+          "detail": "w1=HOLD/REVIEWER_HOLD refused=false"
+        }
+      ]
+    },
+    {
+      "name": "H5",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=HOLD holdCode=ORCHESTRATION_HOLD"
+        },
+        {
+          "k": "WRITER_NEVER_PASSED",
+          "ok": true,
+          "detail": "w1=HOLD v1=none"
+        },
+        {
+          "k": "FAIL_CLOSED_FINDING",
+          "ok": true,
+          "detail": "w1=HOLD/EXECUTOR_ERROR refused=true"
+        }
+      ]
+    },
+    {
+      "name": "H6",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=HOLD holdCode=ORCHESTRATION_HOLD"
+        },
+        {
+          "k": "WRITER_NEVER_PASSED",
+          "ok": true,
+          "detail": "w1=HOLD v1=none"
+        },
+        {
+          "k": "FAIL_CLOSED_FINDING",
+          "ok": true,
+          "detail": "w1=HOLD/EXECUTOR_ERROR refused=true"
+        }
+      ]
+    },
+    {
+      "name": "H7",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=HOLD holdCode=ORCHESTRATION_HOLD"
+        },
+        {
+          "k": "WRITER_NEVER_PASSED",
+          "ok": true,
+          "detail": "w1=HOLD v1=none"
+        },
+        {
+          "k": "FAIL_CLOSED_FINDING",
+          "ok": true,
+          "detail": "w1=HOLD/EXECUTOR_ERROR refused=true"
+        }
+      ]
+    },
+    {
+      "name": "H8",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=HOLD holdCode=ORCHESTRATION_HOLD"
+        },
+        {
+          "k": "WRITER_NEVER_PASSED",
+          "ok": true,
+          "detail": "w1=HOLD v1=none"
+        },
+        {
+          "k": "FAIL_CLOSED_FINDING",
+          "ok": true,
+          "detail": "w1=HOLD/EXECUTOR_ERROR refused=true"
+        }
+      ]
+    },
+    {
+      "name": "H9",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=PASS"
+        },
+        {
+          "k": "SA-R1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R2_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R3_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-W1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-V1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "DISTINCT_AUTHORED_OUTPUTS",
+          "ok": true,
+          "detail": "distinct=true allPassed=true ids=agent_31c1dc,agent_a2db7b,agent_1b8844"
+        },
+        {
+          "k": "WRITER_CONSUMED_ALL_THREE",
+          "ok": true,
+          "detail": "depLines=3 summary=\"analysis summary |  | - dep1 (SA-R1): found 1 file(s) containing TODO under /src/docs | - dep2 (SA-R2): found 2 markdown file(s) under /src/\""
+        },
+        {
+          "k": "IDENTITIES_BOUND",
+          "ok": true,
+          "detail": "bound=true"
+        }
+      ]
+    },
+    {
+      "name": "H10",
+      "ok": true,
+      "checks": [
+        {
+          "k": "A_HANDOVER",
+          "ok": true,
+          "detail": "final=HOLD handedOver=true"
+        },
+        {
+          "k": "B_HANDOVER",
+          "ok": true,
+          "detail": "final=HOLD handedOver=true holdCode=CROSS_SESSION_ROLLOVER_IN_PROGRESS_A_FROZEN"
+        },
+        {
+          "k": "C_RESUMED_CONSUMED_FANOUT",
+          "ok": true,
+          "detail": "final=PASS holdCode="
+        },
+        {
+          "k": "FANIN_PASSED_ACROSS_ERAS",
+          "ok": true,
+          "detail": "w1=PASS@g1 v1=PASS@g2"
+        }
+      ]
+    }
+  ],
+  "verdict": "PASS"
+}

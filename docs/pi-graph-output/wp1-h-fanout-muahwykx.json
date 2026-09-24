@@ -1,0 +1,59 @@
+{
+  "schema": "autoloop.wp1-h-fanout/v1",
+  "ranAt": "2026-09-21T00:17:13.233Z",
+  "log": "/var/folders/xz/z021trgs0n16709lm9s9pcc40000gn/T/wp1-h-log-spKHSH/probe.log",
+  "results": [
+    {
+      "name": "H1",
+      "ok": false,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=PASS"
+        },
+        {
+          "k": "SA-R1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R2_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R3_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-W1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-V1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "DISTINCT_AUTHORED_OUTPUTS",
+          "ok": true,
+          "detail": "distinct=true authored=true verified=true"
+        },
+        {
+          "k": "WRITER_CONSUMED_ALL_THREE",
+          "ok": false,
+          "detail": "claims=\"writer report written under docs/pi-graph-output/summary.md incorporating dependency claims; self-test passed\""
+        },
+        {
+          "k": "IDENTITIES_BOUND",
+          "ok": true,
+          "detail": "bound=true"
+        }
+      ]
+    }
+  ],
+  "verdict": "FAIL"
+}

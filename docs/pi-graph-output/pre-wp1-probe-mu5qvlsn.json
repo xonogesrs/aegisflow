@@ -1,0 +1,93 @@
+{
+  "schema": "autoloop.pre-wp1-probe/v1",
+  "ranAt": "2026-09-17T16:30:55.210Z",
+  "log": "/var/folders/xz/z021trgs0n16709lm9s9pcc40000gn/T/pre-wp1-log-PiYuv2/probe.log",
+  "checks": {
+    "A1_RUN": {
+      "ok": true,
+      "detail": "final=PASS reason="
+    },
+    "A1_DURABLE_GRAPH_USED": {
+      "ok": true,
+      "detail": "checkpoint=true journalEvents=23 passedPhases=[P1] durableId=exec_27e32a40f68d05b4c44f1f02e97794a3"
+    },
+    "A1_DURABLE_PROVENANCE": {
+      "ok": true,
+      "detail": "durableExecutionId=exec_27e32a40f68d05b4c44f1f02e97794a3 evidence.exec_dir=/private/var/folders/xz/z021trgs0n16709lm9s9pcc40000gn/T/pw1-mu5qvlsn-persist-TuNBMD/exec_27e32a40f68d05b4c44f1f02e97794a3"
+    },
+    "A2_RUN": {
+      "ok": false,
+      "detail": "final=HOLD reason=HOLD"
+    },
+    "A2_USAGE_OBSERVATION_REACHABLE": {
+      "ok": false,
+      "detail": "no PROVIDER_USAGE_OBSERVED (observationFailed=false; runnerForwardsExecutor=true)"
+    },
+    "A2_CANONICAL_EXECUTOR_DERIVABLE": {
+      "ok": true,
+      "detail": "deriveCanonicalRolloverExecutor returns a function for a valid rollover admission"
+    },
+    "A2_GATE_INJECTS_SUBAGENT_EXECUTOR": {
+      "ok": true,
+      "detail": "admission-gate derives canonical executor for graph=subagent"
+    },
+    "A2_RUNNER_FORWARDS_EXECUTOR": {
+      "ok": true,
+      "detail": "runSubagentGraph forwards rolloverRequestExecutor to runDurableGraph"
+    },
+    "A3_POSITIVE_RUN": {
+      "ok": false,
+      "detail": "final=HOLD reason=HOLD"
+    },
+    "A3_O1_PERSISTED": {
+      "ok": false,
+      "detail": "resultsDir=/var/folders/xz/z021trgs0n16709lm9s9pcc40000gn/T/pw1-mu5qvlsn-scratch-cbo4FI/exec_1ca1ed1e6148533b24d636db590ad23c/results P1.json=false"
+    },
+    "A3_P2_ENVELOPE_CARRIED_P1_IDENTITY": {
+      "ok": false,
+      "detail": "no dependencyResultIdentities(P1) found in P2 executor artifacts"
+    },
+    "A3_P2_WORKTREE_CARRIES_O1_CLAIM": {
+      "ok": false,
+      "detail": "P2 worktree artifact does NOT contain O1's claim — consumption not proven"
+    },
+    "A3_P3_JOIN_VERIFIED": {
+      "ok": false,
+      "detail": "P3 joinVerify did not pass"
+    },
+    "A3_NEGATIVE_O1_DESTROYED": {
+      "ok": false,
+      "detail": "O1 removed mid-run=false"
+    },
+    "A3_NEGATIVE_P2_FAILED": {
+      "ok": true,
+      "detail": "final=HOLD reason=HOLD"
+    },
+    "A3_NEGATIVE_FAILURE_TRACES_TO_P2": {
+      "ok": true,
+      "detail": "P2-level failure journaled=true final=HOLD"
+    },
+    "A4_CRASH_TRIGGERED": {
+      "ok": false,
+      "detail": "worker1 exit=1 out=RUN_FINAL:HOLD"
+    },
+    "A4_RESULTS_SURVIVED_CRASH": {
+      "ok": false,
+      "detail": "pre-resume results=[]"
+    },
+    "A4_RESUME_FINAL": {
+      "ok": false,
+      "detail": "final=HOLD reason=already_terminal"
+    },
+    "A4_RESULTS_SURVIVED_RESUME": {
+      "ok": false,
+      "detail": "post-resume results=[]"
+    },
+    "A4_P3_CONSUMED_SURVIVING_RESULTS": {
+      "ok": false,
+      "detail": "P3 passed exactly once=false (P2 re-started=false)"
+    }
+  },
+  "verdict": "HOLD",
+  "firstBreak": "A2_RUN"
+}

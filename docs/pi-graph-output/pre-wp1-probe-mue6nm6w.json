@@ -1,0 +1,121 @@
+{
+  "schema": "autoloop.pre-wp1-probe/v1",
+  "ranAt": "2026-09-23T14:13:10.935Z",
+  "log": "/var/folders/xz/z021trgs0n16709lm9s9pcc40000gn/T/pre-wp1-log-crxPXi/probe.log",
+  "checks": {
+    "A1_RUN": {
+      "ok": false,
+      "detail": "final=HOLD reason=GRAPH_EXCEPTION:ColimaRuntimeError"
+    },
+    "A1_DURABLE_GRAPH_USED": {
+      "ok": false,
+      "detail": "checkpoint=true journalEvents=12 passedPhases=[] durableId=exec_0e7cd7ec527a64c2eecacfac3718f06c"
+    },
+    "A1_DURABLE_PROVENANCE": {
+      "ok": true,
+      "detail": "durableExecutionId=exec_0e7cd7ec527a64c2eecacfac3718f06c evidence.exec_dir=/Users/zhengfengqing/.pre-wp1-probe/a1-mue6nm6w-mue6nm6w-319x/persist/exec_0e7cd7ec527a64c2eecacfac3718f06c"
+    },
+    "A2_RUN": {
+      "ok": true,
+      "detail": "final=HOLD stage=undefined holdCode=GRAPH_EXCEPTION:ColimaRuntimeError reason=GRAPH_EXCEPTION:ColimaRuntimeError"
+    },
+    "A2_PROVIDER_USAGE_OBSERVED": {
+      "ok": false,
+      "detail": "no provider-reported usage events (observationFailed=false)"
+    },
+    "A2_CANONICAL_OCCUPANCY": {
+      "ok": false,
+      "detail": "occupancy mismatch"
+    },
+    "A2_AUTOMATIC_TRIGGER": {
+      "ok": false,
+      "detail": "no SPAWN_DISPATCH with the admitted binding"
+    },
+    "A2_SUCCESSOR_PATH_REACHABLE": {
+      "ok": false,
+      "detail": "mirror state=undefined handedOver=false final=HOLD"
+    },
+    "A2_SECRET_VALUE_ABSENT": {
+      "ok": true,
+      "detail": "journal scanned for the admitted secret value"
+    },
+    "A5_RUN": {
+      "ok": true,
+      "detail": "final=HOLD stage=undefined holdCode=GRAPH_EXCEPTION:ColimaRuntimeError reason=GRAPH_EXCEPTION:ColimaRuntimeError"
+    },
+    "A5_PROVIDER_USAGE_OBSERVED": {
+      "ok": false,
+      "detail": "no provider-reported usage events"
+    },
+    "A5_CANONICAL_OCCUPANCY": {
+      "ok": false,
+      "detail": "occupancy mismatch"
+    },
+    "A5_SPAWN_DISPATCH_EXACTLY_ONCE": {
+      "ok": false,
+      "detail": "SPAWN_DISPATCH events=0"
+    },
+    "A5_INTAKE_AT_QUIESCENT_BOUNDARY": {
+      "ok": false,
+      "detail": "dispatchSeq=null usageEventsBefore=0"
+    },
+    "A5_SUCCESSOR_PATH_REACHABLE": {
+      "ok": false,
+      "detail": "mirror state=undefined handedOver=false final=HOLD"
+    },
+    "A5_SECRET_VALUE_ABSENT": {
+      "ok": true,
+      "detail": "journal scanned for the admitted secret value"
+    },
+    "A3_POSITIVE_RUN": {
+      "ok": false,
+      "detail": "final=HOLD reason=GRAPH_EXCEPTION:ColimaRuntimeError"
+    },
+    "A3_CANONICAL_RESULTS_PRODUCED": {
+      "ok": false,
+      "detail": "mid-run resultsDir after SA-R1=[] after SA-R2=[]"
+    },
+    "A3_WRITER_ENVELOPE_CARRIED_DEP_IDENTITIES": {
+      "ok": false,
+      "detail": "no dependencyResultIdentities on the SA-W1 node result (got null)"
+    },
+    "A3_WRITER_WORKTREE_CLAIMS_SURVIVE": {
+      "ok": false,
+      "detail": "writer artifacts missing after SA-W1 terminal (got [])"
+    },
+    "A3_VERIFIER_INDEPENDENTLY_VERIFIED": {
+      "ok": false,
+      "detail": "SA-V1 did not independently verify"
+    },
+    "A3_NEGATIVE_DEP_DESTROYED": {
+      "ok": false,
+      "detail": "SA-R1.json removed mid-run=false"
+    },
+    "A3_NEGATIVE_DEPENDENT_FAILED": {
+      "ok": true,
+      "detail": "final=HOLD reason=GRAPH_EXCEPTION:ColimaRuntimeError"
+    },
+    "A3_NEGATIVE_FAILURE_TRACES_TO_WRITER": {
+      "ok": true,
+      "detail": "SA-W1-level failure journaled=false final=HOLD"
+    },
+    "A4_CRASH_TRIGGERED": {
+      "ok": false,
+      "detail": "worker1 exit=1 out=RUN_FINAL:HOLD"
+    },
+    "A4_RESULTS_SURVIVED_CRASH": {
+      "ok": false,
+      "detail": "pre-resume results=[]"
+    },
+    "A4_RESUME_FINAL": {
+      "ok": false,
+      "detail": "final=HOLD reason=already_terminal"
+    },
+    "A4_VERIFIER_CONSUMED_SURVIVING_RESULTS": {
+      "ok": false,
+      "detail": "SA-V1 passed exactly once=false (SA-W1 re-started=false)"
+    }
+  },
+  "verdict": "HOLD",
+  "firstBreak": "A1_RUN"
+}

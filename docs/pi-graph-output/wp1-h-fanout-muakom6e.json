@@ -1,0 +1,266 @@
+{
+  "schema": "autoloop.wp1-h-fanout/v1",
+  "ranAt": "2026-09-21T01:34:42.758Z",
+  "log": "/var/folders/xz/z021trgs0n16709lm9s9pcc40000gn/T/wp1-h-log-duJd8s/probe.log",
+  "results": [
+    {
+      "name": "H2",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=PASS"
+        },
+        {
+          "k": "SA-R1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R2_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R3_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-W1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-V1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "DISTINCT_AUTHORED_OUTPUTS",
+          "ok": true,
+          "detail": "distinct=true authored=true verified=true"
+        },
+        {
+          "k": "WRITER_CONSUMED_ALL_THREE",
+          "ok": true,
+          "detail": "depLines=3 summary=\"analysis summary |  | - dep1 (SA-R1): found 1 file(s) containing TODO under /src/docs | - dep2 (SA-R2): found 2 markdown file(s) under /src/\""
+        },
+        {
+          "k": "IDENTITIES_BOUND",
+          "ok": true,
+          "detail": "bound=true"
+        }
+      ]
+    },
+    {
+      "name": "H3",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=PASS"
+        },
+        {
+          "k": "SA-R1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R2_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R3_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-W1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-V1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "DISTINCT_AUTHORED_OUTPUTS",
+          "ok": true,
+          "detail": "distinct=true authored=true verified=true"
+        },
+        {
+          "k": "WRITER_CONSUMED_ALL_THREE",
+          "ok": true,
+          "detail": "depLines=3 summary=\"analysis summary |  | - dep1 (SA-R1): found 1 file(s) containing TODO under /src/docs | - dep2 (SA-R2): found 2 markdown file(s) under /src/\""
+        },
+        {
+          "k": "IDENTITIES_BOUND",
+          "ok": true,
+          "detail": "bound=true"
+        }
+      ]
+    },
+    {
+      "name": "H4",
+      "ok": false,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=HOLD holdCode=ORCHESTRATION_HOLD"
+        },
+        {
+          "k": "WRITER_NEVER_PASSED",
+          "ok": true,
+          "detail": "w1=HOLD v1=none"
+        },
+        {
+          "k": "FAIL_CLOSED_FINDING",
+          "ok": false,
+          "detail": "w1=HOLD/REVIEWER_HOLD refused=false"
+        }
+      ]
+    },
+    {
+      "name": "H5",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=HOLD holdCode=ORCHESTRATION_HOLD"
+        },
+        {
+          "k": "WRITER_NEVER_PASSED",
+          "ok": true,
+          "detail": "w1=HOLD v1=none"
+        },
+        {
+          "k": "FAIL_CLOSED_FINDING",
+          "ok": true,
+          "detail": "w1=HOLD/EXECUTOR_ERROR refused=true"
+        }
+      ]
+    },
+    {
+      "name": "H6",
+      "ok": true,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=HOLD holdCode=ORCHESTRATION_HOLD"
+        },
+        {
+          "k": "WRITER_NEVER_PASSED",
+          "ok": true,
+          "detail": "w1=HOLD v1=none"
+        },
+        {
+          "k": "FAIL_CLOSED_FINDING",
+          "ok": true,
+          "detail": "w1=HOLD/EXECUTOR_ERROR refused=true"
+        }
+      ]
+    },
+    {
+      "name": "H7",
+      "ok": false,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": false,
+          "detail": "final=PASS"
+        },
+        {
+          "k": "WRITER_NEVER_PASSED",
+          "ok": false,
+          "detail": "w1=PASS v1=PASS"
+        },
+        {
+          "k": "FAIL_CLOSED_FINDING",
+          "ok": false,
+          "detail": "w1=PASS/ refused=false"
+        }
+      ]
+    },
+    {
+      "name": "H8",
+      "ok": false,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": false,
+          "detail": "final=PASS"
+        },
+        {
+          "k": "WRITER_NEVER_PASSED",
+          "ok": false,
+          "detail": "w1=PASS v1=PASS"
+        },
+        {
+          "k": "FAIL_CLOSED_FINDING",
+          "ok": false,
+          "detail": "w1=PASS/ refused=false"
+        }
+      ]
+    },
+    {
+      "name": "H9",
+      "ok": false,
+      "checks": [
+        {
+          "k": "RUN",
+          "ok": true,
+          "detail": "final=PASS"
+        },
+        {
+          "k": "SA-R1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R2_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-R3_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-W1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "SA-V1_PASSED",
+          "ok": true,
+          "detail": "final=PASS gen=0"
+        },
+        {
+          "k": "DISTINCT_AUTHORED_OUTPUTS",
+          "ok": true,
+          "detail": "distinct=true authored=true verified=true"
+        },
+        {
+          "k": "WRITER_CONSUMED_ALL_THREE",
+          "ok": true,
+          "detail": "depLines=3 summary=\"analysis summary |  | - dep1 (SA-R1): found 1 file(s) containing TODO under /src/docs | - dep2 (SA-R2): found 2 markdown file(s) under /src/\""
+        },
+        {
+          "k": "IDENTITIES_BOUND",
+          "ok": false,
+          "detail": "bound=false"
+        }
+      ]
+    }
+  ],
+  "verdict": "FAIL"
+}
