@@ -123,8 +123,26 @@ floor requires it):
 | governance | 573/573 PASS |
 | telemetry + budget | 215/215 PASS |
 | rollover | 53/53 PASS |
-| v2 full | 661/661 PASS |
+| v2 full | see note below |
 | `npm run check` | PASS |
+
+### A test-harness race found while establishing the v2 floor
+
+The v2 floor exposed a PRE-EXISTING flake in the E2 reboot soak (introduced by
+`11059ba`; neither evolution commit touches `test/v2/`): the SIGKILL workers
+published their ack with a plain `writeFileSync` while the parent gated the kill
+on `existsSync` → `readFileSync` → `JSON.parse` with no retry, so a read inside
+the create-then-write window threw `SyntaxError: Unexpected end of JSON input`
+from `waitForMarker`. It presented as a different subtest failing each run (R7
+once, R3 twice) — a race, not a regression.
+
+Reproduced on an isolated harness with the identical patterns (7993 torn reads
+in 4 s, same message); zero after the fix. Fix landed separately
+(`test(v2): fix the E2 reboot-soak marker race`, commit `f0ae793`): the worker
+publishes atomically (tmp + rename) and `waitForMarker` treats an unreadable
+marker as "not written yet". `test-e2-reboot-soak.mjs` then passed 9/9 on three
+consecutive runs. E1 is unaffected (it reads the ack only after the child has
+exited).
 
 ## Authority boundaries (unchanged invariants)
 
