@@ -44,6 +44,8 @@ import {
   SUBAGENT_WRITER_RESULT_SCHEMA,
   TOOL_PERMISSIONS,
 } from "./subagent-contract.mjs";
+import { canonicalScopeEntry, canonicalScopeEntries, isWithinCanonicalScope } from "../c2d/mutation-scope.mjs";
+import { verifyWriteContainment } from "../c2d/write-containment.mjs";
 
 export class SubagentWriterExecutorError extends Error {
   constructor(reason, details) {
@@ -52,6 +54,31 @@ export class SubagentWriterExecutorError extends Error {
     this.reason = reason;
     this.details = details;
   }
+}
+
+/**
+ * Host-observed writer scope decision — the AUTHORITATIVE replacement for the
+ * agent's self-reported one, over two independent sources:
+ *
+ *  1. git's changed-path inventory (`hostChangedPaths`), canonicalized with the
+ *     shared seam（`canonicalScopeEntry` / `isWithinCanonicalScope`）; and
+ *  2. the git-INDEPENDENT write-containment scan of the materialized worktree
+ *     (`verifyWriteContainment`) — a write THROUGH a pre-existing symlink leaves
+ *     no repo-relative changed path at all, so source 1 cannot see it.
+ *
+ * Containment can only add violations; it never authorizes a path source 1
+ * refused. Exported so the decision is testable without a sandbox runtime.
+ */
+export function hostObservedScopeViolations({ worktreePath, mutationScope = [], hostChangedPaths = [] }) {
+  const scopeSet = canonicalScopeEntries(mutationScope, worktreePath);
+  const containment = verifyWriteContainment({ root: worktreePath, boundaries: mutationScope });
+  return [
+    ...hostChangedPaths.filter((p) => {
+      const canonical = canonicalScopeEntry(p, worktreePath);
+      return canonical === null || scopeSet === null || !isWithinCanonicalScope(canonical, scopeSet);
+    }),
+    ...containment.violations.map((v) => `${v.path ?? "<worktree>"} (${v.reason})`),
+  ];
 }
 
 /**
@@ -505,8 +532,12 @@ export function createSubagentWriterExecutorAdapter({ profile, repoPath, scratch
             diffSummary = `new file(s): ${untrackedRun.stdout.trim().split("\n").join(", ")}`;
           }
         }
-        const scopeSet = (mutationScope || []).map((m) => String(m).replace(/\/+$/, ""));
-        const scopeViolations = hostChangedPaths.filter((p) => !scopeSet.some((s) => p === s || p.startsWith(s + "/")));
+        // Host-observed scope decision — CANONICAL semantics, the same rules
+        // the enforcement gate applies（c2d/mutation-scope.mjs）: a changed path
+        // that does not canonicalize（absolute / traversal / non-normalized /
+        // symlink-adjacent）and a declared scope that does not canonicalize are
+        // both violations, never passes.
+        const scopeViolations = hostObservedScopeViolations({ worktreePath, mutationScope, hostChangedPaths });
         repoHeadClean = gitHead(repoPath) === repoHeadAtStart;
         subagentResult = {
           ...parsed,
@@ -524,6 +555,7 @@ export function createSubagentWriterExecutorAdapter({ profile, repoPath, scratch
           mutationScope,
           hostChangedPaths,
           repoHeadClean,
+          repositoryRoot: worktreePath,
         });
       }
     }

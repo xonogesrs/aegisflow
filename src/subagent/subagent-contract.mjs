@@ -17,6 +17,7 @@
 
 import { createHash } from "node:crypto";
 import { assertAuthorizedPathsBounded } from "../admission/search-scope-governor.mjs";
+import { canonicalScopeEntry, canonicalScopeEntries, isWithinCanonicalScope } from "../c2d/mutation-scope.mjs";
 
 export const SUBAGENT_RESULT_SCHEMA = "autoloop.subagent.structured-result/v1";
 export const SUBAGENT_WRITER_RESULT_SCHEMA = "autoloop.subagent.writer-result/v1";
@@ -263,7 +264,9 @@ export function validateSubagentResult(result, { expectedAgentExecutionId, expec
  *
  * `hostChangedPaths` is the host-observed changed-path set of the worktree
  *（relative to the worktree root）; `repoHeadClean` is the host-observed
- * main-repo purity flag（main repo must stay zero-touch）.
+ * main-repo purity flag（main repo must stay zero-touch）; `repositoryRoot`
+ *（the worktree root, when known）selects the gate's full canonicalization
+ *（root containment + symlink rejection）for the scope decision.
  */
 export function validateWriterSubagentResult(
   result,
@@ -275,6 +278,7 @@ export function validateWriterSubagentResult(
     mutationScope = [],
     hostChangedPaths = [],
     repoHeadClean = true,
+    repositoryRoot = null,
   } = {},
 ) {
   const errors = [];
@@ -342,10 +346,13 @@ export function validateWriterSubagentResult(
   }
 
   // Mutation scope containment（both agent-reported and host-observed）.
-  const scopeSet = new Set((mutationScope || []).map((p) => String(p).replace(/\/+$/, "")));
+  // CANONICAL semantics — the same rules the enforcement gate applies
+  //（c2d/mutation-scope.mjs）: a declared scope entry or a reported path that
+  // does not canonicalize authorizes nothing, so it is out of scope.
+  const scopeSet = canonicalScopeEntries(mutationScope ?? [], repositoryRoot);
   const inScope = (p) => {
-    const np = String(p).replace(/\/+$/, "");
-    return [...scopeSet].some((s) => np === s || np.startsWith(s + "/"));
+    const canonical = canonicalScopeEntry(p, repositoryRoot);
+    return canonical !== null && scopeSet !== null && isWithinCanonicalScope(canonical, scopeSet);
   };
   for (const f of result.filesChanged ?? []) {
     if (!inScope(f)) errors.push(`filesChanged_out_of_scope:${f}`);

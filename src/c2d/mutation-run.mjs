@@ -21,6 +21,7 @@ import { publishIntent, publishComplete, validateContinuity } from "./journal.mj
 import { reconcileMutationIntent } from "./reconcile.mjs";
 import { authorizeMutation, C3B_HOLD, assertValidationPlan } from "./mutation-authority.mjs";
 import { captureScopeSnapshot, enforceScopeGate } from "./mutation-scope.mjs";
+import { verifyWriteContainment } from "./write-containment.mjs";
 import { captureReviewedCandidate, buildCandidateReviewerHandoff } from "./reviewed-commit-candidate.mjs";
 import { acquireRepositoryMutationLock } from "./repository-mutation-lock.mjs";
 
@@ -393,92 +394,128 @@ export async function runMutation({
     lifecycle.push({ state: "BASELINE_CAPTURED", at: new Date().toISOString() });
     const baseline = captureScopeSnapshot(worktree.worktreePath);
 
-    lifecycle.push({ state: "MUTATING", at: new Date().toISOString() });
+    // ── WRITE CONTAINMENT — pre-execution, git-independent ────────────────
+    // The post-mutation scope gate below iterates git's changed-path delta. A
+    // write THROUGH a pre-existing symlink produces NO changed path, so that
+    // gate can never see it. Audit the MATERIALIZED filesystem before anything
+    // is dispatched: if the isolated worktree can redirect a write outside the
+    // authorized root (a symlink — resolvable or dangling — on the write path,
+    // or a symlink component of a declared writable boundary), nothing runs at
+    // all. This is what makes the denial PRE-WRITE rather than post-hoc.
+    const preContainment = verifyWriteContainment({
+      root: worktree.worktreePath,
+      boundaries: durableAuthorization.allowed_paths,
+    });
+    gates.push({ gate: "pre_mutation_write_containment", ok: preContainment.ok, violations: preContainment.violations });
+
     let mutationExec = { ran: false };
-    if (mutationCommand) {
-      mutationExec = await runBoundedCommand(mutationCommand.cmd, mutationCommand.args || [], {
-        cwd: worktree.worktreePath,
-        timeoutMs: mutationCommand.timeout_ms,
-        envAllowlist: mutationCommand.env_allowlist,
-      });
-    }
-    const postMutation = captureScopeSnapshot(worktree.worktreePath);
-    const preGate = enforceScopeGate(worktree.worktreePath, baseline, postMutation, durableAuthorization.allowed_paths, durableAuthorization.forbidden_paths);
-    gates.push({ gate: "post_mutation", ok: preGate.ok, violations: preGate.violations });
+    let postMutation = baseline;
+    let preGate = { ok: true, delta: [], violations: [] };
+    let validation = { results: [], environmentFailure: false, validationFailed: false };
 
-    if (!preGate.ok) {
+    if (!preContainment.ok) {
       outcomeState = "SCOPE_VIOLATION";
-    } else if (mutationCommand && mutationExec.error && !mutationExec.timed_out) {
-      outcomeState = "ENVIRONMENT_FAILURE";
-    } else if (mutationCommand && mutationExec.timed_out) {
-      outcomeState = "MUTATION_FAILED";
-    } else if (mutationCommand && mutationExec.exit_code !== 0) {
-      outcomeState = "MUTATION_FAILED";
     } else {
-      lifecycle.push({ state: "MUTATION_COMPLETE", at: new Date().toISOString() });
-      fireHook("after_c3b_mutation_before_validation");
-      lifecycle.push({ state: "VALIDATING", at: new Date().toISOString() });
-      const validation = validationPlan
-        ? await runValidationPlan(durableAuthorization, validationPlanId, validationPlan, worktree.worktreePath)
-        : { results: [], environmentFailure: false, validationFailed: false };
-      const postValidation = captureScopeSnapshot(worktree.worktreePath);
-      // Zero-tolerance gate: validation (and any background process) must not
-      // change anything at all — no allowlist applies here, unlike the
-      // post-mutation gate above.
-      const postValidationGate = enforceScopeGate(worktree.worktreePath, postMutation, postValidation, [], []);
-      gates.push({ gate: "post_validation", ok: postValidationGate.ok, violations: postValidationGate.violations });
+      lifecycle.push({ state: "MUTATING", at: new Date().toISOString() });
+      if (mutationCommand) {
+        mutationExec = await runBoundedCommand(mutationCommand.cmd, mutationCommand.args || [], {
+          cwd: worktree.worktreePath,
+          timeoutMs: mutationCommand.timeout_ms,
+          envAllowlist: mutationCommand.env_allowlist,
+        });
+      }
+      postMutation = captureScopeSnapshot(worktree.worktreePath);
+      preGate = enforceScopeGate(worktree.worktreePath, baseline, postMutation, durableAuthorization.allowed_paths, durableAuthorization.forbidden_paths);
+      gates.push({ gate: "post_mutation", ok: preGate.ok, violations: preGate.violations });
 
-      if (!postValidationGate.ok) {
+      // ── WRITE CONTAINMENT — post-execution, git-independent ─────────────
+      // Re-audit the materialized filesystem. A symlink created or swapped in
+      // by the mutation itself is caught here even if git reports no changed
+      // path for the write it mediated; the run fails closed.
+      const postContainment = verifyWriteContainment({
+        root: worktree.worktreePath,
+        boundaries: durableAuthorization.allowed_paths,
+      });
+      gates.push({ gate: "post_mutation_write_containment", ok: postContainment.ok, violations: postContainment.violations });
+
+      if (!preGate.ok || !postContainment.ok) {
         outcomeState = "SCOPE_VIOLATION";
-      } else if (validation.environmentFailure) {
+      } else if (mutationCommand && mutationExec.error && !mutationExec.timed_out) {
         outcomeState = "ENVIRONMENT_FAILURE";
-      } else if (validation.validationFailed) {
-        outcomeState = "VALIDATION_FAILED";
+      } else if (mutationCommand && mutationExec.timed_out) {
+        outcomeState = "MUTATION_FAILED";
+      } else if (mutationCommand && mutationExec.exit_code !== 0) {
+        outcomeState = "MUTATION_FAILED";
       } else {
-        lifecycle.push({ state: "READY_FOR_REVIEW", at: new Date().toISOString() });
-        outcomeState = "READY_FOR_REVIEW";
-        // Candidate lineage is supplied only by Controller integration. Old
-        // mutation-only callers remain supported; they cannot claim a
-        // reviewed commit candidate without this durable lineage.
-        if (inputManifest?.reviewed_candidate === true) {
-          // C3B mutation transition must complete first. Candidate capture is
-          // next independent C2D transition; keep source worktree until its
-          // COMPLETE + CURRENT CAS has succeeded.
-          preserveWorktreeForCandidateRecovery = true;
-          const lineage = inputManifest.candidate_lineage || {};
-          candidateCaptureArgs = {
-            repoRoot, sourceWorktree: worktree.worktreePath, execDir, permit,
-            authorization: durableAuthorization, sourceCheckpointRevision: expectedRevisionBefore,
-            authorityRecordDigest: lineage.authority_record_digest,
-            executionContextDigest: lineage.execution_context_digest,
-            mutationAuthorityDigest: authResult.authorityDigest,
-            expiresAt: lineage.expires_at,
-          };
+        lifecycle.push({ state: "MUTATION_COMPLETE", at: new Date().toISOString() });
+        fireHook("after_c3b_mutation_before_validation");
+        lifecycle.push({ state: "VALIDATING", at: new Date().toISOString() });
+        validation = validationPlan
+          ? await runValidationPlan(durableAuthorization, validationPlanId, validationPlan, worktree.worktreePath)
+          : { results: [], environmentFailure: false, validationFailed: false };
+        const postValidation = captureScopeSnapshot(worktree.worktreePath);
+        // Zero-tolerance gate: validation (and any background process) must not
+        // change anything at all — no allowlist applies here, unlike the
+        // post-mutation gate above.
+        const postValidationGate = enforceScopeGate(worktree.worktreePath, postMutation, postValidation, [], []);
+        gates.push({ gate: "post_validation", ok: postValidationGate.ok, violations: postValidationGate.violations });
+
+        if (!postValidationGate.ok) {
+          outcomeState = "SCOPE_VIOLATION";
+        } else if (validation.environmentFailure) {
+          outcomeState = "ENVIRONMENT_FAILURE";
+        } else if (validation.validationFailed) {
+          outcomeState = "VALIDATION_FAILED";
+        } else {
+          lifecycle.push({ state: "READY_FOR_REVIEW", at: new Date().toISOString() });
+          outcomeState = "READY_FOR_REVIEW";
+          // Candidate lineage is supplied only by Controller integration. Old
+          // mutation-only callers remain supported; they cannot claim a
+          // reviewed commit candidate without this durable lineage.
+          if (inputManifest?.reviewed_candidate === true) {
+            // C3B mutation transition must complete first. Candidate capture is
+            // next independent C2D transition; keep source worktree until its
+            // COMPLETE + CURRENT CAS has succeeded.
+            preserveWorktreeForCandidateRecovery = true;
+            const lineage = inputManifest.candidate_lineage || {};
+            candidateCaptureArgs = {
+              repoRoot, sourceWorktree: worktree.worktreePath, execDir, permit,
+              authorization: durableAuthorization, sourceCheckpointRevision: expectedRevisionBefore,
+              authorityRecordDigest: lineage.authority_record_digest,
+              executionContextDigest: lineage.execution_context_digest,
+              mutationAuthorityDigest: authResult.authorityDigest,
+              expiresAt: lineage.expires_at,
+            };
+          }
         }
       }
-      const diff = git(["diff", fp.expected_head, "--", "."], worktree.worktreePath).stdout || "";
-      evidence = {
-        execution_id: execId,
-        card_id: durableAuthorization.card_id,
-        card_revision: durableAuthorization.card_revision,
-        baseline: {
-          repo: repoRoot, branch: fp.expected_ref, head: fp.expected_head,
-          origin: fp.origin_url, dirty: false,
-        },
-        changed_paths: preGate.delta,
-        diff,
-        patch_identity: patchIdentity(diff),
-        scope_checks: gates,
-        validation_results: validation.results,
-        failure_evidence: outcomeState === "READY_FOR_REVIEW" ? null : { outcome_state: outcomeState, gates },
-        authority_lineage: {
-          lease_id: lease.lease_id, lease_revision: lease.lease_revision,
-          authority_digest: authResult.authorityDigest,
-        },
-        candidate,
-        unresolved_warnings: [],
-      };
     }
+
+    // Evidence is recorded for EVERY terminal state of the attempt — a scope
+    // or containment refusal must carry the gate that denied it, never be
+    // indistinguishable from "no attempt was made".
+    const diff = git(["diff", fp.expected_head, "--", "."], worktree.worktreePath).stdout || "";
+    evidence = {
+      execution_id: execId,
+      card_id: durableAuthorization.card_id,
+      card_revision: durableAuthorization.card_revision,
+      baseline: {
+        repo: repoRoot, branch: fp.expected_ref, head: fp.expected_head,
+        origin: fp.origin_url, dirty: false,
+      },
+      changed_paths: preGate.delta,
+      diff,
+      patch_identity: patchIdentity(diff),
+      scope_checks: gates,
+      validation_results: validation.results,
+      failure_evidence: outcomeState === "READY_FOR_REVIEW" ? null : { outcome_state: outcomeState, gates },
+      authority_lineage: {
+        lease_id: lease.lease_id, lease_revision: lease.lease_revision,
+        authority_digest: authResult.authorityDigest,
+      },
+      candidate,
+      unresolved_warnings: [],
+    };
   } catch (e) {
     // Only C2dHoldError instances represent an expected, classifiable
     // operational failure (e.g. worktree creation environment failure). Any

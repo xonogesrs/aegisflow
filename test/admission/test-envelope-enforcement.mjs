@@ -89,6 +89,51 @@ test("assertMutationWithinAdmissionScope: containment enforced", () => {
   assert.throws(() => assertMutationWithinAdmissionScope(medium, ["src/v2/runner.mjs"]), AdmissionEnvelopeError);
 });
 
+// ── F1 — SCOPE PROJECTION CANONICALIZATION ─────────────────────────────
+// The projection canonicalizes with the enforcement gate's semantics
+// (c2d/mutation-scope.mjs) and fails closed, so it can never report
+// "authorized" for a boundary the gate would refuse. Regression corpus and
+// projection/enforcement parity: test/admission/test-scope-projection-canonicalization.mjs.
+
+test("F1: a lexically escaping phase boundary is refused at projection time", () => {
+  const medium = mediumAdmission();
+  for (const boundary of ["../outside.txt", "docs/../../outside.txt", "/etc/passwd", "docs/./a.md", "docs/**", "", " docs/a.md"]) {
+    assert.throws(
+      () => projectEnvelopeFields({ admission: medium, nodeRole: "writer", mutationScopeFromPhase: [boundary] }),
+      (e) => e instanceof AdmissionEnvelopeError && e.code === "ADMISSION_MUTATION_SCOPE_VIOLATION",
+      `phase boundary ${JSON.stringify(boundary)} must fail closed`,
+    );
+  }
+});
+
+test("F1: a non-canonical admission.mutation_scope grants nothing", () => {
+  // A null/non-string entry is already refused by the admission schema at
+  // freeze time; these are the string entries the schema stores verbatim.
+  for (const scope of [["/docs"], ["docs/../.."], ["docs/**"], [""]]) {
+    const admission = mediumAdmission({ mutationScope: scope });
+    assert.throws(
+      () => projectEnvelopeFields({ admission, nodeRole: "writer", mutationScopeFromPhase: ["docs/a.md"] }),
+      (e) => e instanceof AdmissionEnvelopeError && e.code === "ADMISSION_MUTATION_SCOPE_VIOLATION",
+      `mutation_scope ${JSON.stringify(scope)} must fail closed`,
+    );
+    assert.throws(
+      () => assertMutationWithinAdmissionScope(admission, ["docs/a.md"]),
+      (e) => e instanceof AdmissionEnvelopeError && e.code === "ADMISSION_MUTATION_SCOPE_VIOLATION",
+    );
+  }
+  // …and the same predicate refuses an escaping requested path.
+  const medium = mediumAdmission();
+  assert.throws(() => assertMutationWithinAdmissionScope(medium, ["docs/../../etc/x"]), AdmissionEnvelopeError);
+});
+
+test("F1: the projected envelope scope is canonical, never widened", () => {
+  const medium = mediumAdmission();
+  const projected = projectEnvelopeFields({ admission: medium, nodeRole: "writer", mutationScopeFromPhase: ["docs/pi-graph-output/"] });
+  assert.deepEqual(projected.mutationScope, ["docs/pi-graph-output"]);
+  const unscoped = projectEnvelopeFields({ admission: medium, nodeRole: "writer", mutationScopeFromPhase: [] });
+  assert.deepEqual(unscoped.mutationScope, ["docs"]);
+});
+
 test("writer with empty admission scope is fail-closed", () => {
   const c = classify({ dimensionScores: FULL_EVIDENCE, riskSignals: scanRiskSignals("fix one typo in README") });
   const rec = buildAdmissionRecord({ taskId: "TEST-ENV-2", classification: c, mutationScope: [] });

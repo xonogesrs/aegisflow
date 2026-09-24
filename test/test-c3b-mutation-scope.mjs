@@ -17,7 +17,7 @@ function test(name, fn) {
 }
 function assert(c, m) { if (!c) throw new Error(m || "assert"); }
 
-const { canonicalRepositoryPath, enforceScopeGate, captureScopeSnapshot } = await import(join(C2D, "mutation-scope.mjs"));
+const { canonicalRepositoryPath, canonicalScopeEntries, canonicalScopeEntry, enforceScopeGate, isWithinCanonicalScope, captureScopeSnapshot } = await import(join(C2D, "mutation-scope.mjs"));
 
 function mkTemp(name) {
   const r = join(tmpdir(), `c3b-scope-${name}-${randomBytes(3).toString("hex")}`);
@@ -147,6 +147,50 @@ test("17 background mutation caught at final gate", () => {
   const gate = enforceScopeGate(repo, postValidation1, finalSnapshot, [], []);
   assert(!gate.ok, "background mutation must be caught at the final gate");
   rmSync(repo, { recursive: true, force: true });
+});
+
+// ── F1 — SCOPE PROJECTION CANONICALIZATION（single canonical seam）────────
+// The projection（admission/policy-projection.mjs）, the writer-result
+// validation（subagent/subagent-contract.mjs）and this enforcer resolve scope
+// paths through the SAME canonicalizer. These items pin the seam's semantics:
+// declared entries are canonicalized（never prefix-matched）, and containment
+// is component-wise over canonical paths.
+// Full projection/enforcement parity corpus:
+// test/admission/test-scope-projection-canonicalization.mjs.
+
+test("18 canonical scope entries: only already-canonical repo-relative entries resolve", () => {
+  assert(canonicalScopeEntry("src") === "src", "canonical entry resolves");
+  assert(canonicalScopeEntry("src/") === "src", "trailing separator is stripped (H5 equivalence)");
+  assert(canonicalScopeEntry("src/a.txt") === "src/a.txt", "file-shaped entry resolves");
+  for (const bad of ["src/../../etc", "../outside.txt", "/etc", "src/./a.txt", "src//a.txt", "src/**", ".git", ".git/config", "", " ", "src\\a.txt", 42, null, undefined]) {
+    assert(canonicalScopeEntry(bad) === null, `entry ${JSON.stringify(bad)} must not resolve`);
+  }
+  assert(canonicalScopeEntries(["src/", "src/"]).join(",") === "src", "duplicate canonical entries collapse");
+  assert(canonicalScopeEntries(["src", "docs"]).join(",") === "src,docs", "canonical entries keep order");
+  assert(canonicalScopeEntries(["src/../../etc"]) === null, "an escaping entry never resolves");
+  assert(canonicalScopeEntries(["src", null]) === null, "one undecidable entry fails the whole list");
+});
+
+test("19 canonical containment is component-wise, never a lexical prefix", () => {
+  assert(isWithinCanonicalScope("src/a.txt", ["src"]) === true, "subtree membership");
+  assert(isWithinCanonicalScope("src", ["src"]) === true, "equality");
+  assert(isWithinCanonicalScope("srcx/a.txt", ["src"]) === false, "sibling sharing a prefix is outside");
+  assert(isWithinCanonicalScope("src", ["src/a.txt"]) === false, "parent is outside a narrower entry");
+  assert(isWithinCanonicalScope("src/a.txt", []) === false, "empty boundary set authorizes nothing");
+  assert(isWithinCanonicalScope("", ["src"]) === false, "empty candidate authorizes nothing");
+});
+
+test("20 declared escape fixtures: projection and enforcement agree", () => {
+  const scope = ["src"];
+  const canonicalScope = canonicalScopeEntries(scope);
+  assert(canonicalScope !== null);
+  for (const boundary of ["src/a.txt", "src/sub/dir/deep.txt", "src/"]) {
+    const canonical = canonicalScopeEntry(boundary);
+    assert(canonical !== null && isWithinCanonicalScope(canonical, canonicalScope), `${boundary} must stay authorized`);
+  }
+  for (const boundary of ["../outside.txt", "src/../../outside.txt", "src/./a.txt", "/etc/passwd", "src/**", "src/.git/config", ""]) {
+    assert(canonicalScopeEntry(boundary) === null, `${boundary} must not canonicalize into the scope`);
+  }
 });
 
 console.log(`C3B mutation scope: ${pass} passed, ${fail} failed`);

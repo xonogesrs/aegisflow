@@ -1957,12 +1957,33 @@ test("L3: event-type vocabulary unchanged post-implementation (frozen-set assert
 });
 
 test("L4: no new store/lock/manifest/index module (file-set assert)", () => {
-  const c2d = readdirSync(join(process.cwd(), "src", "c2d")).sort();
-  const evidence = readdirSync(join(process.cwd(), "src", "evidence")).sort();
-  // Sealed counts (admission boundary): src/c2d = 19 files, src/evidence = 2.
-  const mjs = (a) => a.filter((f) => f.endsWith(".mjs"));
-  assert.equal(mjs(c2d).length, 19, `src/c2d must keep exactly 19 .mjs modules (got ${mjs(c2d).length})`);
-  assert.equal(mjs(evidence).length, 2, `src/evidence must keep exactly 2 .mjs modules (got ${mjs(evidence).length})`);
+  // Sealed module SET (admission boundary). The property this asserts is "no
+  // new store / lock / manifest / index module appears at this boundary"; the
+  // original encoding was a bare count. Pinning the NAMES keeps the guard
+  // discriminating (an addition, removal OR rename fails) while letting a
+  // sanctioned non-state module be listed explicitly.
+  const FROZEN_C2D = [
+    "checkpoint-store.mjs", "commit-authorization.mjs",
+    "commit-materialized-candidate.mjs", "execution-id.mjs", "fingerprint.mjs",
+    "fs-atomic.mjs", "journal.mjs", "lease.mjs", "lock.mjs",
+    "materialization-authorization.mjs", "mutation-authority.mjs",
+    "mutation-run.mjs", "mutation-scope.mjs", "permit.mjs",
+    "read-only-discovery-run.mjs", "reconcile.mjs",
+    "repository-mutation-lock.mjs", "reviewed-commit-candidate.mjs",
+    "validate-snapshot.mjs",
+    // Added by AUTOLOOP_OPEN_SOURCE_SYMLINK_WRITE_CONTAINMENT_REPAIR_1 (M1):
+    // a PURE read-only audit of the materialized worktree (lstat/readlink/
+    // realpath). It owns no store, lock, manifest or index, creates nothing,
+    // and narrows authority only — the scope-containment layer companion to
+    // mutation-scope.mjs, not new durable state.
+    "write-containment.mjs",
+  ];
+  const FROZEN_EVIDENCE = ["run-evidence-store.mjs", "run-manifest.mjs"];
+  const mjs = (a) => a.filter((f) => f.endsWith(".mjs")).sort();
+  const c2d = readdirSync(join(process.cwd(), "src", "c2d"));
+  const evidence = readdirSync(join(process.cwd(), "src", "evidence"));
+  assert.deepEqual(mjs(c2d), [...FROZEN_C2D].sort(), "src/c2d must keep exactly its sealed module set");
+  assert.deepEqual(mjs(evidence), [...FROZEN_EVIDENCE].sort(), "src/evidence must keep exactly its sealed module set");
   // No new lock namespace outside the execDir: the publisher takes
   // CURRENT.json.lock only.
   const bridge = readFileSync(join(process.cwd(), "src", "v2", "checkpoint-bridge.mjs"), "utf8");

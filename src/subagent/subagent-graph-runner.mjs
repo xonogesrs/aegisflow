@@ -39,6 +39,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { runColimaGraph, isWriterPhase } from "../runtime/colima-graph-runner.mjs";
+import { autoloopDefault } from "../shared/autoloop-paths.mjs";
 import { runDurableGraph, resumeDurableGraph, DurableGraphHoldError, childResultFoldGate } from "../v2/durable-graph.mjs";
 import { checkpointExists, readCheckpoint, validateRunIdentity } from "../v2/checkpoint-bridge.mjs";
 import { validateAdmission } from "../admission/admission-record.mjs";
@@ -377,7 +378,7 @@ export async function runSubagentGraph({
     // keeps the caller's logical executionId（resume maps it back via
     // durableExecutionIdFor）+ exposes durableExecutionId + the recovery /
     // evidence provenance ONLY the durable layer produces.
-    const root = persistence?.root ?? join(homedir(), ".autoloop", "durable", durableExecutionId);
+    const root = persistence?.root ?? autoloopDefault("durable", durableExecutionId);
     const { executorAdapterFactory, reviewerAdapterFactory } = buildSubagentAdapterFactories({ profile, repoPath, scratchRoot: ownedScratchRoot, resultsDir, maxRepairAttempts, admission });
     const durableResult = await runDurableGraph({
       ir,
@@ -508,7 +509,7 @@ export async function resumeSubagentGraph({
   durableGraphGeneration = null,
 }) {
   const durableExecutionId = persistence?.executionId ?? durableExecutionIdFor(executionId);
-  const root = persistence?.root ?? join(homedir(), ".autoloop", "durable", durableExecutionId);
+  const root = persistence?.root ?? autoloopDefault("durable", durableExecutionId);
   if (!checkpointExists(root, durableExecutionId)) {
     throw new DurableGraphHoldError("RESUME_FINGERPRINT_MISMATCH", "no checkpoint exists for this execution");
   }
@@ -815,7 +816,18 @@ function buildSubagentGraphHooks({ ir, resultsDir, dependencyExecutionId, hooks,
           // refuses to run.
           if (admission) {
             try {
-              const projected = projectEnvelopeFields({ admission, nodeRole: "writer", mutationScopeFromPhase: phase.effects?.boundaries?.artifact ?? [] });
+              // The isolated worktree root is the boundary's reference root
+              //（colima-graph-runner sets runtime.worktreePath before this hook）,
+              // so the projection and the enforcement gate resolve the boundary
+              // identically — including symlink-adjacent representations. Where
+              // no root is known the projection stays lexical; the gate remains
+              // the authority.
+              const projected = projectEnvelopeFields({
+                admission,
+                nodeRole: "writer",
+                mutationScopeFromPhase: phase.effects?.boundaries?.artifact ?? [],
+                repositoryRoot: phase.runtime?.worktreePath ?? null,
+              });
               phase.runtime.mutationScope = [...projected.mutationScope];
               phase.runtime.toolPermissions = [...projected.toolPermissions];
               phase.runtime.admissionId = admission.admission_id;

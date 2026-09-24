@@ -14,9 +14,20 @@
 // hardcodes them — both derive from admission. Writer enforcement（L）is
 // fail-closed: writer capability must be in allowed_capabilities and every
 // requested mutation path must be inside mutation_scope.
+//
+// Scope decisions here are CANONICAL（c2d/mutation-scope.mjs is the single
+// path-canonicalization seam）: a mutation_scope entry or phase boundary that
+// is unresolvable, ambiguous, absolute, or lexically/canonically escaping is
+// refused at projection time, so this projection can never report
+// "authorized" for a boundary the enforcement gate canonicalizes away.
 
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { isAbsolute } from "node:path";
 import { TOOL_PERMISSIONS } from "../subagent/subagent-contract.mjs";
 import { resolveCapabilityId, capabilityRegistry, resolveCapability } from "./registry.mjs";
+import { resolveExecutable } from "../shared/autoloop-paths.mjs";
+import { canonicalScopeEntry, canonicalScopeEntries, isWithinCanonicalScope } from "../c2d/mutation-scope.mjs";
 
 export const PROJECTION_SCHEMA = "autoloop.policy-projection/v1";
 
@@ -217,12 +228,25 @@ export function projectCapabilities({ profile, risk }) {
  * Project sub-agent ENVELOPE fields from the admission record（K）— the
  * single enforcement seam.
  *
+ * Scope semantics（L）: the phase boundary is resolved with the SAME
+ * canonical semantics the enforcement gate uses（c2d/mutation-scope.mjs）and
+ * compared component-wise against the canonical admission scope. A boundary
+ * or scope entry that is unresolvable, ambiguous, absolute, lexically
+ * escaping or canonically escaping is NEVER authorized — it fails closed
+ * HERE, so the projection cannot say "allowed" where `enforceScopeGate` would
+ * say "denied".
+ *
  * @param {object} admission — frozen admission record
  * @param {string} nodeRole — readonly-analyst | writer | repairer | reviewer |
  *        verifier | join
  * @param {object} [opts] — { mutationScopeFromPhase: string[] } — the
  *        decomposition's declared artifact boundary（admission must CONTAIN
- *        it; intersection enforced, L）.
+ *        it; intersection enforced, L）;
+ *        { repositoryRoot: string|null } — the root the boundaries are
+ *        relative to（the isolated worktree for a writer phase）. When known,
+ *        entries resolve with the gate's full canonicalization（root
+ *        containment + symlink rejection）; when unknown, lexical
+ *        canonicalization only（the enforcement gate stays authoritative）.
  * @returns {{ toolPermissions: string[], mutationScope: string[] | null,
  *             authorizedPaths: string[], writerAllowed: boolean }}
  *          — throws AdmissionEnvelopeError on any fail-closed violation.
@@ -235,7 +259,7 @@ export class AdmissionEnvelopeError extends Error {
   }
 }
 
-export function projectEnvelopeFields({ admission, nodeRole, mutationScopeFromPhase = [] } = {}) {
+export function projectEnvelopeFields({ admission, nodeRole, mutationScopeFromPhase = [], repositoryRoot = null } = {}) {
   if (!admission || typeof admission !== "object") {
     throw new AdmissionEnvelopeError("ADMISSION_INVALID", "no admission record");
   }
@@ -256,22 +280,33 @@ export function projectEnvelopeFields({ admission, nodeRole, mutationScopeFromPh
 
   // Writer / repairer roles（L）— fail-closed:
   //   1. writer capability must be granted by admission（NEG3）
-  //   2. every requested mutation path must be inside admission.mutation_scope
+  //   2. admission.mutation_scope must be a CANONICAL repository-relative
+  //      scope（a non-canonical / escaping / glob entry grants nothing）
+  //   3. every requested mutation path must be canonical AND inside it
   if (!writerAllowed) {
     throw new AdmissionEnvelopeError("ADMISSION_MUTATION_SCOPE_VIOLATION", `writer capability not granted by admission (nodeRole=${nodeRole})`);
   }
-  const admissionScope = normalizeScope(admission.mutation_scope ?? []);
+  const admissionScope = canonicalScopeEntries(admission.mutation_scope ?? [], repositoryRoot);
+  if (admissionScope === null) {
+    throw new AdmissionEnvelopeError("ADMISSION_MUTATION_SCOPE_VIOLATION", `admission.mutation_scope is not a canonical repository-relative scope: ${JSON.stringify(admission.mutation_scope ?? [])}`);
+  }
   if (admissionScope.length === 0) {
     throw new AdmissionEnvelopeError("ADMISSION_MUTATION_SCOPE_VIOLATION", "admission grants writer but mutation_scope is empty");
   }
   // Decomposition-declared boundary must be a SUBSET of the admission scope
   //（admission only narrows）; anything outside -> HOLD（L）。
+  const phaseBoundaries = [];
   for (const p of mutationScopeFromPhase ?? []) {
-    if (!withinScope(p, admissionScope)) {
-      throw new AdmissionEnvelopeError("ADMISSION_MUTATION_SCOPE_VIOLATION", `phase boundary ${p} outside admission.mutation_scope`);
+    const canonical = canonicalScopeEntry(p, repositoryRoot);
+    if (canonical === null) {
+      throw new AdmissionEnvelopeError("ADMISSION_MUTATION_SCOPE_VIOLATION", `phase boundary ${String(p)} is not a canonical repository-relative path`);
     }
+    if (!isWithinCanonicalScope(canonical, admissionScope)) {
+      throw new AdmissionEnvelopeError("ADMISSION_MUTATION_SCOPE_VIOLATION", `phase boundary ${String(p)} outside admission.mutation_scope`);
+    }
+    if (!phaseBoundaries.includes(canonical)) phaseBoundaries.push(canonical);
   }
-  const effectiveScope = (mutationScopeFromPhase?.length ? mutationScopeFromPhase : admissionScope).slice();
+  const effectiveScope = phaseBoundaries.length ? phaseBoundaries : admissionScope.slice();
   return {
     toolPermissions: [...TOOL_PERMISSIONS.READ_ONLY, ...TOOL_PERMISSIONS.SCRATCH_WRITE],
     mutationScope: effectiveScope,
@@ -280,25 +315,21 @@ export function projectEnvelopeFields({ admission, nodeRole, mutationScopeFromPh
   };
 }
 
-function normalizeScope(paths) {
-  return (paths ?? []).map((p) => String(p).replace(/\/+$/, "")).filter(Boolean);
-}
-
-function withinScope(path, scope) {
-  const np = String(path).replace(/\/+$/, "");
-  // path is inside scope iff path == scope OR path starts with scope + "/".
-  return scope.some((s) => np === s || np.startsWith(s + "/"));
-}
-
 /**
- * Writer mutation-scope enforcement（L）: requested paths must be inside the
- * admission scope. Pure check — throws on violation.
+ * Writer mutation-scope enforcement（L）: requested paths must be canonical and
+ * inside the canonical admission scope. Pure check — throws on violation.
+ * `repositoryRoot`（optional）selects the gate's full canonicalization for the
+ * same root-aware agreement as `projectEnvelopeFields`.
  */
-export function assertMutationWithinAdmissionScope(admission, requestedPaths) {
-  const scope = normalizeScope(admission?.mutation_scope ?? []);
+export function assertMutationWithinAdmissionScope(admission, requestedPaths, { repositoryRoot = null } = {}) {
+  const scope = canonicalScopeEntries(admission?.mutation_scope ?? [], repositoryRoot);
+  if (scope === null) {
+    throw new AdmissionEnvelopeError("ADMISSION_MUTATION_SCOPE_VIOLATION", `admission.mutation_scope is not a canonical repository-relative scope: ${JSON.stringify(admission?.mutation_scope ?? [])}`);
+  }
   for (const p of requestedPaths ?? []) {
-    if (!withinScope(p, scope)) {
-      throw new AdmissionEnvelopeError("ADMISSION_MUTATION_SCOPE_VIOLATION", `path ${p} outside admission.mutation_scope`);
+    const canonical = canonicalScopeEntry(p, repositoryRoot);
+    if (canonical === null || !isWithinCanonicalScope(canonical, scope)) {
+      throw new AdmissionEnvelopeError("ADMISSION_MUTATION_SCOPE_VIOLATION", `path ${String(p)} outside admission.mutation_scope`);
     }
   }
   return true;
@@ -375,8 +406,6 @@ export function buildAdmissionRecord({ taskId, classification, authorityRecordDi
 // catalog or selector.
 // ═══════════════════════════════════════════════════════════════════════
 
-import { createHash } from "node:crypto";
-import { readFileSync, realpathSync } from "node:fs";
 import { canonicalize, digestOf } from "../canonical-digest.mjs";
 import { admissionDigest } from "./admission-record.mjs";
 
@@ -401,13 +430,99 @@ export const TOOL_SELECTION_FAILURE_CODES = Object.freeze([
 ]);
 
 /**
- * FROZEN runtime identity (contract §2, captured 2026-08-23T16:05:45Z via
- * read-only `pi --help`; no tool invocation, no network).
+ * THE pinned (frozen) executor runtime identity for adapterKind=pi-builtin.
+ *
+ * This is the contract authority the §4 drift fence compares an OBSERVED
+ * runtime against. It is CONFIGURATION, not a hardcoded install path:
+ *
+ *   AUTOLOOP_PI_RUNTIME_PATH     absolute path to the `pi` CLI entry point
+ *   AUTOLOOP_PI_RUNTIME_SHA256   expected sha256 of that file (optional:
+ *                                computed from the file when absent)
+ *   AUTOLOOP_PI_RUNTIME_VERSION  expected version string (optional)
+ *
+ * When AUTOLOOP_PI_RUNTIME_PATH is unset the identity is self-observed from
+ * the `pi` executable found on PATH, so a fresh checkout works without
+ * configuration while still pinning exactly one artifact for the run.
+ *
+ * Fail-closed: when no `pi` executable can be found the resolver throws
+ * TOOL_SELECTION_CONTRACT_MISSING — there is never a permissive fallback
+ * identity. Resolution is memoized per (path, sha, version) tuple.
+ */
+export const PI_RUNTIME_PATH_ENV = "AUTOLOOP_PI_RUNTIME_PATH";
+export const PI_RUNTIME_SHA256_ENV = "AUTOLOOP_PI_RUNTIME_SHA256";
+export const PI_RUNTIME_VERSION_ENV = "AUTOLOOP_PI_RUNTIME_VERSION";
+
+const runtimeIdentityCache = new Map();
+
+/** Absolute path of the `pi` executable, from env override or PATH. */
+export function resolvePiExecutable({ env = process.env } = {}) {
+  const override = env?.[PI_RUNTIME_PATH_ENV];
+  if (typeof override === "string" && override.trim().length > 0) {
+    if (!isAbsolute(override.trim())) {
+      throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", `${PI_RUNTIME_PATH_ENV} must be an absolute path: ${override}`);
+    }
+    return override.trim();
+  }
+  return resolveExecutable("pi", { env });
+}
+
+/**
+ * Resolve the pinned runtime identity. Throws TOOL_SELECTION_CONTRACT_MISSING
+ * when the runtime cannot be located, and TOOL_SELECTION_CONTRACT_MISSING on
+ * an unreadable artifact — never a guessed identity.
+ */
+export function frozenRuntimeIdentity({ env = process.env, resolveExecutablePath = resolvePiExecutable, existsOf = existsSync } = {}) {
+  const candidate = resolveExecutablePath({ env });
+  const shaOverride = typeof env?.[PI_RUNTIME_SHA256_ENV] === "string" && env[PI_RUNTIME_SHA256_ENV].trim().length > 0
+    ? env[PI_RUNTIME_SHA256_ENV].trim()
+    : null;
+  const version = typeof env?.[PI_RUNTIME_VERSION_ENV] === "string" && env[PI_RUNTIME_VERSION_ENV].trim().length > 0
+    ? env[PI_RUNTIME_VERSION_ENV].trim()
+    : null;
+  const cacheKey = `${candidate}\u0000${shaOverride ?? ""}\u0000${version ?? ""}`;
+  const cached = runtimeIdentityCache.get(cacheKey);
+  if (cached) return cached;
+
+  if (typeof candidate !== "string" || candidate.length === 0 || !isAbsolute(candidate)) {
+    throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", `pi runtime executable not resolvable; set ${PI_RUNTIME_PATH_ENV}`);
+  }
+  // The identity must point at a concrete, existing artifact.
+  const located = candidate;
+  if (!existsOf(located)) {
+    throw new ToolSelectionError(
+      "TOOL_SELECTION_CONTRACT_MISSING",
+      `pi runtime executable not found at ${located ?? candidate}; set ${PI_RUNTIME_PATH_ENV} to its absolute path`,
+    );
+  }
+  const real = realpathSync(located);
+  const sha256 = shaOverride ?? createHash("sha256").update(readFileSync(real)).digest("hex");
+  const identity = Object.freeze({ realpath: real, sha256, version });
+  runtimeIdentityCache.set(cacheKey, identity);
+  return identity;
+}
+
+/**
+ * The identity in effect for THIS process, resolved lazily on first use so
+ * importing this module never requires a `pi` installation (tests, docs and
+ * every non-Pi consumer keep working in a bare checkout).
+ */
+export function currentRuntimeIdentity() {
+  return frozenRuntimeIdentity();
+}
+
+/**
+ * Backwards-compatible view of the pinned identity.
+ *
+ * Properties resolve on ACCESS (not at import), so a bare checkout that never
+ * touches tool selection can still import this module, and a caller that reads
+ * `.realpath` without a `pi` installation gets the same fail-closed
+ * TOOL_SELECTION_CONTRACT_MISSING the functions raise. Prefer
+ * `frozenRuntimeIdentity()` in new code — it makes the resolution explicit.
  */
 export const FROZEN_RUNTIME_IDENTITY = Object.freeze({
-  realpath: "/Users/zhengfengqing/.npm-global/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
-  sha256: "840d1e8e689ed9e4937bcb00b9a810e02a8567d9afb10a47097f11ca93ea1521",
-  version: "0.84.2",
+  get realpath() { return frozenRuntimeIdentity().realpath; },
+  get sha256() { return frozenRuntimeIdentity().sha256; },
+  get version() { return frozenRuntimeIdentity().version; },
 });
 
 /** FROZEN runtime vocabulary — bytewise-sorted exact names. */
@@ -561,8 +676,9 @@ export function computeRegistryDigest(admission) {
  * realpath resolution + file sha256. Version is supplied only by explicit
  * introspection (never guessed) — null here means "not observed".
  */
-export function observeRuntimeIdentity({ executablePath = FROZEN_RUNTIME_IDENTITY.realpath } = {}) {
-  const real = realpathSync(executablePath);
+export function observeRuntimeIdentity({ executablePath = null } = {}) {
+  const target = executablePath ?? frozenRuntimeIdentity().realpath;
+  const real = realpathSync(target);
   const content = readFileSync(real);
   const sha256 = createHash("sha256").update(content).digest("hex");
   return { realpath: real, sha256, version: null };
@@ -676,7 +792,9 @@ export function projectToolSelection({
   executionId,
   selectedAt,
   mappingRows = TOOL_SELECTION_MAPPING,
+  frozenIdentity = null,
 } = {}) {
+  const frozen = frozenIdentity ?? frozenRuntimeIdentity();
   // ── 0. contract/mapping binding present (CONTRACT_MISSING otherwise) ──
   if (!admission || typeof admission !== "object") throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", "no frozen admission record");
   if (!taskAllocation || typeof taskAllocation !== "object") throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", "no authoritative task allocation");
@@ -686,9 +804,9 @@ export function projectToolSelection({
   if (!Array.isArray(mappingRows) || mappingRows.length === 0) throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", "mapping binding missing");
 
   // ── 1. §4 drift checks FIRST: runtime identity + vocabulary digest ──
-  if (runtimeIdentity.realpath !== FROZEN_RUNTIME_IDENTITY.realpath ||
-      runtimeIdentity.sha256 !== FROZEN_RUNTIME_IDENTITY.sha256 ||
-      (runtimeIdentity.version != null && runtimeIdentity.version !== FROZEN_RUNTIME_IDENTITY.version)) {
+  if (runtimeIdentity.realpath !== frozen.realpath ||
+      runtimeIdentity.sha256 !== frozen.sha256 ||
+      (runtimeIdentity.version != null && frozen.version != null && runtimeIdentity.version !== frozen.version)) {
     throw new ToolSelectionError("TOOL_SELECTION_RUNTIME_VOCABULARY_DRIFT", "observed runtime identity != frozen contract identity");
   }
   if (runtimeVocabularyDigest !== FROZEN_RUNTIME_VOCABULARY_DIGEST) {
@@ -841,7 +959,7 @@ export function projectToolSelection({
     runtimeIdentity: {
       realpath: runtimeIdentity.realpath,
       sha256: runtimeIdentity.sha256,
-      version: runtimeIdentity.version ?? FROZEN_RUNTIME_IDENTITY.version,
+      version: runtimeIdentity.version ?? frozen.version,
     },
     runtimeVocabularyDigest,
     selectionBasis: basis,
@@ -892,7 +1010,8 @@ export function createLifecycleSelectionAuthority({
  * second copy). Returns { ok:true, argvToolNames, basis } or
  * { ok:false, code, reason } with code ∈ TOOL_SELECTION_FAILURE_CODES.
  */
-export function validateToolSelection(selection, { authorityBinding } = {}) {
+export function validateToolSelection(selection, { authorityBinding, frozenIdentity = null } = {}) {
+  const frozen = frozenIdentity ?? frozenRuntimeIdentity();
   const invalid = (reason) => ({ ok: false, code: "TOOL_SELECTION_PROVENANCE_INVALID", reason });
   if (!authorityBinding) return invalid("no authoritative lifecycle binding expectation resolved for THIS invocation");
   if (!selection || typeof selection !== "object" || Array.isArray(selection)) return invalid("selection output missing/malformed");
@@ -914,7 +1033,7 @@ export function validateToolSelection(selection, { authorityBinding } = {}) {
   if (selection.mappingDigest !== FROZEN_MAPPING_DIGEST) return invalid("mappingDigest stale/forged");
   if (selection.runtimeVocabularyDigest !== FROZEN_RUNTIME_VOCABULARY_DIGEST) return { ok: false, code: "TOOL_SELECTION_RUNTIME_VOCABULARY_DRIFT", reason: "runtimeVocabularyDigest stale" };
   const ri = selection.runtimeIdentity ?? {};
-  if (ri.realpath !== FROZEN_RUNTIME_IDENTITY.realpath || ri.sha256 !== FROZEN_RUNTIME_IDENTITY.sha256) {
+  if (ri.realpath !== frozen.realpath || ri.sha256 !== frozen.sha256) {
     return { ok: false, code: "TOOL_SELECTION_RUNTIME_VOCABULARY_DRIFT", reason: "runtimeIdentity stale/forged" };
   }
 
@@ -986,7 +1105,7 @@ export function validateToolSelection(selection, { authorityBinding } = {}) {
           dimensions: authorityBinding.taskAllocationDimensions,
           allocationId: authorityBinding.taskAllocationDigest,
         },
-        runtimeIdentity: FROZEN_RUNTIME_IDENTITY,
+        runtimeIdentity: frozen,
         runtimeVocabularyDigest: FROZEN_RUNTIME_VOCABULARY_DIGEST,
         executionId: authorityBinding.runIdentity,
       });
