@@ -75,13 +75,23 @@ function spawnVictim(fixture, mode, extraArgs = []) {
   return w;
 }
 
-/** Wait until the durable marker file appears (the ack IS the marker). */
+/**
+ * Wait until the durable marker file appears (the ack IS the marker).
+ *
+ * The worker publishes the ack atomically, but the read is tolerant anyway:
+ * a marker that exists yet cannot be parsed is treated as "not written yet"
+ * and retried until the deadline. Without that tolerance an instantaneous
+ * partial read surfaced as `SyntaxError: Unexpected end of JSON input`
+ * instead of the intended marker, failing this soak nondeterministically
+ * (observed: a different subtest each run).
+ */
 async function waitForMarker(ackPath, expect, timeoutMs = 20000, diag = null) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (existsSync(ackPath)) {
-      const ack = JSON.parse(readFileSync(ackPath, "utf8"));
-      if (!expect || ack.marker === expect || ack.delivered) return ack;
+      let ack = null;
+      try { ack = JSON.parse(readFileSync(ackPath, "utf8")); } catch { ack = null; }
+      if (ack && (!expect || ack.marker === expect || ack.delivered)) return ack;
     }
     await new Promise((r) => setImmediate(r));
   }

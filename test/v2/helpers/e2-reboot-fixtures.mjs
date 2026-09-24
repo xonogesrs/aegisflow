@@ -529,7 +529,7 @@ function victimBootstrapSrc() {
   return `
 const fsatomic = await import(process.env.E2_FSATOMIC_URL);
 const { setInjectionHook, clearInjectionHooks } = fsatomic;
-import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 function arg(name) { const i = process.argv.indexOf("--" + name); return i >= 0 ? process.argv[i + 1] : null; }
 const root = arg("root"), execId = arg("exec"), repo = arg("repo"), scratch = arg("scratch"), ackPath = arg("ack");
@@ -568,7 +568,19 @@ run.state._lastRunnerStatuses = { ...cp.snapshot.phase_states };
 const ownership = JSON.parse(readFileSync(join(store.execDir, "artifacts", "scratch-ownership.json"), "utf8"));
 const ownedRoot = scratchOwnership.prepareOwnedScratchRoot({ scratchRoot: scratch, executionId, repoPath: repo, authorityToken: ownership.authorityToken });
 run.state.permittedDirtyDigest = cp.snapshot.graph?.permitted_dirty_digest ?? null;
-const helperAck = (obj) => { mkdirSync(require_dirname(ackPath), { recursive: true }); writeFileSync(ackPath, JSON.stringify(obj)); };
+// ATOMIC publish (tmp + rename): the parent polls this path, so the file must
+// never be observable in a partially-written state. A plain writeFileSync
+// creates/truncates the path BEFORE writing the bytes, and a parent that
+// read between those two moments got an empty file and threw
+// "Unexpected end of JSON input" — a real, observed soak flake (this marker
+// gates a SIGKILL, so the window was hit often).
+const publishAck = (obj) => {
+  mkdirSync(require_dirname(ackPath), { recursive: true });
+  const tmp = ackPath + ".tmp-" + process.pid;
+  writeFileSync(tmp, JSON.stringify(obj));
+  renameSync(tmp, ackPath);
+};
+const helperAck = publishAck;
 
 if (mode === "phase-start-kill") {
   // R1/R6: die INSIDE the writer phase start, after the durable marker
@@ -606,7 +618,7 @@ if (mode === "phase-start-kill") {
   setInjectionHook("before_checksum_rename", () => {
     // Durable marker for the parent: the torn window is NOW. Write the ack
     // OUTSIDE the evidence root (parent-visible), then stop cooperating.
-    try { mkdirSync(require_dirname(ackPath), { recursive: true }); writeFileSync(ackPath, JSON.stringify({ marker: "TORN" })); } catch {}
+    try { publishAck({ marker: "TORN" }); } catch {}
     throw new Error("E2_TORN_MARKER_STOP"); // publication aborts here in-worker if parent is slow; parent SIGKILL wins the race by design
   });
   const hooks = run.buildGraphHooks(ir);
@@ -617,7 +629,7 @@ if (mode === "phase-start-kill") {
   // R5 alternate: the injected failure is DELIVERED (no parent kill yet);
   // proves the window is real even without the kill racing the worker.
   setInjectionHook("before_checksum_rename", () => {
-    try { mkdirSync(require_dirname(ackPath), { recursive: true }); writeFileSync(ackPath, JSON.stringify({ marker: "TORN" })); } catch {}
+    try { publishAck({ marker: "TORN" }); } catch {}
     throw new Error("E2_TORN_INJECTED_FAILURE");
   });
   const hooks = run.buildGraphHooks(ir);
