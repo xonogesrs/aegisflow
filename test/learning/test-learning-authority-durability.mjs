@@ -60,26 +60,12 @@ import {
   authorityIssuerPrincipalDigest,
   createIdentityBinder,
 } from "../../src/learning/transfer-metrics/identities.mjs";
-import {
-  FIXTURE,
-  SYSTEM,
-  makeIdentities,
-  makeBinder,
-  makeEvent,
-  createTestWriter,
-  createTestRoot,
-  expectCode,
-  hex,
-  iso,
-  writeRawLog,
-  rawLogLines,
-  writeRawLogBytes,
-} from "../../src/learning/transfer-metrics/fixtures.mjs";
+import { FIXTURE, SYSTEM, makeIdentities, makeBinder, makeEvent, createTestWriter, createTestRoot, expectCode, hex, iso, writeRawLog, rawLogLines, writeRawLogBytes, IDENTITY_ROOT, TMP_PARENT } from "../../src/learning/transfer-metrics/fixtures.mjs";
 import { reduceTransferMetrics, serializeDerived } from "../../src/learning/transfer-metrics/reducer.mjs";
 import { buildIncidentProjection, PROJECTION_CODES, PROJECTION_SCHEMA_VERSION, CURRENT_AUTHORITY_STATUS_NOT_EVALUATED } from "../../src/learning/incidents/projection.mjs";
 import { scanTransferPayload } from "../../src/learning/transfer-metrics/redact.mjs";
 
-const REPO = fileURLToPath(new URL("../..", import.meta.url));
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -134,7 +120,9 @@ function makeAuthorityRecordFixture(label = "authrec") {
   return { ids, root, writer, result: r, record: JSON.parse(line) };
 }
 
-const WORKER_PARENT = "/Volumes/NVM2T/Development/tmp/transfer-metrics-core-1";
+// Worker scripts are REAL files that child processes execute, so this needs a
+// real writable directory — not the synthetic identity root.
+const WORKER_PARENT = TMP_PARENT;
 
 function writeWorkerScript(name, body) {
   mkdirSync(WORKER_PARENT, { recursive: true, mode: 0o700 });

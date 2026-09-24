@@ -22,6 +22,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   runMandatoryGraphCloseout,
   generationKeyFromBundleText,
@@ -31,7 +32,7 @@ import {
   BUNDLE_AUTHORITY_HOLDS,
 } from "../../src/governance/review-bundle.mjs";
 
-const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 // ── passing graph fixture（shape matches runColimaGraph / test-graph-closeout）──
 function passGraph(executionId) {

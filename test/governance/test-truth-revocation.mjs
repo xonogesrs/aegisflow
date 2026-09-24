@@ -362,9 +362,10 @@ test("TR13. historical record behavior: appending a revocation rewrites nothing"
 // ── gate integration（runCloseoutGate revocation path）─────────────────────
 
 import { runCloseoutGate } from "../../src/governance/review-bundle.mjs";
+import { fileURLToPath } from "node:url";
 
 const GROOT = `${tmpdir()}/truth-rev-gate-${process.pid}`;
-const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO_A = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 const gateSource = (cardId, over = {}) => ({
   schema: "autoloop.review-bundle.source/v1",

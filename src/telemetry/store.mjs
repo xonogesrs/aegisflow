@@ -43,6 +43,7 @@ export class TelemetryStore {
     this.activePath = join(stateRoot, "telemetry.jsonl");
     this.open_ = false;
     this.eventCount = 0;
+    this.activeBytes = 0;
     this.rotated = 0;
   }
 
@@ -82,6 +83,12 @@ export class TelemetryStore {
       }
       this.eventCount = count;
     }
+    // Byte accounting is tracked incrementally (below) so append() never has
+    // to re-read the whole active file: the previous implementation read the
+    // entire chunk on every append, which made a bounded benchmark O(n²) in
+    // I/O and made its latency threshold depend on which volume the state root
+    // happened to sit on.
+    this.activeBytes = Buffer.byteLength(readFileSync(this.activePath, "utf8"), "utf8");
     this.open_ = true;
     return { ok: true, status: this.status };
   }
@@ -102,12 +109,15 @@ export class TelemetryStore {
     const line = canonicalJson(ev) + "\n";
     const scan = scanTelemetryEvent(line);
     if (!scan.safe) throw new TelemetryStoreError(TELEMETRY_HOLD_CODES.SECRET_DETECTED, scan.matches.join(","));
-    // bounded growth: rotate BEFORE append when the active file is at cap
-    const size = existsSync(this.activePath) ? (readFileSync(this.activePath, "utf8").length + line.length) : line.length;
-    if (this.eventCount >= this.maxEvents || size >= this.maxBytes) {
+    // bounded growth: rotate BEFORE append when the active file is at cap.
+    // Size accounting is O(1): the active chunk's byte length is tracked
+    // incrementally and reset on rotation.
+    const lineBytes = Buffer.byteLength(line, "utf8");
+    if (this.eventCount >= this.maxEvents || this.activeBytes + lineBytes >= this.maxBytes) {
       this.#rotate();
     }
     writeFileSync(this.activePath, line, { flag: "a" });
+    this.activeBytes += lineBytes;
     this.eventCount++;
     return { ok: true, status: this.status, event: ev };
   }
@@ -117,9 +127,11 @@ export class TelemetryStore {
     const seq = this.rotated + 1;
     const dest = join(this.stateRoot, `telemetry-${seq}.jsonl`);
     renameSync(this.activePath, dest);
-    writeFileSync(this.activePath, this.#headerLine(), "utf8");
+    const header = this.#headerLine();
+    writeFileSync(this.activePath, header, "utf8");
     this.rotated = seq;
     this.eventCount = 0;
+    this.activeBytes = Buffer.byteLength(header, "utf8");
     if (this.log) this.log(`telemetry: rotated active file -> ${dest}`);
   }
 

@@ -11,7 +11,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { homedir } from "node:os";
+import { externalReviewSurfaceDir } from "../../src/governance/review-bundle.mjs";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   checkVerificationRoot,
   assertVerificationRoot,
@@ -19,10 +21,10 @@ import {
   VERIFICATION_SCOPE_HOLDS,
 } from "../../src/governance/verification-scope-guard.mjs";
 
-const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
-test("NEG1: recursive scan of /Users/zhengfengqing is rejected before traversal", () => {
-  const result = checkVerificationRoot("/Users/zhengfengqing");
+test("NEG1: recursive scan of the user home directory is rejected before traversal", () => {
+  const result = checkVerificationRoot(homedir());
   assert.equal(result.ok, false);
   assert.equal(result.hold, VERIFICATION_SCOPE_HOLDS.UNBOUNDED);
 });
@@ -56,10 +58,13 @@ test("NEG8: bounded authorized repo scan is allowed", () => {
   assert.equal(result.resolved, resolve(REPO, "src", "governance"));
 });
 
-test("NEG8b: authorized external-review surface dir is allowed", () => {
-  const surface = resolve(homedir(), "Desktop", "AutoLoop-Review", "Current");
+test("NEG8b: the configured review surface is an authorized root", () => {
+  // The surface is CONFIGURED (AUTOLOOP_REVIEW_SURFACE), not a fixed Desktop
+  // path: the test asks the same resolver the deliverer uses, so it cannot
+  // drift from where the surface actually is.
+  const surface = externalReviewSurfaceDir();
   const result = checkVerificationRoot(surface, { authorizedRoots: defaultAuthorizedRoots() });
-  assert.equal(result.ok, true);
+  assert.equal(result.ok, true, `configured surface ${surface} must be an authorized root`);
 });
 
 test("NEG9: forensic broad scan without explicit authorization is rejected", () => {

@@ -22,6 +22,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   REVIEW_BUNDLE_SOURCE_SCHEMA,
   REVIEW_BUNDLE_HOLDS,
@@ -39,7 +40,7 @@ import {
   validateCardInventoryConsistency,
 } from "../../src/governance/card-inventory.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO_A = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 const ROOT = `${tmpdir()}/fm3-inventory-${process.pid}`;
 const OUT = join(ROOT, "out");
 

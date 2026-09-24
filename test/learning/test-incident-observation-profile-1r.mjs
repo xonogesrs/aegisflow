@@ -47,8 +47,11 @@ import {
   WINDOW,
 } from "../../src/learning/transfer-metrics/fixtures.mjs";
 
-const REPO = fileURLToPath(new URL("../..", import.meta.url));
-const OPENING_GOLDENS_PATH = "/Volumes/NVM2T/Development/evidence/autoloop/STAGE-E-INCIDENT-OBSERVATION-PROFILE-1-20260827T110106Z/goldens/other-13-opening.json";
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
+// Opening goldens committed as a repo fixture (captured from the STAGE-E
+// profile-1 evidence run) so the byte-identity regression is reproducible in
+// any checkout and does not depend on a machine-local evidence store.
+const OPENING_GOLDENS_PATH = new URL("../fixtures/incident-opening-goldens.json", import.meta.url);
 
 function digestOf(value) {
   return canonicalSha256(value);
@@ -500,7 +503,7 @@ test("1R INCOMPLETE cannot skip identity or source digest", () => {
 });
 
 test("1R other-13 opening goldens remain byte-identical", () => {
-  const goldens = JSON.parse(readFileSync(OPENING_GOLDENS_PATH, "utf8"));
+  const goldens = JSON.parse(readFileSync(OPENING_GOLDENS_PATH, "utf8")).goldens;
   assert.equal(goldens.length, 13);
   const byType = Object.fromEntries(goldens.map((g) => [g.event_type, g]));
   const other = EVENT_TYPES.filter((t) => t !== "INCIDENT_OBSERVED");
@@ -538,12 +541,38 @@ test("1R other-13 opening goldens remain byte-identical", () => {
 });
 
 test("1R production reachability remains zero", () => {
+  // The guarded property is: NOTHING in production is wired to the
+  // observation-profile pipeline or to a transfer-event WRITER. The scan list
+  // is the proxy for that, and it must not flag a legitimate shared
+  // dependency: the learning lifecycle imports the transfer-event ERROR-CODE
+  // constant (TRANSFER_CODES) from transfer-metrics/schema.mjs, which is a
+  // value import, not pipeline wiring. That one import is therefore asserted
+  // explicitly (so it stays visible and deliberate) and excluded from the
+  // reachability scan; everything else must remain absent.
+  const ALLOWED_SHARED_IMPORT = {
+    rel: "src/learning/lifecycle/state-machine.mjs",
+    needle: "learning/transfer-metrics",
+    line: 'import { TRANSFER_CODES } from "../../learning/transfer-metrics/schema.mjs";',
+  };
   const hits = scanSrcScripts([
-    "learning/transfer-metrics", "getTransferMetricsWriter", "recordTransferEvent",
+    "getTransferMetricsWriter", "recordTransferEvent",
     "appendTransferEvent", "INCIDENT_OBSERVED", "deriveSourceIdentityKey",
     "applyIncidentObservedProfile", "source_identity_key",
   ]);
   assert.equal(hits.length, 0, JSON.stringify(hits));
+
+  // Any remaining reference to the transfer-metrics module must be exactly
+  // the documented error-code import — nothing else may reach into it.
+  const moduleRefs = scanSrcScripts(["learning/transfer-metrics"]);
+  for (const hit of moduleRefs) {
+    const source = readFileSync(join(REPO, hit.rel), "utf8");
+    const offending = source.split("\n").filter((l) => l.includes("learning/transfer-metrics") && l.trim() !== ALLOWED_SHARED_IMPORT.line);
+    assert.equal(
+      offending.length, 0,
+      `${hit.rel}: unexpected reference to transfer-metrics outside the documented error-code import: ${JSON.stringify(offending)}`,
+    );
+    assert.equal(hit.rel, ALLOWED_SHARED_IMPORT.rel, `${hit.rel}: only the lifecycle error-code import may reference transfer-metrics`);
+  }
   const incidentsDir = join(REPO, "src/learning/incidents");
   if (existsSync(incidentsDir)) {
     assert.deepEqual(readdirSync(incidentsDir).sort(), ["current-verification.mjs", "lifecycle-terminal-adapter.mjs", "projection.mjs"]);

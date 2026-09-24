@@ -2,11 +2,55 @@
   "name": "autoloop",
   "version": "0.0.0",
   "private": true,
+  "description": "AutoLoop — agent governance harness for spec-driven development: admission authority, durable execution, independent review, and bounded autonomous evolution.",
   "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xonogesrs/autoloop.git"
+  },
+  "homepage": "https://github.com/xonogesrs/autoloop#readme",
+  "bugs": {
+    "url": "https://github.com/xonogesrs/autoloop/issues"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "keywords": [
+    "agent",
+    "orchestration",
+    "governance",
+    "durable-execution",
+    "llm",
+    "automation"
+  ],
+  "dependencies": {
+    "@earendil-works/pi-ai": "0.83.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.84.0"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
+  },
   "scripts": {
     "check": "find src -name '*.mjs' -exec node --check {} +",
+    "test": "node test/run-suite.mjs",
+    "test:colima": "node --test --test-concurrency=1 test/test-colima-runtime.mjs test/test-c3-colima-pipeline.mjs test/test-colima-graph.mjs test/test-subagent-graph.mjs test/test-subagent-writer-graph.mjs test/test-subagent-review-repair-graph.mjs test/test-graph-closeout-integration.mjs test/test-durable-subagent-resume.mjs test/memory/test-graph-colima-writeback.mjs test/memory/test-writeback-authority.mjs test/subagent/test-provider-backed-dispatch.mjs test/v2/test-decomposition-manifest.mjs test/v2/test-durable-graph.mjs test/v2/test-e2-reboot-soak.mjs test/v2/test-e2-reboot-soak-probes.mjs",
+    "test:pi": "node --test test/tool-selection/test-tool-selection-contract.mjs test/tool-selection/test-tool-selection-production-wiring.mjs test/tool-selection/test-tool-selection-durable-resume.mjs",
+    "test:external": "node test/run-suite.mjs --include-external",
+    "example:minimal": "node examples/minimal/run.mjs",
+    "example:subagent": "node examples/subagent/run.mjs",
     "pi:autoloop": "bash scripts/pi-autoloop.sh",
-    "gate:card5e": "node scripts/card5e-parity-gate.mjs",
+    "run:c3": "node scripts/c3-colima-task.mjs",
+    "operator": "node scripts/autoloop-operator.mjs",
+    "evolution:status": "node scripts/evolution-operator.mjs",
+    "evolution:kill-switch": "node scripts/evolution-kill-switch.mjs",
+    "gov:effective": "node scripts/gov-effective-authority.mjs",
+    "gov:closeout-bundle": "node scripts/gov-closeout-bundle.mjs",
+    "gov:review-bundle": "node scripts/gov-review-bundle.mjs",
     "test:card5e": "node --test test/v2/test-card5e-parity.mjs",
     "test:pi-rpc-adapter": "node --test test/test-pi-rpc-adapter.mjs test/test-pi-lifecycle-integration.mjs",
     "test:pi-rpc-smoke": "node test/pi-rpc-real-smoke.mjs",
@@ -15,7 +59,6 @@
     "test:subagent-writer": "node --test test/test-subagent-writer-graph.mjs",
     "test:review-repair": "node --test test/test-subagent-review-repair-graph.mjs",
     "test:colima-all": "node --test --test-concurrency=1 test/test-colima-runtime.mjs test/test-c3-colima-pipeline.mjs test/test-colima-graph.mjs test/test-subagent-graph.mjs test/test-subagent-writer-graph.mjs test/test-subagent-review-repair-graph.mjs test/test-graph-closeout-integration.mjs test/test-durable-subagent-resume.mjs test/memory/test-graph-colima-writeback.mjs",
-    "run:c3": "node scripts/c3-colima-task.mjs",
     "test:c2": "node --test test/test-autoloop-entrypoint.mjs test/v2/test-production-pipeline.mjs test/v2/test-execution-orchestrator.mjs",
     "test:c3": "node --test test/test-run-evidence-store.mjs test/test-run-manifest.mjs test/v2/test-checkpoint-bridge.mjs test/v2/test-durable-execution.mjs",
     "test:c4r": "node --test test/v2/test-phase-response-contract.mjs",
@@ -44,13 +87,7 @@
     "test:pi-command-admission": "node --test test/admission/test-pi-command-admission.mjs",
     "test:rb-ssg": "node --test test/admission/test-search-scope-governor.mjs test/admission/test-pi-command-admission.mjs",
     "test:rb-ssg4": "node --test test/admission/test-rb-ssg4-bounded-rewrite.mjs test/admission/test-rb-ssg4-fr4-foundation.mjs test/admission/test-rb-ssg-vendor-integrity.mjs",
-    "gov:effective": "node scripts/gov-effective-authority.mjs",
-    "gov:closeout-bundle": "node scripts/gov-closeout-bundle.mjs",
-    "gov:review-bundle": "node scripts/gov-review-bundle.mjs",
     "test:de2r": "node --test --test-concurrency=1 test/test-durable-subagent-resume.mjs",
     "test:r2": "node --test test/memory/test-r2-identity-vectors.mjs test/memory/test-r2-consolidation-qualification-applicability.mjs test/memory/test-r2-candidate-evidence-binding.mjs test/learning/test-r2-resume-replay-exactly-once.mjs test/learning/test-r2-cross-process.mjs test/learning/test-r2-discrimination.mjs test/learning/test-r2-terminal-cleanup.mjs test/memory/test-record-schema.mjs test/memory/test-query-schema.mjs test/memory/test-sqlite.mjs test/memory/test-writeback-candidate.mjs test/memory/test-writeback-gate.mjs test/memory/test-writeback-trust.mjs test/memory/test-writeback-closed-loop.mjs test/memory/test-writeback-telemetry.mjs test/memory/test-writeback-graph.mjs test/memory/test-writeback-perf.mjs test/memory/test-canonical.mjs test/memory/test-jsonl.mjs test/memory/test-local-store.mjs test/memory/test-retrieval.mjs test/memory/test-retrieval-security.mjs test/memory/test-rebuild-determinism.mjs test/memory/test-snapshot.mjs test/memory/test-security.mjs test/memory/test-trust-validity.mjs test/memory/test-graph-context.mjs test/learning/test-transfer-metrics-core-1r.mjs test/learning/test-transfer-metrics-reducer.mjs test/learning/test-transfer-metrics-schema.mjs test/learning/test-transfer-metrics-seam.mjs test/learning/test-transfer-metrics-writer.mjs test/learning/test-pattern-candidate-1.mjs test/learning/test-pattern-candidate-fences-1.mjs test/learning/test-pattern-candidate-projection-1.mjs"
-  },
-  "dependencies": {
-    "@earendil-works/pi-ai": "0.83.0"
   }
 }

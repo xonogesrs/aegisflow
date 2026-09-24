@@ -16,13 +16,14 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, appendFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawn, execFileSync } from "node:child_process";
 import { LocalMemoryStore, MEMORY_QUERY_SCHEMA, deriveLogicalKey } from "../../src/memory/index.mjs";
 import { assertChainIntegrity, readJournal } from "../../src/memory/jsonl-journal.mjs";
 import { hex64, REPO, incidentRecord, patternRecord, silentLog } from "../memory/test-r2-helpers.mjs";
 
-const REPO_ROOT = "/Volumes/NVM2T/Development/repos/autoloop";
-const WORKER_PARENT = "/Volumes/NVM2T/Development/tmp/r2-cross-process";
+const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
+const WORKER_PARENT = join(tmpdir(), "r2-cross-process");
 const ROOTS = [];
 
 function freshRoot() {

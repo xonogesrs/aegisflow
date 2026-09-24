@@ -11,8 +11,8 @@
 // shell semantics than that objective requires.
 //
 // ── INCIDENT RECORD (preserved evidence) ────────────────────────────────
-// 1. `find /Users/zhengfengqing -name "*gov-closeout-bundle*"` traversed
-//    HOME and ran ~738.7s (NO_PROGRESS).
+// 1. A `find <$HOME> -name "*gov-closeout-bundle*"` traversed the operator's
+//    entire home directory and ran ~738.7s (NO_PROGRESS).
 // 2. The agent incorrectly described filename filtering as making the search
 //    "bounded".
 // 3. After that NO_PROGRESS event, another materially equivalent HOME-wide

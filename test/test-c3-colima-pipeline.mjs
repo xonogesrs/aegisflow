@@ -20,9 +20,10 @@ import { join } from "node:path";
 import { runColimaTask } from "../src/runtime/colima-pipeline.mjs";
 import { phaseExecutionId } from "../src/v2/phase-task-card.mjs";
 import { deleteInstance, instanceSocket, cleanupStale } from "../src/runtime/colima-runtime.mjs";
+import { fileURLToPath } from "node:url";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO_A = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
 const SCRATCH = `${HOME}/autoloop-c3-test-scratch`;
 const PROFILE = "autoloop-c3";
 const PHASE_ID = "c3-phase";

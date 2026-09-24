@@ -16,6 +16,7 @@ import {
   linkSync,
 } from "node:fs";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -27,15 +28,7 @@ import {
   journalDir,
   journalFileName,
 } from "../../src/evidence/run-evidence-store.mjs";
-import {
-  FIXTURE,
-  makeIdentities,
-  makeBinder,
-  makeEvent,
-  createTestRoot,
-  iso,
-  hex,
-} from "../../src/learning/transfer-metrics/fixtures.mjs";
+import { FIXTURE, makeIdentities, makeBinder, makeEvent, createTestRoot, iso, hex, IDENTITY_ROOT } from "../../src/learning/transfer-metrics/fixtures.mjs";
 import { writeExclusiveCreate, sha256Hex } from "../../src/c2d/fs-atomic.mjs";
 import { createInitialSnapshot as makeSnap } from "../../src/c2d/checkpoint-store.mjs";
 import { mintExecutionId, mintChainId, mintCheckpointId } from "../../src/c2d/execution-id.mjs";
@@ -82,7 +75,7 @@ import {
   RESULT_STORAGE,
 } from "../../src/learning/incidents/current-verification.mjs";
 
-const REPO = fileURLToPath(new URL("../..", import.meta.url));
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 // ---------------------------------------------------------------------------
 // Harness: ONE shared NVM2T root holds the C3 exec dirs, the V2 raw log and
@@ -512,7 +505,7 @@ test("T7 evidence root outside NVM2T rejected", () => {
   // sub-case: HOME-rooted evidence root rejected
   (() => {
     const r2 = verifyCurrentIncident(
-      verifyArgs(ctx, { validated_evidence_root: "/Users/someone/evidence" }),
+      verifyArgs(ctx, { validated_evidence_root: join(homedir(), "evidence") }),
     );
     assert.equal(r2.result.status, "STRUCTURAL_INVALID");
   })();
@@ -521,7 +514,7 @@ test("T7 evidence root outside NVM2T rejected", () => {
 test("T8 evidence-root search attempt rejected (traversal/non-absolute)", () => {
   const ctx = prepare(publishHeld("t08"));
   for (const bad of [
-    "/Volumes/NVM2T/Development/../etc/evidence",
+    join(IDENTITY_ROOT, "..", "etc", "evidence"),
     "relative/root",
     "",
   ]) {
@@ -668,7 +661,7 @@ test("T20 manifest digest mismatch rejected", () => {
 
 test("T21 IdentityBinder project binding mismatch rejected", () => {
   const ctx = prepare(publishHeld("t21", {
-    snapshotRepoIdentity: "/Volumes/NVM2T/Development/tmp/other-project",
+    snapshotRepoIdentity: join(IDENTITY_ROOT, "other-project"),
   }));
   const { result } = verifyCurrentIncident(verifyArgs(ctx));
   assert.equal(result.status, "IDENTITY_MISMATCH");
@@ -693,7 +686,7 @@ test("T23 attempt mismatch rejected", () => {
 test("T24 worktree identity mismatch rejected", () => {
   const ctx = prepare(publishHeld("t24"));
   const item = structuredClone(ctx.item);
-  item.worktree_identity = "/Volumes/NVM2T/Development/tmp/other-worktree";
+  item.worktree_identity = join(IDENTITY_ROOT, "other-worktree");
   const { result } = verifyCurrentIncident(verifyArgs(ctx, { projection_item: item }));
   assert.equal(result.status, "IDENTITY_MISMATCH");
 });
@@ -897,7 +890,7 @@ test("T31 authority state corrupt ⇒ REVOCATION_UNAVAILABLE", () => {
   (() => {
     const ctx3 = prepare(publishHeld("t31c"));
     const r3 = verifyCurrentIncident(
-      verifyArgs(ctx3, { validated_evidence_root: "/Volumes/NVM2T/Development/*/missing" }),
+      verifyArgs(ctx3, { validated_evidence_root: join(IDENTITY_ROOT, "missing") }),
     );
     assert.notEqual(r3.result.status, "VERIFIED_CURRENT");
   })();
@@ -1823,6 +1816,18 @@ test("T81 verifier import graph restricted, structurally read-only", () => {
 });
 
 test("T82 production import scan zero (fresh filesystem sweep)", () => {
+  // The guarded property is: the INCIDENT-VERIFICATION / projection surface is
+  // unreachable from production. The scan list is the proxy for that, and it
+  // must name modules rather than the bare substring "learning/" — the memory
+  // and writeback layers legitimately import `learning/lifecycle/*` and
+  // `learning/patterns/*`, so a bare "learning/" match reports those working
+  // imports as violations (it did: 4 false hits before this repair).
+  const FORBIDDEN_MODULES = [
+    "incidents/current-verification",
+    "incidents/projection",
+    "incidents/lifecycle-terminal-adapter",
+    "transfer-metrics/",
+  ];
   function walk(dir, hits) {
     for (const name of readdirSync(dir)) {
       if (name === "node_modules" || name === ".git") continue;
@@ -1832,9 +1837,9 @@ test("T82 production import scan zero (fresh filesystem sweep)", () => {
       else if (name.endsWith(".mjs") || name.endsWith(".js")) {
         const body = readFileSync(p, "utf8");
         const inLearning = p.includes(join(REPO, "src", "learning"));
-        const needles = ["learning/", "current-verification", "transfer-metrics", "incidents/projection", "lifecycle-terminal-adapter"];
-        for (const needle of needles) {
-          if (body.includes(needle) && !inLearning) hits.push(`${p}: ${needle}`);
+        if (inLearning) continue;
+        for (const needle of FORBIDDEN_MODULES) {
+          if (body.includes(needle)) hits.push(`${p}: ${needle}`);
         }
       }
     }
@@ -1870,15 +1875,26 @@ const GOLDENS = Object.freeze({
   projection_digest: "b7814746ba7f5f8ccab587f182afdc9f1e0bb12b9b5ddc08430f2581837a5a95",
   projection_bytes_sha256: "ac7d51d9f94507cb0b3526e0e92b4af489ffaff3016a1fb6f05bfc6a9c0d0caf",
   reducer_doc_sha256: "43c022f60ae2478204935b0fe0fbcf678178fc6fa60adc0a0d9d4a28b5c741e3",
-  adapter_sha256: "f377611591958488878e8ac3c3533946a41c78403914825054d40fccee0cb074",
+  // Re-pinned by AUTOLOOP_OPEN_SOURCE_PUBLICATION_REMEDIATION_1: the
+  // machine-local storage-root guard was replaced by the portable
+  // namespace-boundary guard (see src/shared/autoloop-paths.mjs). The
+  // property the golden protects — "this module's behavior is frozen" — is
+  // preserved; the file bytes deliberately changed to remove the hardcoded
+  // storage path.
+  adapter_sha256: "0a1eb7a0c2a74fb23ceb7879326e587a42c6540ecc63050b0e4b3a6686e25f9e",
   authority_state_sha256: "9845b2139097b4b5943ce987f1df28552ede4438cf0cab0cb716eeda709564b4",
   // P7 subtraction: durability-1r R57/R58 were re-pointed to the optional
   // layer (src/orchestration/…) by the authorized M25/M27/M38 extraction —
   // mechanical path-list change only; the authority-stack goldens above are
   // unchanged.
-  durability_1r_sha256: "d560f863a6857bbc1d83e9c78396a974aaeac19894cf6811553348e0e3ec8460",
+  // Re-pinned with adapter_sha256 above: the only change is the trailing
+  // separator strip on the derived repository root, which keeps relative path
+  // comparisons identical when the checkout sits at a filesystem root.
+  durability_1r_sha256: "883c608fad62ffd1fcc819dfc4be69ace5c88c7f652eabd6af6aa8780acd9385",
   projection_sha256: "e21c1c3f8a0ed62f72843500ca67f937f91279e869cfcf35dd93d8ad59717bab",
-  writer_sha256: "4f1d2529a28948262b3ee43cbc5216ac1973fbc63ac2356bc8c6949465487c98",
+  // Re-pinned with adapter_sha256 above for the same reason (the portable
+  // storage-root boundary). authority_state_sha256 is UNCHANGED.
+  writer_sha256: "9f2d85fa816652236c28660aac0efc5aa2a02f79ae49cff9a6f8d3e6bf08fdf2",
 });
 
 test("T84 event-type inventory 15 V2 / 14 V1 with frozen name sets", () => {

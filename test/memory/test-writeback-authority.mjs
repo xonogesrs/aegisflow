@@ -25,6 +25,7 @@ import { LocalMemoryStore } from "../../src/memory/index.mjs";
 import { classify, scanRiskSignals } from "../../src/admission/classify.mjs";
 import { buildAdmissionRecord } from "../../src/admission/policy-projection.mjs";
 import { freezeAdmission } from "../../src/admission/admission-record.mjs";
+import { fileURLToPath } from "node:url";
 
 const ROOTS = [];
 function freshRoot() {
@@ -67,7 +68,7 @@ function countingStore() {
   return s;
 }
 
-const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 const IR = { phases: [{ phase_id: "R1", depends_on: [], effects: { artifact_mutation: "none" }, runtime: { mode: "readonly" } }] };
 const BASE = {
   ir: IR,

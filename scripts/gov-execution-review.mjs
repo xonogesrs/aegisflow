@@ -5,11 +5,11 @@
 //
 // The fixed human-facing entrypoint for the most recent formal execution's
 // review:
-//   ~/Desktop/AutoLoop-Review/Latest/review.txt
+//   <review surface>/Latest/review.txt
 // Historical execution reviews rotate into:
-//   ~/Desktop/AutoLoop-Review/Latest/archive/
+//   <review surface>/Latest/archive/
 // This surface is INDEPENDENT of the external-review inbox
-//（~/Desktop/AutoLoop-Review/Current/ + Archive/）— a pending external review
+//（the review surface + archive）— a pending external review
 // never blocks an execution review, and this CLI never touches the inbox.
 //
 // Env overrides（tests / CI isolation）: AUTOLOOP_EXECUTION_REVIEW_SURFACE,

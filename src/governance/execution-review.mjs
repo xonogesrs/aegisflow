@@ -4,12 +4,12 @@
 // review publication）.
 //
 // RSL1 froze the two-authority surface split:
-//   Domain A（this module）— ~/Desktop/AutoLoop-Review/Latest/review.txt:
+//   Domain A（this module）— <review surface>/Latest/review.txt:
 //     the FIXED absolute human entrypoint for the most recent Formal Agent
 //     Execution's review. EVERY formal execution publishes here; the previous
 //     occupant is rotated into Latest/archive/（byte-identical, collision-
 //     safe, immutable）. Never blocked by external-review inbox state.
-//   Domain B（review-bundle.mjs）— ~/Desktop/AutoLoop-Review/Current/ +
+//   Domain B（review-bundle.mjs）— <review surface>/Current/ +
 //     Archive/: the external review INBOX. Unresolved occupants stay until a
 //     reviewer verdict; nothing in this module ever touches that inbox.
 //
@@ -34,10 +34,10 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { scanForSecrets, sha256Text } from "../evidence/run-evidence-store.mjs";
 import { collectRepoFacts } from "./review-bundle.mjs";
+import { resolveExecutionReviewArchive, resolveExecutionReviewSurface } from "../shared/autoloop-paths.mjs";
 import { currentSurfaceReviewStatus } from "./review-bundle.mjs";
 
 export const EXECUTION_REVIEW_SCHEMA = "autoloop.execution-review/v1";
@@ -59,13 +59,13 @@ export const EXECUTION_REVIEW_HOLDS = Object.freeze({
 });
 
 /** Fixed absolute human entrypoint for the latest formal execution review. */
-export function latestReviewDir() {
-  return process.env.AUTOLOOP_EXECUTION_REVIEW_SURFACE ?? join(homedir(), "Desktop", "AutoLoop-Review", "Latest");
+export function latestReviewDir({ env = process.env } = {}) {
+  return resolveExecutionReviewSurface({ env });
 }
 
 /** Historical execution reviews（rotated from Latest/; flat, immutable）. */
-export function latestReviewArchiveDir() {
-  return process.env.AUTOLOOP_EXECUTION_REVIEW_ARCHIVE ?? join(homedir(), "Desktop", "AutoLoop-Review", "Latest", "archive");
+export function latestReviewArchiveDir({ env = process.env } = {}) {
+  return resolveExecutionReviewArchive({ env });
 }
 
 // ---------------------------------------------------------------------------

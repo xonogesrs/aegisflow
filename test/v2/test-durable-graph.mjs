@@ -19,7 +19,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync, realpathSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   classifyPostHeadEvent, POST_HEAD_EVENT_SEMANTICS, buildDagFingerprint, buildIrSha256,
@@ -412,19 +412,22 @@ test("DE-2 production wiring: durableExecutionIdFor maps logical run ids determi
   assert.notEqual(a, c, "different logical id -> different durable id");
 });
 
-test("DE-2 production wiring: every production caller stays durable (no durable:false bypass)", () => {
-  const scriptDir = join(process.cwd(), "scripts");
-  const offenders = [];
-  const callers = [];
-  // DE-2R: scan only ACTUAL runner-call bodies. A plain /durable:false/
-  // regex also matches the literal prose ``durable: false`` inside card
-  // closeout scripts' design-decision text（de2-self-closeout.mjs）— a false
-  // positive that hid the guard's intent. The call-body scan below still
-  // catches any production script passing durable:false to runSubagentGraph /
-  // runColimaGraph, while ignoring prose outside calls.
+test("DE-2 production wiring: NO production path can opt out of durable execution", () => {
+  // The guarded property is: nothing that runs in production may pass
+  // `durable: false` to a graph runner. That escape hatch is TEST-ONLY.
+  //
+  // The scan covers BOTH places a production call can live: the operator CLIs
+  // in scripts/ and the library entry points in src/. It previously scanned
+  // only scripts/ and carried a ">= 5 callers" floor as a proxy for "callers
+  // exist" — but the one-off probe/capture scripts that satisfied that floor
+  // are internal operational tooling and are not part of the public tree, so
+  // the floor measured the operator's local tooling rather than the invariant.
+  // What is checked now is the invariant itself, at every call site.
+  const scanRoots = [join(process.cwd(), "scripts"), join(process.cwd(), "src")];
+
   const runnerCallBodies = (src) => {
     const bodies = [];
-    for (const fn of ["runSubagentGraph(", "runColimaGraph("]) {
+    for (const fn of ["runSubagentGraph(", "runColimaGraph(", "runDurableGraph("]) {
       let from = 0;
       while (true) {
         const start = src.indexOf(fn, from);
@@ -444,21 +447,22 @@ test("DE-2 production wiring: every production caller stays durable (no durable:
     }
     return bodies;
   };
-  for (const f of readdirSync(scriptDir).filter((f) => f.endsWith(".mjs")).sort()) {
-    const src = readFileSync(join(scriptDir, f), "utf8");
-    if (!src.includes("runSubagentGraph")) continue;
-    if (runnerCallBodies(src).some((body) => /\bdurable\s*:\s*false\b/.test(body))) offenders.push(f);
-    if (src.includes("await runSubagentGraph(")) callers.push(f);
-  }
-  // NO production script may opt out of durable execution（durable: false is
-  // a documented TEST-ONLY escape hatch）.
-  assert.deepEqual(offenders, [], "production scripts must not disable durability");
-  // R-04 removal: the 17 one-shot self-closeout wrapper scripts (each an
-  // `await runSubagentGraph(` caller) were deleted — the remaining canonical
-  // production callers are the evidence-capture / probe / resume-worker set.
-  assert.ok(callers.length >= 5, `expected >=5 production callers, got ${callers.length}: ${callers.join(", ")}`);
-});
 
+  const files = [];
+  for (const root of scanRoots) {
+    if (!existsSync(root)) continue;
+    for (const f of readdirSync(root).filter((f) => f.endsWith(".mjs")).sort()) files.push(join(root, f));
+  }
+  assert.ok(files.length > 0, "scan found source files to inspect");
+
+  const offenders = [];
+  for (const full of files) {
+    const src = readFileSync(full, "utf8");
+    if (!/run(Subagent|Colima|Durable)Graph/.test(src)) continue;
+    if (runnerCallBodies(src).some((body) => /\bdurable\s*:\s*false\b/.test(body))) offenders.push(relative(process.cwd(), full));
+  }
+  assert.deepEqual(offenders, [], "production code must not disable durability");
+});
 // Real end-to-end proof: runSubagentGraph（production entry）with the DEFAULT
 // durable wiring produces journal + checkpoints + manifest on disk, returns
 // recovery/evidence provenance only the durable layer emits, and a fresh

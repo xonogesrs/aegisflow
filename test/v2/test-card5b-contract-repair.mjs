@@ -29,11 +29,14 @@ function eff(a, r = "forbidden", ext = "forbidden", ev = "none", extra = {}) {
   };
 }
 
-// ── Card 5 live raw IR（frozen evidence）──
-const LIVE_EVIDENCE_PATH = "/Volumes/NVM2T/Development/evidence/autoloop/card-5-live-probe-2026-08-02T15-43-49-242Z/evidence.json";
+// ── Card 5 live raw IR ──
+// Committed as a repo fixture (captured from the card-5 live probe) so this
+// suite is reproducible in any checkout and does not depend on a machine-local
+// evidence store.
+const LIVE_EVIDENCE_FIXTURE = new URL("../fixtures/card-5-live-e2-ir.json", import.meta.url);
 function liveE2IR() {
-  const ev = JSON.parse(readFileSync(LIVE_EVIDENCE_PATH, "utf8"));
-  return ev.cases[0].parsed_ir;
+  const ev = JSON.parse(readFileSync(LIVE_EVIDENCE_FIXTURE, "utf8"));
+  return ev.parsed_ir;
 }
 
 // ══ Stage 1/3 — provenance 完整性 ══

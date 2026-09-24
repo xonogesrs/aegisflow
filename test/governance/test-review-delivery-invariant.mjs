@@ -30,6 +30,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   REVIEW_BUNDLE_SOURCE_SCHEMA,
   REVIEW_BUNDLE_HOLDS,
@@ -42,7 +43,7 @@ import {
   readExternalReviewDeliveryRecord,
 } from "../../src/governance/review-bundle.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO_A = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 const ROOT = `${tmpdir()}/review-delivery-invariant-${process.pid}`;
 const OUT = join(ROOT, "out");
 const repoEntriesBefore = spawnSync("git", ["-C", REPO_A, "status", "--porcelain"], { encoding: "utf8" }).stdout.trim().split("\n").filter(Boolean).length;

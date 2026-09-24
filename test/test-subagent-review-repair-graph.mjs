@@ -41,9 +41,10 @@ import { resolveInstance } from "../src/runtime/colima-runtime.mjs";
 // durable production path itself is proven in test/v2/test-durable-graph.mjs
 // (production-wiring test) + the canonical test:colima-all acceptance.
 import { agentExecutionIdFor, stageAgentExecutionId, SUBAGENT_REVIEW_RESULT_SCHEMA } from "../src/subagent/subagent-contract.mjs";
+import { fileURLToPath } from "node:url";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO_A = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
 const SCRATCH = `${HOME}/autoloop-review-repair-test-scratch`;
 const PROFILE = "autoloop-graph";
 // Ownership contract: the runner deletes the instance only when it created it.

@@ -28,9 +28,10 @@ import { join } from "node:path";
 import { runColimaGraph } from "../src/runtime/colima-graph-runner.mjs";
 import { validateReviewBundle, REVIEW_BUNDLE_HOLDS } from "../src/governance/review-bundle.mjs";
 import { CLOSEOUT_STATE_SCHEMA, closeoutStatePath, writeCloseoutState } from "../src/governance/closeout-state.mjs";
+import { fileURLToPath } from "node:url";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO_A = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
 const SCRATCH = `${HOME}/autoloop-graph-closeout-test-scratch`;
 const PROFILE = "autoloop-graph";
 const PARENT = { scope: { allowed_paths: ["docs/"], forbidden_paths: [".git"] } };

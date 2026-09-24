@@ -14,6 +14,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import {
   timingFields,
   parseNodeTestOut,
@@ -21,7 +22,7 @@ import {
   aggregateTiming,
 } from "../../src/governance/verification-timing.mjs";
 
-const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 test("S2/1: timingFields records MEASURED start/completed/wallMs from real instants", () => {
   const start = Date.now() - 1234;

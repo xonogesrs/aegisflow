@@ -76,7 +76,7 @@ function writeCheckpointFile(execDir, snapshot) {
   return digest;
 }
 
-const REPO = fileURLToPath(new URL("../..", import.meta.url));
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 const publication = {
   artifact_digest: hex("artifact-digest"),

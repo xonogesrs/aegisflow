@@ -40,6 +40,7 @@ import {
   makeEvent,
   makeBinder,
   createTestRoot,
+  IDENTITY_ROOT,
 } from "../../src/learning/transfer-metrics/fixtures.mjs";
 import {
   TransferMetricsWriter,
@@ -66,7 +67,7 @@ import {
 } from "../../src/learning/incidents/projection.mjs";
 import { TRANSFER_METRICS_ENABLED, isTransferMetricsEnabled } from "../../src/learning/transfer-metrics/seam.mjs";
 
-const REPO = fileURLToPath(new URL("../..", import.meta.url));
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 const PROJECTION_PATH = join(REPO, "src/learning/incidents/projection.mjs");
 const WRITER_PATH = join(REPO, "src/learning/transfer-metrics/writer.mjs");
 const LOCK_PATH = join(REPO, "src/c2d/lock.mjs");
@@ -655,7 +656,7 @@ test("R135 path fence matrix: tmp/HOME/traversal/NUL/non-string rejected PATH_UN
       "/tmp/autoloop-1r-probe",
       "/private/tmp/autoloop-1r-probe",
       root + "/./../../../../../../../../etc",
-      "/Volumes/NVM2T/Development/../..",
+      join(IDENTITY_ROOT, "..", ".."),
       root + "\0evil",
       undefined,
       42,
@@ -1232,8 +1233,8 @@ test("R161 one-to-one cardinality; retry no inflation; conflict no LWW; distinct
     assert.equal(a.attempt_identity.attempt === b.attempt_identity.attempt, false);
     // distinct project, same source digests -> distinct identity, separate writer
     const proj2 = {
-      repository_root_identity: "/Volumes/NVM2T/Development/tmp/transfer-metrics-core-1/proj-r161b",
-      git_common_dir_identity: "/Volumes/NVM2T/Development/tmp/transfer-metrics-core-1/proj-r161b/.git",
+      repository_root_identity: join(IDENTITY_ROOT, "proj-r161b"),
+      git_common_dir_identity: join(IDENTITY_ROOT, "proj-r161b", ".git"),
     };
     const second = testWriter(ids, {
       projects: new Map([

@@ -56,7 +56,7 @@ function defaultSurfaceDir() {
  * @param {string} [opts.cwd] — repository worktree (defaults to --cwd /
  *   process.cwd()).
  * @param {string} [opts.surfaceDir] — external review surface (defaults to
- *   --surface / ~/Desktop/AutoLoop-Review/Current).
+ *   --surface / AUTOLOOP_REVIEW_SURFACE).
  * @param {string} [opts.remote] — remote name (defaults to --remote / origin).
  * @param {Function} [opts.remotePolicy] — remote-URL authorizer
  *   (url, repoId) => boolean. Production ALWAYS uses productionRemoteMatch

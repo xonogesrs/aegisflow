@@ -31,16 +31,7 @@ import {
 } from "../../src/learning/transfer-metrics/schema.mjs";
 import { scanTransferPayload } from "../../src/learning/transfer-metrics/redact.mjs";
 import { TransferMetricsWriter, captureRawLogSnapshot } from "../../src/learning/transfer-metrics/writer.mjs";
-import {
-  FIXTURE,
-  makeIdentities,
-  makeEvent,
-  makeBinder,
-  createTestRoot,
-  expectCode,
-  hex,
-  iso,
-} from "../../src/learning/transfer-metrics/fixtures.mjs";
+import { FIXTURE, makeIdentities, makeEvent, makeBinder, createTestRoot, expectCode, hex, iso, IDENTITY_ROOT } from "../../src/learning/transfer-metrics/fixtures.mjs";
 import {
   PROJECTION_SCHEMA_VERSION,
   PROJECTION_ALGORITHM_VERSION,
@@ -64,7 +55,7 @@ import {
 } from "../../src/learning/incidents/projection.mjs";
 import { sha256Text } from "../../src/evidence/run-evidence-store.mjs";
 
-const REPO = fileURLToPath(new URL("../..", import.meta.url));
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 const sha256Hex = (text) => createHash("sha256").update(text, "utf8").digest("hex");
 const sha256Buf = (buf) => createHash("sha256").update(buf).digest("hex");
@@ -374,8 +365,8 @@ test("T8 distinct attempts identical text preserved as two items", () => {
 test("T9 distinct projects preserved as two items with distinct keys", () => {
   const ids = makeIdentities("t9");
   const projB = {
-    repository_root_identity: join("/Volumes/NVM2T/Development/tmp", "proj-t9-b"),
-    git_common_dir_identity: join("/Volumes/NVM2T/Development/tmp", "proj-t9-b", ".git"),
+    repository_root_identity: join(IDENTITY_ROOT, "proj-t9-b"),
+    git_common_dir_identity: join(IDENTITY_ROOT, "proj-t9-b", ".git"),
   };
   const { root, writer } = testWriter(ids, {
     projects: new Map([
@@ -1254,7 +1245,7 @@ test("T68 output contains no non-frozen absolute paths", () => {
   } catch (e) {
     const serialized = JSON.stringify({ code: e.code, details: e.details, message: e.message });
     assert.equal(serialized.includes(root), false);
-    assert.equal(serialized.includes("/Volumes/"), false);
+    assert.equal(serialized.includes("/Volumes/"), false, "no external volume path leaks into the record");
   }
 });
 

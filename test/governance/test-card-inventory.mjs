@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   runMandatoryGraphCloseout,
   buildGraphCloseoutSource,
@@ -23,7 +24,7 @@ import {
   captureBaselineInventory,
 } from "../../src/governance/review-bundle.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO_A = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 const ROOT = `${tmpdir()}/cbm2r-inventory-${process.pid}`;
 const OUT = join(ROOT, "out");
 

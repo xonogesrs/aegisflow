@@ -46,10 +46,14 @@ import { MEMORY_STORE_IDENTITY_SCHEMA } from "./query-schema.mjs";
 import { MEMORY_SCHEMA_VERSION } from "./contract.mjs";
 import { deriveEventId } from "./identity.mjs";
 import { recursiveCanonicalJson, utcNowIso } from "./canonical.mjs";
+import { autoloopDefault } from "../shared/autoloop-paths.mjs";
 import { sha256Text } from "../evidence/run-evidence-store.mjs";
 
 export const MEMORY_STATE_ROOT_ENV = "AUTOLOOP_MEMORY_STATE_ROOT";
-export const DEFAULT_MEMORY_STATE_ROOT = join(homedir(), ".autoloop", "memory");
+// Resolved through the single configuration seam so AUTOLOOP_HOME actually
+// governs this root (the previous literal ~/.autoloop/memory bypassed it,
+// making the documented "AUTOLOOP_HOME moves all AutoLoop state" false).
+export const DEFAULT_MEMORY_STATE_ROOT = autoloopDefault("memory");
 export const MEMORY_STORE_FILES = Object.freeze(["memory.db", "journal.jsonl"]);
 
 export const MEMORY_STORE_HOLD_CODES = Object.freeze({

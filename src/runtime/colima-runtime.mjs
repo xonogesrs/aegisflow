@@ -16,7 +16,7 @@
 //   5. NVM2T fail-closed storage gate (COLIMA-NVM2T-FAIL-CLOSED): the Colima
 //      home MUST be the canonical NVM2T runtime path, verified against the
 //      real mount by volume UUID. Missing/mis-mounted NVM2T, a system-disk
-//      COLIMA_HOME, or a shadow mount (e.g. "/Volumes/NVM2T 1") fails closed
+//      COLIMA_HOME, or a shadow mount (the gated mount name with a numeric
 //      BEFORE any machine action — never mkdir ~/.colima, never fall back.
 //
 // Authority-free: this module only produces well-formed outcomes; judgment
@@ -25,11 +25,21 @@
 import { spawn, spawnSync } from "node:child_process";
 import { accessSync, constants, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, resolve, sep } from "node:path";
+import { dirname, isAbsolute, resolve, sep } from "node:path";
 import { createHash } from "node:crypto";
+import {
+  COLIMA_BIN_ENV,
+  COLIMA_HOME_ENV,
+  DOCKER_BIN_ENV,
+  colimaMountGate,
+  configuredColimaHome,
+  resolveExecutable,
+} from "../shared/autoloop-paths.mjs";
 
-export const COLIMA_BIN = "/opt/homebrew/bin/colima";
-export const DOCKER_BIN = "/opt/homebrew/bin/docker";
+// Executable discovery: explicit env override -> PATH -> platform defaults ->
+// bare name (PATH applies at spawn). No package-manager prefix is hardcoded.
+export const COLIMA_BIN = resolveExecutable("colima", { envName: COLIMA_BIN_ENV });
+export const DOCKER_BIN = resolveExecutable("docker", { envName: DOCKER_BIN_ENV });
 export const TEST_IMAGE =
   "docker.io/library/alpine@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce";
 export const CARD_LABEL = "autoloop.card=colima-autoloop-real-integration";
@@ -42,14 +52,22 @@ export class ColimaRuntimeError extends Error {
   }
 }
 // ---------------------------------------------------------------------------
-// NVM2T fail-closed storage gate (single seam; every path below flows
-// through colimaHome(), so every consumer inherits the gate).
+// Colima storage gate (single seam; every path below flows through
+// colimaHome(), so every consumer inherits the gate).
+//
+// The gate is CONFIGURATION-DRIVEN, never a hardcoded volume:
+//   COLIMA_HOME                     required, absolute, outside $HOME
+//   AUTOLOOP_COLIMA_MOUNT           optional: the volume the runtime must live on
+//   AUTOLOOP_COLIMA_MOUNT_UUID      optional: that volume's identity (with the
+//                                   mount var, enables the UUID + shadow-mount gate)
+//   AUTOLOOP_COLIMA_SKIP_MOUNT_GATE optional "1": disable the volume gate
+//                                   entirely (still requires an absolute,
+//                                   non-$HOME COLIMA_HOME)
+// Setting the two mount variables reproduces the original deployment's exact
+// behavior (canonical volume + UUID + shadow-mount refusal).
 // ---------------------------------------------------------------------------
 
-export const CANONICAL_COLIMA_HOME = "/Volumes/NVM2T/Development/runtime/colima";
-const NVM2T_MOUNT = "/Volumes/NVM2T";
-// Volume UUID of the real NVM2T disk (same authority as scripts/durable-worktree.sh).
-const NVM2T_UUID = "971A7EA8-5108-4B8E-B9A8-5141F0C04A8A";
+export const COLIMA_SKIP_MOUNT_GATE_ENV = "AUTOLOOP_COLIMA_SKIP_MOUNT_GATE";
 
 function isUnder(child, parent) {
   const c = resolve(child);
@@ -59,56 +77,82 @@ function isUnder(child, parent) {
 
 /**
  * Resolve + verify the Colima home. Fail closed:
- *   - COLIMA_HOME unset, non-absolute, or != canonical NVM2T path
- *   - /Volumes/NVM2T not the real mount (volume UUID mismatch)
- *   - shadow mounts ("/Volumes/NVM2T 1") present
- *   - canonical runtime dir unavailable or unwritable
+ *   - COLIMA_HOME unset, empty, or relative
+ *   - COLIMA_HOME resolves to $HOME or inside $HOME
+ *   - (when the mount gate is configured) a different volume is mounted at the
+ *     configured mount root, its volume UUID does not match, or a shadow mount
+ *     of that volume is present
+ *   - the directory is absent or not writable
  * Never creates a fallback directory and never rewrites COLIMA_HOME.
  */
-export function assertColimaHome({ env = process.env, uuidOf = defaultUuidOf, volumesOf = defaultVolumesOf, statOf = defaultStatOf } = {}) {
-  const configured = env.COLIMA_HOME ?? "";
-  if (configured !== CANONICAL_COLIMA_HOME) {
+export function assertColimaHome({
+  env = process.env,
+  uuidOf = defaultUuidOf,
+  volumesOf = defaultVolumesOf,
+  statOf = defaultStatOf,
+  accessOf = accessSync,
+} = {}) {
+  const raw = env?.[COLIMA_HOME_ENV] ?? "";
+  if (raw !== "" && !isAbsolute(raw.trim())) {
     throw new ColimaRuntimeError(
-      `HOLD COLIMA_HOME_NOT_CANONICAL: COLIMA_HOME must be exactly ${CANONICAL_COLIMA_HOME} ` +
-      `(got ${configured ? JSON.stringify(configured) : "unset"}); ` +
-      `refusing to fall back to ~/.colima or any system-disk path`,
-      { configured, canonical: CANONICAL_COLIMA_HOME },
+      `HOLD COLIMA_HOME_NOT_CANONICAL: ${COLIMA_HOME_ENV} must be an absolute path (got ${JSON.stringify(raw)}); ` +
+      `a relative value is never resolved against the process cwd`,
+      { configured: raw },
     );
   }
-  if (!isUnder(configured, NVM2T_MOUNT) || isUnder(configured, homedir())) {
+  const configured = configuredColimaHome({ env });
+  if (configured === null) {
     throw new ColimaRuntimeError(
-      `HOLD COLIMA_HOME_NOT_CANONICAL: ${configured} must resolve under ${NVM2T_MOUNT} and never under $HOME`,
-      { configured },
+      `HOLD COLIMA_HOME_NOT_CANONICAL: ${COLIMA_HOME_ENV} must be set to an absolute path` +
+      `${raw ? ` (got ${JSON.stringify(raw)})` : ""}; refusing to fall back to ~/.colima or any system-disk path`,
+      { configured: raw },
     );
   }
-  const uuid = uuidOf(NVM2T_MOUNT);
-  if (uuid !== NVM2T_UUID) {
+  const home = resolve(homedir());
+  if (isUnder(configured, home)) {
     throw new ColimaRuntimeError(
-      `HOLD COLIMA_NVM2T_MOUNT_IDENTITY_FAILED: ${NVM2T_MOUNT} volume UUID is '${uuid ?? "none"}', ` +
-      `want ${NVM2T_UUID} — mount drifted or a wrong volume is mounted at the canonical path`,
-      { mount: NVM2T_MOUNT, uuid, want: NVM2T_UUID },
+      `HOLD COLIMA_HOME_NOT_CANONICAL: ${configured} must never resolve under $HOME (${home})`,
+      { configured, home },
     );
   }
-  for (const entry of volumesOf()) {
-    if (entry.startsWith("NVM2T") && entry !== "NVM2T") {
+  const gate = env?.[COLIMA_SKIP_MOUNT_GATE_ENV] === "1" ? null : colimaMountGate({ env });
+  if (gate) {
+    if (!isUnder(configured, gate.mount)) {
       throw new ColimaRuntimeError(
-        `HOLD COLIMA_NVM2T_SHADOW_MOUNT: /Volumes/${entry} exists alongside ${NVM2T_MOUNT} — ` +
-        `refusing to guess which volume is the real NVM2T; remount cleanly and retry`,
-        { shadow: `/Volumes/${entry}`, canonical: NVM2T_MOUNT },
+        `HOLD COLIMA_HOME_NOT_CANONICAL: ${configured} must resolve under the configured mount ${gate.mount}`,
+        { configured, mount: gate.mount },
       );
+    }
+    const uuid = uuidOf(gate.mount);
+    if (uuid !== gate.uuid) {
+      throw new ColimaRuntimeError(
+        `HOLD COLIMA_MOUNT_IDENTITY_FAILED: ${gate.mount} volume UUID is '${uuid ?? "none"}', ` +
+        `want ${gate.uuid} — mount drifted or a wrong volume is mounted at the configured path`,
+        { mount: gate.mount, uuid, want: gate.uuid },
+      );
+    }
+    const mountName = gate.mount.split(sep).filter(Boolean).pop();
+    for (const entry of volumesOf()) {
+      if (entry.startsWith(mountName) && entry !== mountName) {
+        throw new ColimaRuntimeError(
+          `HOLD COLIMA_SHADOW_MOUNT: ${dirname(gate.mount)}/${entry} exists alongside ${gate.mount} — ` +
+          `refusing to guess which volume is the real one; remount cleanly and retry`,
+          { shadow: `${dirname(gate.mount)}/${entry}`, canonical: gate.mount },
+        );
+      }
     }
   }
   let stat = null;
   try { stat = statOf(configured); } catch { /* absent */ }
   if (!stat || !stat.isDirectory()) {
     throw new ColimaRuntimeError(
-      `HOLD COLIMA_RUNTIME_HOME_UNAVAILABLE: canonical runtime directory ${configured} does not exist`,
+      `HOLD COLIMA_RUNTIME_HOME_UNAVAILABLE: Colima runtime directory ${configured} does not exist`,
       { configured },
     );
   }
-  try { accessSync(configured, constants.W_OK | constants.X_OK); } catch (e) {
+  try { accessOf(configured, constants.W_OK | constants.X_OK); } catch (e) {
     throw new ColimaRuntimeError(
-      `HOLD COLIMA_RUNTIME_HOME_UNAVAILABLE: canonical runtime directory ${configured} is not writable: ${e.message}`,
+      `HOLD COLIMA_RUNTIME_HOME_UNAVAILABLE: Colima runtime directory ${configured} is not writable: ${e.message}`,
       { configured },
     );
   }
@@ -392,7 +436,17 @@ export function ensureInstance({ profile, cpus = 2, memory = 2, disk = 20, roMou
   // (listInstances / colima start|stop), config write, mkdir, spawn, or probe.
   // COLIMA-NVM2T-FAIL-CLOSED: verify the canonical NVM2T runtime home BEFORE
   // any machine action (list / start / stop / config write / mkdir / probe).
-  assertColimaHome({ env, uuidOf: deps.uuidOf });
+  // Forward every injectable observation so a caller (and the tests) can
+  // exercise the gate's DECISIONS without a real machine. `deps` is already the
+  // seam for machine actions; the gate's filesystem/volume facts belong there
+  // too, otherwise a test cannot reach a later validation.
+  assertColimaHome({
+    env,
+    uuidOf: deps.uuidOf,
+    volumesOf: deps.volumesOf,
+    statOf: deps.statOf,
+    accessOf: deps.accessOf,
+  });
   const scratchMount = assertSingleWritableMount(rwMounts);
   const run = deps.run ?? runSync;
   const resolveFn = deps.resolve ?? resolveInstance;

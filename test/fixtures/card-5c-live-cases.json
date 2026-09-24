@@ -1,0 +1,607 @@
+{
+  "schema": "autoloop.test-fixture/card-5c-live-cases/v1",
+  "provenance": {
+    "source": "card-5c live probe (2026-08-02T16-10-02-635Z) evidence record",
+    "note": "parsed_ir + terminal verdict per live case, committed as a fixture so the regression-replay suite does not depend on a machine-local evidence store."
+  },
+  "cases": [
+    {
+      "case_id": "E2",
+      "parsed_ir": {
+        "verdict": "DECOMPOSED",
+        "parent_goal": "分析現有結構、提取共用邏輯、加入單元測試、提交結果",
+        "execution_policy": {
+          "executor": "INHERIT_PARENT",
+          "reviewer": "EXTERNAL_GPT",
+          "multi_model_orchestration": false
+        },
+        "phases": [
+          {
+            "phase_id": "analyze_existing_structure",
+            "title": "分析現有結構",
+            "summary": "分析 src/auth/ 下的現有程式碼結構，識別可提取的共用邏輯。",
+            "responsibility": "檢視 src/auth/ 範圍內的程式碼，整理模組邊界與重複模式，提供提取共用邏輯所需的資訊。",
+            "purpose": "analysis",
+            "effects": {
+              "artifact_mutation": "forbidden",
+              "runtime_side_effect": "forbidden",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "ephemeral",
+              "boundaries": {
+                "artifact": [],
+                "runtime": [],
+                "external_system": [],
+                "evidence": []
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R1",
+                "completeness": "complete",
+                "claim": "分析 src/auth/ 的現有結構並產出理解結果"
+              }
+            ],
+            "depends_on": []
+          },
+          {
+            "phase_id": "extract_common_logic",
+            "title": "提取共用邏輯",
+            "summary": "根據分析結果，在 src/auth/ 中提取並重構共用邏輯。",
+            "responsibility": "將重複或可共用的邏輯抽取為共用函式/模組，並確保變更限制在 src/auth/ 範圍內。",
+            "purpose": "implementation",
+            "effects": {
+              "artifact_mutation": "required",
+              "runtime_side_effect": "forbidden",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "none",
+              "boundaries": {
+                "artifact": [
+                  "src/auth/"
+                ],
+                "runtime": [],
+                "external_system": [],
+                "evidence": []
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R2",
+                "completeness": "complete",
+                "claim": "在 src/auth/ 中完成共用邏輯提取"
+              }
+            ],
+            "depends_on": [
+              "analyze_existing_structure"
+            ]
+          },
+          {
+            "phase_id": "add_unit_tests",
+            "title": "加入單元測試",
+            "summary": "在 test/auth/ 中加入對提取後共用邏輯的單元測試。",
+            "responsibility": "撰寫單元測試以覆蓋提取後的共用邏輯，驗證其行為符合預期並能通過測試。",
+            "purpose": "verification",
+            "effects": {
+              "artifact_mutation": "required",
+              "runtime_side_effect": "forbidden",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "none",
+              "boundaries": {
+                "artifact": [
+                  "test/auth/"
+                ],
+                "runtime": [],
+                "external_system": [],
+                "evidence": []
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R3",
+                "completeness": "complete",
+                "claim": "在 test/auth/ 中加入對共用邏輯的單元測試"
+              }
+            ],
+            "depends_on": [
+              "extract_common_logic"
+            ],
+            "verification_plan": {
+              "subject_phase_ids": [
+                "extract_common_logic"
+              ],
+              "method": "為提取的共用邏輯撰寫單元測試，並執行測試套件。",
+              "success_criteria": "新增的單元測試通過，且覆蓋共用邏輯的主要分支。",
+              "failure_criteria": "測試未通過或無法覆蓋共用邏輯的主要行為。",
+              "evidence": "test/auth/ 下的測試檔案及測試執行結果"
+            }
+          }
+        ],
+        "dispositions": [
+          {
+            "requirement_id": "R4",
+            "disposition": "deferred",
+            "reason": "目前 commit_allowed=false，沒有提交變更的授權；需要由具備提交權限的執行者或後續授權流程完成提交。",
+            "reason_code": "COMMIT_NOT_AUTHORIZED",
+            "target": "在取得提交授權後執行"
+          }
+        ],
+        "decomposition_evidence": [
+          "R1 以分析階段處理，R2 以實作階段處理，R3 以新增單元測試的驗證階段處理，R4 因 commit_allowed=false 無法在此任務內完成而 disposition deferred。"
+        ]
+      },
+      "failure_code": null,
+      "final_verdict": "PASS"
+    },
+    {
+      "case_id": "E6",
+      "parsed_ir": {
+        "verdict": "DECOMPOSED",
+        "parent_goal": "Implement authentication features: login, logout, session management, password reset, email verification, OAuth2",
+        "execution_policy": {
+          "executor": "INHERIT_PARENT",
+          "reviewer": "EXTERNAL_GPT",
+          "multi_model_orchestration": false
+        },
+        "phases": [
+          {
+            "phase_id": "session_management",
+            "title": "Implement session management",
+            "summary": "Create the session lifecycle primitives used by login, logout, and OAuth2.",
+            "responsibility": "Implement session creation, storage, validation, and destruction under src/auth/.",
+            "purpose": "implementation",
+            "effects": {
+              "artifact_mutation": "required",
+              "runtime_side_effect": "forbidden",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "none",
+              "boundaries": {
+                "artifact": [
+                  "src/auth/"
+                ],
+                "runtime": [],
+                "external_system": [],
+                "evidence": []
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R3",
+                "completeness": "complete",
+                "claim": "Provide session management primitives (create, read, destroy, validate) covering the session management requirement."
+              }
+            ],
+            "depends_on": []
+          },
+          {
+            "phase_id": "login",
+            "title": "Implement login",
+            "summary": "Add credential authentication and session creation.",
+            "responsibility": "Authenticate user credentials and create a session using the session management layer.",
+            "purpose": "implementation",
+            "effects": {
+              "artifact_mutation": "required",
+              "runtime_side_effect": "forbidden",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "none",
+              "boundaries": {
+                "artifact": [
+                  "src/auth/"
+                ],
+                "runtime": [],
+                "external_system": [],
+                "evidence": []
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R1",
+                "completeness": "complete",
+                "claim": "Authenticate users and establish a session on successful login."
+              }
+            ],
+            "depends_on": [
+              "session_management"
+            ]
+          },
+          {
+            "phase_id": "logout",
+            "title": "Implement logout",
+            "summary": "Add session invalidation and logout logic.",
+            "responsibility": "Invalidate the current session and clear local session state.",
+            "purpose": "implementation",
+            "effects": {
+              "artifact_mutation": "required",
+              "runtime_side_effect": "forbidden",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "none",
+              "boundaries": {
+                "artifact": [
+                  "src/auth/"
+                ],
+                "runtime": [],
+                "external_system": [],
+                "evidence": []
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R2",
+                "completeness": "complete",
+                "claim": "Terminate user sessions on logout."
+              }
+            ],
+            "depends_on": [
+              "session_management"
+            ]
+          },
+          {
+            "phase_id": "email_verification",
+            "title": "Implement email verification",
+            "summary": "Generate, send, and validate email verification tokens.",
+            "responsibility": "Implement email verification token generation, email sending via src/email/, and token validation in src/auth/.",
+            "purpose": "implementation",
+            "effects": {
+              "artifact_mutation": "required",
+              "runtime_side_effect": "forbidden",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "none",
+              "boundaries": {
+                "artifact": [
+                  "src/auth/",
+                  "src/email/"
+                ],
+                "runtime": [],
+                "external_system": [],
+                "evidence": []
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R5",
+                "completeness": "complete",
+                "claim": "Provide a complete email verification flow with token delivery and verification."
+              }
+            ],
+            "depends_on": []
+          },
+          {
+            "phase_id": "password_reset",
+            "title": "Implement password reset",
+            "summary": "Send password reset emails and allow secure password updates.",
+            "responsibility": "Implement password reset token creation, email dispatch, token validation, and password update using the email service built for verification.",
+            "purpose": "implementation",
+            "effects": {
+              "artifact_mutation": "required",
+              "runtime_side_effect": "forbidden",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "none",
+              "boundaries": {
+                "artifact": [
+                  "src/auth/",
+                  "src/email/"
+                ],
+                "runtime": [],
+                "external_system": [],
+                "evidence": []
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R4",
+                "completeness": "complete",
+                "claim": "Provide a complete password reset flow from request to password update."
+              }
+            ],
+            "depends_on": [
+              "email_verification"
+            ]
+          },
+          {
+            "phase_id": "oauth2",
+            "title": "Implement OAuth2 authentication",
+            "summary": "Integrate OAuth2 providers and local session creation.",
+            "responsibility": "Implement OAuth2 authorization flow, callback handling, and creation of local sessions via the session management layer.",
+            "purpose": "implementation",
+            "effects": {
+              "artifact_mutation": "required",
+              "runtime_side_effect": "forbidden",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "none",
+              "boundaries": {
+                "artifact": [
+                  "src/auth/"
+                ],
+                "runtime": [],
+                "external_system": [],
+                "evidence": []
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R6",
+                "completeness": "complete",
+                "claim": "Support OAuth2 authentication flows and establish sessions after provider authorization."
+              }
+            ],
+            "depends_on": [
+              "session_management"
+            ]
+          }
+        ],
+        "dispositions": [],
+        "decomposition_evidence": [
+          "One implementation phase per authentication requirement.",
+          "Session management is a prerequisite for login, logout, and OAuth2 since those flows create/destroy/use sessions.",
+          "Password reset depends on email verification to reuse the email delivery infrastructure."
+        ]
+      },
+      "failure_code": null,
+      "final_verdict": "PASS"
+    },
+    {
+      "case_id": "E9",
+      "parsed_ir": {
+        "verdict": "DECOMPOSED",
+        "parent_goal": "建立 foundation/baseline 分析、實作 feature、執行測試驗證並接受外部 review",
+        "execution_policy": {
+          "executor": "INHERIT_PARENT",
+          "reviewer": "EXTERNAL_GPT",
+          "multi_model_orchestration": false
+        },
+        "phases": [
+          {
+            "phase_id": "baseline_analysis",
+            "title": "建立 foundation/baseline 分析",
+            "summary": "分析現有基礎與需求，產出 baseline 分析文件",
+            "responsibility": "檢視 src/ 內現有程式碼，建立 foundation/baseline 分析，釐清實作 feature 的影響範圍",
+            "purpose": "analysis",
+            "effects": {
+              "artifact_mutation": "allowed",
+              "runtime_side_effect": "forbidden",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "persistent",
+              "boundaries": {
+                "artifact": [
+                  "src/"
+                ],
+                "runtime": [],
+                "external_system": [],
+                "evidence": [
+                  "src/baseline/"
+                ]
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R1",
+                "completeness": "complete",
+                "claim": "產出 foundation/baseline 分析"
+              }
+            ],
+            "depends_on": []
+          },
+          {
+            "phase_id": "implement_feature",
+            "title": "實作 feature",
+            "summary": "依據 baseline 分析實作 feature 功能",
+            "responsibility": "在 src/ 內實作 feature 功能程式碼",
+            "purpose": "implementation",
+            "effects": {
+              "artifact_mutation": "required",
+              "runtime_side_effect": "forbidden",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "none",
+              "boundaries": {
+                "artifact": [
+                  "src/"
+                ],
+                "runtime": [],
+                "external_system": [],
+                "evidence": []
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R2",
+                "completeness": "complete",
+                "claim": "完成 feature 功能實作"
+              }
+            ],
+            "depends_on": [
+              "baseline_analysis"
+            ]
+          },
+          {
+            "phase_id": "test_verification",
+            "title": "執行測試驗證",
+            "summary": "撰寫並執行測試，驗證 feature 正確性",
+            "responsibility": "建立/更新測試資產並執行測試，確認 feature 符合需求",
+            "purpose": "verification",
+            "effects": {
+              "artifact_mutation": "allowed",
+              "runtime_side_effect": "allowed",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "persistent",
+              "boundaries": {
+                "artifact": [
+                  "src/tests/"
+                ],
+                "runtime": [
+                  "local_test_env"
+                ],
+                "external_system": [],
+                "evidence": [
+                  "src/tests/reports/"
+                ]
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R3",
+                "completeness": "complete",
+                "claim": "測試驗證 feature 正確性"
+              }
+            ],
+            "depends_on": [
+              "implement_feature"
+            ],
+            "verification_plan": {
+              "subject_phase_ids": [
+                "implement_feature"
+              ],
+              "method": "執行單元與整合測試",
+              "success_criteria": "所有測試通過且覆蓋 feature 關鍵行為",
+              "failure_criteria": "任一測試失敗或關鍵行為未被驗證",
+              "evidence": "測試結果報告與 logs"
+            }
+          },
+          {
+            "phase_id": "external_review",
+            "title": "外部 review",
+            "summary": "由外部 reviewer 獨立檢視實作與測試結果",
+            "responsibility": "獨立審查 feature 實作品質與測試驗證結果，提供 review 意見",
+            "purpose": "review",
+            "effects": {
+              "artifact_mutation": "forbidden",
+              "runtime_side_effect": "forbidden",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "ephemeral",
+              "boundaries": {
+                "artifact": [],
+                "runtime": [],
+                "external_system": [],
+                "evidence": []
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R4",
+                "completeness": "complete",
+                "claim": "完成外部獨立 review"
+              }
+            ],
+            "depends_on": [
+              "test_verification"
+            ],
+            "verification_plan": {
+              "subject_phase_ids": [
+                "implement_feature",
+                "test_verification"
+              ],
+              "method": "獨立 code review 並檢視測試結果",
+              "success_criteria": "reviewer 認可實作與測試驗證",
+              "failure_criteria": "reviewer 提出需修正之 issue",
+              "evidence": "review 意見與決議"
+            }
+          }
+        ],
+        "dispositions": [],
+        "decomposition_evidence": [
+          "四個階段依序為 baseline 分析、feature 實作、測試驗證、外部 review",
+          "各需求 R1-R4 分別由單一 phase 完整涵蓋",
+          "依賴鏈 baseline_analysis -> implement_feature -> test_verification -> external_review 形成有效 DAG"
+        ]
+      },
+      "failure_code": null,
+      "final_verdict": "PASS"
+    },
+    {
+      "case_id": "E4",
+      "parsed_ir": {
+        "verdict": "DECOMPOSED",
+        "parent_goal": "產生 migration 檔案、離線驗證 schema integrity、實際更新 production database",
+        "execution_policy": {
+          "executor": "INHERIT_PARENT",
+          "reviewer": "EXTERNAL_GPT",
+          "multi_model_orchestration": false
+        },
+        "phases": [
+          {
+            "phase_id": "generate_migration_file",
+            "title": "產生 migration 檔案",
+            "summary": "在 migrations/ 目錄下建立 migration 檔案，內容包含 schema 變更。",
+            "responsibility": "根據需求產生 migration 檔案，並確保其落在允許的 migrations/ 路徑內。",
+            "purpose": "implementation",
+            "effects": {
+              "artifact_mutation": "required",
+              "runtime_side_effect": "forbidden",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "none",
+              "boundaries": {
+                "artifact": [
+                  "migrations/"
+                ],
+                "runtime": [],
+                "external_system": [],
+                "evidence": []
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R1",
+                "completeness": "complete",
+                "claim": "產生 migration 檔案並置於 migrations/ 路徑下"
+              }
+            ],
+            "depends_on": []
+          },
+          {
+            "phase_id": "verify_schema_integrity",
+            "title": "離線驗證 schema integrity",
+            "summary": "在離線環境執行 migration 驗證工具，確認 migration 檔案與 schema 完整性。",
+            "responsibility": "執行離線 schema 驗證，檢查 migration 檔案是否通過完整性及一致性檢查。",
+            "purpose": "verification",
+            "effects": {
+              "artifact_mutation": "forbidden",
+              "runtime_side_effect": "allowed",
+              "external_system_mutation": "forbidden",
+              "evidence_output": "ephemeral",
+              "boundaries": {
+                "artifact": [],
+                "runtime": [
+                  "local_offline_environment"
+                ],
+                "external_system": [],
+                "evidence": []
+              }
+            },
+            "covers": [
+              {
+                "requirement_id": "R2",
+                "completeness": "complete",
+                "claim": "透過離線驗證確認 schema integrity"
+              }
+            ],
+            "depends_on": [
+              "generate_migration_file"
+            ],
+            "verification_plan": {
+              "subject_phase_ids": [
+                "generate_migration_file"
+              ],
+              "method": "在離線環境執行 migration 驗證工具（例如 migrate check / schema diff），針對產生的 migration 檔案進行完整性檢查。",
+              "success_criteria": "migration 檔案通過所有 schema 完整性檢查，無 schema drift 或格式錯誤。",
+              "failure_criteria": "驗證工具回報錯誤、schema 不一致或 migration 檔案無效。",
+              "evidence": "驗證工具輸出之離線檢查結果 log。"
+            }
+          }
+        ],
+        "dispositions": [
+          {
+            "requirement_id": "R3",
+            "type": "out_of_scope",
+            "reason": "實際更新 production database 屬於 production runtime 操作，超出本任務授權範圍（僅允許 migrations/ 路徑變更，且 commit_allowed=false）。",
+            "evidence": "Authority boundary 僅允許 migrations/ 內變更，未授予 production database 存取權限，亦未允許 commit。",
+            "reason_code": "PRODUCTION_RUNTIME_OUT_OF_SCOPE"
+          }
+        ],
+        "decomposition_evidence": [
+          "R1 由 generate_migration_file 階段以 implementation 方式完整涵蓋。",
+          "R2 由 verify_schema_integrity 階段以 verification 方式完整涵蓋。",
+          "R3 因涉及 production database 更新，超出允許的 authority boundary，因此 disposition 為 out_of_scope。"
+        ]
+      },
+      "failure_code": "SCHEMA_FAILURE",
+      "final_verdict": "HOLD"
+    }
+  ]
+}

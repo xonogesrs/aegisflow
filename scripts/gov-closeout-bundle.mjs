@@ -45,6 +45,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import {
   runCloseoutGate,
@@ -144,8 +145,8 @@ if (mode === "enumerate-review-job") {
 // generate mode
 if (mode === "generate") {
   const sourcePath = arg("--generate", null);
-  const repoPath = arg("--repo", "/Volumes/NVM2T/Development/repos/autoloop");
-  const outDir = arg("--out", `${process.env.HOME}/Desktop/AutoLoop-Review`);
+  const repoPath = arg("--repo", fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, ""));
+  const outDir = arg("--out", process.env.AUTOLOOP_REVIEW_SURFACE ?? join(homedir(), ".autoloop", "review", "Current"));
   const timeoutMs = Number(arg("--timeout-ms", "30000"));
   const fileName = arg("--file", null);
 
@@ -362,7 +363,7 @@ if (mode === "final-closeout") {
 if (mode === "state-driven-closeout") {
   const statePath = arg("--state-driven-closeout", null);
   const evidencePath = arg("--graph-evidence", null);
-  const repo = arg("--repo", "/Volumes/NVM2T/Development/repos/autoloop");
+  const repo = arg("--repo", fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, ""));
   const outDir = arg("--out", null);
   const surfaceDir = arg("--surface", null);
   const timeoutMs = Number(arg("--timeout-ms", "30000"));

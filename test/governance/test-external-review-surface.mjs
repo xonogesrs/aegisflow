@@ -41,6 +41,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   runMandatoryGraphCloseout,
   collectRepoFacts,
@@ -58,7 +59,7 @@ import {
   releaseExternalReviewSurfaceLock,
 } from "../../src/governance/review-bundle.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO_A = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 const ROOT = `${tmpdir()}/rb1h-surface-${process.pid}`;
 const OUT = join(ROOT, "out");
 const ARCHIVE = join(ROOT, "archive");

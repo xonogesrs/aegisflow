@@ -195,6 +195,7 @@ test("P11. corrupt journal → MEMORY_STORE_INVALID (fail closed)", () => {
 });
 
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 function readAll(p) {
   return readFileSync(p, "utf8").trim().split("\n");
 }
@@ -217,7 +218,7 @@ test("P12. FTS tokenizer mismatch cannot enter the digest (pinned unicode61 remo
 test("P13. graph provider: missing store → EMPTY_MEMORY (graph continues)", async () => {
   const root = freshRoot(); // empty — no store files
   const provider = createGraphMemoryProvider({ stateRoot: root, log: silent });
-  const mr = await provider.retrieveGraphMemory({ repoPath: "/Volumes/NVM2T/Development/repos/autoloop", cwd: "/Volumes/NVM2T/Development/repos/autoloop", executionId: "g-1" });
+  const mr = await provider.retrieveGraphMemory({ repoPath: fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, ""), cwd: fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, ""), executionId: "g-1" });
   assert.equal(mr.state, "EMPTY_MEMORY");
   assert.equal(mr.memoryContext.state, "EMPTY_MEMORY");
   assert.equal(mr.memoryContext.selectedRecords.length, 0);
@@ -231,7 +232,7 @@ test("P14. graph provider: corrupt store → INVALID (HOLD / MEMORY_STORE_INVALI
   s.close();
   writeFileSync(join(root, "journal.jsonl"), "broken{json\n");
   const provider = createGraphMemoryProvider({ stateRoot: root, log: silent });
-  const mr = await provider.retrieveGraphMemory({ repoPath: "/Volumes/NVM2T/Development/repos/autoloop", cwd: "/Volumes/NVM2T/Development/repos/autoloop", executionId: "g-1" });
+  const mr = await provider.retrieveGraphMemory({ repoPath: fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, ""), cwd: fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, ""), executionId: "g-1" });
   assert.equal(mr.state, "INVALID");
   assert.ok(mr.reason.includes("MEMORY_STORE_INVALID"), mr.reason);
   assert.equal(mr.memoryContext, null);

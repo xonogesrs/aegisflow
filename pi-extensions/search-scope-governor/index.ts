@@ -17,8 +17,8 @@
 //
 // Deployment convergence: the governor + admission bridge are BUNDLED into
 // ./vendor (byte-identical to the authoritative AutoLoop source). The
-// installed extension therefore does NOT depend on /Volumes/NVM2T/Development
-// /autoloop at runtime.
+// installed extension therefore does NOT depend on a specific checkout path
+// at runtime.
 //
 // Resolution order (fail-closed):
 //   1. bundled ./vendor/pi-command-admission.mjs  (authoritative runtime copy)

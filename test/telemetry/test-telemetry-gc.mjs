@@ -20,7 +20,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   GC_HOLD_CODES,
   GcHoldError,
@@ -37,7 +37,10 @@ import {
   resolveGcNamespace,
   runTelemetryGc,
 } from "../../src/telemetry/gc.mjs";
-import { resolveTelemetryStateRoot, TELEMETRY_STATE_ROOT_ENV } from "../../src/telemetry/location.mjs";
+import { resolveTelemetryStateRoot, telemetryEvidenceRoot, TELEMETRY_ROOT, TELEMETRY_STATE_ROOT_ENV } from "../../src/telemetry/location.mjs";
+import { resolveEvidenceRoot } from "../../src/shared/autoloop-paths.mjs";
+
+const EVIDENCE_ROOT = resolveEvidenceRoot();
 
 function tmpRoot(label) {
   return mkdtempSync(join(tmpdir(), `gc-${label}-`));
@@ -76,9 +79,9 @@ test("C1. namespace admission: arbitrary roots rejected (GC_ARBITRARY_ROOT_DELET
   // A real $HOME child (macOS tmpdir is /var/folders — NOT inside $HOME —
   // so use an explicit HOME child to prove the fence).
   assert.throws(() => resolveGcNamespace({ tempNamespaceRoot: join(process.env.HOME, "gc-forbidden") }), (e) => e.code === GC_HOLD_CODES.ARBITRARY_ROOT);
-  assert.throws(() => resolveGcNamespace({ tempNamespaceRoot: "/Volumes/NVM2T/Development/evidence/autoloop-telemetry" }), (e) => e.code === GC_HOLD_CODES.ARBITRARY_ROOT, "canonical telemetry root is not a TEMP namespace");
-  assert.throws(() => resolveGcNamespace({ tempNamespaceRoot: "/Volumes/NVM2T/Development/evidence/autoloop/some" }), (e) => e.code === GC_HOLD_CODES.ARBITRARY_ROOT, "evidence root overlap rejected");
-  assert.throws(() => resolveGcNamespace({ tempNamespaceRoot: "/Volumes/NVM2T/Development" }), (e) => e.code === GC_HOLD_CODES.ARBITRARY_ROOT, "evidence root parent overlap rejected");
+  assert.throws(() => resolveGcNamespace({ tempNamespaceRoot: TELEMETRY_ROOT }), (e) => e.code === GC_HOLD_CODES.ARBITRARY_ROOT, "canonical telemetry root is not a TEMP namespace");
+  assert.throws(() => resolveGcNamespace({ tempNamespaceRoot: join(EVIDENCE_ROOT, "some") }), (e) => e.code === GC_HOLD_CODES.ARBITRARY_ROOT, "evidence root overlap rejected");
+  assert.throws(() => resolveGcNamespace({ tempNamespaceRoot: dirname(EVIDENCE_ROOT) }), (e) => e.code === GC_HOLD_CODES.ARBITRARY_ROOT, "evidence root parent overlap rejected");
 });
 
 test("C2. namespace admission: run-scoped + canonical sweep admitted; identity binding mandatory", () => {
@@ -92,7 +95,7 @@ test("C2. namespace admission: run-scoped + canonical sweep admitted; identity b
   assert.throws(() => resolveGcNamespace({ graphRunId: "a/b", env: envFor(root) }), (e) => e.code === GC_HOLD_CODES.IDENTITY_INVALID);
   // Without an override the RUN namespace is TELEMETRY_ROOT/<graphRunId>.
   const canonical = resolveGcNamespace({ graphRunId: "grun1", env: {} });
-  assert.equal(canonical.root, resolve(join("/Volumes/NVM2T/Development/evidence/autoloop-telemetry", "grun1")));
+  assert.equal(canonical.root, resolve(join(TELEMETRY_ROOT, "grun1")));
   const sweep = resolveGcNamespace({ env: envFor(root) });
   assert.equal(sweep.kind, "CANONICAL_SWEEP");
   rmSync(root, { recursive: true, force: true });
@@ -315,7 +318,7 @@ test("F4. tampered prior snapshot (identity mismatch) is AMBIGUOUS, retained", (
 
 test("F5. persistence root inside the authoritative evidence root is rejected", () => {
   assert.throws(
-    () => planPriorSnapshotGc({ persistenceRoot: "/Volumes/NVM2T/Development/evidence/autoloop/durable", executionId: "exec_abc" }),
+    () => planPriorSnapshotGc({ persistenceRoot: join(EVIDENCE_ROOT, "durable"), executionId: "exec_abc" }),
     (e) => e.code === GC_HOLD_CODES.ARBITRARY_ROOT,
   );
 });
@@ -522,8 +525,8 @@ test("J4. adversarial: foreign graphRunId run root is simply not the current nam
 
 test("J5. adversarial: canonical sweep never crosses into the evidence root", () => {
   const ns = resolveGcNamespace({ env: {} });
-  assert.equal(ns.root, "/Volumes/NVM2T/Development/evidence/autoloop-telemetry");
-  assert.ok(!ns.root.startsWith("/Volumes/NVM2T/Development/evidence/autoloop/"));
+  assert.equal(ns.root, TELEMETRY_ROOT);
+  assert.ok(!ns.root.startsWith(EVIDENCE_ROOT + "/"));
 });
 
 test("J6. adversarial: duplicate GC replay converges (double execution)", () => {

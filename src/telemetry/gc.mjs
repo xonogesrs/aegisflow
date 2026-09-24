@@ -44,6 +44,7 @@ import {
   TELEMETRY_STATE_ROOT_ENV,
   resolveTelemetryStateRoot,
 } from "./location.mjs";
+import { resolveEvidenceRoot } from "../shared/autoloop-paths.mjs";
 
 // ── Lifecycle vocabulary (S16 Phase F) ──────────────────────────────────────
 
@@ -204,7 +205,7 @@ function assertFlatIdentity(value, label) {
  * Everything else fails closed (GC_ARBITRARY_ROOT_DELETE).
  */
 export function resolveGcNamespace({ graphRunId = null, env = process.env, tempNamespaceRoot = null } = {}) {
-  const evidenceRoot = "/Volumes/NVM2T/Development/evidence/autoloop";
+  const evidenceRoot = resolveEvidenceRoot({ env });
   const home = resolve(process.env.HOME ?? "");
   if (tempNamespaceRoot != null) {
     if (typeof tempNamespaceRoot !== "string" || !isAbsolute(tempNamespaceRoot)) {
@@ -742,9 +743,10 @@ export function planPriorSnapshotGc({
   persistenceRoot,
   executionId,
   keep = DEFAULT_PRIOR_SNAPSHOT_KEEP,
+  env = process.env,
 } = {}) {
   assertFlatIdentity(executionId, "executionId");
-  const evidenceRoot = "/Volumes/NVM2T/Development/evidence/autoloop";
+  const evidenceRoot = resolveEvidenceRoot({ env });
   const root = resolve(persistenceRoot ?? "");
   if (!isAbsolute(root)) throw new GcHoldError(GC_HOLD_CODES.ARBITRARY_ROOT, "persistenceRoot must be absolute");
   // Containment: the execDir must be inside the admitted persistence root

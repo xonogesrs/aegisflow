@@ -17,9 +17,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { governPiCommand, governStructuredSearch } from "../../src/admission/pi-command-admission.mjs";
 import { createFailedStrategyRegistry, SEARCH_HOLDS } from "../../src/admission/search-scope-governor.mjs";
+import { fileURLToPath } from "node:url";
 
-const HOME = "/Users/zhengfengqing";
-const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
+const HOME = "/Users/example-user";
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 const decide = (command, cwd = REPO, registry) =>
   governPiCommand({ command, cwd, home: HOME, registry });
@@ -42,7 +43,7 @@ test("A2. structured root forbidden (HOME / root / user-dir) REJECTS", () => {
 });
 
 test("A3. structured root that is not statically concrete is INDETERMINATE", () => {
-  for (const p of ["~root", "~zhengfengqing", "$ROOT", "${ROOT}", "$(pwd)"]) {
+  for (const p of ["~root", "~testuser", "$ROOT", "${ROOT}", "$(pwd)"]) {
     const d = governStructuredSearch({ path: p, cwd: REPO, home: HOME });
     assert.equal(d.admit, false, `${p}: ${d.reason}`);
     assert.equal(d.decision, "INDETERMINATE");
@@ -86,8 +87,8 @@ test("B2. explicit forbidden roots REJECT", () => {
 test("B3. FR3 unknown-root bypasses fail closed (no ADMIT lane)", () => {
   for (const cmd of [
     "grep -R x ~root",
-    "grep -R x ~zhengfengqing",
-    "grep -R x ~zhengfengqing/Downloads",
+    "grep -R x ~testuser",
+    "grep -R x ~testuser/Downloads",
     "grep -R x $ROOT",
     "grep -R x ${ROOT}",
     "grep -R x `echo /tmp`",
@@ -139,22 +140,22 @@ test("B6. cd-tracking resolves literal cd but taints indeterminate cd", () => {
 // ── Phase D — failed-strategy ladder + hydrate/persist ───────────────────
 test("D1. failure → record → equivalent retry → REPLAN → 3rd → BLOCK", () => {
   const reg = createFailedStrategyRegistry();
-  const d1 = decide("grep -R x /Users/zhengfengqing", REPO, reg);
+  const d1 = decide(`grep -R x ${HOME}`, REPO, reg);
   assert.equal(d1.spawnAllowed, false);
   assert.equal(d1.holdCode, SEARCH_HOLDS.UNBOUNDED_HOME_TRAVERSAL);
 
-  const d2 = decide("rg x /Users/zhengfengqing", REPO, reg); // same root, different tool
+  const d2 = decide(`rg x ${HOME}`, REPO, reg); // same root, different tool
   assert.equal(d2.spawnAllowed, false);
   assert.equal(d2.holdCode, SEARCH_HOLDS.REPLAN_REQUIRED, d2.reason);
 
-  const d3 = decide("find /Users/zhengfengqing -name x", REPO, reg); // same root, different tool
+  const d3 = decide(`find ${HOME} -name x`, REPO, reg); // same root, different tool
   assert.equal(d3.spawnAllowed, false);
   assert.equal(d3.holdCode, SEARCH_HOLDS.SEARCH_STRATEGY_FAILED, d3.reason);
 });
 
 test("D2. a materially different bounded strategy remains usable after failure", () => {
   const reg = createFailedStrategyRegistry();
-  decide("grep -R x /Users/zhengfengqing", REPO, reg); // record HOME failure
+  decide(`grep -R x ${HOME}`, REPO, reg); // record HOME failure
   const bounded = decide("grep -R x src", REPO, reg);
   assert.equal(bounded.spawnAllowed, true, bounded.reason);
 });

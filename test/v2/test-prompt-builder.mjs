@@ -50,7 +50,7 @@ const ROLE_DICT_HINTS = ["role dictionary", "canonical role vocabulary", "founda
 // ── probe sources（與 live probe 相同構造；requirements 來自 case contract，authority 來自原始 eval fixture）──
 
 import { readFileSync as _rfs } from "node:fs";
-const EVAL_CASES_RAW = JSON.parse(_rfs(new URL("../../autoloop-analysis/task-decomposition-eval-cases.json", import.meta.url), "utf8"));
+const EVAL_CASES_RAW = JSON.parse(_rfs(new URL("../fixtures/task-decomposition-eval-cases.json", import.meta.url), "utf8"));
 const EVAL_CASES = Array.isArray(EVAL_CASES_RAW) ? EVAL_CASES_RAW : EVAL_CASES_RAW.cases || EVAL_CASES_RAW.eval_cases || [];
 const evalBy = (id) => EVAL_CASES.find((e) => e.case_id === id);
 

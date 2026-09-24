@@ -43,10 +43,11 @@
 // the moment the real colima-graph-runner loads under isolation. The lock is
 // metadata serialization, not a machine action: the NVM2T fail-closed storage
 // gate still guards the ACTUAL mutation seam (ensureInstance). The lock root
-// follows the canonical runtime home so lock records live on the same
-// verified volume as the profiles they serialize.
+// follows the CONFIGURED runtime home so lock records live on the same
+// storage as the profiles they serialize.
 
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
+import { autoloopHome, configuredColimaHome } from "../shared/autoloop-paths.mjs";
 import {
   C2dHoldError,
   HOLD,
@@ -69,19 +70,30 @@ export const COLIMA_PROFILE_LOCK_ALLOWED = Object.freeze([
   "autoloop-w2",
 ]);
 
-// Canonical lock root: a sibling of the Colima profile directories under the
-// canonical runtime home (same NVM2T volume the storage gate verifies for
-// real machine work). Env override for tests / CI isolation — mirrors the
-// AUTOLOOP_TELEMETRY_STATE_ROOT / AUTOLOOP_MEMORY_STATE_ROOT convention.
+// Lock root: a sibling of the Colima profile directories under the configured
+// runtime home (so lock records live on the same storage as the profiles they
+// serialize). Resolution order, mirroring AUTOLOOP_TELEMETRY_STATE_ROOT /
+// AUTOLOOP_MEMORY_STATE_ROOT:
+//   AUTOLOOP_COLIMA_PROFILE_LOCK_ROOT → <COLIMA_HOME>/autoloop-locks → <AUTOLOOP_HOME>/colima-locks
 export const COLIMA_PROFILE_LOCK_ROOT_ENV = "AUTOLOOP_COLIMA_PROFILE_LOCK_ROOT";
-export const COLIMA_PROFILE_LOCK_DEFAULT_ROOT =
-  "/Volumes/NVM2T/Development/runtime/colima/autoloop-locks";
+
+export function colimaProfileLockDefaultRoot({ env = process.env } = {}) {
+  const configured = env?.[COLIMA_PROFILE_LOCK_ROOT_ENV];
+  if (typeof configured === "string" && configured.trim().length > 0) {
+    if (!isAbsolute(configured.trim())) {
+      throw new Error(`${COLIMA_PROFILE_LOCK_ROOT_ENV} must be an absolute path: ${configured}`);
+    }
+    return resolve(configured.trim());
+  }
+  const colimaHome = configuredColimaHome({ env });
+  return colimaHome === null
+    ? join(autoloopHome({ env }), "colima-locks")
+    : join(colimaHome, "autoloop-locks");
+}
 
 /** Canonical lock path for one profile. */
 export function colimaProfileLockPath(profile, root = null) {
-  const base = root
-    ?? process.env[COLIMA_PROFILE_LOCK_ROOT_ENV]
-    ?? COLIMA_PROFILE_LOCK_DEFAULT_ROOT;
+  const base = root ?? colimaProfileLockDefaultRoot();
   return join(base, `colima-profile-${profile}.lock`);
 }
 

@@ -1,8 +1,0 @@
-{
-  "status_completed": true,
-  "output_exact": true,
-  "zero_tool_calls": true,
-  "no_new_sessions": true,
-  "no_removed_sessions": true,
-  "zero_cwd_mutations": true
-}

@@ -20,6 +20,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   parseGitStatusPorcelainZ,
   collectRepoFacts,
@@ -185,7 +186,7 @@ test("12. real repo A: live dirty-path parse is intact（no truncation; stable i
   // The durable invariant (parser never drops the first character / mangles
   // any real path) is checked here against whatever the live state is;
   // the modified-package.json behavior itself is covered by fixture test 1.
-  const facts = collectRepoFacts("/Volumes/NVM2T/Development/repos/autoloop");
+  const facts = collectRepoFacts(fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, ""));
   const allPaths = [...facts.dirtyPaths, ...facts.untrackedFiles];
   assert.ok(!allPaths.includes("ackage.json"), "no ackage.json anywhere");
   for (const p of allPaths) {

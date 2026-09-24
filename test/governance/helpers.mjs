@@ -56,7 +56,7 @@ export function entryRecord(overrides = {}) {
     authorized_by: "controller",
     authorization_ref: "card",
     repository: REPOSITORY,
-    worktree: "/Volumes/NVM2T/Development/repos/autoloop",
+    worktree: fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, ""),
     branch: BRANCH,
     base: BASE,
     base_head: "2a9d5c1e010a3654b2f371ef41e8c50c32cc21e4",
@@ -129,6 +129,7 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * Test-only remote-URL adapter (round 4 finding 2). Production accepts ONLY

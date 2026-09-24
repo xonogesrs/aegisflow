@@ -15,8 +15,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { resolveTelemetryRoot } from "../../src/shared/autoloop-paths.mjs";
 import {
   TELEMETRY_ROOT,
+  telemetryEvidenceRoot,
   TELEMETRY_STATE_ROOT_ENV,
   RETENTION_CLASSES,
   TELEMETRY_RETENTION_ASSIGNMENT,
@@ -38,11 +40,13 @@ test("L2. identity binding is mandatory (no shared/global store root)", () => {
   assert.throws(() => resolveTelemetryStateRoot({ graphRunId: ".." }), /flat identity/);
 });
 
-test("L3. fail-closed: $HOME namespace and relative overrides rejected", () => {
+test("L3. fail-closed: $HOME-itself, out-of-namespace home paths and relative overrides rejected", () => {
   assert.throws(
     () => resolveTelemetryStateRoot({ graphRunId: "g1", env: { [TELEMETRY_STATE_ROOT_ENV]: homedir() } }),
     /rejected/,
   );
+  // A home-namespace override outside the AutoLoop namespace is refused
+  // (state may not be scattered into ~/Documents, ~/Desktop, …).
   assert.throws(
     () => resolveTelemetryStateRoot({ graphRunId: "g1", env: { [TELEMETRY_STATE_ROOT_ENV]: join(homedir(), "x") } }),
     /rejected/,
@@ -51,8 +55,11 @@ test("L3. fail-closed: $HOME namespace and relative overrides rejected", () => {
     () => resolveTelemetryStateRoot({ graphRunId: "g1", env: { [TELEMETRY_STATE_ROOT_ENV]: "relative/path" } }),
     /absolute/,
   );
-  // canonical namespace itself is not under $HOME
-  assert.ok(!resolve(TELEMETRY_ROOT).startsWith(resolve(homedir())));
+  // The portable default lives in the AutoLoop namespace under $HOME, so the
+  // authority fence that matters is separation from the EVIDENCE namespace —
+  // that is what must never be violated.
+  assert.ok(!resolve(TELEMETRY_ROOT).startsWith(telemetryEvidenceRoot() + "/"));
+  assert.ok(resolve(TELEMETRY_ROOT).length > 0);
 });
 
 test("L4. env override wins and stays isolated from the canonical namespace", () => {
@@ -67,9 +74,9 @@ test("L4. env override wins and stays isolated from the canonical namespace", ()
 test("L5. authority fence: no GC_PROTECTED surface lives in the telemetry namespace", () => {
   // The canonical telemetry root must be a SIBLING of (never inside) the
   // authoritative evidence root — namespace separation is the fence.
-  assert.equal(TELEMETRY_ROOT, "/Volumes/NVM2T/Development/evidence/autoloop-telemetry");
+  assert.equal(TELEMETRY_ROOT, resolveTelemetryRoot({ env: {} }), "import-time root == resolver result");
   assert.ok(TELEMETRY_ROOT.endsWith("autoloop-telemetry"), "sibling of the evidence/autoloop root");
-  assert.ok(!TELEMETRY_ROOT.startsWith("/Volumes/NVM2T/Development/evidence/autoloop/"), "not inside the authoritative root");
+  assert.ok(!TELEMETRY_ROOT.startsWith(telemetryEvidenceRoot() + "/"), "not inside the authoritative root");
 });
 
 test("L6. retention assignment totality + legal classes", () => {

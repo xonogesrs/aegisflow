@@ -5,12 +5,12 @@
 //
 // The reviewer's inbox is ONE fixed location（never scattered across per-card
 // output dirs）:
-//   ~/Desktop/AutoLoop-Review/Current/   the single card awaiting review
+//   <review surface>/Current/   the single card awaiting review
 //     review-bundle.txt                  current valid bundle（atomic copy）
 //     delivery.json                      delivery/verdict state（identity,
 //                                        sha, supersedes, status）
 //     evidence.json                      this card's closeout evidence
-//   ~/Desktop/AutoLoop-Review/Archive/   flat archive of reviewed/rotated cards
+//   <review archive>/           flat archive of reviewed/rotated cards
 //
 // Env overrides（tests / CI isolation）: AUTOLOOP_REVIEW_SURFACE,
 // AUTOLOOP_REVIEW_ARCHIVE.

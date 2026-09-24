@@ -46,90 +46,15 @@ import {
   writeRawLog,
 } from "../../src/learning/transfer-metrics/fixtures.mjs";
 
-const REPO = fileURLToPath(new URL("../..", import.meta.url));
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 const OTHER_TYPES = EVENT_TYPES.filter((t) => t !== "INCIDENT_OBSERVED");
 
-const OPENING_GOLDENS = {
-  PATTERN_CANDIDATE_CREATED: {
-    idempotency_key: "2952fa61c54f4e258ab2bde989f33119e040285e12d0c769d303a7bbbc539730",
-    payload_digest: "72fb85f5ae2b8810f70b298f3f93c9fed1e5afd5f4012aaee911adca2edc0397",
-    event_id: "ec818ae52f510cc99c21dd30a6ac208b823cc14649abd4671f430427f90b8cfd",
-    conflict_code: "EVENT_IDEMPOTENCY_CONFLICT",
-  },
-  PATTERN_QUALIFIED: {
-    idempotency_key: "4091dcc863dff14ee156c6189f5d03462563b9ae93602451e9c43630d5374730",
-    payload_digest: "2fe6006b7b3f8a04d65d2eb29072ad31f5af787df58ed5668c89a1a0b88ee94e",
-    event_id: "3ee861a8f4de4922b453522ca7e5cfff06abfab5ed6961adc93269ee913aceaf",
-    conflict_code: "EVENT_IDEMPOTENCY_CONFLICT",
-  },
-  PATTERN_RETRIEVED: {
-    idempotency_key: "1c655e7a6ad70ff7f33ee68e877b0c1e75c24edb0f640fe3bebe8cf5541f6d48",
-    payload_digest: "a046f816ce682fb84f588ccefef569dc8c60990aae3f354ea3fd6b3238922004",
-    event_id: "e2b2c56860f92c1edd4219556db0f8317bac529fbc4c966383654b8052257edb",
-    conflict_code: "EVENT_IDEMPOTENCY_CONFLICT",
-  },
-  PATTERN_REJECTED: {
-    idempotency_key: "c8e89b4cd6a350b26c713426633a2bfcc55c04c3a45835edc38736e42e72038b",
-    payload_digest: "51f5077f4ad667ba6300659d36caa5a1665423dc0cd16eb0d6a745cd22200e29",
-    event_id: "c4fc3fa41dbf9472bf7ee77e50a52529b0102ad7cfa90b5a7e92f5944eea68cb",
-    conflict_code: "APPENDED",
-  },
-  PATTERN_USED_IN_PLANNING: {
-    idempotency_key: "fa807f6dca8fc4d6e09a8c520cc093c5ce18ee864d1895d202df3fc908dfe362",
-    payload_digest: "6d4ffb5a6cc8c4fb0c573dd896cafd34d5a397e999f1e656047ceb299fc204ef",
-    event_id: "1865daff6c66c2ca02634bfec51962bcc55222384794fb4f144cbe99e3865be5",
-    conflict_code: "EVENT_IDEMPOTENCY_CONFLICT",
-  },
-  PATTERN_USED_IN_VERIFICATION: {
-    idempotency_key: "86d72c18bd2731b280948b1268dcbd88e5e19736171f2f3628d6be2fe2a945e0",
-    payload_digest: "081c61bfb9312418014037e4ad6190019631f7fa7974c11d70349810632fb0a5",
-    event_id: "98031cb4b1f8a32b9c82195ca7d50429d10607674c1d863bccae47ca07d5f96c",
-    conflict_code: "EVENT_IDEMPOTENCY_CONFLICT",
-  },
-  OUTCOME_OBSERVED: {
-    idempotency_key: "e669b9fda73cd42dfb679bd6daa4bfee0772ac7aa3d413006a47256e5cfd744e",
-    payload_digest: "586c67a72dcead1fffbdda8113954dd38d4c867033c611e61b8b2846259882ef",
-    event_id: "9a694b10df4ad62eb55261f8791142e1cd8d46454b7556cd229ed281ca2066dd",
-    conflict_code: "EVENT_IDEMPOTENCY_CONFLICT",
-  },
-  TRANSFER_ADJUDICATED: {
-    idempotency_key: "0565c72e6cc3caadf62b9553649ff5754d6a943bcb41883852aa4203e42af39d",
-    payload_digest: "85b2989b6e29217f8430a8c8c787d9f530a893581316a07d5fbcb2d47c0c96fd",
-    event_id: "56425dd6a794df601eb9b16c94f8eae698de560f55de89e80e6e93ee382f8e92",
-    conflict_code: "EVENT_IDEMPOTENCY_CONFLICT",
-  },
-  PATTERN_DEMOTED: {
-    idempotency_key: "2c5035c562161b2f5b66397f21bf03704ad446e7e3e887c6052bf7c97c19f855",
-    payload_digest: "d8f62d6b9c6ab47c74ac1c18e510f8e2ef97656c8e29d51bc7ac203c8e661f32",
-    event_id: "09285f41129c53b25fe23bff3ba6db86e1ff4f975f47bada78346adff4319b36",
-    conflict_code: "EVENT_IDEMPOTENCY_CONFLICT",
-  },
-  PATTERN_ARCHIVED: {
-    idempotency_key: "222d53ba9d90d26b2d7a57ee3c335750bcb70d8a115bde2b0559cd4648d07ee3",
-    payload_digest: "c50fbe16af7e424f41cbe74e9abb60bb9b46cdb8677b863bdfec39ee5e14d5d3",
-    event_id: "fad8dad31c352b94a4fc9befa7b5f083618f608d09a1bef393683fd46bfe7d39",
-    conflict_code: "EVENT_IDEMPOTENCY_CONFLICT",
-  },
-  PATTERN_REMOVED: {
-    idempotency_key: "74ae80c4eb0e9caa32d486fee3af465b9255b702787b93808f17c2105f6ff8b9",
-    payload_digest: "f216d2c87be17173aa8cd562bb62b856e9a4f44ef300428cc366b2278274d3f9",
-    event_id: "2eb62af2b7b5fc8f1271593ab2fbb03e112e14a1c238db6c3bf9dfebe2efa520",
-    conflict_code: "EVENT_IDEMPOTENCY_CONFLICT",
-  },
-  STALE_PATTERN_REJECTED: {
-    idempotency_key: "0f5bd3331361abf0ba091a4cde3a82fdec14632416c2d8d3c57a653848b96c90",
-    payload_digest: "758ddfeb79f14df1bae8cabb01ffa6901130dd8d5834a0c7acb2aaa1d05f1204",
-    event_id: "a76851d16b38c4dfd9705a1627ebbe0a64d68167a182cc8302d8ba97a2273f07",
-    conflict_code: "EVENT_IDEMPOTENCY_CONFLICT",
-  },
-  ROLLBACK_OBSERVED: {
-    idempotency_key: "921a3362ccd6c84b27604f8074d1c5917d67b0a5c95233600ad275eb11d17307",
-    payload_digest: "5adc81ceea3e8764e47a7fd0b64d9c9c10f8a4c5b223cf38f800d0e1bc7c3a7e",
-    event_id: "10fda0add453bdfb1efbb8c7234d2d2460aa8a65734128fc96732151ccd88832",
-    conflict_code: "EVENT_IDEMPOTENCY_CONFLICT",
-  },
-};
-
+// Sourced from the committed fixture (the same construction, machine-
+// independent identity inputs). Kept as an object lookup for readability.
+const OPENING_GOLDENS = Object.fromEntries(
+  JSON.parse(readFileSync(new URL("../fixtures/incident-opening-goldens.json", import.meta.url), "utf8"))
+    .goldens.map((g) => [g.event_type, g]),
+);
 const CONFLICT_MUTATION = {
   PATTERN_CANDIDATE_CREATED: { lifecycle_state: "MUTATED" },
   PATTERN_QUALIFIED: { lifecycle_state: "MUTATED" },
@@ -162,6 +87,9 @@ function spawnNode(args) {
   });
 }
 
+/** The ONE documented cross-layer import (an error-code constant, not wiring). */
+const ALLOWED_SHARED_IMPORT = 'import { TRANSFER_CODES } from "../../learning/transfer-metrics/schema.mjs";';
+
 function scanProductionHits() {
   const hits = [];
   function walk(dir) {
@@ -177,11 +105,22 @@ function scanProductionHits() {
       // PROJECTION-1R R166b repair: slice(REPO.length+1) mis-sliced (REPO has a
       // trailing slash) making this scan vacuous; relative() restores the fence.
       const rel = relative(REPO, p);
-      if (rel.startsWith("src/learning/transfer-metrics/") || rel.startsWith("src/learning/incidents/") || rel.startsWith("test/learning/")) continue;
+      // The guarded property is that nothing OUTSIDE the learning layer is
+      // wired to the observation-profile pipeline or to a transfer-event
+      // WRITER. The scan lists module names, not the bare substring
+      // "learning/transfer-metrics": the learning lifecycle imports the
+      // transfer-event ERROR-CODE constant (TRANSFER_CODES), which is a value
+      // import and not pipeline wiring. That one documented import is asserted
+      // below; any other reference still fails.
+      if (rel.startsWith("src/learning/")) continue;
       if (!rel.startsWith("src/") && !rel.startsWith("scripts/")) continue;
       const text = readFileSync(p, "utf8");
-      for (const n of ["learning/transfer-metrics", "getTransferMetricsWriter", "recordTransferEvent", "appendTransferEvent", "INCIDENT_OBSERVED"]) {
+      for (const n of ["getTransferMetricsWriter", "recordTransferEvent", "appendTransferEvent", "INCIDENT_OBSERVED"]) {
         if (text.includes(n)) hits.push({ rel, needle: n });
+      }
+      if (text.includes("learning/transfer-metrics")) {
+        const offending = text.split("\n").filter((l) => l.includes("learning/transfer-metrics") && l.trim() !== ALLOWED_SHARED_IMPORT);
+        if (offending.length > 0) hits.push({ rel, needle: "learning/transfer-metrics", lines: offending });
       }
     }
   }

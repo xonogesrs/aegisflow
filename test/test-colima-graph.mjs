@@ -18,9 +18,10 @@ import { homedir } from "node:os";
 import { rmSync, mkdirSync } from "node:fs";
 import { runColimaGraph } from "../src/runtime/colima-graph-runner.mjs";
 import { resolveInstance } from "../src/runtime/colima-runtime.mjs";
+import { fileURLToPath } from "node:url";
 
 const HOME = homedir();
-const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO_A = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
 const SCRATCH = `${HOME}/autoloop-graph-test-scratch`;
 const PROFILE = "autoloop-graph";
 const PARENT = { scope: { allowed_paths: ["docs/"], forbidden_paths: [".git"] } };

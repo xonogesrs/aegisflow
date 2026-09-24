@@ -1,0 +1,129 @@
+{
+  "schema": "autoloop.test-fixture/card-5-live-e2-ir/v1",
+  "provenance": {
+    "source": "card-5 live probe (2026-08-02T15-43-49-242Z) evidence record",
+    "note": "parsed_ir of case E2, captured from a real provider response; committed as a fixture so the parity suites do not depend on a machine-local evidence store."
+  },
+  "case_id": "E2",
+  "parsed_ir": {
+    "verdict": "DECOMPOSED",
+    "parent_goal": "分析現有結構；提取共用邏輯；加入單元測試；提交結果",
+    "execution_policy": {
+      "executor": "INHERIT_PARENT",
+      "reviewer": "EXTERNAL_GPT",
+      "multi_model_orchestration": false
+    },
+    "phases": [
+      {
+        "phase_id": "analyze_existing_structure",
+        "title": "分析現有結構",
+        "summary": "分析 src/auth/ 下的現有程式碼結構",
+        "responsibility": "閱讀並梳理 src/auth/ 現有程式碼，識別可重構與可提取的共用邏輯位置",
+        "purpose": "analysis",
+        "effects": {
+          "artifact_mutation": "forbidden",
+          "runtime_side_effect": "forbidden",
+          "external_system_mutation": "forbidden",
+          "evidence_output": "ephemeral",
+          "boundaries": {
+            "artifact": [],
+            "runtime": [],
+            "external_system": [],
+            "evidence": []
+          }
+        },
+        "covers": [
+          {
+            "requirement_id": "R1",
+            "completeness": "complete",
+            "claim": "完成對現有結構的分析，作為後續提取共用邏輯的基礎"
+          }
+        ],
+        "depends_on": []
+      },
+      {
+        "phase_id": "extract_shared_logic",
+        "title": "提取共用邏輯",
+        "summary": "將重複或共用邏輯提取到 src/auth/ 下的共用程式碼",
+        "responsibility": "基於分析結果，在 src/auth/ 內提取共用邏輯並調整相關呼叫點",
+        "purpose": "implementation",
+        "effects": {
+          "artifact_mutation": "required",
+          "runtime_side_effect": "forbidden",
+          "external_system_mutation": "forbidden",
+          "evidence_output": "none",
+          "boundaries": {
+            "artifact": [
+              "src/auth/"
+            ],
+            "runtime": [],
+            "external_system": [],
+            "evidence": []
+          }
+        },
+        "covers": [
+          {
+            "requirement_id": "R2",
+            "completeness": "complete",
+            "claim": "完成共用邏輯的提取並更新受影響的程式碼"
+          }
+        ],
+        "depends_on": [
+          "analyze_existing_structure"
+        ]
+      },
+      {
+        "phase_id": "add_unit_tests",
+        "title": "加入單元測試",
+        "summary": "針對提取出的共用邏輯加入單元測試",
+        "responsibility": "在 test/auth/ 下撰寫單元測試，驗證提取後的共用邏輯行為正確",
+        "purpose": "verification",
+        "effects": {
+          "artifact_mutation": "required",
+          "runtime_side_effect": "forbidden",
+          "external_system_mutation": "forbidden",
+          "evidence_output": "none",
+          "boundaries": {
+            "artifact": [
+              "test/auth/"
+            ],
+            "runtime": [],
+            "external_system": [],
+            "evidence": []
+          }
+        },
+        "covers": [
+          {
+            "requirement_id": "R3",
+            "completeness": "complete",
+            "claim": "新增覆蓋提取後共用邏輯的單元測試"
+          }
+        ],
+        "depends_on": [
+          "extract_shared_logic"
+        ],
+        "verification_plan": {
+          "subject_phase_ids": [
+            "extract_shared_logic"
+          ],
+          "method": "在 test/auth/ 撰寫並執行單元測試，針對提取出的共用邏輯驗證輸入輸出與邊界行為",
+          "success_criteria": "單元測試全部通過，且涵蓋提取後共用邏輯的主要分支",
+          "failure_criteria": "測試無法編譯、執行失敗，或發現提取後共用邏輯的行為與預期不符",
+          "evidence": "test/auth/ 下的測試原始檔與測試執行結果"
+        }
+      }
+    ],
+    "dispositions": [
+      {
+        "requirement_id": "R4",
+        "disposition": "deferred",
+        "reason": "目前授權邊界不允許 commit（commit_allowed=false），無法在本次任務中提交結果",
+        "reason_code": "COMMIT_NOT_AUTHORIZED",
+        "target": "取得提交權限後再執行提交"
+      }
+    ],
+    "decomposition_evidence": [
+      "任務被拆分為分析、實作、測試三個可執行階段，提交結果因缺乏提交授權而被 disposition 為 deferred"
+    ]
+  }
+}

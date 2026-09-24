@@ -31,8 +31,12 @@ import { evaluateScorecardV2 } from "../../src/orchestration/validators/scorecar
 import { CONTRACTS_BY_ID } from "../../src/v2/case-contracts.mjs";
 import { probeParent, probeSource } from "../../scripts/shared/probe-sources.mjs";
 
+// Live-case replay corpus. Committed as a repo fixture (captured from the
+// card-5c live probe) so this suite is reproducible in any checkout and does
+// not depend on a machine-local evidence store. The fixture carries only the
+// fields these replays consume: parsed_ir plus the terminal verdict.
 const EVIDENCE = JSON.parse(
-  readFileSync(new URL("/Volumes/NVM2T/Development/evidence/autoloop/card-5c-live-probe-2026-08-02T16-10-02-635Z/evidence.json", "file://"), "utf8"),
+  readFileSync(new URL("../fixtures/card-5c-live-cases.json", import.meta.url), "utf8"),
 );
 
 const SYSTEM = buildSystemPrompt();

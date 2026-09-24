@@ -29,6 +29,7 @@ import { codeRecord, REPO, TREE } from "./helpers-cbm3.mjs";
 import { classify, scanRiskSignals } from "../../src/admission/classify.mjs";
 import { buildAdmissionRecord } from "../../src/admission/policy-projection.mjs";
 import { freezeAdmission } from "../../src/admission/admission-record.mjs";
+import { fileURLToPath } from "node:url";
 
 const ROOTS = [];
 function freshRoot() {
@@ -40,7 +41,7 @@ const silent = { info() {}, warn() {}, error() {} };
 function store(root) {
   return new LocalMemoryStore({ stateRoot: root, log: silent });
 }
-const REPO_PATH = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO_PATH = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 // R-10 (AUTH1): build a schema-valid admission with an explicit retrieval
 // authority so the graph-time memory gate can be exercised offline.

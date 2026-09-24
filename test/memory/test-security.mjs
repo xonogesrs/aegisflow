@@ -5,7 +5,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   validateMemoryRecordV1,
@@ -51,13 +51,13 @@ test("3. .env content rejected", () => {
 });
 
 test("4. credential path rejected (path not allowed)", () => {
-  const r = baseCodeRecord({ scope: { tree: "c".repeat(40), path: "/Users/zhengfengqing/.ssh/id_rsa" } });
+  const r = baseCodeRecord({ scope: { tree: "c".repeat(40), path: join(homedir(), ".ssh", "id_rsa") } });
   const v = validateMemoryRecordV1(r);
   // credential paths are NOT in the ingestion allowlist — the record itself
   // is schema-valid but the scope path fails the credential-path check below
   assert.equal(v.valid, true, "record schema itself is fine");
   // explicit credential-path guard（ingestion denylist）
-  const denied = isDeniedPath("/Users/zhengfengqing/.ssh/id_rsa");
+  const denied = isDeniedPath(join(homedir(), ".ssh", "id_rsa"));
   assert.equal(denied, true, "credential path denied");
 });
 

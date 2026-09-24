@@ -149,14 +149,16 @@ function pathCall(fn) {
 }
 
 function assertPrefixAllowed(resolved) {
+  // $HOME ITSELF is refused; the namespace prefix below is the real boundary
+  // (the portable default learning root lives under ~/.autoloop).
   const home = resolve(homedir());
-  if (resolved === home || resolved.startsWith(home + sep)) {
-    fail(TRANSFER_CODES.PATH_UNSAFE, "HOME namespace rejected");
+  if (resolved === home) {
+    fail(TRANSFER_CODES.PATH_UNSAFE, "$HOME itself is not a storage root");
   }
   const prefix = ALLOWED_ROOT_PREFIX.endsWith(sep) ? ALLOWED_ROOT_PREFIX : ALLOWED_ROOT_PREFIX + sep;
   const allowedRoot = ALLOWED_ROOT_PREFIX.replace(/\/$/, "");
   if (resolved !== allowedRoot && !resolved.startsWith(prefix)) {
-    fail(TRANSFER_CODES.PATH_UNSAFE, `root outside NVM2T boundary: ${resolved}`);
+    fail(TRANSFER_CODES.PATH_UNSAFE, `root outside the configured learning boundary (${ALLOWED_ROOT_PREFIX}): ${resolved}`);
   }
 }
 

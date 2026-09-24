@@ -9,8 +9,8 @@
 //   → Controller 上傳 → 外部 reviewer 判定 → PASS 後才允許 integration commit／push／Draft PR。
 //
 // 固定輸出:
-//   $HOME/Desktop/AutoLoop-Review/READY_FOR_REVIEW.txt
-//   $HOME/Desktop/AutoLoop-Review/archive/<YYYYMMDD-HHMMSS>-<CARD_ID>-<RUN_ID>.txt
+//   <review surface>/READY_FOR_REVIEW.txt
+//   <review archive>/<YYYYMMDD-HHMMSS>-<CARD_ID>-<RUN_ID>.txt
 //
 // 寫入協定: 暫存檔 → 完整寫入 → atomic rename → archive copy。
 // 身份: changedTreeIdentity / patchSha256 / testOutputDigest / evidenceDigest /

@@ -20,6 +20,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, 
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   REVIEW_BUNDLE_SOURCE_SCHEMA,
   REVIEW_BUNDLE_SECTIONS,
@@ -34,7 +35,7 @@ import {
   evidenceManifestDigest,
 } from "../../src/governance/review-bundle.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO_A = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 const ROOT = `${tmpdir()}/rb-test-${process.pid}`;
 const OUT = join(ROOT, "out");
 const EV = join(ROOT, "ev");

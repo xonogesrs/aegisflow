@@ -24,8 +24,26 @@ import {
 } from "./schema.mjs";
 import { createIdentityBinder, mintPrincipal } from "./identities.mjs";
 import { TransferMetricsWriter } from "./writer.mjs";
+import { resolveScratchRoot } from "../../shared/autoloop-paths.mjs";
 
-export const TMP_PARENT = "/Volumes/NVM2T/Development/tmp/transfer-metrics-core-1";
+// Fixture scratch parent. Portable by default (<AUTOLOOP_HOME>/learning/scratch,
+// i.e. inside the learning storage namespace these fixtures must live under);
+// relocate with AUTOLOOP_SCRATCH_ROOT.
+export const TMP_PARENT = resolveScratchRoot();
+
+/**
+ * Synthetic root used ONLY to build fixture IDENTITIES (repository / git-common
+ * dir strings recorded on events).
+ *
+ * Deliberately NOT derived from the machine layout: an identity string is
+ * content, and every digest vector in these suites is a pure function of the
+ * event content. Deriving it from the operator's storage path made the
+ * published golden digests machine-specific (change the scratch root and every
+ * golden changes), which is not a property the suites should have. Keeping it
+ * fixed makes the digests reproducible in any checkout while honest: it is a
+ * labeled synthetic path, never a real location.
+ */
+export const IDENTITY_ROOT = "/autoloop-fixture/scratch";
 
 export const FIXTURE = mintPrincipal({ identity: "fix-1", role: "fixture" });
 export const EXECUTOR = mintPrincipal({ identity: "ex-1", role: "executor" });
@@ -106,7 +124,7 @@ export function makeIdentities(label = "t") {
   const task_id = `task-${label}`;
   const admission_id = hex(`admission-${label}`);
   const execution_id = `exec-${label}`;
-  const repository_root_identity = join(TMP_PARENT, `proj-${label}`);
+  const repository_root_identity = join(IDENTITY_ROOT, `proj-${label}`);
   const git_common_dir_identity = join(repository_root_identity, ".git");
   return {
     task_id,

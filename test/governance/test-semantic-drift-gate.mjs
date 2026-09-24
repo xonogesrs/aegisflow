@@ -32,6 +32,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   runStateDrivenCloseout,
 } from "../../src/governance/review-bundle.mjs";
@@ -48,7 +49,7 @@ import {
   validateRevocationEvent,
 } from "../../src/governance/truth-revocation.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO_A = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 const ROOT = `${tmpdir()}/semantic-drift-gate-${process.pid}`;
 const OUT = join(ROOT, "out");
 const surface = (n) => join(ROOT, `surface-${n}`);

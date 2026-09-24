@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { EVENT_TYPES, EVENT_TYPES_V2, AUTHORITY_EVENT_TYPE } from "../../src/learning/transfer-metrics/schema.mjs";
 
-const REPO = fileURLToPath(new URL("../..", import.meta.url));
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 
 test("F1 EVENT_TYPES stays closed at 14 types", () => {

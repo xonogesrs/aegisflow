@@ -19,9 +19,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { governPiCommand } from "../../src/admission/pi-command-admission.mjs";
 import { governSearch, SEARCH_HOLDS } from "../../src/admission/search-scope-governor.mjs";
+import { fileURLToPath } from "node:url";
 
-const HOME = "/Users/zhengfengqing";
-const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
+const HOME = "/Users/example-user";
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 // ── The exact incident ───────────────────────────────────────────────────
 test("exact incident: cd $HOME && grep -rl \"Phase R\" . from a HOME cwd is REJECTED", () => {

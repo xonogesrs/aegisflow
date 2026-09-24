@@ -25,6 +25,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   runStateDrivenCloseout,
   runMandatoryGraphCloseout,
@@ -45,7 +46,7 @@ import {
   readCloseoutState,
 } from "../../src/governance/closeout-state.mjs";
 
-const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO_A = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 const ROOT = `${tmpdir()}/closeout-lifecycle-${process.pid}`;
 const OUT = join(ROOT, "out");
 const ARCHIVE = join(ROOT, "archive");

@@ -38,7 +38,7 @@ import {
   buildCandidateProjection,
 } from "../../src/learning/patterns/candidate.mjs";
 
-const REPO = fileURLToPath(new URL("../..", import.meta.url));
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 test("candidate identity key is stable and excludes content/evidence", () => {
   const ids = makeIdentities("cand-1");

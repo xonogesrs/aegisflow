@@ -109,7 +109,7 @@ function baseRequest({ scratchRoot = null, overrides = {} } = {}) {
 
 async function withFixtureControl(control, { repo = null, scratchRoot = null } = {}, fn) {
   const prevHome = process.env.COLIMA_HOME;
-  process.env.COLIMA_HOME = "/Volumes/NVM2T/Development/runtime/colima";
+  process.env.COLIMA_HOME = process.env.COLIMA_HOME ?? "/var/lib/autoloop-colima";
   // The container leg mounts repoPath(ro) + owned scratch(rw) — the SAME
   // instance-mount reconciliation the production graph runner performs
   // (ensureInstance with the desired mount generation).

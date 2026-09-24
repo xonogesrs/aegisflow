@@ -17,7 +17,7 @@ import {
 } from "node:fs";
 import * as fs from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import {
@@ -39,12 +39,9 @@ import {
   recordTransferEvent,
   TRANSFER_METRICS_ENABLED,
 } from "../../src/learning/transfer-metrics/seam.mjs";
-import {
-  FIXTURE, EXECUTOR, SYSTEM, REVIEWER,
-  makeIdentities, makeEvent, createTestWriter, createTestRoot, expectCode, hex, iso, makeBinder, WINDOW,
-} from "../../src/learning/transfer-metrics/fixtures.mjs";
+import { FIXTURE, EXECUTOR, SYSTEM, REVIEWER, makeIdentities, makeEvent, createTestWriter, createTestRoot, expectCode, hex, iso, makeBinder, WINDOW, IDENTITY_ROOT } from "../../src/learning/transfer-metrics/fixtures.mjs";
 
-const REPO = fileURLToPath(new URL("../..", import.meta.url));
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 function shaFile(path) {
   const { createHash } = createRequire(import.meta.url)("node:crypto");
@@ -329,7 +326,7 @@ test("A14 string-prefix path escape rejected", () => {
   const ids = makeIdentities("a14");
   expectCode(
     () => new TransferMetricsWriter({
-      transferMetricsRoot: "/Volumes/NVM2T/Development-evil/metrics",
+      transferMetricsRoot: join(dirname(dirname(IDENTITY_ROOT)), "autoloop-learning-evil", "metrics"),
       identityBinder: makeBinder(ids),
       allowFixture: true,
     }),
@@ -337,7 +334,7 @@ test("A14 string-prefix path escape rejected", () => {
   );
   expectCode(
     () => new TransferMetricsWriter({
-      transferMetricsRoot: join("/Volumes/NVM2T/Development/tmp", "..", "..", "secret"),
+      transferMetricsRoot: join(IDENTITY_ROOT, "..", "..", "secret"),
       identityBinder: makeBinder(ids),
       allowFixture: true,
     }),

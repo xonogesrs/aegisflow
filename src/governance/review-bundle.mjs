@@ -30,8 +30,8 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { resolveReviewArchive, resolveReviewSurface } from "../shared/autoloop-paths.mjs";
 import { scanForSecrets, sha256Text } from "../evidence/run-evidence-store.mjs";
 import { readReviewJob, findingsPath, verdictPath, updateReviewJob } from "./review-job.mjs";
 import {
@@ -187,7 +187,7 @@ export const EXTERNAL_REVIEW_DELIVERY_RECORD_SCHEMA = "autoloop.external-review-
 // The reviewer's inbox is a SINGLE fixed location — never scattered across
 // per-card output dirs. Two responsibilities are strictly separated:
 //   internal evidence store  = repo docs/pi-graph-output/<run>/（durable）
-//   external review surface  = ~/Desktop/AutoLoop-Review/Current/（收件匣）
+//   external review surface  = the external-review inbox (AUTOLOOP_REVIEW_SURFACE)
 // The surface holds at most ONE card:
 //   Current/review-bundle.txt   the current valid bundle（atomic copy）
 //   Current/delivery.json      delivery/verdict state（identity, sha,
@@ -196,16 +196,16 @@ export const EXTERNAL_REVIEW_DELIVERY_RECORD_SCHEMA = "autoloop.external-review-
 // A requiresReview card that fails to atomically deliver to the fixed
 // surface stays AWAITING_BUNDLE_DELIVERY（fail-closed; hard rule enforced
 // by runCloseoutGate's default surface deliverer）. After PASS / REPAIR /
-// HOLD the surface is rotated into ~/Desktop/AutoLoop-Review/Archive/
+// HOLD the surface is rotated into the review archive (AUTOLOOP_REVIEW_ARCHIVE)
 //（flat, never nested）; Current/ never retains the previous card.
 // Paths are resolved LAZILY（env override for tests / CI isolation）.
 
-export function externalReviewSurfaceDir() {
-  return process.env.AUTOLOOP_REVIEW_SURFACE ?? join(homedir(), "Desktop", "AutoLoop-Review", "Current");
+export function externalReviewSurfaceDir({ env = process.env } = {}) {
+  return resolveReviewSurface({ env });
 }
 
-export function externalReviewArchiveDir() {
-  return process.env.AUTOLOOP_REVIEW_ARCHIVE ?? join(homedir(), "Desktop", "AutoLoop-Review", "Archive");
+export function externalReviewArchiveDir({ env = process.env } = {}) {
+  return resolveReviewArchive({ env });
 }
 
 export function isValidExternalReviewStatus(s) {

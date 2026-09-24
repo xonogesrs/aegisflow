@@ -20,6 +20,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { governPiCommand } from "../../src/admission/pi-command-admission.mjs";
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import {
   governSearch,
   createFailedStrategyRegistry,
@@ -31,9 +33,14 @@ import {
   REWRITE_STRATEGIES,
 } from "../../src/admission/search-scope-governor.mjs";
 
-const HOME = "/Users/zhengfengqing";
-const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
-const DEV = "/Volumes/NVM2T/Development";
+const HOME = "/Users/example-user";
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
+// The "broad development root" these tests use must be a real ANCESTOR of the
+// authoritative repository — that ancestor relation is what makes a rewrite
+// possible (the governor narrows a broad search down to a known authoritative
+// subtree). It is therefore derived from the checkout location rather than
+// hardcoded, so the test states the relation rather than one machine's path.
+const DEV = resolve(REPO, "..", "..");
 
 /** Mirror the Pi extension pre-spawn seam: govern, then spawn only what is admitted. */
 function simulateSpawn(command, opts = {}) {

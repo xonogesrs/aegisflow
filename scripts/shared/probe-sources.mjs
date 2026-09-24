@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { CONTRACTS_BY_ID } from "../../src/v2/case-contracts.mjs";
 
 const EVAL_CASES_RAW = JSON.parse(
-  readFileSync(fileURLToPath(new URL("../../autoloop-analysis/task-decomposition-eval-cases.json", import.meta.url)), "utf8"),
+  readFileSync(fileURLToPath(new URL("../../test/fixtures/task-decomposition-eval-cases.json", import.meta.url)), "utf8"),
 );
 const EVAL_CASES = Array.isArray(EVAL_CASES_RAW) ? EVAL_CASES_RAW : EVAL_CASES_RAW.cases || EVAL_CASES_RAW.eval_cases || [];
 

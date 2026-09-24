@@ -1,11 +1,82 @@
+# ---------------------------------------------------------------------------
+# Platform + editor litter
+# ---------------------------------------------------------------------------
 .DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# ---------------------------------------------------------------------------
+# Dependencies + build output
+# ---------------------------------------------------------------------------
 node_modules/
 coverage/
 dist/
 build/
-*.log
-*.tmp
-*.swp
-*~
+*.tgz
+
+# ---------------------------------------------------------------------------
+# Secrets and local environment
+#
+# Never commit a real credential. `.env` files are local configuration only.
+# ---------------------------------------------------------------------------
 .env
 .env.*
+!.env.example
+*.pem
+*.p12
+*.key
+
+# ---------------------------------------------------------------------------
+# Local AutoLoop state (portable default namespace, see
+# src/shared/autoloop-paths.mjs)
+#
+# These are MACHINE-LOCAL stores: telemetry, durable checkpoints, memory,
+# evolution policy/candidates, Colima profile locks, review surfaces and
+# scratch. They are recreated on demand and must never be versioned.
+# ---------------------------------------------------------------------------
+.autoloop/
+
+# Evidence / telemetry namespaces when placed inside the checkout
+# (AUTOLOOP_EVIDENCE_ROOT / AUTOLOOP_TELEMETRY_ROOT).
+/evidence/
+/telemetry/
+/learning/
+
+# Generated governance evidence for a run (the governance engine's default
+# evidence store, overridable with AUTOLOOP_PI_GRAPH_OUTPUT). Operators who
+# deliberately version their run evidence should delete this line and use
+# `git add -f` for the specific records they want tracked.
+/docs/pi-graph-output/
+
+# Generated analysis / local captures
+/generated/
+*.analysis.json
+*.probe.json
+*.tmp
+
+# Local declarations and operator state
+production-declaration.json
+*-deployment.json
+review-job.json
+*.log
+
+# ---------------------------------------------------------------------------
+# Test-suite litter
+#
+# Test suites must write to the OS temp directory; these entries exist only so
+# an accidental cwd-relative write can never be committed. Treat a hit as a bug
+# in the suite, not as something to commit.
+#
+# `file:` is a real observed shape: a test that passes a `file://...` string to
+# a path-taking function with the scheme intact creates a literal `file:`
+# directory. It must be ignored as a FILE as well as a directory, which is why
+# the rule is `file:*` and not `/file:`.
+# ---------------------------------------------------------------------------
+file:*
+/learning-incidents*/
+/transfer-metrics-core*/
+/r2-cross-process*/

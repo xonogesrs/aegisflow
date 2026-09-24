@@ -209,16 +209,18 @@ function mapThrown(err) {
   throw err;
 }
 
-function assertNvm2tRoot(root) {
+function assertStorageRootInNamespace(root) {
   if (typeof root !== "string" || root.length === 0) {
     return rejected(ADAPTER_CODES.PATH_UNSAFE);
   }
   if (!root.startsWith("/") || root.includes("\0") || root.split(sep).includes("..")) {
     return rejected(ADAPTER_CODES.PATH_UNSAFE);
   }
+  // $HOME ITSELF is refused; the namespace boundary below is the real fence
+  // (the portable default learning root lives under ~/.autoloop).
   const home = resolve(homedir());
   const lexical = resolve(root);
-  if (lexical === home || lexical.startsWith(home + sep)) {
+  if (lexical === home) {
     return rejected(ADAPTER_CODES.PATH_UNSAFE);
   }
   const prefix = ALLOWED_ROOT_PREFIX.endsWith(sep) ? ALLOWED_ROOT_PREFIX : ALLOWED_ROOT_PREFIX + sep;
@@ -233,7 +235,7 @@ function assertNvm2tRoot(root) {
     if (resolved !== allowedRoot && !resolved.startsWith(prefix)) {
       return rejected(ADAPTER_CODES.PATH_UNSAFE);
     }
-    if (resolved === home || resolved.startsWith(home + sep)) {
+    if (resolved === home) {
       return rejected(ADAPTER_CODES.PATH_UNSAFE);
     }
   } catch (err) {
@@ -432,7 +434,7 @@ export function verifyLifecycleHeldTerminal({
     return rejected(ADAPTER_CODES.ONE_SOURCE_BOUND);
   }
   const { evidenceRoot, execution_id, phase_id } = authoritativeSourceReference;
-  const nvmErr = assertNvm2tRoot(evidenceRoot);
+  const nvmErr = assertStorageRootInNamespace(evidenceRoot);
   if (nvmErr) return nvmErr;
   if (typeof phase_id !== "string" || !PHASE_ID_RE.test(phase_id) || phase_id.includes("..")) {
     return rejected(ADAPTER_CODES.PATH_UNSAFE);
@@ -453,7 +455,7 @@ export function verifyLifecycleHeldTerminal({
   } catch (err) {
     return mapThrown(err);
   }
-  const nvm2 = assertNvm2tRoot(resolvedRoot);
+  const nvm2 = assertStorageRootInNamespace(resolvedRoot);
   if (nvm2) return nvm2;
 
   let execDir;

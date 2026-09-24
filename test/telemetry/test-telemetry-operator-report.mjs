@@ -32,7 +32,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, appendFileSync, readFileSync, symlinkSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -74,7 +74,7 @@ test("E1. reader resolves ONLY through the S16 location contract (override honor
   assert.match(refused.reason, /ROOT_RESOLUTION_REFUSED/);
 
   // $HOME override rejected by the S16 resolver (fail-closed, no fallback)
-  const homeRefused = readRunTelemetry({ graphRunId: "g-e1", env: { AUTOLOOP_TELEMETRY_STATE_ROOT: "/Users/zhengfengqing/Desktop" } });
+  const homeRefused = readRunTelemetry({ graphRunId: "g-e1", env: { AUTOLOOP_TELEMETRY_STATE_ROOT: join(homedir(), "Desktop", "telemetry-forbidden") } });
   assert.equal(homeRefused.ok, false);
 });
 

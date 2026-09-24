@@ -18,70 +18,148 @@ import {
   assertSingleWritableMount,
   roundTripProbe,
   assertColimaHome,
-  CANONICAL_COLIMA_HOME,
   ensureInstance,
 } from "../src/runtime/colima-runtime.mjs";
 import { validateAdapterResult, validateAdapterRequest } from "../src/adapter/contract.mjs";
 
-test("instanceSocket is pinned to the profile under the canonical COLIMA_HOME", () => {
-  assert.equal(instanceSocket("autoloop-w1"), `unix://${CANONICAL_COLIMA_HOME}/autoloop-w1/docker.sock`);
-  assert.notEqual(instanceSocket("autoloop-w1"), instanceSocket("autoloop-w2"));
+// An arbitrary absolute, non-$HOME runtime home: the gate is configuration-
+// driven, so the test needs a PATH, not one machine's volume.
+const CANON = "/srv/autoloop/runtime/colima";
+/**
+ * A runtime home that actually exists on disk.
+ *
+ * The gate requires the directory to exist and be writable, so a purely
+ * synthetic path cannot be used to exercise the helpers that read
+ * `process.env.COLIMA_HOME` at call time. The tests that need that create one
+ * here and clean it up.
+ */
+function withRealColimaHome(fn) {
+  const dir = mkdtempSync(join(tmpdir(), "autoloop-colima-home-"));
+  const prev = process.env.COLIMA_HOME;
+  process.env.COLIMA_HOME = dir;
+  try {
+    return fn(dir);
+  } finally {
+    if (prev === undefined) delete process.env.COLIMA_HOME; else process.env.COLIMA_HOME = prev;
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+// The gate these tests configure: the mount that CONTAINS CANON, so the
+// containment check is exercised with a coherent pair.
+const GATE = Object.freeze({ AUTOLOOP_COLIMA_MOUNT: "/srv/autoloop", AUTOLOOP_COLIMA_MOUNT_UUID: "UUID-1" });
+/** Injected filesystem/id observations so no real volume is required. */
+const okFacts = Object.freeze({
+  statOf: () => ({ isDirectory: () => true }),
+  accessOf: () => {},
 });
 
-// ── COLIMA-NVM2T-FAIL-CLOSED: storage gate rejects every fallback shape ──
-const CANON = "/Volumes/NVM2T/Development/runtime/colima";
+test("instanceSocket is pinned to the profile under the configured COLIMA_HOME", () => {
+  // These helpers read process.env at call time, so the test sets it rather
+  // than depending on the ambient shell being configured.
+  withRealColimaHome((home) => {
+    assert.equal(instanceSocket("autoloop-w1"), `unix://${home}/autoloop-w1/docker.sock`);
+    assert.notEqual(instanceSocket("autoloop-w1"), instanceSocket("autoloop-w2"));
+  });
+});
+
+// ── COLIMA storage gate: rejects every fallback / drift shape ──────────
+
 const uuidOk = () => "971A7EA8-5108-4B8E-B9A8-5141F0C04A8A";
 const uuidNone = () => null;
 
-test("N1: missing NVM2T mount (no volume UUID) fails closed", () => {
+test("N1: a gated mount with no volume UUID fails closed", () => {
   assert.throws(
-    () => assertColimaHome({ env: { COLIMA_HOME: CANON }, uuidOf: uuidNone }),
-    (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_NVM2T_MOUNT_IDENTITY_FAILED"),
+    () =>
+      assertColimaHome({ env: { COLIMA_HOME: CANON, ...GATE }, uuidOf: uuidNone, volumesOf: () => ["autoloop"], ...okFacts }),
+    (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_MOUNT_IDENTITY_FAILED"),
   );
 });
 
-test("N2: COLIMA_HOME unset fails closed", () => {
+test("N2: COLIMA_HOME unset fails closed and states no fallback", () => {
   assert.throws(
-    () => assertColimaHome({ env: {}, uuidOf: uuidOk }),
-    (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_HOME_NOT_CANONICAL") && e.message.includes("unset"),
+    () => assertColimaHome({ env: {}, ...okFacts }),
+    (e) =>
+      e instanceof ColimaRuntimeError &&
+      e.message.includes("COLIMA_HOME_NOT_CANONICAL") &&
+      /refusing to fall back/.test(e.message),
   );
 });
 
 test("N3: COLIMA_HOME pointing at ~/.colima fails closed and names no fallback", () => {
   assert.throws(
-    () => assertColimaHome({ env: { COLIMA_HOME: `${homedir()}/.colima` }, uuidOf: uuidOk }),
+    () => assertColimaHome({ env: { COLIMA_HOME: `${homedir()}/.colima` }, ...okFacts }),
     (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_HOME_NOT_CANONICAL"),
   );
 });
 
 test("N4: COLIMA_HOME on another system-disk path fails closed", () => {
   assert.throws(
-    () => assertColimaHome({ env: { COLIMA_HOME: "/Users/zhengfengqing/colima-elsewhere" }, uuidOf: uuidOk }),
+    () => assertColimaHome({ env: { COLIMA_HOME: join(homedir(), "colima-elsewhere") }, ...okFacts }),
     (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_HOME_NOT_CANONICAL"),
   );
 });
 
-test("N5: canonical runtime directory unavailable fails closed", () => {
+test("N5: runtime directory unavailable fails closed", () => {
   assert.throws(
-    () => assertColimaHome({ env: { COLIMA_HOME: CANON }, uuidOf: uuidOk, statOf: () => { throw new Error("ENOENT"); } }),
+    () =>
+      assertColimaHome({
+        env: { COLIMA_HOME: CANON },
+        statOf: () => {
+          throw new Error("ENOENT");
+        },
+        accessOf: () => {},
+      }),
     (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_RUNTIME_HOME_UNAVAILABLE"),
   );
 });
 
-test("N6: shadow NVM2T mount ('/Volumes/NVM2T 1') fails closed — no guessing", () => {
+test("N6: a shadow mount of the gated volume fails closed — no guessing", () => {
+  // The gate is configuration-driven, so the mount name is derived from the
+  // configured gate rather than being one machine's volume name.
   assert.throws(
-    () => assertColimaHome({ env: { COLIMA_HOME: CANON }, uuidOf: uuidOk, volumesOf: () => ["NVM2T", "NVM2T 1"] }),
-    (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_NVM2T_SHADOW_MOUNT"),
+    () =>
+      assertColimaHome({
+        env: { COLIMA_HOME: CANON, ...GATE },
+        uuidOf: () => GATE.AUTOLOOP_COLIMA_MOUNT_UUID,
+        volumesOf: () => ["autoloop", "autoloop 1"],
+        ...okFacts,
+      }),
+    (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_SHADOW_MOUNT"),
   );
 });
 
-test("gate passes with canonical env and real mount identity", () => {
-  assert.equal(assertColimaHome({ env: { COLIMA_HOME: CANON }, uuidOf: uuidOk }), CANON);
+test("N7: with no mount gate configured, a valid COLIMA_HOME is admitted", () => {
+  assert.equal(assertColimaHome({ env: { COLIMA_HOME: CANON }, ...okFacts }), CANON);
+});
+
+test("N8: a COLIMA_HOME outside the configured mount fails closed", () => {
+  assert.throws(
+    () => assertColimaHome({ env: { COLIMA_HOME: "/other/colima", ...GATE }, ...okFacts }),
+    (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_HOME_NOT_CANONICAL"),
+  );
+});
+
+test("gate passes with a configured mount and matching volume identity", () => {
+  assert.equal(
+    assertColimaHome({
+      env: { COLIMA_HOME: CANON, ...GATE },
+      uuidOf: () => GATE.AUTOLOOP_COLIMA_MOUNT_UUID,
+      volumesOf: () => ["autoloop"],
+      ...okFacts,
+    }),
+    CANON,
+  );
+});
+
+test("instanceSocket requires the runtime home to be configured", () => {
+  // Without COLIMA_HOME the socket cannot be resolved — fail closed, never a
+  // fallback to ~/.colima.
+  assert.throws(() => instanceSocket("autoloop-w1"), (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_HOME_NOT_CANONICAL"));
 });
 
 test("ensureInstance runs the storage gate before any machine action", () => {
   assert.throws(
-    () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: ["/tmp/x"], env: { COLIMA_HOME: "/Users/zhengfengqing/.colima" } }),
+    () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: ["/tmp/x"], env: { COLIMA_HOME: join(homedir(), ".colima") } }),
     (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_HOME_NOT_CANONICAL"),
   );
 });
@@ -95,7 +173,7 @@ test("card label is stable for stale cleanup scoping", () => {
 });
 
 test("assertMountAllowlist accepts only repo ro + scratch rw", () => {
-  const repo = "/Volumes/NVM2T/Development/repos/autoloop";
+  const repo = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
   const scratch = `${homedir()}/autoloop-runtime`;
   // allowed
   assert.doesNotThrow(() =>
@@ -186,7 +264,7 @@ import { C2dHoldError } from "../src/c2d/fs-atomic.mjs";
 
 const FP_A = { location: "/tmp/suite-a", writable: true };
 const FP_B = { location: "/tmp/suite-b", writable: true };
-const REPO_RO = { location: "/Volumes/NVM2T/Development/repos/autoloop", writable: false };
+const REPO_RO = { location: fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, ""), writable: false };
 
 test("mountFingerprint: stable ordering, mode-sensitive, alias-normalized", () => {
   const base = [REPO_RO, FP_A];
@@ -252,6 +330,14 @@ test("planInstanceAction: never-created profile starts through the seam; unowned
   assert.equal(planInstanceAction({ profile: "default", desiredFingerprint: desired, runtimeFingerprint: null, running: false }).action, INSTANCE_ACTION.HOLD);
 });
 
+/** Gate facts every injected dep set carries, so a configured COLIMA_HOME suffices. */
+const GATE_FACTS = Object.freeze({
+  uuidOf: () => null,
+  volumesOf: () => [],
+  statOf: () => ({ isDirectory: () => true }),
+  accessOf: () => {},
+});
+
 function fakeDeps({ runtimeNow, runtimeAfter, probeOk = true, listRows }) {
   const calls = { stop: 0, start: [] };
   const run = (bin, args) => {
@@ -267,17 +353,17 @@ function fakeDeps({ runtimeNow, runtimeAfter, probeOk = true, listRows }) {
   const resolve = () => ({ socket: "unix:///tmp/x.sock", ok: true, serverVersion: "27", error: null });
   const probeCalls = [];
   const probe = (arg) => { probeCalls.push(arg); return { ok: probeOk, direction: probeOk ? "ROUND_TRIP" : "HOST_TO_GUEST", reason: probeOk ? "" : "nonce mismatch" }; };
-  return { deps: { run, resolve, probe, runtimeFingerprint }, calls, probeCalls };
+  return { deps: { run, resolve, probe, runtimeFingerprint, ...GATE_FACTS }, calls, probeCalls };
 }
 
 test("ensureInstance T1/T2/T8: 'already running' with stale mounts is NOT ready -> bounded reconcile; still-stale after start -> HOLD", () => {
-  const repo = "/Volumes/NVM2T/Development/repos/autoloop";
+  const repo = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
   const desiredB = mountFingerprint([{ location: repo, writable: false }, FP_B]);
   const staleA = mountFingerprint([{ location: repo, writable: false }, FP_A]);
   // Reconcile path runs and the VM now carries the desired generation.
   {
     const { deps, calls } = fakeDeps({ runtimeNow: staleA, runtimeAfter: desiredB, listRows: ["autoloop-graph Running aarch64 2 2GiB 20GiB docker"] });
-    const r = ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-b"], deps });
+    const r = ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-b"], deps , env: COLIMA_ENV});
     assert.equal(calls.stop, 1, "stale running profile must be stopped before start");
     assert.equal(calls.start.length, 1);
     assert.ok(calls.start[0].includes("--mount"));
@@ -288,7 +374,7 @@ test("ensureInstance T1/T2/T8: 'already running' with stale mounts is NOT ready 
   {
     const { deps, probeCalls } = fakeDeps({ runtimeNow: staleA, runtimeAfter: staleA, listRows: ["autoloop-graph Running aarch64 2 2GiB 20GiB docker"] });
     assert.throws(
-      () => ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-b"], deps }),
+      () => ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-b"], deps , env: COLIMA_ENV}),
       (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_RUNTIME_MOUNT_RECONCILE_INCOMPLETE"),
     );
     assert.equal(probeCalls.length, 0, "no readiness published when runtime generation still stale");
@@ -296,10 +382,10 @@ test("ensureInstance T1/T2/T8: 'already running' with stale mounts is NOT ready 
 });
 
 test("ensureInstance T3/T14: matching running instance reuses without restart; disk policy untouched", () => {
-  const repo = "/Volumes/NVM2T/Development/repos/autoloop";
+  const repo = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
   const fp = mountFingerprint([{ location: repo, writable: false }, FP_A]);
   const { deps, calls, probeCalls } = fakeDeps({ runtimeNow: fp, runtimeAfter: fp, listRows: ["autoloop-graph Running aarch64 2 2GiB 20GiB docker"] });
-  const r = ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-a"], deps });
+  const r = ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-a"], deps , env: COLIMA_ENV});
   assert.equal(calls.start.length, 0, "matching runtime must not restart");
   assert.equal(calls.stop, 0);
   assert.equal(r.reused, true);
@@ -309,7 +395,7 @@ test("ensureInstance T3/T14: matching running instance reuses without restart; d
 });
 
 test("ensureInstance T16: crash during reconcile propagates and never publishes readiness", () => {
-  const repo = "/Volumes/NVM2T/Development/repos/autoloop";
+  const repo = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
   const desiredB = mountFingerprint([{ location: repo, writable: false }, FP_B]);
   const staleA = mountFingerprint([{ location: repo, writable: false }, FP_A]);
   const base = fakeDeps({ runtimeNow: staleA, runtimeAfter: desiredB, listRows: ["autoloop-graph Running aarch64 2 2GiB 20GiB docker"] });
@@ -321,24 +407,27 @@ test("ensureInstance T16: crash during reconcile propagates and never publishes 
   base.deps.run = run;
   let probed = 0;
   base.deps.probe = () => { probed += 1; return { ok: true, direction: "ROUND_TRIP" }; };
-  assert.throws(() => ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-b"], deps: base.deps }), /SIGKILL mid-reconcile/);
+  assert.throws(() => ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-b"], deps: base.deps , env: COLIMA_ENV}), /SIGKILL mid-reconcile/);
   assert.equal(probed, 0);
 });
 
 test("ensureInstance T6/T7: failed round-trip probe fails closed with explicit HOLD code", () => {
-  const repo = "/Volumes/NVM2T/Development/repos/autoloop";
+  const repo = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
   const fp = mountFingerprint([{ location: repo, writable: false }, FP_A]);
   const { deps } = fakeDeps({ runtimeNow: fp, runtimeAfter: fp, probeOk: false, listRows: ["autoloop-graph Running aarch64 2 2GiB 20GiB docker"] });
   assert.throws(
-    () => ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-a"], deps }),
+    () => ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-a"], deps , env: COLIMA_ENV}),
     (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_ROUND_TRIP_PROBE_FAILED"),
   );
 });
 
 test("runtime fingerprint helpers are total over missing instances", () => {
-  assert.equal(runtimeMountFingerprint("autoloop-does-not-exist-anywhere"), null);
+  withRealColimaHome(() => {
+    assert.equal(runtimeMountFingerprint("autoloop-does-not-exist-anywhere"), null);
+    assert.ok(limaRuntimeYamlPath("p").endsWith("/_lima/colima-p/lima.yaml"));
+  });
+  // listInstances is total regardless of the runtime home.
   assert.deepEqual(listInstances(() => ({ status: 1, stdout: "", stderr: "boom" })), []);
-  assert.ok(limaRuntimeYamlPath("p").endsWith("/_lima/colima-p/lima.yaml"));
 });
 
 // ── R2A28: RW mount cardinality authority（EXACTLY ONE）────────────────────
@@ -351,14 +440,26 @@ const HOLD_CODE = /COLIMA_RW_MOUNT_CARDINALITY_INVALID/;
 
 /** Every dependency is a tripwire: touching it means a side effect escaped
  *  ahead of cardinality validation. */
+/**
+ * A dependency set where every machine action explodes: the cardinality tests
+ * assert that a malformed request is rejected BEFORE anything runs.
+ *
+ * It also satisfies the storage gate (with `COLIMA_HOME` supplied explicitly by
+ * the caller) so the tests reach the cardinality seam rather than stopping at
+ * the environment check — and so they do not depend on the ambient
+ * environment being configured.
+ */
 function inertDeps() {
   const boom = () => { throw new Error("SIDE_EFFECT_BEFORE_CARDINALITY_VALIDATION"); };
-  return { run: boom, resolve: boom, probe: boom, runtimeFingerprint: boom };
+  return { run: boom, resolve: boom, probe: boom, runtimeFingerprint: boom, ...GATE_FACTS };
 }
+
+/** The env every ensureInstance call in this file uses. */
+const COLIMA_ENV = Object.freeze({ COLIMA_HOME: CANON });
 
 test("R2A28 T1 ZERO_RW_MOUNTS: [] fails closed before any action", () => {
   assert.throws(
-    () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: [], deps: inertDeps() }),
+    () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: [], deps: inertDeps(), env: COLIMA_ENV }),
     (e) => e instanceof ColimaRuntimeError && HOLD_CODE.test(e.message),
   );
   assert.throws(() => assertSingleWritableMount([]), HOLD_CODE);
@@ -368,7 +469,7 @@ test("R2A28 T2 TWO_RW_MOUNTS: A28 reproduction now HOLDs at the seam", () => {
   // Exact R2R reproduction shape: two writable mounts whose joint fingerprint
   // used to publish readiness while only [0] was probed.
   assert.throws(
-    () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: ["/tmp/a28-x", "/tmp/a28-y"], deps: inertDeps() }),
+    () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: ["/tmp/a28-x", "/tmp/a28-y"], deps: inertDeps(), env: COLIMA_ENV }),
     (e) => e instanceof ColimaRuntimeError && HOLD_CODE.test(e.message),
   );
 });
@@ -376,7 +477,7 @@ test("R2A28 T2 TWO_RW_MOUNTS: A28 reproduction now HOLDs at the seam", () => {
 test("R2A28 T3 THREE_RW_MOUNTS and duplicate guest targets fail closed", () => {
   for (const bad of [["/a", "/b", "/c"], ["/dup", "/dup"]]) {
     assert.throws(
-      () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: bad, deps: inertDeps() }),
+      () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: bad, deps: inertDeps(), env: COLIMA_ENV }),
       (e) => e instanceof ColimaRuntimeError && HOLD_CODE.test(e.message),
     );
   }
@@ -386,7 +487,7 @@ test("R2A28 T4 NON_ARRAY_RW_MOUNTS: null/object/string/undefined fail closed", (
   for (const bad of [null, {}, { length: 1, 0: "/x" }, "/tmp/solo", undefined]) {
     assert.throws(() => assertSingleWritableMount(bad), HOLD_CODE);
     assert.throws(
-      () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: bad, deps: inertDeps() }),
+      () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: bad, deps: inertDeps(), env: COLIMA_ENV }),
       (e) => e instanceof ColimaRuntimeError && HOLD_CODE.test(e.message),
     );
   }
@@ -395,7 +496,7 @@ test("R2A28 T4 NON_ARRAY_RW_MOUNTS: null/object/string/undefined fail closed", (
 test("R2A28 T5 MALFORMED_SINGLE_RW_MOUNT: missing host path fails closed", () => {
   for (const bad of [[""], ["   "], [null], [42], [{ source: "/x", target: "/y" }]]) {
     assert.throws(
-      () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: bad, deps: inertDeps() }),
+      () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: bad, deps: inertDeps(), env: COLIMA_ENV }),
       (e) => e instanceof ColimaRuntimeError && HOLD_CODE.test(e.message),
     );
   }
@@ -404,9 +505,9 @@ test("R2A28 T5 MALFORMED_SINGLE_RW_MOUNT: missing host path fails closed", () =>
 test("R2A28 T6 INVALID_INPUT_ZERO_MACHINE_ACTION: no list/start/stop/docker/probe", () => {
   const touched = [];
   const spy = (...k) => () => { touched.push(k.join(":")); throw new Error("ESCAPED"); };
-  const deps = { run: spy("run"), resolve: spy("resolve"), probe: spy("probe"), runtimeFingerprint: spy("fp") };
+  const deps = { run: spy("run"), resolve: spy("resolve"), probe: spy("probe"), runtimeFingerprint: spy("fp"), ...GATE_FACTS };
   assert.throws(
-    () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: ["/x", "/y"], deps }),
+    () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: ["/x", "/y"], deps , env: COLIMA_ENV}),
     HOLD_CODE,
   );
   assert.deepEqual(touched, [], `machine actions leaked past validation: ${JSON.stringify(touched)}`);
@@ -418,7 +519,7 @@ test("R2A28 T7 INVALID_INPUT_ZERO_FILESYSTEM_EFFECT: no undefined/.autoloop-prob
   process.chdir(tmp);
   try {
     assert.throws(
-      () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: [], deps: inertDeps() }),
+      () => ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: [], deps: inertDeps(), env: COLIMA_ENV }),
       HOLD_CODE,
     );
     assert.deepEqual(readdirSync(tmp), [], "invalid input must not create probe directories");
@@ -429,10 +530,10 @@ test("R2A28 T7 INVALID_INPUT_ZERO_FILESYSTEM_EFFECT: no undefined/.autoloop-prob
 });
 
 test("R2A28 T8 EXACTLY_ONE_REUSE: single rw mount + matching runtime reuses", () => {
-  const repo = "/Volumes/NVM2T/Development/repos/autoloop";
+  const repo = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
   const fp = mountFingerprint([{ location: repo, writable: false }, FP_A]);
   const { deps, calls, probeCalls } = fakeDeps({ runtimeNow: fp, runtimeAfter: fp, listRows: ["autoloop-graph Running aarch64 2 2GiB 20GiB docker"] });
-  const r = ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-a"], deps });
+  const r = ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-a"], deps , env: COLIMA_ENV});
   assert.equal(r.reused, true);
   assert.equal(r.ok, true);
   assert.equal(calls.start.length, 0);
@@ -440,36 +541,38 @@ test("R2A28 T8 EXACTLY_ONE_REUSE: single rw mount + matching runtime reuses", ()
 });
 
 test("R2A28 T9 EXACTLY_ONE_RECONCILE: stale runtime still bounded-reconciles", () => {
-  const repo = "/Volumes/NVM2T/Development/repos/autoloop";
+  const repo = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
   const desired = mountFingerprint([{ location: repo, writable: false }, FP_B]);
   const stale = mountFingerprint([{ location: repo, writable: false }, FP_A]);
   const { deps, calls } = fakeDeps({ runtimeNow: stale, runtimeAfter: desired, listRows: ["autoloop-graph Running aarch64 2 2GiB 20GiB docker"] });
-  const r = ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-b"], deps });
+  const r = ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-b"], deps , env: COLIMA_ENV});
   assert.equal(r.reconciled, true);
   assert.equal(calls.stop, 1);
   assert.equal(calls.start.length, 1);
 });
 
 test("R2A28 T10 EXACTLY_ONE_ROUND_TRIP: probe receives the validated mount only", () => {
-  const repo = "/Volumes/NVM2T/Development/repos/autoloop";
+  const repo = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
   const fp = mountFingerprint([{ location: repo, writable: false }, FP_A]);
   const { deps, probeCalls } = fakeDeps({ runtimeNow: fp, runtimeAfter: fp, listRows: ["autoloop-graph Running aarch64 2 2GiB 20GiB docker"] });
-  ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-a/"], deps });
+  ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-a/"], deps , env: COLIMA_ENV});
   assert.equal(probeCalls.length, 1);
   assert.equal(probeCalls[0].scratchRoot, "/tmp/suite-a", "probe must get the normalized validated mount, never rwMounts[i]");
   assert.equal(probeCalls[0].profile, "autoloop-graph");
 });
 
 test("R2A28 T11 MULTIPLE_RO_MOUNTS_PRESERVED: several read-only mounts unaffected", () => {
-  const repo = "/Volumes/NVM2T/Development/repos/autoloop";
-  const extraRo = "/Volumes/NVM2T/Development";
+  const repo = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
+  // Any real directory works: this test is about the FINGERPRINT including all
+  // mounts, not about which directory it is.
+  const extraRo = tmpdir();
   const fp = mountFingerprint([
     { location: repo, writable: false },
     { location: extraRo, writable: false },
     FP_A,
   ]);
   const { deps, calls, probeCalls } = fakeDeps({ runtimeNow: fp, runtimeAfter: fp, listRows: ["autoloop-graph Running aarch64 2 2GiB 20GiB docker"] });
-  const r = ensureInstance({ profile: "autoloop-graph", roMounts: [repo, extraRo], rwMounts: ["/tmp/suite-a"], deps });
+  const r = ensureInstance({ profile: "autoloop-graph", roMounts: [repo, extraRo], rwMounts: ["/tmp/suite-a"], deps , env: COLIMA_ENV});
   assert.equal(r.ok, true);
   assert.equal(calls.start.length, 0, "matching multi-ro generation must reuse");
   assert.equal(probeCalls.length, 1);
@@ -479,13 +582,13 @@ test("R2A28 T12 A28_SHORTEST_PATH: matching dual-rw runtime still cannot go read
   // Even when the VM already runs the exact [repo, A, B] generation — i.e.
   // planInstanceAction would say REUSE and the old code probed only A —
   // dual writable mounts are rejected before any action or probe.
-  const repo = "/Volumes/NVM2T/Development/repos/autoloop";
+  const repo = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
   const dualFp = mountFingerprint([{ location: repo, writable: false }, FP_A, FP_B]);
   let fpReads = 0;
   const deps = inertDeps();
   deps.runtimeFingerprint = () => { fpReads += 1; return dualFp; };
   assert.throws(
-    () => ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-a", "/tmp/suite-b"], deps }),
+    () => ensureInstance({ profile: "autoloop-graph", roMounts: [repo], rwMounts: ["/tmp/suite-a", "/tmp/suite-b"], deps , env: COLIMA_ENV}),
     (e) => e instanceof ColimaRuntimeError && HOLD_CODE.test(e.message),
   );
   assert.equal(fpReads, 0, "runtime fingerprint must not even be read after invalid cardinality");
@@ -502,7 +605,7 @@ test("R2A28 T14 READINESS_NOT_PUBLISHED: invalid cardinality never returns ready
   for (const bad of [[], ["/a", "/b"], null]) {
     let result;
     try {
-      result = ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: bad, deps: inertDeps() });
+      result = ensureInstance({ profile: "autoloop-graph", roMounts: [], rwMounts: bad, deps: inertDeps(), env: COLIMA_ENV });
       assert.fail(`invalid cardinality ${JSON.stringify(bad)} published readiness: ${JSON.stringify(result)}`);
     } catch (e) {
       assert.ok(e instanceof ColimaRuntimeError && HOLD_CODE.test(e.message));
@@ -526,7 +629,7 @@ import {
   colimaProfileLockPath,
   COLIMA_PROFILE_LOCK_HOLD,
   COLIMA_PROFILE_LOCK_ALLOWED,
-  COLIMA_PROFILE_LOCK_DEFAULT_ROOT,
+  colimaProfileLockDefaultRoot,
 } from "../src/runtime/colima-profile-lock.mjs";
 import { mkdirSync, readFileSync as readLockFileSync, rmSync as rmLockDirSync } from "node:fs";
 
@@ -538,7 +641,7 @@ function lockTestRoot(t) {
 
 test("F/G parity: lock allowlist mirrors AUTOLOOP_TEST_PROFILES exactly", () => {
   assert.deepEqual([...COLIMA_PROFILE_LOCK_ALLOWED].sort(), [...AUTOLOOP_TEST_PROFILES].sort());
-  assert.equal(COLIMA_PROFILE_LOCK_DEFAULT_ROOT, `${CANONICAL_COLIMA_HOME}/autoloop-locks`);
+  assert.equal(colimaProfileLockDefaultRoot({ env: { COLIMA_HOME: CANON } }), join(CANON, "autoloop-locks"));
 });
 
 test("F/G lock path is per-profile under the lock root", () => {
@@ -641,3 +744,4 @@ test("F/G crash recovery: same-host dead-pid orphan is reclaimed; cross-host orp
 
 import { writeFileSync as writeLockFileSync } from "node:fs";
 import { hostname } from "node:os";
+import { fileURLToPath } from "node:url";

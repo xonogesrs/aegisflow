@@ -275,7 +275,7 @@ const CAPABILITIES = [
   },
   {
     capability_id: "CAP.EXTERNAL_REVIEW_DELIVERY",
-    purpose: "Fixed inbox ~/Desktop/AutoLoop-Review/Current/; atomic publish under single-owner lock; occupancy fail-closed; verdict is the sole receipt",
+    purpose: "Fixed inbox at the external-review surface (AUTOLOOP_REVIEW_SURFACE); atomic publish under single-owner lock; occupancy fail-closed; verdict is the sole receipt",
     required_permissions: [],
     mutation_capability: false,
     network_capability: false,

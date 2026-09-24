@@ -58,7 +58,7 @@ import {
   HISTORY_SCAN,
 } from "../../src/learning/incidents/lifecycle-terminal-adapter.mjs";
 
-const REPO = fileURLToPath(new URL("../..", import.meta.url));
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 function nowClock() {
   return () => new Date(Date.now() + 120000).toISOString();

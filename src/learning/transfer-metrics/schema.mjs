@@ -8,6 +8,7 @@
 
 import { recursiveCanonicalJson, canonicalSha256, compareCodePoints } from "../../memory/canonical.mjs";
 import { sha256Text } from "../../evidence/run-evidence-store.mjs";
+import { resolveLearningRoot } from "../../shared/autoloop-paths.mjs";
 import { timingSafeEqual } from "node:crypto";
 
 export const SCHEMA_VERSION = "autoloop.transfer-event/v1";
@@ -30,7 +31,11 @@ export const MAX_DERIVED_BYTES = 1048576;
 export const MAX_REDUCER_EVENTS = 65536;
 export const CLOCK_SKEW_SECONDS = 300;
 
-export const ALLOWED_ROOT_PREFIX = "/Volumes/NVM2T/Development/";
+// Storage-identity prefix every recorded writer/authority root must live
+// under. Portable by default (<AUTOLOOP_HOME>/learning/); relocate with
+// AUTOLOOP_LEARNING_ROOT. Kept with a trailing separator because consumers
+// test membership by string prefix.
+export const ALLOWED_ROOT_PREFIX = resolveLearningRoot();
 
 export const EVENT_TYPES = Object.freeze([
   "INCIDENT_OBSERVED",
@@ -1324,7 +1329,7 @@ export function validateAuthoritySubjectIdentity(identity, subjectKind) {
     validateProjectIdentity(identity.project_identity);
     assertAuthorityBoundedString(identity.writer_storage_identity, "subject_identity.writer_storage_identity");
     if (!identity.writer_storage_identity.startsWith(ALLOWED_ROOT_PREFIX)) {
-      fail(TRANSFER_CODES.AUTHORITY_SUBJECT_INVALID, "subject_identity.writer_storage_identity outside NVM2T boundary");
+      fail(TRANSFER_CODES.AUTHORITY_SUBJECT_INVALID, `subject_identity.writer_storage_identity outside the configured learning root (${ALLOWED_ROOT_PREFIX})`);
     }
     return;
   }

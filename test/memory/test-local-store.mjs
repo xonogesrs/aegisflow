@@ -24,6 +24,7 @@ import {
   insertRecord,
 } from "../../src/memory/index.mjs";
 import { codeRecord, executionRecord, decisionRecord, REPO, TREE } from "./helpers-cbm3.mjs";
+import { fileURLToPath } from "node:url";
 
 const ROOTS = [];
 function freshRoot() {
@@ -259,8 +260,8 @@ test("S16. validate() reports healthy store ok", () => {
 
 test("S17. resolveRepositoryIdentity derives deterministic repo/worktree/tree identity", async () => {
   const { resolveRepositoryIdentity } = await import("../../src/memory/index.mjs");
-  const id1 = resolveRepositoryIdentity("/Volumes/NVM2T/Development/repos/autoloop");
-  const id2 = resolveRepositoryIdentity("/Volumes/NVM2T/Development/repos/autoloop");
+  const id1 = resolveRepositoryIdentity(fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, ""));
+  const id2 = resolveRepositoryIdentity(fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, ""));
   assert.deepEqual(id1, id2);
   assert.ok(/^[0-9a-f]{64}$/.test(id1.repositoryIdentity));
   assert.ok(/^[0-9a-f]{64}$/.test(id1.worktreeIdentity));

@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import {
   currentSurfaceReviewStatus,
   serializeExternalReviewState,
@@ -26,6 +27,7 @@ import {
   VERIFICATION_SCOPE_HOLDS,
 } from "../../src/governance/verification-scope-guard.mjs";
 import { buildPhaseExecutionPrompt } from "../../src/v2/phase-response-contract.mjs";
+import { fileURLToPath } from "node:url";
 
 const SURFACE = join(tmpdir(), `vca1-p0b-surface-${process.pid}`);
 
@@ -65,13 +67,13 @@ test("scope guard: attempted root = $HOME is blocked before any executor would t
   assert.equal(result.hold, VERIFICATION_SCOPE_HOLDS.UNBOUNDED);
 });
 
-test("scope guard: attempted root = /Users/zhengfengqing is blocked before any executor would traverse it", () => {
-  const result = checkVerificationRoot("/Users/zhengfengqing");
+test("scope guard: attempted root = the user home directory is blocked before any executor would traverse it", () => {
+  const result = checkVerificationRoot(homedir());
   assert.equal(result.ok, false);
 });
 
 test("scope guard: explicit repo-scoped verification root is allowed", () => {
-  const result = checkVerificationRoot("/Volumes/NVM2T/Development/repos/autoloop/src/governance");
+  const result = checkVerificationRoot(join(fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, ""), "src", "governance"));
   assert.equal(result.ok, true);
 });
 
@@ -87,7 +89,7 @@ test("scope guard: allowlist contract — a caller-authorized root under $HOME i
 
 test("Pi prompt text: executor prompt instructs authoritative-source-first and bounded verification root", () => {
   const phase = { phase_id: "p1", verification_plan: { method: "m", success_criteria: "s", failure_criteria: "f" } };
-  const taskCard = { repositoryRoot: "/Volumes/NVM2T/Development/repos/autoloop", allowedPaths: ["src/x.mjs"], forbiddenPaths: [] };
+  const taskCard = { repositoryRoot: fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, ""), allowedPaths: ["src/x.mjs"], forbiddenPaths: [] };
   const prompt = buildPhaseExecutionPrompt({ phase, taskCard, lifecyclePhase: "executor", attempt: 0 });
   assert.match(prompt, /AUTHORITATIVE_SOURCE_FIRST/);
   assert.match(prompt, /VERIFICATION_SCOPE_UNBOUNDED/);
@@ -96,7 +98,7 @@ test("Pi prompt text: executor prompt instructs authoritative-source-first and b
 
 test("Pi prompt text: reviewer prompt also carries the bounded-verification instruction", () => {
   const phase = { phase_id: "p1", verification_plan: { method: "m", success_criteria: "s", failure_criteria: "f" } };
-  const taskCard = { repositoryRoot: "/Volumes/NVM2T/Development/repos/autoloop", allowedPaths: [], forbiddenPaths: [] };
+  const taskCard = { repositoryRoot: fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, ""), allowedPaths: [], forbiddenPaths: [] };
   const prompt = buildPhaseExecutionPrompt({ phase, taskCard, lifecyclePhase: "reviewer", attempt: 0 });
   assert.match(prompt, /AUTHORITATIVE_SOURCE_FIRST/);
 });

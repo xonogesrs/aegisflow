@@ -303,14 +303,16 @@ function timingSafeHexEqual(a, b) {
   return timingSafeEqual(ba, bb);
 }
 
-function assertNvm2tRoot(root) {
+function assertStorageRootInNamespace(root) {
   if (typeof root !== "string" || root.length === 0) struct("PATH_UNSAFE");
   if (!root.startsWith("/") || root.includes("\0") || root.split(sep).includes("..")) {
     struct("PATH_UNSAFE");
   }
+  // $HOME ITSELF is refused; the namespace boundary below is the real fence
+  // (the portable default learning root lives under ~/.autoloop).
   const home = resolve(homedir());
   const lexical = resolve(root);
-  if (lexical === home || lexical.startsWith(home + sep)) struct("PATH_UNSAFE");
+  if (lexical === home) struct("PATH_UNSAFE");
   const prefix = ALLOWED_ROOT_PREFIX.endsWith(sep)
     ? ALLOWED_ROOT_PREFIX
     : ALLOWED_ROOT_PREFIX + sep;
@@ -325,7 +327,7 @@ function assertNvm2tRoot(root) {
     struct("PATH_UNSAFE");
   }
   if (resolved !== allowedRoot && !resolved.startsWith(prefix)) struct("PATH_UNSAFE");
-  if (resolved === home || resolved.startsWith(home + sep)) struct("PATH_UNSAFE");
+  if (resolved === home) struct("PATH_UNSAFE");
   return resolved;
 }
 
@@ -1461,7 +1463,7 @@ export function verifyCurrentIncident(input) {
   let root;
   try {
     root = assertValidEvidenceRoot(ctx.evidenceRootString, null);
-    root = assertNvm2tRoot(root);
+    root = assertStorageRootInNamespace(root);
   } catch {
     return { result: buildFailure("STRUCTURAL_INVALID"), receipt: null };
   }
@@ -1597,7 +1599,7 @@ export function consumeCurrentVerificationReceipt(input) {
   let root;
   try {
     root = assertValidEvidenceRoot(ctx.evidenceRootString, null);
-    root = assertNvm2tRoot(root);
+    root = assertStorageRootInNamespace(root);
   } catch {
     return { result: buildFailure("STRUCTURAL_INVALID") };
   }

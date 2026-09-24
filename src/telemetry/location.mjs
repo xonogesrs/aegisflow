@@ -28,12 +28,29 @@
 
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import {
+  TELEMETRY_ROOT_ENV as AUTOLOOP_TELEMETRY_ROOT_ENV,
+  assertStateRootAllowed,
+  resolveEvidenceRoot,
+  resolveTelemetryRoot,
+} from "../shared/autoloop-paths.mjs";
 
-// Canonical telemetry namespace: sibling of the authoritative evidence root
-// (scripts/shared/evidence-root.mjs -> /Volumes/NVM2T/Development/evidence/autoloop).
-// Separation is the authority fence, not aesthetics: the two namespaces have
-// disjoint retention classes.
-export const TELEMETRY_ROOT = "/Volumes/NVM2T/Development/evidence/autoloop-telemetry";
+// Canonical telemetry namespace: a SIBLING of the authoritative evidence root,
+// never inside it. Separation is the authority fence, not aesthetics: the two
+// namespaces have disjoint retention classes.
+//
+// Portable default: <AUTOLOOP_HOME>/evidence/autoloop-telemetry (see
+// src/shared/autoloop-paths.mjs). Set AUTOLOOP_TELEMETRY_ROOT explicitly to
+// place it anywhere else; a value inside the evidence namespace fails closed.
+export const TELEMETRY_ROOT = resolveTelemetryRoot();
+
+/** Name of the env var that relocates the telemetry namespace. */
+export const TELEMETRY_ROOT_ENV = AUTOLOOP_TELEMETRY_ROOT_ENV;
+
+/** The authoritative evidence namespace this root must stay separate from. */
+export function telemetryEvidenceRoot({ env = process.env } = {}) {
+  return resolveEvidenceRoot({ env });
+}
 
 // Env override for the exact store root (tests / CI isolation), mirroring
 // AUTOLOOP_MEMORY_STATE_ROOT. Never a fallback creator: when the env var is
@@ -90,10 +107,19 @@ export function isGcProtected(retentionClass) {
   return retentionClass === "R3" || retentionClass === "R4";
 }
 
+/**
+ * Reject $HOME ITSELF as a run-scoped root.
+ *
+ * The namespace boundary is the telemetry root, not the home directory: the
+ * portable default lives at ~/.autoloop/evidence/autoloop-telemetry, so a
+ * blanket "$HOME subtree is forbidden" rule would reject the default. This
+ * keeps the original refusal of the worst case (state landing directly in
+ * $HOME) while `resolveTelemetryRoot` enforces the namespace boundary itself.
+ */
 function rejectHomeNamespace(resolved) {
   const home = resolve(homedir());
-  if (resolved === home || resolved.startsWith(home + "/") || resolved.startsWith(home + "\\")) {
-    throw new Error(`S16 telemetry location: $HOME namespace rejected: ${resolved}`);
+  if (resolved === home) {
+    throw new Error(`S16 telemetry location: $HOME itself is not a telemetry root: ${resolved}`);
   }
 }
 
@@ -118,11 +144,19 @@ export function resolveTelemetryStateRoot({ graphRunId, env = process.env } = {}
     if (!isAbsolute(override)) {
       throw new Error(`S16 telemetry location: ${TELEMETRY_STATE_ROOT_ENV} must be absolute: ${override}`);
     }
-    const resolved = resolve(override);
+    let resolved;
+    try {
+      resolved = assertStateRootAllowed(override, { env });
+    } catch (e) {
+      throw new Error(`S16 telemetry location: ${TELEMETRY_STATE_ROOT_ENV} rejected (${e.code}): ${override}`);
+    }
     rejectHomeNamespace(resolved);
     return resolved;
   }
-  const resolved = join(TELEMETRY_ROOT, graphRunId);
+  // The namespace root is re-resolved from THIS env (not the import-time
+  // constant) so an explicit AUTOLOOP_TELEMETRY_ROOT is honored per call.
+  const namespace = resolveTelemetryRoot({ env });
+  const resolved = join(namespace, graphRunId);
   rejectHomeNamespace(resolved);
   return resolved;
 }

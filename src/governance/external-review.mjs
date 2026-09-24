@@ -159,7 +159,7 @@ export function renderProhibitedActions(authority, extraDeclarations = []) {
 /**
  * Controller-owned result path, DERIVED from the review bundle directory
  * (which lives outside the executor's writable scope — e.g.
- * ~/Desktop/AutoLoop-Review). Executor CLIs only READ this path; the
+ * the external-review surface). Executor CLIs only READ this path; the
  * artifact is created exclusively by the Controller ingestion entry
  * (scripts/controller/ingest-review-result.mjs).
  */

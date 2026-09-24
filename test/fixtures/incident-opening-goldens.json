@@ -1,0 +1,274 @@
+{
+  "schema": "autoloop.test-fixture/incident-opening-goldens/v1",
+  "provenance": {
+    "source": "STAGE-E incident-observation-profile-1 golden capture (2026-08-27)",
+    "note": "the 13 non-INCIDENT_OBSERVED opening goldens, committed as a fixture so the digest-chain regression is reproducible in any checkout. Identity inputs come from fixtures.mjs IDENTITY_ROOT (a labeled synthetic path), so these digests are machine-independent."
+  },
+  "goldens": [
+    {
+      "event_type": "PATTERN_CANDIDATE_CREATED",
+      "schema_version": "autoloop.transfer-event/v1",
+      "logical_dedupe_key": {
+        "pattern_id": "pat-gold-PATTERN_CANDIDATE_CREATED",
+        "constituent_incident_set_digest": "4e128bf0bb5b2852c165a13bf2670a50c88f8945238d0418e266b94fa77c2ea7"
+      },
+      "idempotency_key": "678ba731553eb6e0854d1a844e2a05ab8b4b94cb20fed990b17b1bab042b1902",
+      "payload_digest": "72fb85f5ae2b8810f70b298f3f93c9fed1e5afd5f4012aaee911adca2edc0397",
+      "event_id": "67a0b5097c428205bbf97b3a4bf673f92be7587c455d0607ae54297a6fae0631",
+      "first_status": "APPENDED",
+      "retry_status": "ALREADY_SATISFIED",
+      "original_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_event_id": "ec818ae52f510cc99c21dd30a6ac208b823cc14649abd4671f430427f90b8cfd",
+      "conflict_code": "EVENT_IDEMPOTENCY_CONFLICT",
+      "durable_type_count": 1,
+      "canonical_payload": "{\"applicability_digest\":\"23cb05d01ba95b13eb3003e629115c203f6c18d6ee9bee7891195315c1b95e02\",\"constituent_incident_set_digest\":\"4e128bf0bb5b2852c165a13bf2670a50c88f8945238d0418e266b94fa77c2ea7\",\"lifecycle_state\":\"CANDIDATE\",\"mechanism_digest\":\"01a27714a663383151abbe2f543c65d170fe83d2663a7b5b39985ef896acb3c8\"}",
+      "reducer_formula_version": "transfer-metrics-formulas/v1"
+    },
+    {
+      "event_type": "PATTERN_QUALIFIED",
+      "schema_version": "autoloop.transfer-event/v1",
+      "logical_dedupe_key": {
+        "pattern_id": "pat-gold-PATTERN_QUALIFIED",
+        "generation": 0,
+        "reviewer_identity": "fix-1"
+      },
+      "idempotency_key": "a2d8f6d5604c75fdca349585446faafc081b68e92dba00a3e7e2645ffe69e93e",
+      "payload_digest": "2fe6006b7b3f8a04d65d2eb29072ad31f5af787df58ed5668c89a1a0b88ee94e",
+      "event_id": "97725a662cbdc4695082be2e40965e18fff3dd29707b2a923ed8207b98b7c9d1",
+      "first_status": "APPENDED",
+      "retry_status": "ALREADY_SATISFIED",
+      "original_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_event_id": "3ee861a8f4de4922b453522ca7e5cfff06abfab5ed6961adc93269ee913aceaf",
+      "conflict_code": "EVENT_IDEMPOTENCY_CONFLICT",
+      "durable_type_count": 1,
+      "canonical_payload": "{\"applicability_digest\":\"7dee869782dd1ed308ab9bf386ac5abbdd73fac4c78b80133cf98331622ce130\",\"lifecycle_event_digest\":\"9941bb906a098ed165e8b4c2bb5d322f2578ae69b61d151f847d346be5256fd0\",\"lifecycle_state\":\"ADVISORY\",\"mechanism_digest\":\"61e6898851d3dc342285d62b069ca1789428ebaf51725d99d17556c65f848312\"}",
+      "reducer_formula_version": "transfer-metrics-formulas/v1"
+    },
+    {
+      "event_type": "PATTERN_RETRIEVED",
+      "schema_version": "autoloop.transfer-event/v1",
+      "logical_dedupe_key": {
+        "retrievalDigest": "eda8d169c025dfdd6ae2ed34d7aee04d31a8ab59d09930712cc522aa77eaaa10",
+        "pattern_id": "pat-gold-PATTERN_RETRIEVED"
+      },
+      "idempotency_key": "03c5a446a2818cb7b13a31871876929c7e6cfb42113c0317834e90d1de1f50f6",
+      "payload_digest": "a046f816ce682fb84f588ccefef569dc8c60990aae3f354ea3fd6b3238922004",
+      "event_id": "dab5470c98a1bfffc51eb35beba4871c9d13bdc500c3471d2849544d2bec1b17",
+      "first_status": "APPENDED",
+      "retry_status": "ALREADY_SATISFIED",
+      "original_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_event_id": "e2b2c56860f92c1edd4219556db0f8317bac529fbc4c966383654b8052257edb",
+      "conflict_code": "EVENT_IDEMPOTENCY_CONFLICT",
+      "durable_type_count": 1,
+      "canonical_payload": "{\"rank\":0,\"retrievalDigest\":\"eda8d169c025dfdd6ae2ed34d7aee04d31a8ab59d09930712cc522aa77eaaa10\",\"storeSnapshotDigest\":\"fe0caedad24fd6dd81489472f9c7dbbef80d38f39cec8af8ca066a921f8d8462\",\"truncated\":false}",
+      "reducer_formula_version": "transfer-metrics-formulas/v1"
+    },
+    {
+      "event_type": "PATTERN_REJECTED",
+      "schema_version": "autoloop.transfer-event/v1",
+      "logical_dedupe_key": {
+        "retrievalDigest": "629493c45616fadbb8a161d5cd6569f2009bb9d921f81d9c9f5ace865e8aefad",
+        "pattern_id": "pat-gold-PATTERN_REJECTED",
+        "rejection_code": "NOT_APPLICABLE"
+      },
+      "idempotency_key": "329ccf72b21aee50cee18da556a87dcdbe4279d56ad9a4b032836e3a002fa22a",
+      "payload_digest": "51f5077f4ad667ba6300659d36caa5a1665423dc0cd16eb0d6a745cd22200e29",
+      "event_id": "4a7304bb087235d724452d69ccca4e3d79bdbfbcf2619b8981e3c8c85b863844",
+      "first_status": "APPENDED",
+      "retry_status": "ALREADY_SATISFIED",
+      "original_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_event_id": "c4fc3fa41dbf9472bf7ee77e50a52529b0102ad7cfa90b5a7e92f5944eea68cb",
+      "conflict_code": "APPENDED",
+      "durable_type_count": 2,
+      "canonical_payload": "{\"rejection_code\":\"NOT_APPLICABLE\",\"retrievalDigest\":\"629493c45616fadbb8a161d5cd6569f2009bb9d921f81d9c9f5ace865e8aefad\"}",
+      "reducer_formula_version": "transfer-metrics-formulas/v1"
+    },
+    {
+      "event_type": "PATTERN_USED_IN_PLANNING",
+      "schema_version": "autoloop.transfer-event/v1",
+      "logical_dedupe_key": {
+        "retrieval_event_id": "e39c9c0f2321069c347bba96b878b2da3db38690b2aaa7f42d592f679a21dd8d",
+        "planning_artifact_digest": "392540edbb993641091b0b1cc2ae2e723de45c160636daa64566d5f01b3355ee"
+      },
+      "idempotency_key": "e3bf0c0991892606d3f8685fe9b2290f4a599ccebac0e05eb641abeba4c9fd55",
+      "payload_digest": "6d4ffb5a6cc8c4fb0c573dd896cafd34d5a397e999f1e656047ceb299fc204ef",
+      "event_id": "ea1ddd6726fb3ee2c91cbf8e250a8cff4289af0919576928c4d69f149bb11973",
+      "first_status": "APPENDED",
+      "retry_status": "ALREADY_SATISFIED",
+      "original_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_event_id": "1865daff6c66c2ca02634bfec51962bcc55222384794fb4f144cbe99e3865be5",
+      "conflict_code": "EVENT_IDEMPOTENCY_CONFLICT",
+      "durable_type_count": 1,
+      "canonical_payload": "{\"artifact_digest\":\"392540edbb993641091b0b1cc2ae2e723de45c160636daa64566d5f01b3355ee\",\"citation_kind\":\"explicit_reference\"}",
+      "reducer_formula_version": "transfer-metrics-formulas/v1"
+    },
+    {
+      "event_type": "PATTERN_USED_IN_VERIFICATION",
+      "schema_version": "autoloop.transfer-event/v1",
+      "logical_dedupe_key": {
+        "retrieval_event_id": "7d588dfd976c00732c530038b87fa68f4712952a108f6989ec23be1adc032099",
+        "verification_artifact_digest": "76985a193c8239a995a24ce46681651291abd04e6150a92e15e7859706f7d1f3"
+      },
+      "idempotency_key": "7599287921e93acf026cad21be18c2569a699a9a37039aaf40495bd9557817e3",
+      "payload_digest": "081c61bfb9312418014037e4ad6190019631f7fa7974c11d70349810632fb0a5",
+      "event_id": "7112e0e25deb5dacd287396173316d5e2343147808459bacecf97e04ebbc9b64",
+      "first_status": "APPENDED",
+      "retry_status": "ALREADY_SATISFIED",
+      "original_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_event_id": "98031cb4b1f8a32b9c82195ca7d50429d10607674c1d863bccae47ca07d5f96c",
+      "conflict_code": "EVENT_IDEMPOTENCY_CONFLICT",
+      "durable_type_count": 1,
+      "canonical_payload": "{\"artifact_digest\":\"76985a193c8239a995a24ce46681651291abd04e6150a92e15e7859706f7d1f3\",\"citation_kind\":\"explicit_reference\"}",
+      "reducer_formula_version": "transfer-metrics-formulas/v1"
+    },
+    {
+      "event_type": "OUTCOME_OBSERVED",
+      "schema_version": "autoloop.transfer-event/v1",
+      "logical_dedupe_key": "exec-gold-OUTCOME_OBSERVED",
+      "idempotency_key": "b8e5272d638ea44ee2a76e4d19eda9dfcc0d3b239e6047e53b1b969a596dda5d",
+      "payload_digest": "586c67a72dcead1fffbdda8113954dd38d4c867033c611e61b8b2846259882ef",
+      "event_id": "a6863b5c6d419af058111fd99e0f8b0b9ba8f2a0126838f21be4d4ccd9bd2739",
+      "first_status": "APPENDED",
+      "retry_status": "ALREADY_SATISFIED",
+      "original_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_event_id": "9a694b10df4ad62eb55261f8791142e1cd8d46454b7556cd229ed281ca2066dd",
+      "conflict_code": "EVENT_IDEMPOTENCY_CONFLICT",
+      "durable_type_count": 1,
+      "canonical_payload": "{\"evidence_manifest_digest\":\"82be564a3be02d82825dc0c36dd8b7a27748b9037893655bcf458c3c057f254e\",\"final\":\"PASS\",\"hold_code\":null,\"repair_attempts\":0}",
+      "reducer_formula_version": "transfer-metrics-formulas/v1"
+    },
+    {
+      "event_type": "TRANSFER_ADJUDICATED",
+      "schema_version": "autoloop.transfer-event/v1",
+      "logical_dedupe_key": {
+        "subject_event_id": "d704e26715fdc67d57ce34ec6b5d24a3ab6f43d54024cac5017b3d0b4567e562",
+        "adjudicator_identity": "rev-1",
+        "attribution_grade": "C"
+      },
+      "idempotency_key": "0a0c3da1234f30f4e85cfa5136608d8b87e03109ecb986ad0ed9c5ea16248809",
+      "payload_digest": "85b2989b6e29217f8430a8c8c787d9f530a893581316a07d5fbcb2d47c0c96fd",
+      "event_id": "e4cfe57effa75483a65386b851f5db1c191669c215cd006bac6b68afe048487c",
+      "first_status": "APPENDED",
+      "retry_status": "ALREADY_SATISFIED",
+      "original_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_event_id": "56425dd6a794df601eb9b16c94f8eae698de560f55de89e80e6e93ee382f8e92",
+      "conflict_code": "EVENT_IDEMPOTENCY_CONFLICT",
+      "durable_type_count": 1,
+      "canonical_payload": "{\"adjudicator_role\":\"reviewer\",\"attribution_grade\":\"C\",\"benefit_claimed\":true,\"counterfactual_digest\":\"09bc2ff0454146d041d409b5d391483428aa5356d2a81ab3b73c96917c156853\",\"detected_earlier\":null,\"overlay_applicability\":\"APPLICABLE\",\"unnecessary_gate\":null}",
+      "reducer_formula_version": "transfer-metrics-formulas/v1"
+    },
+    {
+      "event_type": "PATTERN_DEMOTED",
+      "schema_version": "autoloop.transfer-event/v1",
+      "logical_dedupe_key": {
+        "pattern_id": "pat-gold-PATTERN_DEMOTED",
+        "generation": 0,
+        "lifecycle_event_digest": "0a3fcfcbeb9d776b482e75028fdb63c59cd1c43a02eeb30f385157f400f34a7b"
+      },
+      "idempotency_key": "b90a93c6a454b63f06130eb2a9adaabc725db7d9168762edcddcde26d01b3f4d",
+      "payload_digest": "d8f62d6b9c6ab47c74ac1c18e510f8e2ef97656c8e29d51bc7ac203c8e661f32",
+      "event_id": "8bbb1fe5cef9625ff2e47993cd77411b4403e6cd6b7585fd4889353d8026ae88",
+      "first_status": "APPENDED",
+      "retry_status": "ALREADY_SATISFIED",
+      "original_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_event_id": "09285f41129c53b25fe23bff3ba6db86e1ff4f975f47bada78346adff4319b36",
+      "conflict_code": "EVENT_IDEMPOTENCY_CONFLICT",
+      "durable_type_count": 1,
+      "canonical_payload": "{\"applicability_digest\":\"6f487629045525d614023504c8c4bf4cd459c87356a91db6344d5892757d657e\",\"lifecycle_event_digest\":\"0a3fcfcbeb9d776b482e75028fdb63c59cd1c43a02eeb30f385157f400f34a7b\",\"lifecycle_state\":\"DEMOTED\",\"mechanism_digest\":\"8c4dc3d1745fd7c123e70823678fcddb0cd34306ebf81cf8d793986d500cc741\"}",
+      "reducer_formula_version": "transfer-metrics-formulas/v1"
+    },
+    {
+      "event_type": "PATTERN_ARCHIVED",
+      "schema_version": "autoloop.transfer-event/v1",
+      "logical_dedupe_key": {
+        "pattern_id": "pat-gold-PATTERN_ARCHIVED",
+        "generation": 0,
+        "lifecycle_event_digest": "c9e54af9e939f89584e59ba705276399d0f95a72b920e6f905e74858d7be4756"
+      },
+      "idempotency_key": "8d26ef6f811d78af2afd659fa103bf19acf05fa2f00f0050081451361a764dbe",
+      "payload_digest": "c50fbe16af7e424f41cbe74e9abb60bb9b46cdb8677b863bdfec39ee5e14d5d3",
+      "event_id": "d92b28c7c3f703bc512f8adebac4a6943a77b327c583faa618753693a05c9eae",
+      "first_status": "APPENDED",
+      "retry_status": "ALREADY_SATISFIED",
+      "original_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_event_id": "fad8dad31c352b94a4fc9befa7b5f083618f608d09a1bef393683fd46bfe7d39",
+      "conflict_code": "EVENT_IDEMPOTENCY_CONFLICT",
+      "durable_type_count": 1,
+      "canonical_payload": "{\"applicability_digest\":\"4e1a5fd53067cc3b1835a91f9deeda7367236e2977f225102625d685fe9e23b3\",\"lifecycle_event_digest\":\"c9e54af9e939f89584e59ba705276399d0f95a72b920e6f905e74858d7be4756\",\"lifecycle_state\":\"ARCHIVED\",\"mechanism_digest\":\"1e122e91f9ebe477e0c8c82f8bd9367361bb683527b60b970f12694e911a6cb2\"}",
+      "reducer_formula_version": "transfer-metrics-formulas/v1"
+    },
+    {
+      "event_type": "PATTERN_REMOVED",
+      "schema_version": "autoloop.transfer-event/v1",
+      "logical_dedupe_key": {
+        "pattern_id": "pat-gold-PATTERN_REMOVED",
+        "generation": 0,
+        "lifecycle_event_digest": "af727f86ff6df1af6961670492ec6ca972832a7d84b7830ed7d27519e67c9cf7"
+      },
+      "idempotency_key": "2bb711ef8896a5930567ef39f7d6d8d07f25ac1568317772a68818a3af6aa220",
+      "payload_digest": "f216d2c87be17173aa8cd562bb62b856e9a4f44ef300428cc366b2278274d3f9",
+      "event_id": "066cf88a3dcdac50b3712a33f0c21e27460efd1b4ed2a1cc4d4c38f0853581ac",
+      "first_status": "APPENDED",
+      "retry_status": "ALREADY_SATISFIED",
+      "original_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_event_id": "2eb62af2b7b5fc8f1271593ab2fbb03e112e14a1c238db6c3bf9dfebe2efa520",
+      "conflict_code": "EVENT_IDEMPOTENCY_CONFLICT",
+      "durable_type_count": 1,
+      "canonical_payload": "{\"applicability_digest\":\"3e75022c0fb5e2f2f3c6b4ea07dec0c7026f237c762bb5fef73496845f5a0902\",\"lifecycle_event_digest\":\"af727f86ff6df1af6961670492ec6ca972832a7d84b7830ed7d27519e67c9cf7\",\"lifecycle_state\":\"REMOVED\",\"mechanism_digest\":\"54d271f6d81d04ac1eec36b2c2b51dcd18d93734b24e66a2143bfa9a9daef2a7\"}",
+      "reducer_formula_version": "transfer-metrics-formulas/v1"
+    },
+    {
+      "event_type": "STALE_PATTERN_REJECTED",
+      "schema_version": "autoloop.transfer-event/v1",
+      "logical_dedupe_key": {
+        "pattern_id": "pat-gold-STALE_PATTERN_REJECTED",
+        "generation": 0,
+        "retrievalDigest": "43734eb87637bd144ec6b0e2ae79f16ecee10eb76055a1acbe31b79a0724d718"
+      },
+      "idempotency_key": "53aef0c3f189df2ae2a0a3bfbf63400a25bfb8e3df7651eb3398be179b90eed3",
+      "payload_digest": "758ddfeb79f14df1bae8cabb01ffa6901130dd8d5834a0c7acb2aaa1d05f1204",
+      "event_id": "044cbc89e5fcc80c954a64155fc076da17400e7ba6eb7f2f10b4261033304687",
+      "first_status": "APPENDED",
+      "retry_status": "ALREADY_SATISFIED",
+      "original_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_event_id": "a76851d16b38c4dfd9705a1627ebbe0a64d68167a182cc8302d8ba97a2273f07",
+      "conflict_code": "EVENT_IDEMPOTENCY_CONFLICT",
+      "durable_type_count": 1,
+      "canonical_payload": "{\"rejection_code\":\"STALE_GENERATION\",\"retrievalDigest\":\"43734eb87637bd144ec6b0e2ae79f16ecee10eb76055a1acbe31b79a0724d718\"}",
+      "reducer_formula_version": "transfer-metrics-formulas/v1"
+    },
+    {
+      "event_type": "ROLLBACK_OBSERVED",
+      "schema_version": "autoloop.transfer-event/v1",
+      "logical_dedupe_key": {
+        "pattern_id": "pat-gold-ROLLBACK_OBSERVED",
+        "from_generation": 1,
+        "to_generation": 0
+      },
+      "idempotency_key": "2b39b4199e304d2435e4f542abd64fc34a0817b30e0167d54ad06915cb018f8f",
+      "payload_digest": "5adc81ceea3e8764e47a7fd0b64d9c9c10f8a4c5b223cf38f800d0e1bc7c3a7e",
+      "event_id": "ff183c36afea386d7b34a2d0c844543ba157522094f3e38245f559743da1c372",
+      "first_status": "APPENDED",
+      "retry_status": "ALREADY_SATISFIED",
+      "original_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_recorded_at": "2026-08-01T00:00:10.000Z",
+      "retry_event_id": "10fda0add453bdfb1efbb8c7234d2d2460aa8a65734128fc96732151ccd88832",
+      "conflict_code": "EVENT_IDEMPOTENCY_CONFLICT",
+      "durable_type_count": 1,
+      "canonical_payload": "{\"from_generation\":1,\"reason_code\":\"REGRESSION\",\"to_generation\":0}",
+      "reducer_formula_version": "transfer-metrics-formulas/v1"
+    }
+  ]
+}

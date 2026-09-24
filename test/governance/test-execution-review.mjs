@@ -49,8 +49,9 @@ import {
   runStateDrivenCloseout,
 } from "../../src/governance/review-bundle.mjs";
 import { CLOSEOUT_STATE_SCHEMA, closeoutStatePath } from "../../src/governance/closeout-state.mjs";
+import { fileURLToPath } from "node:url";
 
-const REPO_A = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO_A = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 const ROOT = join(tmpdir(), `rsl2-exec-review-${process.pid}-${Date.now()}`);
 let SURFACE;

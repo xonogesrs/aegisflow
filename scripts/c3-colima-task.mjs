@@ -7,7 +7,7 @@
 //
 // Usage:
 //   node scripts/c3-colima-task.mjs --card ./task-card.json [--profile autoloop-c3]
-//                                   [--scratch ~/autoloop-runtime] [--repo /Volumes/NVM2T/Development/repos/autoloop]
+//                                   [--scratch <dir>] [--repo <checkout>]
 //                                   [--out <dir>] [--timeout-ms 90000]
 //
 //   --card path.json       task card with { id?, executionId?, runtime: {...} }
@@ -16,7 +16,7 @@
 //                          runtime.expect.stdoutContains = [...markers] for the
 //                          deterministic reviewer.
 //   --out <dir>            where the structured result JSON is written
-//                          (default: <repo>/../../Desktop/AutoLoop-Review/governance/c3-results
+//                          (default: $AUTOLOOP_C3_RESULTS_DIR, else <AUTOLOOP_HOME>/review/governance/c3-results
 //                          falls back to ./c3-results)
 //
 // Exit code 0 iff final === PASS; 1 otherwise.
@@ -25,6 +25,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { runColimaTask } from "../src/runtime/colima-pipeline.mjs";
+import { fileURLToPath } from "node:url";
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name);
@@ -34,10 +35,10 @@ function arg(name, fallback) {
 const HOME = homedir();
 const cardPath = arg("--card", null);
 const profile = arg("--profile", "autoloop-c3");
-const repoPath = arg("--repo", "/Volumes/NVM2T/Development/repos/autoloop");
+const repoPath = arg("--repo", fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, ""));
 const scratchRoot = arg("--scratch", `${HOME}/autoloop-runtime`);
 const timeoutMs = Number(arg("--timeout-ms", "90000"));
-const outDir = arg("--out", "/Users/zhengfengqing/Desktop/AutoLoop-Review/governance/c3-results");
+const outDir = arg("--out", join(process.env.AUTOLOOP_C3_RESULTS_DIR ?? join(homedir(), ".autoloop", "review", "governance", "c3-results")));
 
 if (!cardPath) {
   console.error("usage: node scripts/c3-colima-task.mjs --card <task-card.json> [--profile autoloop-c3] [--repo ...] [--scratch ...] [--out ...] [--timeout-ms ...]");

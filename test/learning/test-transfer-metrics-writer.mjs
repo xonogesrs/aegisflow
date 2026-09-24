@@ -12,11 +12,9 @@ import { fileURLToPath } from "node:url";
 import { TRANSFER_CODES } from "../../src/learning/transfer-metrics/schema.mjs";
 import { TransferMetricsWriter } from "../../src/learning/transfer-metrics/writer.mjs";
 import { readLog, lastCompleteEvent, LOG_FILE_NAME } from "../../src/learning/transfer-metrics/log.mjs";
-import {
-  FIXTURE, makeIdentities, makeEvent, createTestWriter, createTestRoot, expectCode, hex, iso, makeBinder,
-} from "../../src/learning/transfer-metrics/fixtures.mjs";
+import { FIXTURE, makeIdentities, makeEvent, createTestWriter, createTestRoot, expectCode, hex, iso, makeBinder, IDENTITY_ROOT } from "../../src/learning/transfer-metrics/fixtures.mjs";
 
-const REPO = fileURLToPath(new URL("../..", import.meta.url));
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 test("T8 same-key same-payload retry is AlreadySatisfied", () => {
   const ids = makeIdentities("t8");
@@ -223,7 +221,7 @@ test("T18 symlink / path escape / non-regular target rejected", () => {
     allowFixture: true,
   }), TRANSFER_CODES.PATH_UNSAFE);
   expectCode(() => new TransferMetricsWriter({
-    transferMetricsRoot: join("/Volumes/NVM2T/Development/tmp", "..", "..", "..", "etc"),
+    transferMetricsRoot: join(IDENTITY_ROOT, "..", "..", "..", "etc"),
     identityBinder: makeBinder(ids),
     allowFixture: true,
   }), TRANSFER_CODES.PATH_UNSAFE);

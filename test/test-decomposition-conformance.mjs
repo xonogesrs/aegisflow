@@ -15,7 +15,7 @@ import { validateDecomposition } from "../src/validate-decomposition.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, "..");
 
-const EVAL_CASES_PATH = join(REPO_ROOT, "autoloop-analysis", "task-decomposition-eval-cases.json");
+const EVAL_CASES_PATH = join(REPO_ROOT, "test", "fixtures", "task-decomposition-eval-cases.json");
 const EVAL_SCHEMA_PATH = join(REPO_ROOT, "src", "schema", "task-decomposition-eval-cases.schema.json");
 const FIXTURES_DIR = join(HERE, "fixtures", "decomposition-outputs");
 const EXPECTED_CASE_IDS = ["E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10", "E11", "E12"];

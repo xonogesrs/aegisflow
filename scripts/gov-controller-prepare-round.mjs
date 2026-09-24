@@ -20,7 +20,7 @@
 // self-contradictory record (finite caps that differ), and refuses to write
 // history whose repair round exceeds the effective cap.
 //
-//   --bundle-dir      fixed bundle directory (default ~/Desktop/AutoLoop-Review)
+//   --bundle-dir      fixed bundle directory (default: the review surface)
 //   --authority-file  the card's authority record (REQUIRED; source of the cap)
 //   --card-id         parent card id
 //   --findings-file   the PREVIOUS round's findings text (Controller input)

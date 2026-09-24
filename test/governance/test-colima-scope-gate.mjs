@@ -23,6 +23,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   classifyColimaScope,
   assertColimaAllAuthorized,
@@ -37,7 +38,7 @@ import {
   buildGraphCloseoutEvidenceSnapshot,
 } from "../../src/governance/review-bundle.mjs";
 
-const REPO = "/Volumes/NVM2T/Development/repos/autoloop";
+const REPO = fileURLToPath(new URL("../..", import.meta.url)).replace(/[\/]$/, "");
 
 const docsOnly = { authorizedScope: ["docs/pi-graph-output/x/"] };
 const memoryOnly = { authorizedScope: ["src/memory/", "test/memory/", "docs/pi-graph-output/x/"] };

@@ -17,6 +17,8 @@
 
 import { homedir } from "node:os";
 import { resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+import { resolveReviewArchive, resolveReviewSurface } from "../shared/autoloop-paths.mjs";
 
 export const VERIFICATION_SCOPE_HOLDS = Object.freeze({
   UNBOUNDED: "VERIFICATION_SCOPE_UNBOUNDED",
@@ -38,19 +40,18 @@ function forbiddenRoots() {
  * Authorized bounded roots for production verification. Defaults to this
  * repo and the two known external-review surface dirs (mirrors
  * externalReviewSurfaceDir/externalReviewArchiveDir in review-bundle.mjs —
- * duplicated here rather than imported, to keep this module
- * dependency-free for use from ad-hoc/bootstrap contexts).
+ * both resolve through src/shared/autoloop-paths.mjs, the single source of
+ * truth for surface locations, so the guard and the deliverer can never
+ * disagree about where the surface is).
  *
  * Additional roots may be passed explicitly by callers that know their own
  * authorized scope (e.g. a card's own outDir); nothing here infers roots
  * from traversal.
  */
-export function defaultAuthorizedRoots() {
-  const repoRoot = resolve(new URL("../..", import.meta.url).pathname);
-  const reviewSurface = process.env.AUTOLOOP_REVIEW_SURFACE
-    ?? resolve(homedir(), "Desktop", "AutoLoop-Review", "Current");
-  const reviewArchive = process.env.AUTOLOOP_REVIEW_ARCHIVE
-    ?? resolve(homedir(), "Desktop", "AutoLoop-Review", "Archive");
+export function defaultAuthorizedRoots({ env = process.env } = {}) {
+  const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+  const reviewSurface = resolveReviewSurface({ env });
+  const reviewArchive = resolveReviewArchive({ env });
   return Object.freeze([resolve(repoRoot), resolve(reviewSurface), resolve(reviewArchive)]);
 }
 
@@ -74,7 +75,7 @@ export function checkVerificationRoot(requestedRoot, { authorizedRoots = default
   const resolved = resolve(requestedRoot.replace(/^~(?=$|\/)/, homedir()));
 
   // Authorized roots are explicit, narrow exceptions carved out of broader
-  // forbidden roots (e.g. ~/Desktop/AutoLoop-Review/Current lives under
+  // forbidden roots (e.g. an authorized review surface may live under
   // $HOME but is a known single-purpose surface, not a home-wide scan).
   // A request lands within scope only if it resolves inside one of these.
   const authorized = authorizedRoots.map((r) => resolve(r));
