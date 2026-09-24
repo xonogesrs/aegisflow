@@ -31,6 +31,7 @@ import { C2dHoldError } from "../c2d/fs-atomic.mjs";
 import { digestOf } from "../canonical-digest.mjs";
 import { compareMetric } from "./fitness.mjs";
 import { tripCircuitBreaker, EVOLUTION_TRIGGER_STATE_SCHEMA } from "./trigger.mjs";
+import { deactivateStrategyValue } from "./strategy-store.mjs";
 
 export const EVOLUTION_CANARY_SCHEMA = "autoloop.evolution-canary/v1";
 
@@ -96,7 +97,15 @@ function writeCanaryRecord(storeRoot, record) {
  * @param {object} p.baselineMetric — the pre-promotion metric observation
  */
 export function openCanaryWindow({ storeRoot, candidate, promotion, fitness, windowMs = DEFAULT_CANARY_WINDOW_MS, baselineMetric }) {
-  if (promotion?.branch !== `evolution/${candidate.candidate_id}`) {
+  const isStrategy = promotion?.kind === "AGENT_STRATEGY";
+  if (isStrategy) {
+    // A strategy promotion binds a RUNTIME strategy surface, not a git branch:
+    // the rollback action is deactivation (strategy-store.mjs), so the window
+    // must name the surface and the activation generation instead.
+    if (promotion.candidate_id !== candidate.candidate_id || !promotion.surface) {
+      fail(CANARY_HOLD.EVIDENCE_INVALID, "strategy promotion does not bind this candidate's surface");
+    }
+  } else if (promotion?.branch !== `evolution/${candidate.candidate_id}`) {
     fail(CANARY_HOLD.EVIDENCE_INVALID, "promotion does not bind this candidate's branch");
   }
   const w = Math.max(Number(windowMs) || 0, CANARY_WINDOW_FLOOR_MS);
@@ -105,9 +114,16 @@ export function openCanaryWindow({ storeRoot, candidate, promotion, fitness, win
     version: 1,
     candidate_id: candidate.candidate_id,
     candidate_digest: candidate.candidate_digest,
-    branch: promotion.branch,
-    commit_oid: promotion.commit_oid,
-    baseline_head: promotion.parent,
+    promotion_kind: isStrategy ? "AGENT_STRATEGY" : "SOURCE",
+    branch: isStrategy ? null : promotion.branch,
+    commit_oid: isStrategy ? null : promotion.commit_oid,
+    baseline_head: isStrategy ? (promotion.baseline_head ?? null) : promotion.parent,
+    strategy_surface: isStrategy ? promotion.surface : null,
+    strategy_dimension: isStrategy ? (promotion.dimension ?? null) : null,
+    strategy_task_class: isStrategy ? (promotion.task_class ?? null) : null,
+    strategy_from_value: isStrategy ? (promotion.from_value ?? null) : null,
+    strategy_to_value: isStrategy ? (promotion.to_value ?? null) : null,
+    strategy_generation: isStrategy ? (promotion.generation ?? null) : null,
     fitness_digest: fitness.fitness_digest,
     baseline_metric: baselineMetric ?? null,
     opened_at: new Date().toISOString(),
@@ -164,7 +180,15 @@ export function evaluateCanary({ storeRoot, candidate, postEvents = [], postMuta
     if (live !== record.declared_contract_digest) reasons.push("semantic_drift");
   }
   // 5. target metric deterioration vs the canary baseline.
-  if (record.baseline_metric?.value != null) {
+  // The only post-promotion quantity measurable from durable evidence is
+  // provider-reported OCCUPANCY, so this check is meaningful only when the
+  // canary's baseline metric IS that quantity. Comparing an unrelated metric's
+  // baseline (a failure/repair count, or a strategy success rate) against an
+  // occupancy average is a category error that could roll back a healthy
+  // promotion — so the check applies to the matching metric only, and the
+  // other criteria (regression / repeated failure / crash / drift) carry the
+  // rest.
+  if (record.baseline_metric?.value != null && /occupancy|wall_duration_ms|provider_occupancy/.test(String(record.baseline_metric.metric ?? ""))) {
     const usages = postEvents.filter((e) => e.event_type === "PROVIDER_USAGE_OBSERVED").map((e) => e.payload?.occupancy).filter((v) => typeof v === "number");
     if (usages.length >= 2) {
       const avg = usages.reduce((a, v) => a + v, 0) / usages.length;
@@ -188,6 +212,39 @@ export function evaluateCanary({ storeRoot, candidate, postEvents = [], postMuta
 export function rollbackCandidate({ repoRoot, storeRoot, candidate }) {
   const record = readCanary(storeRoot, candidate.candidate_id);
   if (!record) fail(CANARY_HOLD.EVIDENCE_INVALID, "no canary record to roll back");
+
+  // STRATEGY ROLLBACK: a strategy promotion changed a runtime policy value, so
+  // the rollback DEACTIVATES that value (restoring the recorded previous one).
+  // No ref, no history, no worktree is involved — the strategy store is the
+  // only durable state, and deactivation is idempotent.
+  if (record.promotion_kind === "AGENT_STRATEGY") {
+    const d = deactivateStrategyValue({
+      storeRoot,
+      taskClass: record.strategy_task_class,
+      dimension: record.strategy_dimension,
+    });
+    record.rolled_back = true;
+    record.verdict = "ROLLED_BACK";
+    record.rolled_back_at = new Date().toISOString();
+    record.rollback = {
+      kind: "strategy_deactivation",
+      surface: record.strategy_surface,
+      dimension: record.strategy_dimension,
+      task_class: record.strategy_task_class,
+      deactivated: d.deactivated === true,
+      restored_to: d.deactivated ? (record.strategy_from_value ?? null) : null,
+      generation: d.generation ?? null,
+    };
+    writeCanaryRecord(storeRoot, record);
+    return {
+      rolled_back: true,
+      kind: "strategy_deactivation",
+      surface: record.strategy_surface,
+      restored_to: record.rollback.restored_to,
+      deactivated: record.rollback.deactivated,
+    };
+  }
+
   const branch = record.branch;
   // The previous known-good is the pre-promotion baseline.
   const prev = gitRevParse(repoRoot, `refs/heads/${branch}`);

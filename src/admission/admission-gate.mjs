@@ -399,6 +399,10 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
       evidenceRoot: runnerOpts.persistence?.root ?? null,
       executionId: result?.executionId ?? runnerOpts.executionId ?? null,
       graphRunId: telemetryRunId,
+      // The frozen admission is the ONLY provider authority: the consumer reads
+      // the admitted provider_binding from it for attribution (§A) and never
+      // re-derives or replaces it (§E).
+      admission,
     });
   } catch {
     // Evolution observation/consumption failure is observability + scheduling

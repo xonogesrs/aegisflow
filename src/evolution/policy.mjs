@@ -130,6 +130,17 @@ export function validatePolicyShape(p) {
   if (!errors.includes("issued_at_invalid") && !errors.includes("expires_at_invalid") && Date.parse(p.expires_at) <= Date.parse(p.issued_at)) errors.push("expiry_ordering_invalid");
   if (p.generation !== undefined && (!Number.isInteger(p.generation) || p.generation < 0)) errors.push("generation_invalid");
   if (!p.forbidden_risk_classes || !Array.isArray(p.forbidden_risk_classes) || !HIGH_RISK_CLASSES.every((c) => p.forbidden_risk_classes.includes(c))) errors.push("forbidden_risk_classes_incomplete");
+  if (p.strategy_dimensions_allowed !== undefined) {
+    if (!Array.isArray(p.strategy_dimensions_allowed)) errors.push("strategy_dimensions_allowed_invalid");
+    else {
+      const seen = new Set();
+      for (const d of p.strategy_dimensions_allowed) {
+        if (typeof d !== "string" || !STRATEGY_DIMENSION_IDS.includes(d)) errors.push(`strategy_dimension_unknown:${String(d)}`);
+        else if (seen.has(d)) errors.push(`strategy_dimension_duplicate:${d}`);
+        else seen.add(d);
+      }
+    }
+  }
   if (!errors.length && p.policy_id !== digestOf({ ...p, policy_id: undefined, policy_digest: undefined })) errors.push("policy_id_mismatch");
   if (!errors.length && computePolicyDigest(p) !== p.policy_digest) errors.push("policy_digest_mismatch");
   return errors;
@@ -163,6 +174,12 @@ export function createEvolutionPolicy(policyRoot, input) {
     expires_at: input.expires_at,
     generation: input.generation ?? 0,
     forbidden_risk_classes: [...HIGH_RISK_CLASSES],
+    // AGENT-STRATEGY authority is OPT-IN and operator-issued: absent means a
+    // strategy candidate is refused (fail closed), so no existing policy
+    // silently gains agent-strategy authority from a code change.
+    ...(Array.isArray(input.strategy_dimensions_allowed)
+      ? { strategy_dimensions_allowed: [...new Set(input.strategy_dimensions_allowed)] }
+      : {}),
   };
   const policy_id = digestOf({ ...identity, policy_id: undefined, policy_digest: undefined });
   const draft = { ...identity, policy_id };
@@ -213,6 +230,32 @@ export function readEvolutionPolicy(policyRoot, { allowExpired = false } = {}) {
  * @param {object} candidate — derived candidate (see candidate.mjs)
  * @returns {{ riskClass: "LOW"|"MEDIUM"|"HIGH", reasons: string[] }}
  */
+
+/** The strategy-surface scheme. An AGENT_STRATEGY candidate names a runtime
+ *  strategy surface, not a file path — it can never be a source-mutation
+ *  scope, and classifying its surface by path markers would be meaningless. */
+export const STRATEGY_SURFACE_SCHEME = "strategy://";
+
+/** The AGENT-STRATEGY dimensions a policy may preauthorize (§C). Kept literal
+ *  here because this module must not depend on the strategy store (which
+ *  imports admission policy-projection). */
+export const STRATEGY_DIMENSION_IDS = Object.freeze([
+  "MODEL_ROUTING", "DECOMPOSITION", "CONTEXT_ALLOCATION",
+  "RETRY_REPAIR", "FANOUT_PARALLELISM", "TOOL_SELECTION", "PROMPT_EVOLUTION",
+]);
+
+/** The strategy dimension a surface names: `strategy://<task class>/<DIM>`. */
+export function strategyDimensionOfSurface(p) {
+  if (!isStrategySurface(p)) return null;
+  const parts = p.slice(STRATEGY_SURFACE_SCHEME.length).split("/");
+  const dim = parts[parts.length - 1] ?? null;
+  return STRATEGY_DIMENSION_IDS.includes(dim) ? dim : null;
+}
+
+export function isStrategySurface(p) {
+  return typeof p === "string" && p.startsWith(STRATEGY_SURFACE_SCHEME);
+}
+
 export function classifyCandidateRisk(candidate) {
   const reasons = [];
   const scope = [...(candidate.affected_scope ?? [])];
@@ -222,6 +265,10 @@ export function classifyCandidateRisk(candidate) {
     "src/memory/writeback/", "src/learning/lifecycle/",
   ];
   for (const p of scope) {
+    // A strategy surface is not a path: it is validated by its own bounded
+    // schema (strategy-store.mjs) and its risk is classified by
+    // classifyStrategyRisk. Path markers do not apply.
+    if (isStrategySurface(p)) continue;
     for (const m of highScopeMarkers) {
       if (p === m.replace(/\/$/, "") || p.startsWith(m)) {
         reasons.push(`high_scope:${p} matches ${m}**`);
@@ -274,12 +321,35 @@ export function authorizeUnderPolicy({ policy, classification, mutationPaths, ba
   // Scope containment: every mutation path inside policy scope, none in
   // forbidden patterns. Same glob conventions as mutation-scope.mjs.
   for (const path of mutationPaths) {
+    // A strategy surface is not a file path: it is a runtime strategy value,
+    // validated against the bounded strategy schema (strategy-store.mjs) and
+    // risk-classified by classifyStrategyRisk. Forbidden-path globs (governance
+    // /admission/evolution/...) cannot apply to it in either direction.
+    if (isStrategySurface(path)) {
+      const dim = strategyDimensionOfSurface(path);
+      if (dim === null) {
+        throw new C2dHoldError(EVOLUTION_POLICY_HOLD.SCOPE_OUTSIDE_POLICY, `malformed strategy surface: ${path}`);
+      }
+      if (!Array.isArray(policy.strategy_dimensions_allowed) || !policy.strategy_dimensions_allowed.includes(dim)) {
+        throw new C2dHoldError(
+          EVOLUTION_POLICY_HOLD.SCOPE_OUTSIDE_POLICY,
+          `strategy dimension ${dim} is not preauthorized by this policy (strategy_dimensions_allowed)`,
+        );
+      }
+      continue;
+    }
     if (!matchesGlob(path, policy.scope_patterns)) {
       throw new C2dHoldError(EVOLUTION_POLICY_HOLD.SCOPE_OUTSIDE_POLICY, `path outside policy scope: ${path}`);
     }
     if (matchesGlob(path, policy.forbidden_patterns)) {
       throw new C2dHoldError(EVOLUTION_POLICY_HOLD.SCOPE_OUTSIDE_POLICY, `path matches forbidden pattern: ${path}`);
     }
+  }
+  // A strategy candidate must carry ONLY strategy surfaces (never a mix that
+  // could smuggle a source path past the strategy classification).
+  const strategySurfaces = mutationPaths.filter(isStrategySurface);
+  if (strategySurfaces.length > 0 && strategySurfaces.length !== mutationPaths.length) {
+    throw new C2dHoldError(EVOLUTION_POLICY_HOLD.SCOPE_OUTSIDE_POLICY, "mixed strategy/source scope is not a valid candidate scope");
   }
   // Resource budget.
   const b = policy.budget;

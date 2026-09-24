@@ -555,9 +555,14 @@ test("R9 a qualified signal WITHOUT a bounded evidence plan records the trigger 
   const drained = await drainFor(result.evolutionDisposition.trigger_id, { timeoutMs: 120000 });
   assert.equal(drained.length, 1, JSON.stringify(drained));
   const outcome = drained[0];
-  // ...but the loop fails closed at derivation: nothing was mutated or promoted.
+  // ...but the loop fails closed at derivation: nothing was mutated or
+  // promoted. (AGENT_STRATEGY_EVOLUTION_COMPLETION_1 added the natural plan
+  // producer ahead of this stage, so a planless signal is now reported by the
+  // producer as INCONCLUSIVE — insufficient attributed evidence — rather than
+  // as UNSUPPORTED by the source derivation. Both are the same invariant:
+  // a planless signal yields NO candidate and mutates nothing.)
   assert.equal(outcome.loop_verdict, "HOLD");
-  assert.match(outcome.cycle.hold_code ?? "", /EVOLUTION_LOOP_CANDIDATE_UNSUPPORTED/);
+  assert.match(outcome.cycle.hold_code ?? "", /EVOLUTION_LOOP_CANDIDATE_(UNSUPPORTED|INCONCLUSIVE)/);
   assert.ok(!existsSync(candidateStorePath(store)) || readdirSync(candidateStorePath(store)).filter((f) => f.endsWith(".json")).length === 0, "no candidate fabricated");
   assert.equal(git(repo, ["status", "--porcelain"]), "");
   assert.equal(git(repo, ["branch", "--list", "evolution/*"]), "");

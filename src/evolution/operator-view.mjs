@@ -27,6 +27,8 @@ import {
   candidateStorePath, derivationIndexPath,
 } from "./candidate.mjs";
 import { evolutionPolicyPath, EVOLUTION_POLICY_SCHEMA } from "./policy.mjs";
+import { strategyPolicyView } from "./strategy-store.mjs";
+import { strategyMemoryView } from "./strategy-memory.mjs";
 
 export const EVOLUTION_OPERATOR_REPORT_SCHEMA = "autoloop.evolution-operator-report/v1";
 
@@ -85,6 +87,10 @@ export function buildEvolutionReport({ storeRoot, env = process.env } = {}) {
     reviews: {},
     canary: {},
     rollbacks: [],
+    // AGENT STRATEGY EVOLUTION (read-only): the active strategy policy and the
+    // bounded performance memory the strategy candidates are derived from.
+    strategy: { generation: 0, task_classes: [], active: {}, history: [], allowed_canonical_tool_ids: [] },
+    strategyMemory: { total: 0, by_task_class: {}, latest: [] },
     diagnostics: [],
   };
   if (!root || !existsSync(root)) {
@@ -183,6 +189,21 @@ export function buildEvolutionReport({ storeRoot, env = process.env } = {}) {
       ? { verdict: canary[c.candidate_id].verdict, rolled_back: canary[c.candidate_id].rolled_back === true, closes_at: canary[c.candidate_id].closes_at }
       : null,
   }));
+  try {
+    const sp = strategyPolicyView(root);
+    report.strategy = {
+      generation: sp.generation,
+      updated_at: sp.updated_at,
+      task_classes: sp.task_classes,
+      active: sp.active,
+      history: sp.history,
+      allowed_canonical_tool_ids: sp.allowed_canonical_tool_ids,
+    };
+  } catch { /* absent/corrupt strategy policy → the empty default stands */ }
+  try {
+    const mv = strategyMemoryView({ storeRoot: root, limit: 16 });
+    report.strategyMemory = { total: mv.total, updated_at: mv.updated_at, by_task_class: mv.by_task_class, latest: mv.latest };
+  } catch { /* absent/corrupt memory → the empty default stands */ }
   report.reviews = Object.fromEntries(Object.entries(reviews).map(([k, v]) => [k, { verdict: v.review_verdict, reviewer: v.reviewer_identity }]));
   report.canary = Object.fromEntries(Object.entries(canary).map(([k, v]) => [k, { verdict: v.verdict, rolled_back: v.rolled_back === true }]));
   report.rollbacks = Object.values(canary).filter((c) => c.rolled_back === true).map((c) => ({
@@ -225,6 +246,14 @@ export function renderEvolutionReportText(report) {
     lines.push("rollbacks:");
     for (const r of report.rollbacks) lines.push(`  ${r.candidate_id} restored to ${r.baseline_head}`);
   }
+  // AGENT STRATEGY EVOLUTION (read-only).
+  lines.push(`strategy policy: generation=${report.strategy.generation}; task classes=${report.strategy.task_classes.length > 0 ? report.strategy.task_classes.join(",") : "none"}`);
+  for (const tc of report.strategy.task_classes) {
+    for (const [dim, a] of Object.entries(report.strategy.active[tc] ?? {})) {
+      lines.push(`  ${tc}/${dim} = ${a.value} (candidate=${a.candidate_id ?? "none"} gen=${a.generation})`);
+    }
+  }
+  lines.push(`strategy memory: ${report.strategyMemory.total} observations; by task class=${JSON.stringify(report.strategyMemory.by_task_class)}`);
   if (report.diagnostics.length > 0) {
     lines.push(`diagnostics (${report.diagnostics.length}):`);
     for (const d of report.diagnostics) lines.push(`  ${d.code}: ${d.detail}`);

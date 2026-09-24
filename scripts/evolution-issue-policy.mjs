@@ -5,6 +5,7 @@
 // operator step that issues the first production evolution policy.
 //
 //   node scripts/evolution-issue-policy.mjs --store <dir> [--scope "src/**"] \
+//     [--strategy-dimensions "MODEL_ROUTING,RETRY_REPAIR"] \
 //     [--expires "2026-10-24T00:00:00.000Z"] [--json]
 //
 // Default production policy (card §B):
@@ -37,7 +38,9 @@ function arg(name) {
 
 const usage = () => {
   console.error("usage:");
-  console.error("  node scripts/evolution-issue-policy.mjs --store <dir> [--scope <glob>] [--scope <glob> ...] [--expires <iso>] [--json]");
+  console.error("  node scripts/evolution-issue-policy.mjs --store <dir> [--scope <glob>] [--scope <glob> ...]");
+  console.error("      [--strategy-dimensions <DIM[,DIM...]>] [--expires <iso>] [--json]");
+  console.error("  --strategy-dimensions is OPT-IN: omitted = the policy preauthorizes NO agent-strategy dimension.");
   process.exit(2);
 };
 
@@ -66,6 +69,29 @@ for (const s of scope_patterns) {
   if (s === "**" || s === "*" || s === "src/**" || s === "src/*") {
     console.error(`EVOLUTION_POLICY_INVALID: unrestricted mutation scope refused: ${s}`);
     process.exit(1);
+  }
+}
+
+// AGENT-STRATEGY authority is OPT-IN (AUTOLOOP_AGENT_STRATEGY_EVOLUTION_
+// COMPLETION_1 §C/J): omitting --strategy-dimensions issues a policy that
+// preauthorizes NO strategy dimension, so agent-strategy adaptation cannot be
+// enabled by implication. Only LOW-risk dimensions are accepted here — the
+// MEDIUM floor (PROMPT_EVOLUTION) is deliberately NOT issuable through this
+// bounded production lane.
+const ALLOWED_STRATEGY_DIMENSIONS = [
+  "MODEL_ROUTING", "DECOMPOSITION", "CONTEXT_ALLOCATION",
+  "RETRY_REPAIR", "FANOUT_PARALLELISM", "TOOL_SELECTION",
+];
+const strategyDimsArg = arg("--strategy-dimensions");
+let strategy_dimensions_allowed;
+if (strategyDimsArg) {
+  strategy_dimensions_allowed = strategyDimsArg.split(",").map((d) => d.trim()).filter(Boolean);
+  for (const d of strategy_dimensions_allowed) {
+    if (!ALLOWED_STRATEGY_DIMENSIONS.includes(d)) {
+      console.error(`EVOLUTION_POLICY_INVALID: strategy dimension not issuable through this lane: ${d}`);
+      console.error(`allowed: ${ALLOWED_STRATEGY_DIMENSIONS.join(",")}`);
+      process.exit(1);
+    }
   }
 }
 
@@ -100,6 +126,7 @@ const input = {
       { cmd: "node", args: ["--check", "src/autoloop.mjs"], timeout_ms: 60000 },
     ],
   },
+  ...(strategy_dimensions_allowed ? { strategy_dimensions_allowed } : {}),
   budget: {
     max_mutation_runs: 4,
     max_wall_clock_ms_per_run: 300000,
@@ -120,6 +147,7 @@ try {
     policy_digest: policy.policy_digest,
     policy_name: policy.policy_name,
     risk_classes_allowed: policy.risk_classes_allowed,
+    strategy_dimensions_allowed: policy.strategy_dimensions_allowed,
     scope_patterns: policy.scope_patterns,
     forbidden_patterns: policy.forbidden_patterns,
     budget: policy.budget,
@@ -130,6 +158,7 @@ try {
     console.log(`status: ${r.status}`);
     console.log(`policy_id: ${summary.policy_id}`);
     console.log(`risk_classes_allowed: ${summary.risk_classes_allowed.join(",")}`);
+    console.log(`strategy_dimensions_allowed: ${policy.strategy_dimensions_allowed ? policy.strategy_dimensions_allowed.join(",") : "(none — no agent-strategy authority)"}`);
     console.log(`scope: ${summary.scope_patterns.join(", ")}`);
     console.log(`expires: ${summary.expires_at}`);
   }

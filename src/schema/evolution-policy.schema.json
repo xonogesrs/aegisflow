@@ -18,6 +18,11 @@
     "policy_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "policy_name": { "type": "string", "minLength": 1 },
     "risk_classes_allowed": { "type": "array", "items": { "enum": ["LOW", "MEDIUM", "HIGH"] } },
+    "strategy_dimensions_allowed": {
+      "description": "AGENT-STRATEGY dimensions this policy preauthorizes. ABSENT = NO strategy authorization (fail closed): an existing policy cannot silently acquire agent-strategy authority.",
+      "type": "array",
+      "items": { "enum": ["MODEL_ROUTING", "DECOMPOSITION", "CONTEXT_ALLOCATION", "RETRY_REPAIR", "FANOUT_PARALLELISM", "TOOL_SELECTION", "PROMPT_EVOLUTION"] }
+    },
     "scope_patterns": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
     "forbidden_patterns": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "allowed_commands": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
