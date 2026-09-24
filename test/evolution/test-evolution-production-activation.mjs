@@ -615,7 +615,7 @@ test("P12 kill switch: SUSPENDED blocks new cycles, leaves NORMAL_OPERATION and 
     runner: journalingRunner(calls, { terminalEvents: heldEvents(1), verdict: "PASS" }),
     persistence: { root: makeEvidenceRoot("p12-ev3"), executionId: `exec_${"f8".padEnd(32, "0").slice(0, 32)}` },
     ir: { phases: [] },
-    evolutionStoreRoot: store,
+    evolution: { storeRoot: store },
   });
   assert.equal(r2.final, "PASS");
   assert.equal(r2.budget.authorized, true);

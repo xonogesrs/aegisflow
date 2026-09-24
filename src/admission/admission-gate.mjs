@@ -41,6 +41,10 @@ import { resolveProductionTelemetryWiring, attachTelemetryDisposition } from "..
 // authority (a fired signal becomes a candidate only through the separate
 // evolution loop entry, never inline in a production run).
 import { observeRunForEvolutionTriggers, attachEvolutionObservation } from "../evolution/production-observer.mjs";
+import {
+  resolveEvolutionProductionConfig,
+  consumeEvolutionObservationForProduction,
+} from "../evolution/production-consumer.mjs";
 
 
 export const PRODUCTION_GATE_HOLDS = Object.freeze({
@@ -366,26 +370,39 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
   if (telemetryResolution.disposition) {
     attachTelemetryDisposition(result, telemetryResolution.disposition);
   }
-  // PRODUCTION ACTIVATION (evolution §C): post-result trigger observation
-  // over the run's durable evidence journal. The observation is read-only
-  // over the journal, kill-switch aware, and fail-open: an observer failure
-  // degrades to an absent/empty observation and NEVER blocks NORMAL_OPERATION.
-  // Only a QUALIFIED signal (≥ the class's minimum evidence count inside its
-  // window) surfaces here; the downstream candidate/mutation pipeline is a
-  // separate entry — a single failure never mutates anything.
+  // EVOLUTION (production activation §C + wiring repair §A): post-result
+  // trigger observation over the run's durable evidence journal, followed by
+  // THE production consumer. The observation is read-only over the journal,
+  // kill-switch aware, and fail-open: an observer failure degrades to an
+  // absent/empty observation and NEVER blocks NORMAL_OPERATION. Only a
+  // QUALIFIED signal (≥ the class's minimum evidence count inside its window)
+  // surfaces here.
+  //
+  // The consumer (§A/§B/§C/§D) then, for a qualified signal ONLY: records the
+  // durable trigger through the existing trigger-state machinery, enforces the
+  // kill switch and single-flight, and SCHEDULES runEvolutionCycle. It is
+  // NEVER awaited — the run envelope below stays authoritative and an
+  // evolution failure can never turn a successful run into HOLD/FAIL.
   try {
-    const evolutionStoreRoot = runnerOpts.evolutionStoreRoot ?? null;
+    const evolutionConfig = resolveEvolutionProductionConfig({ runnerOpts });
     const observation = observeRunForEvolutionTriggers({
       evidenceRoot: runnerOpts.persistence?.root ?? null,
       executionId: result?.executionId ?? runnerOpts.executionId ?? null,
       graphRunId: telemetryRunId,
-      thresholds: runnerOpts.evolutionThresholds ?? {},
-      storeRoot: evolutionStoreRoot,
+      thresholds: evolutionConfig.thresholds,
+      storeRoot: evolutionConfig.storeRoot,
     });
     attachEvolutionObservation(result, observation);
+    result.evolutionDisposition = consumeEvolutionObservationForProduction({
+      observation,
+      config: evolutionConfig,
+      evidenceRoot: runnerOpts.persistence?.root ?? null,
+      executionId: result?.executionId ?? runnerOpts.executionId ?? null,
+      graphRunId: telemetryRunId,
+    });
   } catch {
-    // Evolution observation failure is observability only (card §C: the
-    // observer must never block NORMAL_OPERATION).
+    // Evolution observation/consumption failure is observability + scheduling
+    // only: it must never block or alter NORMAL_OPERATION (card §C).
   }
   // Finalize + reconcile（NEG13）: the runner's runtime evidence and the
   // ledger MUST agree; divergence is a HOLD, never a warning-only event.

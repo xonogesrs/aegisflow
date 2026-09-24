@@ -110,3 +110,177 @@ Post-activation operator protocol: LOW-risk optimization no longer requires a
 per-instance card. Escalate to the operator ONLY for: MEDIUM/HIGH boundary,
 circuit breaker trip, repeated evolution failure, or governance/security
 boundary change.
+
+---
+
+# RECONCILIATION ADDENDUM — PRODUCTION WIRING REPAIR
+
+Card: `AUTOLOOP_AUTONOMOUS_EVOLUTION_PRODUCTION_WIRING_REPAIR_1`
+Date: 2026-09-24
+Predecessor finding: `AUTOLOOP_CROSS_AGENT_EVOLUTION_APPLICATION_AUDIT_1`
+(READ_ONLY audit, 2026-09-24).
+
+This addendum is ADDITIVE. **Nothing above is deleted or rewritten** — the
+activation record above stands exactly as issued, including its
+`PRODUCTION_EVOLUTION_ROUTE = CLOSED` line. This section records that the
+scope of that line has been re-measured and corrected.
+
+## 1. What the audit found
+
+The activation record's §D row claimed the full LOW-risk route was proven
+"END-TO-END through real machinery" (P4), and its final block stated
+`PRODUCTION_EVOLUTION_ROUTE = CLOSED`. Both statements were true **of the
+test harness** and false **of production**:
+
+| Claim (activation) | Measured reality |
+|---|---|
+| `PRODUCTION_EVOLUTION_ROUTE = CLOSED` | `runEvolutionCycle` had **zero production callers** (repo-wide reference scan: only `test/evolution/*.mjs`). No scheduler, no launchd/cron entry, no operator invocation in the production path. |
+| `TRIGGER_WIRING = WIRED` | `runAdmittedGraph` attached `result.evolutionObservation`, but **no production code consumed it** (the only reader was a test assertion). |
+| trigger state durable | `writeTriggerState` was called **only from `loop.mjs`** — i.e. only when a cycle ran, which in production was never. |
+| P4 proves the full route | P4 called `deriveImprovementCandidate` / `runCandidateMutation` / `evaluateFitness` / `bindEvolutionReview` / `commitCandidateToEvolutionBranch` / `evaluateAutonomousPromotion` / `openCanaryWindow` **directly, by hand**. It proved the *stages* compose; it did not prove a *production invocation*. |
+
+The audit's verdict was HOLD with:
+
+```
+PRODUCTION_EVOLUTION_ROUTE_PREVIOUS = NOT_ACTUALLY_CLOSED
+```
+
+A second, independent defect was found while closing the first: the loop's
+mutation stage called `runCandidateMutation` **without** the issued
+validation plan / policy digest / mutation-authority digest / expiry that
+`issueCandidateMutationAuthorization` had just returned. The hand-built P4 and
+N8 assertions supplied those arguments themselves, which is why the defect was
+invisible to them; any execution through the loop's own code path failed
+closed at `MUTATION_FAILED` / `ENVIRONMENT_FAILURE`.
+
+## 2. The repair
+
+| § | Change | Landing |
+|---|---|---|
+| A | the ONE production consumer for `evolutionObservation` | `src/evolution/production-consumer.mjs` (new). Delegates to the EXISTING trigger machinery, the EXISTING loop entry and the EXISTING lock — no second engine. |
+| A/F | production call site | `src/admission/admission-gate.mjs::runAdmittedGraph` now resolves the evolution execution inputs, observes, and consumes post-result. |
+| A | the loop accepts a pre-gated trigger | `src/evolution/loop.mjs` — new `p.triggerEvent` input; when present the loop skips derivation/gating/recording (re-gating would re-apply the cooldown against the record the consumer just wrote). New hold `EVOLUTION_LOOP_TRIGGER_INVALID`. |
+| B | durable trigger state on the production path | The consumer performs the gate + `recordTrigger` + `writeTriggerState`; dedup / cooldown / window cap / signature / evidence refs / circuit-breaker slot / restart survival are the EXISTING `trigger.mjs` semantics, now actually reached. |
+| C | execution isolation | The cycle is SCHEDULED, never awaited: every path is caught, the scheduled task cannot reject, and the run envelope is never rewritten by the consumer. |
+| D | single-flight | In-process reservation per (store, signature) + `acquireStructuredLock` (`c2d/lock.mjs`) on a signature-kinded lock path — forensic orphan reclaim and cross-process contention included. |
+| E | kill switch | Checked first in the consumer (from the observation's already-resolved switch state); `SUSPENDED` writes no trigger state and schedules nothing. |
+| F | evidence-bound bounded plan | `trigger.mjs` now extracts a bounded repair plan (`patch_plan` / `affected_scope` / `declared_risk_markers`) from the DURABLE journal payload and carries it into the signal observation for the classes whose strategy consumes it. Without this link every production derivation ended `UNSUPPORTED` — the route could not leave the trigger stage. Byte-bounded to the SAME limit the applier enforces. |
+| — | loop mutation wiring | `loop.mjs` now forwards `validationPlan` / `policyDigest` / `mutationAuthorityDigest` / `expiresAt` from the issued authorization. |
+| — | production crash recovery | The consumer runs `reconcileEvolutionState` once per store per process (fail-open) — the recovery module now has a production caller. |
+
+## 3. Real production trace
+
+Acceptance: `test/evolution/test-evolution-production-wiring-repair.mjs`
+(R1–R11). **Every case enters through `runAdmittedGraph`; `runEvolutionCycle`
+is never invoked directly as proof.** (R10 is explicitly a helper-level
+contract check, labelled as such — not a route proof.)
+
+R1 (the §F trace) — a production run writes a real durable journal carrying
+three equivalent planned repairs, and the chain runs untouched to completion:
+
+```
+runAdmittedGraph (final PASS, budget authorized)
+  → real RunEvidenceStore journal
+  → production-observer (fired: REPEATED_REPAIR_REQUIREMENT count=3)
+  → production-consumer (disposition CYCLE_STARTED)
+  → durable trigger state written (1 trigger, signature, ≥3 evidence refs, cooldown basis)
+  → runEvolutionCycle (scheduled, not awaited)
+  → candidate (ecand_…)
+  → isolated C3B worktree mutation + validation (READY_FOR_REVIEW)
+  → fitness ACCEPT
+  → independent review PASS
+  → promotion (evolution/<candidate_id> branch advanced)
+  → canary window opened
+  = loop_verdict PROMOTED
+```
+
+Negative/authority cases also proven from the production entrypoint: single
+failure → no cycle (R3); below floor → no cycle (R4); duplicate signature →
+exactly one cycle and one candidate (R5); `SUSPENDED` → no cycle, resume
+restores the route (R6); a FAILING cycle leaves the successful run PASS (R7);
+an undeclared deployment is inert (R8); qualified evidence with no bounded
+plan records the trigger but derives `UNSUPPORTED` — never a fabricated
+mutation (R9); the bounded-plan link honours the applier's byte bound and its
+class selection (R10); a broken durable trigger state makes the consumer fail
+OPEN — run PASS, disposition `SCHEDULE_FAILED`, no cycle, no mutation (R11).
+
+The consumer's terminal dispositions are a frozen closed set
+(`EVOLUTION_CONSUMER_DISPOSITIONS`): `DISABLED`, `NO_QUALIFIED_TRIGGER`,
+`SUSPENDED`, `POLICY_UNAVAILABLE`, `GATED`, `SINGLEFLIGHT`, `CYCLE_STARTED`,
+`SCHEDULE_FAILED`. The production envelope carries exactly one of them as
+`result.evolutionDisposition`, so an operator or an audit can distinguish
+"nothing qualified" from "qualified but suppressed" from "started" without
+reading the evolution store.
+
+## 4. Boundaries that remain (unchanged authority, stated plainly)
+
+1. **The consumer is inert unless the deployment declares its inputs.**
+   `runnerOpts.evolution = { storeRoot, checkpointRoot, repoRoot, reviewerIdentity? }`
+   (or `AUTOLOOP_EVOLUTION_STORE_ROOT` / `_CHECKPOINT_ROOT` / `_REPO_ROOT` /
+   `_REVIEWER`). This is deliberate: the previous production wiring had no
+   store/checkpoint/repo resolution at all, and inventing defaults would have
+   let a misconfigured deployment mutate a repo. An undeclared deployment
+   behaves exactly as before this card.
+2. **Autonomous promotion requires the deployment to designate the reviewer.**
+   `runnerOpts.evolution.reviewerIdentity` (or `AUTOLOOP_EVOLUTION_REVIEWER`)
+   is operator configuration, not something the loop invents: without it the
+   cycle still runs (mutation + fitness) but stops before promotion, and the
+   loop never self-approves. With it, the durable review artifact is bound to
+   that operator-designated identity — the independence check still refuses
+   `agent:*` and `autoloop-evolution`. Declaring this identity is therefore the
+   operator's act that enables autonomous promotion, and it is a deployment
+   decision this card does not make.
+3. **A bounded plan must exist in the durable evidence.** The repair links the
+   plan through; it does not invent one. No producer in this repository yet
+   writes `patch_plan` into a journal payload, so `FIRST_LIVE_EVOLUTION`
+   remains `NOT_YET_TRIGGERED` for natural production evidence. That is a
+   content-producer gap, not a wiring gap.
+4. **The non-patch derivation strategies remain non-executable, and the
+   repair does not change that.** `BOUNDED_CONSTANT_TUNING` and
+   `TELEMETRY_EFFICIENCY_REPAIR` produce `constant_adjustment` /
+   `efficiency_adjustment` edits, and `runCandidateMutation` executes
+   `patch_apply` only. The bounded plan is therefore carried into the signal
+   observation ONLY for the classes whose strategy consumes it; for the other
+   classes carrying it would change nothing, so it is deliberately not
+   carried. Measured, pre-existing outcomes of those classes (unchanged by
+   this card, asserted in R10 so it is documented rather than assumed):
+   `REPEATED_EQUIVALENT_FAILURE` / `RECURRING_HOLD_PATTERN` /
+   `QUALIFIED_PATTERN_EVIDENCE` without a plan ⇒ `UNSUPPORTED` at derivation;
+   `REPEATED_REPAIR_REQUIREMENT` without a plan ⇒ `BOUNDED_CONSTANT_TUNING`
+   selected ⇒ candidate derived ⇒ fails closed at `MUTATION_FAILED`;
+   `ABNORMAL_RETRY_FREQUENCY` / `LATENCY_REGRESSION` / `TOKEN_INEFFICIENCY` ⇒
+   `TELEMETRY_EFFICIENCY_REPAIR` ⇒ likewise `MUTATION_FAILED`. Making those
+   classes executable is a separate card.
+5. Trigger state retains the full trigger record including any carried patch,
+   bounded at 64 kept triggers × ≤256 KiB. Pre-existing `recordTrigger`
+   semantics, unchanged here.
+6. LOW autonomous / MEDIUM operator promotion / HIGH denied, and every
+   forbidden class (`SECURITY_OR_CREDENTIALS`, `GOVERNANCE_AUTHORITY`,
+   `ADMISSION_AUTHORITY`, `PROMOTION_AUTHORITY`, `SECRET_HANDLING`,
+   `DESTRUCTIVE_PERSISTENCE_MIGRATION`, `IRREVERSIBLE_DATA_OPERATION`,
+   `EVOLUTION_POLICY_SELF`) are untouched. The production consumer widens no
+   authority: it only decides WHEN to ask the existing loop.
+
+## 5. Reconciliation verdict
+
+```
+ACTIVATION_P4_SCOPE_MEASURED      = ISOLATED / TEST-DRIVEN STAGE COMPOSITION
+                                    (direct stage invocation; NOT a production invocation)
+
+PRODUCTION_EVOLUTION_ROUTE_PREVIOUS = NOT_ACTUALLY_CLOSED
+PRODUCTION_EVOLUTION_ROUTE_CURRENT  = CLOSED
+  (established only after the production-entrypoint trace R1 reached
+   PROMOTED through runAdmittedGraph with no direct loop call)
+
+RUN_EVOLUTION_CYCLE_PRODUCTION_CALLER = WIRED
+  (src/admission/admission-gate.mjs → src/evolution/production-consumer.mjs)
+DURABLE_TRIGGER_STATE   = WRITTEN BY THE PRODUCTION PATH
+SINGLEFLIGHT            = WIRED (in-process reservation + structured lock)
+KILL_SWITCH             = CONTROLS THE PRODUCTION CONSUMER
+FAIL_OPEN               = PROVEN (R7: failing cycle, run still PASS)
+CRASH_RECOVERY          = WIRED (reconcile in the production consumer; R2 restart survival)
+
+FIRST_LIVE_EVOLUTION    = NOT_YET_TRIGGERED (no natural evidence producer; none fabricated)
+NORMAL_OPERATION_IMPACT = NONE (post-result, synchronous, bounded, fail-open)
+DIRECT_TEST_INVOCATION_USED_AS_PROOF = NO
+```

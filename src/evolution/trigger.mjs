@@ -104,6 +104,49 @@ function createHashHex(text) {
 }
 
 /**
+ * Evidence-bound bounded repair plan.
+ *
+ * The derivation strategies that produce an EXECUTABLE mutation plan
+ * (DETERMINISTIC_BUG_REPAIR) consume a bounded plan carried BY THE EVIDENCE —
+ * `patch text carried by evidence` (candidate.mjs DERIVATION_STRATEGIES) — and
+ * the mutation boundary executes only `patch_apply` edits
+ * (mutation.mjs::runCandidateMutation / scripts/evolution-apply-patch.mjs).
+ * Without this link the production observer could describe a qualified
+ * repetitive failure but never a bounded repair, so every production
+ * derivation ended `UNSUPPORTED`: the production route could not leave the
+ * trigger stage. This extracts the plan from the DURABLE journal payload —
+ * never inferred, never LLM-authored, byte-bounded to the SAME limit the
+ * applier enforces (an oversized/absent patch is simply not extracted, so the
+ * derivation fails closed instead of the mutation failing late).
+ *
+ * Accepted payload keys (snake_case canonical; camelCase tolerated for
+ * in-process producers): patch_plan | patchPlan, affected_scope |
+ * affectedScope, declared_risk_markers | declaredRiskMarkers.
+ */
+export const MAX_EVIDENCE_PATCH_BYTES = 256 * 1024;
+
+function boundedPlanFields(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const out = {};
+  const plan = payload.patch_plan ?? payload.patchPlan ?? null;
+  const patch = typeof plan === "string" ? plan : (typeof plan?.patch === "string" ? plan.patch : null);
+  if (typeof patch === "string" && patch.length > 0 && Buffer.byteLength(patch, "utf8") <= MAX_EVIDENCE_PATCH_BYTES) {
+    out.patchPlan = { patch };
+  }
+  const scope = payload.affected_scope ?? payload.affectedScope ?? (Array.isArray(plan?.affectedScope) ? plan.affectedScope : null);
+  if (Array.isArray(scope)) {
+    const s = scope.filter((p) => typeof p === "string" && p.length > 0 && !p.startsWith("/") && !p.split("/").includes(".."));
+    if (s.length > 0) out.affectedScope = s;
+  }
+  const markers = payload.declared_risk_markers ?? payload.declaredRiskMarkers ?? null;
+  if (Array.isArray(markers)) {
+    const m = markers.filter((x) => typeof x === "string" && x.length > 0);
+    if (m.length > 0) out.declaredRiskMarkers = m;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
  * Derive the failure signature of one durable failure observation.
  * Same signature = same equivalent failure (dedup key). Deterministic:
  * identical facts ⇒ identical signature.
@@ -137,16 +180,20 @@ export function extractTriggerObservations({ store = null, events = null, now = 
     if (!Number.isNaN(at) && at < cutoff) continue; // outside window
     const eventId = e.event_id ?? `seq:${e.sequence ?? "?"}`;
     if (e.event_type === "PHASE_REPAIR_REQUESTED") {
+      const plan = boundedPlanFields(e.payload ?? {});
       out.push({
         kind: "repair", signature: failureSignature({ phaseId: e.phase_id ?? null }),
         phaseId: e.phase_id ?? null, at: Number.isNaN(at) ? now : at, eventId,
+        ...(plan ?? {}),
       });
     } else if (e.event_type === "RUN_HELD") {
       const p = e.payload ?? {};
       const holdCode = p.holdCode ?? (typeof p.reason === "string" ? p.reason.split(":")[0] : null) ?? null;
+      const plan = boundedPlanFields(p);
       out.push({
         kind: "hold", signature: failureSignature({ holdCode }),
         holdCode, at: Number.isNaN(at) ? now : at, eventId,
+        ...(plan ?? {}),
       });
     } else if (e.event_type === "RUN_PASSED" || e.event_type === "RUN_NOT_BENEFICIAL") {
       out.push({ kind: "pass", at: Number.isNaN(at) ? now : at, eventId });
@@ -186,6 +233,31 @@ export function evaluateSignals({
   const fired = [];
   const count = (pred) => observations.filter(pred).length;
 
+  // The bounded plan travels into `signal.observation` ONLY for the classes
+  // whose derivation strategy actually consumes it (selectDerivationStrategy:
+  // DETERMINISTIC_BUG_REPAIR). The other classes select
+  // BOUNDED_CONSTANT_TUNING / TELEMETRY_EFFICIENCY_REPAIR, whose
+  // constant_adjustment / efficiency_adjustment edits the mutation boundary
+  // cannot execute (mutation.mjs applies `patch_apply` only) — carrying a
+  // patch there would not make them executable, so it is deliberately NOT
+  // carried. Those classes therefore keep their pre-existing outcomes
+  // (UNSUPPORTED at derivation, or MUTATION_FAILED at the mutation stage);
+  // this repair does not make them executable.
+  const PLAN_CLASSES = new Set([
+    "REPEATED_EQUIVALENT_FAILURE",
+    "REPEATED_REPAIR_REQUIREMENT",
+    "RECURRING_HOLD_PATTERN",
+    "QUALIFIED_PATTERN_EVIDENCE",
+  ]);
+  const planFields = (cls, o) => {
+    if (!PLAN_CLASSES.has(cls) || !o) return {};
+    const f = {};
+    if (o.patchPlan) f.patchPlan = o.patchPlan;
+    if (o.affectedScope) f.affectedScope = o.affectedScope;
+    if (o.declaredRiskMarkers) f.declaredRiskMarkers = o.declaredRiskMarkers;
+    return f;
+  };
+
   const t = (cls) => ({
     minCount: Math.max(SIGNAL_COUNT_FLOOR[cls] ?? 2, thresholds[cls]?.minCount ?? SIGNAL_COUNT_FLOOR[cls] ?? 2),
     windowMs: thresholds[cls]?.windowMs ?? DEFAULT_SIGNAL_WINDOW_MS,
@@ -206,7 +278,7 @@ export function evaluateSignals({
         fired.push({
           signalClass: "REPEATED_EQUIVALENT_FAILURE", count: arr.length, minCount: c.minCount,
           signature: sig, evidenceRefs: arr.map((x) => x.eventId),
-          observation: { kind: arr[0].kind, holdCode: arr[0].holdCode ?? null, phaseId: arr[0].phaseId ?? null },
+          observation: { kind: arr[0].kind, holdCode: arr[0].holdCode ?? null, phaseId: arr[0].phaseId ?? null, ...planFields("REPEATED_EQUIVALENT_FAILURE", arr[0]) },
         });
       }
     }
@@ -226,7 +298,7 @@ export function evaluateSignals({
         fired.push({
           signalClass: "REPEATED_REPAIR_REQUIREMENT", count: arr.length, minCount: c.minCount,
           signature: sig, evidenceRefs: arr.map((x) => x.eventId),
-          observation: { phaseId: arr[0].phaseId ?? null },
+          observation: { phaseId: arr[0].phaseId ?? null, ...planFields("REPEATED_REPAIR_REQUIREMENT", arr[0]) },
         });
       }
     }
@@ -238,11 +310,17 @@ export function evaluateSignals({
     const c = t("RECURRING_HOLD_PATTERN");
     const holds = observations.filter((o) => o.kind === "hold");
     if (holds.length >= c.minCount) {
+      // The plan (when the evidence carries one) travels from the first HOLD
+      // that has one — the recurring pattern's bounded repair.
+      const planned = holds.find((h) => h.patchPlan || h.affectedScope) ?? holds[0];
       fired.push({
         signalClass: "RECURRING_HOLD_PATTERN", count: holds.length, minCount: c.minCount,
         signature: failureSignature({ errorCode: "RECURRING_HOLD" }),
         evidenceRefs: holds.map((x) => x.eventId),
-        observation: { holdCodes: [...new Set(holds.map((h) => h.holdCode).filter(Boolean))] },
+        observation: {
+          holdCodes: [...new Set(holds.map((h) => h.holdCode).filter(Boolean))],
+          ...planFields("RECURRING_HOLD_PATTERN", planned),
+        },
       });
     }
   }

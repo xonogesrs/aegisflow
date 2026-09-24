@@ -29,10 +29,15 @@
 // What this module is NOT:
 //   - not a second journal: it reads the EXISTING RunEvidenceStore journal
 //     (the terminal authority), never writes to it.
-//   - not the loop: runEvolutionCycle is invoked by the evolution operator
-//     surface / scheduled caller, NOT inline in the production run. The
-//     production run only OBSERVES. This keeps the mutation/commit machinery
-//     entirely outside the NORMAL_OPERATION call stack.
+//   - not the loop, and not the consumer: this module only OBSERVES. Since
+//     AUTOLOOP_AUTONOMOUS_EVOLUTION_PRODUCTION_WIRING_REPAIR_1 the production
+//     path continues into src/evolution/production-consumer.mjs, which records
+//     the durable trigger and SCHEDULES runEvolutionCycle (never awaited, never
+//     on the run's stack). Every mutation/commit/promotion stage therefore
+//     still runs entirely outside the NORMAL_OPERATION call stack.
+//   - not a writer of trigger state: the durable trigger record is written by
+//     the consumer / the loop entry when a qualified signal actually exists,
+//     so a suspended or broken observer can never corrupt it.
 //
 // Qualified-evidence rule (card §C): only evidence that crosses a signal
 // class's MINIMUM COUNT within its observation window can form a candidate.
@@ -61,13 +66,49 @@ export function evolutionSwitchState({ env = process.env, storeRoot = null } = {
 }
 
 /**
+ * Read a run's durable evidence journal (READ-ONLY, integrity-verified).
+ *
+ * THE one journal reader for the evolution subsystem (the observer and the
+ * production consumer both use it) — never a second journal, never a
+ * re-implementation of the C3 read path.
+ *
+ * `chainId`/`checkpointId` are READER-scoped identity labels only: the store
+ * re-derives its head from the journal directory on init, so a reader never
+ * needs the writer's identifiers and never trusts them.
+ *
+ * @returns {{ ok: boolean, reason: string|null, events: object[], count: number }}
+ *   Total: `ok:false` carries the reason and an empty event list; a caller
+ *   never has to distinguish an absent journal from a corrupt one to stay safe.
+ */
+export function readObservationJournal({ evidenceRoot = null, executionId = null, chainId = null, checkpointId = null } = {}) {
+  if (!evidenceRoot || !executionId) return { ok: false, reason: "no_evidence_root", events: [], count: 0 };
+  try {
+    const store = new RunEvidenceStore({
+      root: evidenceRoot,
+      executionId,
+      chainId: chainId ?? `observer:${executionId}`,
+      checkpointId: checkpointId ?? `observer:${executionId}`,
+    });
+    store.init();
+    const j = store.verifyJournal();
+    if (!j.ok) return { ok: false, reason: "journal_integrity", events: [], count: 0 };
+    const events = [];
+    for (let s = 1; s <= j.count; s++) events.push(store.readEvent(s).event);
+    return { ok: true, reason: null, events, count: j.count };
+  } catch {
+    return { ok: false, reason: "journal_unreadable", events: [], count: 0 };
+  }
+}
+
+/**
  * THE production trigger observation (Section C).
  *
  * Reads the run's durable evidence journal (read-only) and evaluates the
  * evolution signal classes. Returns an observation RECORD — it never runs
- * the loop, never mutates the repo, never writes trigger state (trigger
- * state is written by the loop entry when a cycle actually runs, so a
- * suspended/broken observer can never corrupt it).
+ * the loop, never mutates the repo, never writes trigger state (the durable
+ * trigger record is written by the production consumer / loop entry when a
+ * qualified signal actually exists, so a suspended or broken observer can
+ * never corrupt it).
  *
  * @param {object} p
  * @param {string} p.evidenceRoot — the run's durable evidence root
@@ -100,22 +141,18 @@ export function observeRunForEvolutionTriggers(p) {
   // signal evaluation). NORMAL_OPERATION continues unaffected.
   if (out.switch_state.state === "SUSPENDED") return out;
 
-  let events = [];
-  try {
-    const store = new RunEvidenceStore({
-      root: p.evidenceRoot,
-      executionId: p.executionId,
-      chainId: p.chainId ?? `observer:${p.executionId}`,
-      checkpointId: p.checkpointId ?? `observer:${p.executionId}`,
-    });
-    store.init();
-    const j = store.verifyJournal();
-    if (!j.ok) return out; // integrity failure: observe nothing, never judge a broken journal
-    out.baseline_events = j.count;
-    for (let s = 1; s <= j.count; s++) events.push(store.readEvent(s).event);
-  } catch {
-    return out; // journal unreadable → no observation (fail-open to NORMAL_OPERATION)
-  }
+  // The run's REAL durable evidence journal. THE shared reader (also used by
+  // the production consumer for the fitness baseline side) — one journal
+  // contract, never a second journal.
+  const journal = readObservationJournal({
+    evidenceRoot: p.evidenceRoot,
+    executionId: p.executionId,
+    chainId: p.chainId ?? null,
+    checkpointId: p.checkpointId ?? null,
+  });
+  if (!journal.ok) return out; // unreadable/broken journal → no observation (fail-open)
+  const events = journal.events;
+  out.baseline_events = journal.count;
 
   try {
     const observations = extractTriggerObservations({ events });

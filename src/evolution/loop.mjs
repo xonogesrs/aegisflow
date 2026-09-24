@@ -44,9 +44,21 @@ import { openCanaryWindow, evaluateCanary, rollbackCandidate, recordCandidateOut
 import {
   readTriggerState, writeTriggerState, applyTriggerGates, recordTrigger,
   buildTriggerEvent, extractTriggerObservations, evaluateSignals,
+  EVOLUTION_TRIGGER_SCHEMA,
 } from "./trigger.mjs";
 
 export const EVOLUTION_LOOP_SCHEMA = "autoloop.evolution-loop/v1";
+
+/** Every terminal `loop_verdict` one cycle can return (closed set) — the
+ *  contract the production consumer's outcome log and the operator view read. */
+export const EVOLUTION_LOOP_VERDICTS = Object.freeze([
+  "HOLD",                        // failed closed at a stage (see hold_code / stage)
+  "NO_TRIGGER",                  // no signal crossed its threshold
+  "CANDIDATE_EXISTS",            // already derived for this signature@baseline
+  "AWAITING_OPERATOR_PROMOTION", // MEDIUM: evaluated autonomously, promotion is the operator boundary
+  "ROLLED_BACK",                 // canary regressed; the evolution branch was restored
+  "PROMOTED",                    // committed + promoted + canary window open
+]);
 
 // PRODUCTION ACTIVATION (Section H): the explicit kill switch. SUSPENDED
 // prevents NEW evolution cycles only — NORMAL_OPERATION, telemetry and
@@ -57,6 +69,7 @@ import { readEvolutionSuspension } from "./kill-switch.mjs";
 export const EVOLUTION_LOOP_HOLD = Object.freeze({
   SUSPENDED: "HOLD / EVOLUTION_SUSPENDED",
   POLICY_UNAVAILABLE: "HOLD / EVOLUTION_LOOP_POLICY_UNAVAILABLE",
+  TRIGGER_INVALID: "HOLD / EVOLUTION_LOOP_TRIGGER_INVALID",
   TRIGGER_GATED: "HOLD / EVOLUTION_LOOP_TRIGGER_GATED",
   CANDIDATE_UNSUPPORTED: "HOLD / EVOLUTION_LOOP_CANDIDATE_UNSUPPORTED",
   MUTATION_FAILED: "HOLD / EVOLUTION_LOOP_MUTATION_FAILED",
@@ -81,6 +94,10 @@ function hold(code, reason, extra = {}) {
  * @param {string} p.baselineHead — frozen baseline (40-hex)
  * @param {number} p.baselineRevision — durable revision at trigger time
  * @param {object[]} p.baselineEvents — pre-mutation journal events (baseline side)
+ * @param {object} [p.triggerEvent] — a PRE-GATED, already-durably-recorded
+ *        trigger event (production-consumer.mjs). When present the loop skips
+ *        trigger derivation/gating/recording (the consumer owns that) and
+ *        proceeds from candidate derivation. Absent ⇒ the loop derives its own.
  * @param {object} p.fingerprint — collectFingerprint(repoRoot) at baseline
  * @param {object} [p.thresholds] — trigger thresholds (policy-raised only)
  * @param {object} [p.latencyBaseline] / [p.tokenBaseline]
@@ -120,29 +137,47 @@ export async function runEvolutionCycle(p) {
   }
   step("policy", { policy_id: policy.policy_id });
 
-  // ── Stage 1: trigger (observe → evaluate → gate) ─────────────────────────
-  const observations = extractTriggerObservations({ events: p.baselineEvents ?? [] });
-  const fired = evaluateSignals({
-    observations,
-    thresholds: p.thresholds ?? {},
-    latencyBaseline: p.latencyBaseline ?? null,
-    tokenBaseline: p.tokenBaseline ?? null,
-    qualifiedPatterns: p.qualifiedPatterns ?? null,
-  });
-  if (fired.length === 0) {
-    return { loop_verdict: "NO_TRIGGER", reason: "no signal crossed its threshold", trace };
-  }
+  // ── Stage 1: trigger ─────────────────────────────────────────────────────
+  // Two entry modes:
+  //   (a) PRODUCTION CONSUMER (production-consumer.mjs): the trigger was
+  //       already evaluated against the real journal, gated (dedup/cooldown/
+  //       window cap/breaker) and DURABLY RECORDED by the consumer. It is
+  //       injected here so the loop does NOT re-evaluate and re-gate it —
+  //       re-gating would re-apply cooldown against the record the consumer
+  //       just wrote and suppress the very trigger it just produced.
+  //   (b) direct/test/operator invocation: the loop derives, gates and
+  //       records the trigger itself (unchanged behaviour).
+  let triggerEvent;
   let state = readTriggerState(p.policyRoot);
-  const gated = applyTriggerGates({ fired, state });
-  state = gated.state;
-  if (gated.allowed.length === 0) {
+  if (p.triggerEvent) {
+    if (p.triggerEvent.schema !== EVOLUTION_TRIGGER_SCHEMA) {
+      return { ...hold(EVOLUTION_LOOP_HOLD.TRIGGER_INVALID, `injected trigger event is not ${EVOLUTION_TRIGGER_SCHEMA}`, { stage: "trigger" }), trace };
+    }
+    triggerEvent = p.triggerEvent;
+    step("trigger", { trigger_id: triggerEvent.trigger_id, signal_class: triggerEvent.signal_class, source: "production-consumer" });
+  } else {
+    const observations = extractTriggerObservations({ events: p.baselineEvents ?? [] });
+    const fired = evaluateSignals({
+      observations,
+      thresholds: p.thresholds ?? {},
+      latencyBaseline: p.latencyBaseline ?? null,
+      tokenBaseline: p.tokenBaseline ?? null,
+      qualifiedPatterns: p.qualifiedPatterns ?? null,
+    });
+    if (fired.length === 0) {
+      return { loop_verdict: "NO_TRIGGER", reason: "no signal crossed its threshold", trace };
+    }
+    const gated = applyTriggerGates({ fired, state });
+    state = gated.state;
+    if (gated.allowed.length === 0) {
+      writeTriggerState(p.policyRoot, state);
+      return { ...hold(EVOLUTION_LOOP_HOLD.TRIGGER_GATED, `all ${gated.suppressed.length} signal(s) suppressed: ${gated.suppressed[0]?.reason ?? "gated"}`, { stage: "trigger" }), trace };
+    }
+    triggerEvent = buildTriggerEvent({ signal: gated.allowed[0], graphRunId: p.graphRunId ?? null, thresholdPolicyDigest: policy.policy_digest });
+    state = recordTrigger(state, triggerEvent);
     writeTriggerState(p.policyRoot, state);
-    return { ...hold(EVOLUTION_LOOP_HOLD.TRIGGER_GATED, `all ${gated.suppressed.length} signal(s) suppressed: ${gated.suppressed[0]?.reason ?? "gated"}`, { stage: "trigger" }), trace };
+    step("trigger", { trigger_id: triggerEvent.trigger_id, signal_class: triggerEvent.signal_class, suppressed: gated.suppressed.length });
   }
-  const triggerEvent = buildTriggerEvent({ signal: gated.allowed[0], graphRunId: p.graphRunId ?? null, thresholdPolicyDigest: policy.policy_digest });
-  state = recordTrigger(state, triggerEvent);
-  writeTriggerState(p.policyRoot, state);
-  step("trigger", { trigger_id: triggerEvent.trigger_id, signal_class: triggerEvent.signal_class, suppressed: gated.suppressed.length });
 
   // ── Stage 2: candidate derivation ────────────────────────────────────────
   const derived = deriveImprovementCandidate({
@@ -191,6 +226,18 @@ export async function runEvolutionCycle(p) {
     mutation = await runCandidateMutation({
       repoRoot: p.repoRoot, checkpointRoot: p.checkpointRoot, executionId,
       candidate, authorization: issued.authorization,
+      // The issued artifacts MUST travel with the run: without the policy's
+      // validation plan the C3B boundary cannot validate the candidate, and
+      // without the authority digests the durable candidate capture cannot be
+      // bound to the policy authorization that licensed the mutation. The
+      // production route therefore failed closed at MUTATION_FAILED /
+      // ENVIRONMENT_FAILURE for every candidate until the wiring repair
+      // (AUTOLOOP_AUTONOMOUS_EVOLUTION_PRODUCTION_WIRING_REPAIR_1) forwarded
+      // them — the earlier closed-loop evidence had supplied them BY HAND.
+      validationPlan: issued.validationPlan,
+      policyDigest: authorization.policyDigest,
+      mutationAuthorityDigest: issued.mutationAuthorityDigest,
+      expiresAt: issued.expiresAt,
       maxRepairAttempts: 1, mutationCommandOverride: p.mutationCommandOverride ?? null,
     });
   } catch (e) {
