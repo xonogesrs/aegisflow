@@ -91,7 +91,12 @@ for a status string.
   `node scripts/evolution-declare-production.mjs --out <path> --store-root …
   --checkpoint-root … --repo-root … [--task-class …] [--strategy-baseline DIM=value …]`.
   Production store:
-  `/Volumes/NVM2T/Development/evidence/autoloop-evolution`.
+  `/Volumes/NVM2T/Development/evidence/autoloop-evolution`; the deployment's
+  evolution inputs are declared once in
+  `/Volumes/NVM2T/Development/evidence/autoloop-evolution/production-declaration.json`
+  (storeRoot / checkpointRoot / repoRoot / taskClass / strategyBaselineValues /
+  strategyDimensions / reviewerIdentity) and read through
+  `AUTOLOOP_EVOLUTION_DEPLOYMENT_CONFIG`.
 - Anything else structured (admission, budget, evidence manifests) has an
   equivalent module under `src/governance/`, `src/admission/`, `src/budget/`,
   or `src/evolution/` — read the module, don't grep for its output.
