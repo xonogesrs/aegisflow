@@ -26,7 +26,7 @@
 
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { createEvolutionPolicy, readEvolutionPolicy } from "../src/evolution/policy.mjs";
+import { createEvolutionPolicy, readEvolutionPolicy, issueSuccessorEvolutionPolicy } from "../src/evolution/policy.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -40,7 +40,10 @@ const usage = () => {
   console.error("usage:");
   console.error("  node scripts/evolution-issue-policy.mjs --store <dir> [--scope <glob>] [--scope <glob> ...]");
   console.error("      [--strategy-dimensions <DIM[,DIM...]>] [--expires <iso>] [--json]");
+  console.error("  node scripts/evolution-issue-policy.mjs --store <dir> --successor [--previous-digest <64hex>] [...]");
   console.error("  --strategy-dimensions is OPT-IN: omitted = the policy preauthorizes NO agent-strategy dimension.");
+  console.error("  --successor issues generation N+1 of the active policy: the outgoing generation is archived");
+  console.error("  durably under <store>/evolution-policy-history/ and the new record binds its digest.");
   process.exit(2);
 };
 
@@ -138,11 +141,31 @@ const input = {
   expires_at: expires,
 };
 
+// ── §J.1 POLICY SUCCESSION ─────────────────────────────────────────────────
+// `--successor` issues generation N+1 explicitly instead of refusing the
+// conflicting record: the outgoing generation is archived durably under
+// <store>/evolution-policy-history/ and the new record binds its digest. No
+// manual archiving is required (or permitted as a supported operation).
+const successor = process.argv.includes("--successor");
+const previousDigestArg = arg("--previous-digest");
+if (previousDigestArg !== null && !/^[0-9a-f]{64}$/.test(previousDigestArg)) {
+  console.error(`EVOLUTION_POLICY_INVALID: --previous-digest must be a 64-hex policy digest`);
+  process.exit(1);
+}
+
 try {
-  const r = createEvolutionPolicy(resolve(store), input);
-  const policy = readEvolutionPolicy(resolve(store));
+  const r = successor
+    ? issueSuccessorEvolutionPolicy(resolve(store), {
+      ...input,
+      ...(previousDigestArg ? { previous_policy_digest: previousDigestArg } : {}),
+    })
+    : createEvolutionPolicy(resolve(store), input);
+  const policy = readEvolutionPolicy(resolve(store), { allowExpired: true });
   const summary = {
     status: r.status,
+    generation: policy.generation ?? 0,
+    previous_policy_digest: policy.previous_policy_digest ?? null,
+    archived: successor && r.archive ? r.archive.path : null,
     policy_id: policy.policy_id,
     policy_digest: policy.policy_digest,
     policy_name: policy.policy_name,
@@ -156,6 +179,8 @@ try {
   if (asJson) console.log(JSON.stringify(summary, null, 2));
   else {
     console.log(`status: ${r.status}`);
+    console.log(`generation: ${summary.generation}${summary.previous_policy_digest ? ` (succeeds ${summary.previous_policy_digest.slice(0, 12)})` : ""}`);
+    if (summary.archived) console.log(`archived: ${summary.archived}`);
     console.log(`policy_id: ${summary.policy_id}`);
     console.log(`risk_classes_allowed: ${summary.risk_classes_allowed.join(",")}`);
     console.log(`strategy_dimensions_allowed: ${policy.strategy_dimensions_allowed ? policy.strategy_dimensions_allowed.join(",") : "(none — no agent-strategy authority)"}`);
@@ -164,6 +189,6 @@ try {
   }
   process.exit(0);
 } catch (e) {
-  console.error(`EVOLUTION_POLICY_ISSUE_FAILED: ${e?.message ?? e}`);
+  console.error(`EVOLUTION_POLICY_ISSUE_FAILED: ${e?.code ? `${e.code}: ` : ""}${e?.message ?? e}`);
   process.exit(1);
 }

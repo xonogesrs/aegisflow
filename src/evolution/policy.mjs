@@ -25,11 +25,12 @@
 //   - The policy NEVER widens existing governance: admission, review,
 //     promotion and semantic-drift gates still apply downstream.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { C2dHoldError, ensureDir0700, writeJsonExclusiveCreate, assertNotSymlink } from "../c2d/fs-atomic.mjs";
-import { canonicalize, digestOf } from "../canonical-digest.mjs";
+import { C2dHoldError, ensureDir0700, writeJsonExclusiveCreate, assertNotSymlink, writeJsonAtomicReplaceUnderLock } from "../c2d/fs-atomic.mjs";
+import { acquireStructuredLock } from "../c2d/lock.mjs";
+import { digestOf } from "../canonical-digest.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const SCHEMA = JSON.parse(readFileSync(join(HERE, "..", "schema", "evolution-policy.schema.json"), "utf8"));
@@ -45,6 +46,11 @@ export const EVOLUTION_POLICY_HOLD = Object.freeze({
   BUDGET_EXHAUSTED: "HOLD / EVOLUTION_BUDGET_EXHAUSTED",
   CIRCUIT_BREAKER: "HOLD / EVOLUTION_CIRCUIT_BREAKER_TRIPPED",
   BASELINE_MISMATCH: "HOLD / EVOLUTION_BASELINE_MISMATCH",
+  // §J.1 POLICY SUCCESSION: a successor issuance must bind the digest of the
+  // outgoing generation, advance it monotonically, and take the single active
+  // slot — anything else fails closed here.
+  SUCCESSION_MISMATCH: "HOLD / EVOLUTION_POLICY_SUCCESSION_MISMATCH",
+  SUCCESSION_IN_FLIGHT: "HOLD / EVOLUTION_POLICY_SUCCESSION_IN_FLIGHT",
 });
 
 // Card §C HIGH-risk classes — NEVER autonomous, in any policy.
@@ -129,6 +135,12 @@ export function validatePolicyShape(p) {
   if (!p.expires_at || Number.isNaN(Date.parse(p.expires_at))) errors.push("expires_at_invalid");
   if (!errors.includes("issued_at_invalid") && !errors.includes("expires_at_invalid") && Date.parse(p.expires_at) <= Date.parse(p.issued_at)) errors.push("expiry_ordering_invalid");
   if (p.generation !== undefined && (!Number.isInteger(p.generation) || p.generation < 0)) errors.push("generation_invalid");
+  // §J.1 POLICY SUCCESSION: a record that names its predecessor MUST be a
+  // monotonic successor (generation ≥ 1) and bind a well-formed digest.
+  if (p.previous_policy_digest !== undefined) {
+    if (!/^[0-9a-f]{64}$/.test(p.previous_policy_digest)) errors.push("previous_policy_digest_invalid");
+    if (!Number.isInteger(p.generation) || p.generation < 1) errors.push("successor_generation_invalid");
+  }
   if (!p.forbidden_risk_classes || !Array.isArray(p.forbidden_risk_classes) || !HIGH_RISK_CLASSES.every((c) => p.forbidden_risk_classes.includes(c))) errors.push("forbidden_risk_classes_incomplete");
   if (p.strategy_dimensions_allowed !== undefined) {
     if (!Array.isArray(p.strategy_dimensions_allowed)) errors.push("strategy_dimensions_allowed_invalid");
@@ -153,46 +165,26 @@ export function validatePolicyShape(p) {
  * idempotent; any conflicting record fails closed.
  */
 export function createEvolutionPolicy(policyRoot, input) {
-  const now = new Date().toISOString();
-  const identity = {
-    schema: EVOLUTION_POLICY_SCHEMA,
-    authority_type: "evolution_policy",
-    policy_name: input.policy_name,
-    risk_classes_allowed: input.risk_classes_allowed !== undefined ? [...input.risk_classes_allowed].sort() : ["LOW"],
-    scope_patterns: [...input.scope_patterns].sort(),
-    forbidden_patterns: [...new Set([
-      ...["src/governance/**", "src/admission/**", "src/evolution/**", ".git/**", "docs/governance/**"],
-      ...(input.forbidden_patterns ?? []),
-    ])].sort(),
-    allowed_commands: [...input.allowed_commands].sort(),
-    validation_plan_id: input.validation_plan_id,
-    validation_plan: input.validation_plan,
-    budget: input.budget,
-    issued_by: input.issued_by,
-    authorization_ref: input.authorization_ref,
-    issued_at: now,
-    expires_at: input.expires_at,
-    generation: input.generation ?? 0,
-    forbidden_risk_classes: [...HIGH_RISK_CLASSES],
-    // AGENT-STRATEGY authority is OPT-IN and operator-issued: absent means a
-    // strategy candidate is refused (fail closed), so no existing policy
-    // silently gains agent-strategy authority from a code change.
-    ...(Array.isArray(input.strategy_dimensions_allowed)
-      ? { strategy_dimensions_allowed: [...new Set(input.strategy_dimensions_allowed)] }
-      : {}),
-  };
-  const policy_id = digestOf({ ...identity, policy_id: undefined, policy_digest: undefined });
-  const draft = { ...identity, policy_id };
-  const record = { ...draft, policy_digest: computePolicyDigest(draft) };
-  const errors = validatePolicyShape(record);
-  if (errors.length) throw new C2dHoldError(EVOLUTION_POLICY_HOLD.INVALID, errors.join(","));
+  const record = buildPolicyRecord(input, { generation: input.generation ?? 0 });
   ensureDir0700(policyRoot);
   const p = evolutionPolicyPath(policyRoot);
   if (existsSync(p)) {
     assertNotSymlink(p);
     const old = readEvolutionPolicy(policyRoot, { allowExpired: true });
-    if (old.policy_id === record.policy_id) return { status: "AUTHORIZED_EXISTING_IDENTICAL", policy: old };
-    throw new C2dHoldError(EVOLUTION_POLICY_HOLD.CONFLICT, "a different evolution policy already exists (issue a successor generation explicitly)");
+    // IDENTICAL RE-ISSUE IS A NO-OP. `issued_at` is minted per call, so a
+    // byte comparison of the two records would only ever match within the same
+    // millisecond — which made the documented idempotency effectively
+    // unreachable. Re-derive the candidate record under the EXISTING record's
+    // issued_at and compare the CONTENT digests instead.
+    const sameContent = buildPolicyRecord(input, {
+      generation: old.generation ?? 0,
+      previousPolicyDigest: old.previous_policy_digest ?? null,
+    });
+    sameContent.issued_at = old.issued_at;
+    const identical = computePolicyDigest({ ...sameContent, policy_id: undefined, policy_digest: undefined })
+      === computePolicyDigest({ ...old, policy_id: undefined, policy_digest: undefined });
+    if (old.policy_id === record.policy_id || identical) return { status: "AUTHORIZED_EXISTING_IDENTICAL", policy: old };
+    throw new C2dHoldError(EVOLUTION_POLICY_HOLD.CONFLICT, "a different evolution policy already exists — issue a SUCCESSOR generation explicitly (issueSuccessorEvolutionPolicy)");
   }
   try {
     writeJsonExclusiveCreate(p, record);
@@ -217,6 +209,186 @@ export function readEvolutionPolicy(policyRoot, { allowExpired = false } = {}) {
     throw new C2dHoldError(EVOLUTION_POLICY_HOLD.EXPIRED, "evolution policy expired");
   }
   return Object.freeze(record);
+}
+
+// ── §J.1 POLICY SUCCESSION — the formal successor-generation issuance ───────
+//
+// The audit found the ONLY way to reissue a policy was `createEvolutionPolicy`,
+// which refuses any record that differs from the existing one
+// (EVOLUTION_POLICY_CONFLICT). An operator whose policy expired or needed a
+// widened scope had to MANUALLY move the old artifact aside — an
+// un-auditable, unsupported operation on a governance artifact.
+//
+// Succession makes reissue first-class and bounded:
+//
+//   gen N (active, digest D_N)
+//     → archive  gen-N-D_N  (durable, exclusive-create, never overwritten)
+//     → install  gen N+1    (previous_policy_digest = D_N, generation = N+1)
+//
+// Invariants enforced here:
+//   - PREVIOUS DIGEST BINDING: the successor records the outgoing policy's
+//     digest and must present it (explicitly or by reading the active record).
+//   - MONOTONIC GENERATION: generation = outgoing + 1, always. A caller-declared
+//     generation that is not exactly that fails closed.
+//   - EXCLUSIVE ACTIVE POLICY: exactly ONE active record; the install path is
+//     serialized by the shared structured lock and re-verifies the outgoing
+//     digest immediately before the atomic replace.
+//   - OLD GENERATION PRESERVED: the outgoing record is archived before the
+//     install, so every generation stays readable.
+
+export const EVOLUTION_POLICY_HISTORY_DIR = "evolution-policy-history";
+
+/** Durable archive path for one generation of the policy. */
+export function evolutionPolicyHistoryPath(policyRoot, generation, policyId) {
+  return join(policyRoot, EVOLUTION_POLICY_HISTORY_DIR, `gen-${generation}-${policyId}.json`);
+}
+
+/**
+ * Read every archived policy generation (oldest first). READ-ONLY, fail-open
+ * per file: an unreadable archive entry is reported, never thrown.
+ */
+export function listEvolutionPolicyHistory(policyRoot) {
+  const dir = join(policyRoot, EVOLUTION_POLICY_HISTORY_DIR);
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const f of readdirSync(dir).sort()) {
+    if (!f.endsWith(".json")) continue;
+    try {
+      const rec = JSON.parse(readFileSync(join(dir, f), "utf8"));
+      out.push({ file: f, generation: rec?.generation ?? null, policy_id: rec?.policy_id ?? null, policy_digest: rec?.policy_digest ?? null, expires_at: rec?.expires_at ?? null });
+    } catch {
+      out.push({ file: f, generation: null, policy_id: null, policy_digest: null, expires_at: null, unreadable: true });
+    }
+  }
+  return out.sort((a, b) => (a.generation ?? -1) - (b.generation ?? -1));
+}
+
+/** Read one archived generation's FULL record, or null when absent. */
+export function readEvolutionPolicyGeneration(policyRoot, generation) {
+  const dir = join(policyRoot, EVOLUTION_POLICY_HISTORY_DIR);
+  if (!existsSync(dir)) return null;
+  for (const f of readdirSync(dir).sort()) {
+    if (!f.startsWith(`gen-${generation}-`) || !f.endsWith(".json")) continue;
+    try { return JSON.parse(readFileSync(join(dir, f), "utf8")); } catch { return null; }
+  }
+  return null;
+}
+
+/** Build + validate one policy record (shared by create + successor). */
+function buildPolicyRecord(input, { generation, previousPolicyDigest = null }) {
+  const now = new Date().toISOString();
+  const identity = {
+    schema: EVOLUTION_POLICY_SCHEMA,
+    authority_type: "evolution_policy",
+    policy_name: input.policy_name,
+    risk_classes_allowed: input.risk_classes_allowed !== undefined ? [...input.risk_classes_allowed].sort() : ["LOW"],
+    scope_patterns: [...input.scope_patterns].sort(),
+    forbidden_patterns: [...new Set([
+      ...["src/governance/**", "src/admission/**", "src/evolution/**", ".git/**", "docs/governance/**"],
+      ...(input.forbidden_patterns ?? []),
+    ])].sort(),
+    allowed_commands: [...input.allowed_commands].sort(),
+    validation_plan_id: input.validation_plan_id,
+    validation_plan: input.validation_plan,
+    budget: input.budget,
+    issued_by: input.issued_by,
+    authorization_ref: input.authorization_ref,
+    issued_at: now,
+    expires_at: input.expires_at,
+    generation,
+    forbidden_risk_classes: [...HIGH_RISK_CLASSES],
+    // AGENT-STRATEGY authority is OPT-IN and operator-issued: absent means a
+    // strategy candidate is refused (fail closed), so no existing policy
+    // silently gains agent-strategy authority from a code change.
+    ...(Array.isArray(input.strategy_dimensions_allowed)
+      ? { strategy_dimensions_allowed: [...new Set(input.strategy_dimensions_allowed)] }
+      : {}),
+    // §J.1: the outgoing generation this record succeeds (absent for gen 0).
+    ...(previousPolicyDigest ? { previous_policy_digest: previousPolicyDigest } : {}),
+  };
+  const policy_id = digestOf({ ...identity, policy_id: undefined, policy_digest: undefined });
+  const draft = { ...identity, policy_id };
+  const record = { ...draft, policy_digest: computePolicyDigest(draft) };
+  const errors = validatePolicyShape(record);
+  if (errors.length) throw new C2dHoldError(EVOLUTION_POLICY_HOLD.INVALID, errors.join(","));
+  return record;
+}
+
+/** Archive one outgoing policy record (durable, exclusive-create, idempotent). */
+function archivePolicyRecord(policyRoot, record) {
+  const p = evolutionPolicyHistoryPath(policyRoot, record.generation ?? 0, record.policy_id);
+  if (existsSync(p)) return { status: "ARCHIVED_EXISTING", path: p };
+  ensureDir0700(join(policyRoot, EVOLUTION_POLICY_HISTORY_DIR));
+  try {
+    writeJsonExclusiveCreate(p, record);
+  } catch {
+    if (existsSync(p)) return { status: "ARCHIVED_EXISTING", path: p };
+    throw new C2dHoldError(EVOLUTION_POLICY_HOLD.CONFLICT, `cannot archive outgoing generation at ${p}`);
+  }
+  return { status: "ARCHIVED", path: p };
+}
+
+/**
+ * Issue the SUCCESSOR of the currently active policy (§J.1).
+ *
+ * @param {string} policyRoot
+ * @param {object} input — the same input `createEvolutionPolicy` accepts, plus
+ *   an OPTIONAL `previous_policy_digest` that must match the active record
+ *   (an operator may bind it explicitly to prove intent; when omitted the
+ *   active record is read and bound).
+ * @param {object} [opts]
+ * @param {string|null} [opts.lockPath] — override for the succession lock
+ * @returns {{ status: "SUCCEEDED", generation, policy, previous, archive }}
+ */
+export function issueSuccessorEvolutionPolicy(policyRoot, input, { lockPath = null } = {}) {
+  const active = readEvolutionPolicy(policyRoot, { allowExpired: true });
+  const outgoingDigest = active.policy_digest;
+  const outgoingGeneration = Number.isInteger(active.generation) ? active.generation : 0;
+
+  // (1) PREVIOUS DIGEST BINDING — the caller's declared binding must be the
+  // outgoing policy, and a caller-declared generation must be exactly +1.
+  if (input?.previous_policy_digest !== undefined && input.previous_policy_digest !== outgoingDigest) {
+    throw new C2dHoldError(EVOLUTION_POLICY_HOLD.SUCCESSION_MISMATCH, "previous_policy_digest does not match the active generation");
+  }
+  if (input?.generation !== undefined && input.generation !== outgoingGeneration + 1) {
+    throw new C2dHoldError(EVOLUTION_POLICY_HOLD.SUCCESSION_MISMATCH, `declared generation ${input.generation} is not the monotonic successor of ${outgoingGeneration}`);
+  }
+  const record = buildPolicyRecord(input, { generation: outgoingGeneration + 1, previousPolicyDigest: outgoingDigest });
+
+  // (2) EXCLUSIVE ACTIVE POLICY — one successor at a time. The shared
+  // structured lock reclaims a crashed issuance automatically.
+  const lock = acquireStructuredLock(lockPath ?? join(policyRoot, "evolution-policy-succession.lock"), {
+    lock_kind: "evolution_policy_succession",
+    execution_id: "evolution-policy-succession",
+    checkpoint_id: "evolution-policy",
+    chain_id: "evolution-policy",
+    lease_id: "none",
+    lease_revision: 0,
+    actor_id: String(input?.issued_by ?? "unknown").slice(0, 120),
+    session_id: String(input?.authorization_ref ?? "unknown").slice(0, 120),
+    repository_identity: `evolution-store:${policyRoot}`,
+    worktree_identity: "evolution-policy-succession",
+    expected_head: "none",
+  });
+  try {
+    // Re-read under the lock: the active record must STILL be the one this
+    // successor binds, or the issuance was raced and must fail closed.
+    const current = readEvolutionPolicy(policyRoot, { allowExpired: true });
+    if (current.policy_digest !== outgoingDigest) {
+      throw new C2dHoldError(EVOLUTION_POLICY_HOLD.SUCCESSION_IN_FLIGHT, "the active policy changed while the successor was being issued");
+    }
+    const archive = archivePolicyRecord(policyRoot, current);
+    writeJsonAtomicReplaceUnderLock(evolutionPolicyPath(policyRoot), record);
+    return {
+      status: "SUCCEEDED",
+      generation: record.generation,
+      policy: Object.freeze(record),
+      previous: { policy_id: current.policy_id, policy_digest: outgoingDigest, generation: outgoingGeneration },
+      archive,
+    };
+  } finally {
+    try { lock.release(); } catch { /* foreign/lost lock: nothing this process may release */ }
+  }
 }
 
 // ── Section C — risk classification ────────────────────────────────────────

@@ -21,7 +21,7 @@ scheduler, no second fitness engine, no second promotion path.
 | A | evidence attribution | `src/evolution/attribution.mjs` — 14 declared axes derived from durable journal rows + the ADMITTED provider binding; bounded identifiers/digests/enums/numbers only; deterministic digest | S1 |
 | B | natural plan producer | `src/evolution/plan-producer.mjs` — deterministic rule table: qualified evidence → diagnosis → bounded proposal → scope → patch/strategy plan → measurement plan. No LLM in the path. `INCONCLUSIVE` / `NO_CANDIDATE` on thin or clean evidence | S4, S5, S14 |
 | C | strategy candidate classes | 6 LOW classes (MODEL_ROUTING, DECOMPOSITION, CONTEXT_ALLOCATION, RETRY_REPAIR, FANOUT_PARALLELISM, TOOL_SELECTION) + `PROMPT_EVOLUTION` at a declared MEDIUM floor | S6, S13 |
-| D | performance memory | `src/evolution/strategy-memory.mjs` — bounded, provenance-bound, idempotent by identity; success/hold/repair/latency/token/sample-count/confidence per (task class × dimension × value) | S2, S3 |
+| D | performance memory | `src/evolution/strategy-memory.mjs` — bounded, provenance-bound, idempotent by run identity; success/hold/repair/latency/token/sample-count/confidence per (task class × dimension × value). **Feed repaired by `AUTOLOOP_AGENT_STRATEGY_EVIDENCE_FEED_REPAIR_1`**: the write now runs in the every-run production post-result feed (`attribution-feed.mjs`), not behind a fired trigger — see that card's record | S2, S3 |
 | E | adaptive model routing | `src/evolution/strategy-routing.mjs` + `resolveProductionRoute` — selection ONLY inside `SPAWN_RUNTIME_CAPABILITIES`; an admitted binding always wins | S7, S9, S11 |
 | F | bounded decomposition | DECOMPOSITION / CONTEXT_ALLOCATION / FANOUT_PARALLELISM knobs are finite and validated; narrowing-only on stress evidence | S12 |
 | G | tool / retry | TOOL_SELECTION values are constrained to the ACTIVE pi-builtin mapping rows (never `bash`); RETRY_REPAIR is a bounded INT. Admission tool authority unchanged | S6 |
@@ -99,6 +99,11 @@ proven. That is a content gap, not a wiring gap, and it is recorded below.
    the tie breaks lexicographically. A deployment that knows its current
    strategy SHOULD declare it — `evolution.strategyBaselineValues` /
    `AUTOLOOP_EVOLUTION_*`; exposure is wired through the production consumer.
+   **RESOLVED by `AUTOLOOP_AGENT_STRATEGY_EVIDENCE_FEED_REPAIR_1` §J.2**: the
+   strategy is now declarable by the DEPLOYMENT through the durable production
+   declaration record (`src/evolution/production-declaration.mjs`), the
+   `AUTOLOOP_EVOLUTION_STRATEGY_BASELINE_VALUES` JSON variable, or the caller
+   object — no internal-config-object-only seam remains.
 3. **Strategy memory grows to a bound.** 2000 observations, oldest dropped, and
    each observation keeps ≤32 provenance refs, so the durable file stays
    bounded; `study-manifest.json` counts DO change between runs. This is

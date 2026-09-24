@@ -40,7 +40,14 @@ import { resolveProductionTelemetryWiring, attachTelemetryDisposition } from "..
 // lifecycle, closeout, verdict, or promotion semantics, and it mints NO
 // authority (a fired signal becomes a candidate only through the separate
 // evolution loop entry, never inline in a production run).
-import { observeRunForEvolutionTriggers, attachEvolutionObservation } from "../evolution/production-observer.mjs";
+import {
+  observeRunForEvolutionTriggers, attachEvolutionObservation,
+  evolutionSwitchState, readObservationJournal,
+} from "../evolution/production-observer.mjs";
+// EVIDENCE FEED REPAIR §A: the every-run strategy attribution + performance
+// memory feed. It runs in THIS post-result path BEFORE the trigger evaluation
+// and independently of it, so healthy/non-firing runs are recorded too.
+import { feedStrategyObservationForProduction, attachStrategyAttribution } from "../evolution/attribution-feed.mjs";
 import {
   resolveEvolutionProductionConfig,
   consumeEvolutionObservationForProduction,
@@ -370,39 +377,67 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
   if (telemetryResolution.disposition) {
     attachTelemetryDisposition(result, telemetryResolution.disposition);
   }
-  // EVOLUTION (production activation §C + wiring repair §A): post-result
-  // trigger observation over the run's durable evidence journal, followed by
-  // THE production consumer. The observation is read-only over the journal,
-  // kill-switch aware, and fail-open: an observer failure degrades to an
-  // absent/empty observation and NEVER blocks NORMAL_OPERATION. Only a
-  // QUALIFIED signal (≥ the class's minimum evidence count inside its window)
-  // surfaces here.
+  // EVOLUTION (production activation §C + wiring repair §A + EVIDENCE FEED
+  // REPAIR §A): post-result strategy attribution / performance observation for
+  // EVERY eligible production run, followed by the trigger observation and THE
+  // production consumer. The order is the card's contract:
   //
-  // The consumer (§A/§B/§C/§D) then, for a qualified signal ONLY: records the
-  // durable trigger through the existing trigger-state machinery, enforces the
-  // kill switch and single-flight, and SCHEDULES runEvolutionCycle. It is
-  // NEVER awaited — the run envelope below stays authoritative and an
-  // evolution failure can never turn a successful run into HOLD/FAIL.
+  //   terminal result → durable evidence → strategy attribution →
+  //   performance-memory write → trigger evaluation → optional cycle scheduling
+  //
+  // The evidence journal is read ONCE here and the same snapshot is handed to
+  // the feed AND the observer, so the observation and the trigger evaluation
+  // can never disagree about what the run did. Both are read-only over the
+  // journal and fail-open: an attribution/feed/observer failure degrades to an
+  // explicit disposition and NEVER blocks NORMAL_OPERATION.
+  //
+  // The memory write therefore NO LONGER depends on a trigger firing (§A/§G):
+  // healthy non-firing runs are attributed exactly like deficient ones, which
+  // removes the deficient-run selection bias from the strategy memory.
   try {
     const evolutionConfig = resolveEvolutionProductionConfig({ runnerOpts });
+    // The AUTHORITATIVE journal execution id: the durable layer's id when the
+    // runner exposes it (the durable sub-agent path returns the caller's
+    // logical id plus the durable one the journal is actually written under),
+    // else the run's own execution id.
+    const evolutionExecutionId = result?.durableExecutionId ?? result?.executionId ?? runnerOpts.executionId ?? null;
+    const journal = evolutionConfig.enabled
+      ? readObservationJournal({ evidenceRoot: runnerOpts.persistence?.root ?? null, executionId: evolutionExecutionId })
+      : null;
+    const switchState = evolutionSwitchState({ env: evolutionConfig.env ?? process.env, storeRoot: evolutionConfig.storeRoot });
+    const feed = feedStrategyObservationForProduction({
+      journal,
+      config: evolutionConfig,
+      executionId: evolutionExecutionId,
+      graphRunId: telemetryRunId,
+      // The frozen admission is the ONLY provider authority: the feed reads the
+      // admitted provider_binding from it for attribution (§A/§C) and never
+      // re-derives or replaces it (§E).
+      admission,
+      switchState,
+    });
+    attachStrategyAttribution(result, feed.record);
     const observation = observeRunForEvolutionTriggers({
       evidenceRoot: runnerOpts.persistence?.root ?? null,
-      executionId: result?.executionId ?? runnerOpts.executionId ?? null,
+      executionId: evolutionExecutionId,
       graphRunId: telemetryRunId,
       thresholds: evolutionConfig.thresholds,
       storeRoot: evolutionConfig.storeRoot,
+      journal,
+      switchState,
     });
     attachEvolutionObservation(result, observation);
     result.evolutionDisposition = consumeEvolutionObservationForProduction({
       observation,
       config: evolutionConfig,
       evidenceRoot: runnerOpts.persistence?.root ?? null,
-      executionId: result?.executionId ?? runnerOpts.executionId ?? null,
+      executionId: evolutionExecutionId,
       graphRunId: telemetryRunId,
-      // The frozen admission is the ONLY provider authority: the consumer reads
-      // the admitted provider_binding from it for attribution (§A) and never
-      // re-derives or replaces it (§E).
       admission,
+      // §A: the SAME derivation the observation was built from — the loop's
+      // plan inputs never re-derive (and never re-write) the memory.
+      attribution: feed.attribution,
+      attributionFeed: feed.record,
     });
   } catch {
     // Evolution observation/consumption failure is observability + scheduling

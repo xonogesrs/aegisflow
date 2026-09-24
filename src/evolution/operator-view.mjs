@@ -26,9 +26,11 @@ import {
 import {
   candidateStorePath, derivationIndexPath,
 } from "./candidate.mjs";
-import { evolutionPolicyPath, EVOLUTION_POLICY_SCHEMA } from "./policy.mjs";
+import { evolutionPolicyPath, EVOLUTION_POLICY_SCHEMA, listEvolutionPolicyHistory } from "./policy.mjs";
 import { strategyPolicyView } from "./strategy-store.mjs";
 import { strategyMemoryView } from "./strategy-memory.mjs";
+import { strategyFeedView } from "./attribution-feed.mjs";
+import { readEvolutionProductionDeclaration, EVOLUTION_DECLARATION_ENV } from "./production-declaration.mjs";
 
 export const EVOLUTION_OPERATOR_REPORT_SCHEMA = "autoloop.evolution-operator-report/v1";
 
@@ -79,7 +81,7 @@ export function buildEvolutionReport({ storeRoot, env = process.env } = {}) {
     schema: EVOLUTION_OPERATOR_REPORT_SCHEMA,
     storeRoot: root,
     generatedAt: new Date().toISOString(),
-    policy: { state: "UNKNOWN", policyId: null, policyName: null, expiresAt: null, riskClassesAllowed: null },
+    policy: { state: "UNKNOWN", policyId: null, policyName: null, expiresAt: null, riskClassesAllowed: null, generation: null, previousPolicyDigest: null, history: [] },
     circuitBreaker: { state: "UNKNOWN", trippedAt: null, reason: null },
     generation: { current: null, derivations: 0 },
     triggers: { count: 0, latest: [], suppressed: 0 },
@@ -91,8 +93,24 @@ export function buildEvolutionReport({ storeRoot, env = process.env } = {}) {
     // bounded performance memory the strategy candidates are derived from.
     strategy: { generation: 0, task_classes: [], active: {}, history: [], allowed_canonical_tool_ids: [] },
     strategyMemory: { total: 0, by_task_class: {}, latest: [] },
+    // §A/§H EVIDENCE FEED (read-only): the every-run attribution feed's
+    // durable disposition journal — the operator's window into whether
+    // healthy/non-firing runs are being attributed, and into every feed or
+    // attribution failure (which never changes a run result).
+    attributionFeed: { counters: {}, failures: { total: 0, last: null }, total: 0, recorded: 0, latest: [], updated_at: null },
+    // §J.2 PRODUCTION DECLARATION (read-only): which production declaration
+    // record this deployment is using, and its validation errors (a malformed
+    // record is ignored by the resolver, never silently).
+    deployment: { provided: false, path: null, env: EVOLUTION_DECLARATION_ENV, errors: [] },
     diagnostics: [],
   };
+  // §J.2: the deployment declaration is store-independent — report it even
+  // when no evolution store exists yet.
+  const decl = readEvolutionProductionDeclaration({ env });
+  report.deployment = { provided: decl.provided, path: decl.path, env: EVOLUTION_DECLARATION_ENV, errors: decl.errors };
+  if (decl.provided && decl.errors.length > 0) {
+    report.diagnostics.push({ code: "DEPLOYMENT_DECLARATION_INVALID", detail: decl.errors.join("; ") });
+  }
   if (!root || !existsSync(root)) {
     report.diagnostics.push({ code: "NO_EVOLUTION_STORE", detail: `no evolution store at ${root ?? "(unset)"}` });
     report.reportIdentity = sha256Hex(canonicalJson({ ...report, reportIdentity: undefined, generatedAt: undefined }));
@@ -111,6 +129,11 @@ export function buildEvolutionReport({ storeRoot, env = process.env } = {}) {
         policyName: p.policy_name,
         expiresAt: p.expires_at,
         riskClassesAllowed: p.risk_classes_allowed ?? ["LOW"],
+        // §J.1: which generation is active, which generation it succeeds, and
+        // every preserved predecessor — a reissue is visible, not implicit.
+        generation: p.generation ?? 0,
+        previousPolicyDigest: p.previous_policy_digest ?? null,
+        history: listEvolutionPolicyHistory(root),
       };
     } else {
       report.diagnostics.push({ code: "POLICY_UNREADABLE", detail: pPath });
@@ -204,6 +227,20 @@ export function buildEvolutionReport({ storeRoot, env = process.env } = {}) {
     const mv = strategyMemoryView({ storeRoot: root, limit: 16 });
     report.strategyMemory = { total: mv.total, updated_at: mv.updated_at, by_task_class: mv.by_task_class, latest: mv.latest };
   } catch { /* absent/corrupt memory → the empty default stands */ }
+  try {
+    const fv = strategyFeedView({ storeRoot: root, limit: 16 });
+    report.attributionFeed = {
+      counters: fv.counters, failures: fv.failures, total: fv.total, recorded: fv.recorded, latest: fv.latest, updated_at: fv.updated_at,
+    };
+    // §H: an attribution/feed failure is FAIL-OPEN (it never changes a run
+    // result) but it must be VISIBLE to the operator.
+    if ((fv.failures?.total ?? 0) > 0) {
+      report.diagnostics.push({
+        code: "ATTRIBUTION_FEED_FAILURE",
+        detail: `${fv.failures.total} feed failure(s); last=${fv.failures.last?.disposition ?? "?"} reason=${String(fv.failures.last?.reason ?? "").slice(0, 160)}`,
+      });
+    }
+  } catch { /* absent/corrupt feed log → the empty default stands */ }
   report.reviews = Object.fromEntries(Object.entries(reviews).map(([k, v]) => [k, { verdict: v.review_verdict, reviewer: v.reviewer_identity }]));
   report.canary = Object.fromEntries(Object.entries(canary).map(([k, v]) => [k, { verdict: v.verdict, rolled_back: v.rolled_back === true }]));
   report.rollbacks = Object.values(canary).filter((c) => c.rolled_back === true).map((c) => ({
@@ -219,6 +256,10 @@ export function renderEvolutionReportText(report) {
   const lines = [];
   lines.push(`AutoLoop evolution report — ${report.storeRoot ?? "(no store)"}`);
   lines.push(`policy: ${report.policy.state}${report.policy.policyName ? ` (${report.policy.policyName})` : ""}${report.policy.expiresAt ? ` expires ${report.policy.expiresAt}` : ""}`);
+  if (report.policy.generation !== null && report.policy.generation !== undefined) {
+    lines.push(`policy generation: ${report.policy.generation}${report.policy.previousPolicyDigest ? ` (succeeds ${String(report.policy.previousPolicyDigest).slice(0, 12)})` : ""}; preserved generations: ${(report.policy.history ?? []).length}`);
+  }
+  lines.push(`deployment declaration: ${report.deployment.provided ? `${report.deployment.path}${report.deployment.errors.length > 0 ? ` INVALID(${report.deployment.errors.join(",")})` : ""}` : `not declared (${report.deployment.env} unset)`}`);
   lines.push(`circuit breaker: ${report.circuitBreaker.state}${report.circuitBreaker.reason ? ` (${report.circuitBreaker.reason})` : ""}`);
   lines.push(`derivations: ${report.generation.derivations}; triggers recorded: ${report.triggers.count}; suppressed signatures: ${report.triggers.suppressed}`);
   if (report.triggers.latest.length > 0) {
@@ -254,6 +295,7 @@ export function renderEvolutionReportText(report) {
     }
   }
   lines.push(`strategy memory: ${report.strategyMemory.total} observations; by task class=${JSON.stringify(report.strategyMemory.by_task_class)}`);
+  lines.push(`attribution feed: ${report.attributionFeed.recorded}/${report.attributionFeed.total} dispositions recorded ${JSON.stringify(report.attributionFeed.counters)}; failures=${report.attributionFeed.failures.total}`);
   if (report.diagnostics.length > 0) {
     lines.push(`diagnostics (${report.diagnostics.length}):`);
     for (const d of report.diagnostics) lines.push(`  ${d.code}: ${d.detail}`);

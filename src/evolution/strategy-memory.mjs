@@ -88,15 +88,23 @@ function writeStrategyMemory(storeRoot, memory) {
   return p;
 }
 
-/** Deterministic observation identity: one execution contributes at most ONE
- *  observation per attribution content, so a re-observed journal never
- *  inflates a sample count. */
+/**
+ * Deterministic DURABLE observation identity.
+ *
+ * The identity binds the AUTHORITATIVE RUN — its execution id when present,
+ * otherwise its graph run id. It deliberately does NOT include the attribution
+ * content digest: a resumed run appends journal rows, so its recomputed
+ * attribution differs while it is still THE SAME authoritative run. Binding
+ * the run (not the content) is what makes resume / observer retry / process
+ * restart / duplicate terminal observation idempotent (§D): one authoritative
+ * run contributes at most ONE observation. A second recording under the same
+ * identity with different content is refused as an identity conflict
+ * (`OBSERVATION_REJECTED` at the production feed) rather than double counted.
+ */
 export function strategyObservationId(attribution) {
-  return `sobs_${digestOf({
-    execution_id: attribution?.execution_id ?? null,
-    graph_run_id: attribution?.graph_run_id ?? null,
-    attribution_digest: attribution?.attribution_digest ?? null,
-  }).slice(0, 40)}`;
+  const runIdentity = attribution?.execution_id ?? attribution?.graph_run_id ?? null;
+  if (runIdentity === null) return null;
+  return `sobs_${digestOf({ run_identity: runIdentity }).slice(0, 40)}`;
 }
 
 /**
@@ -115,6 +123,10 @@ export function buildStrategyObservation({ attribution, evidenceRefs = [] } = {}
     .filter((r) => typeof r === "string" && r.length > 0 && r.length <= 160)
     .slice(0, MAX_OBSERVATION_EVIDENCE_REFS);
   const executionId = attribution.execution_id ?? null;
+  const observationId = strategyObservationId(attribution);
+  if (observationId === null) {
+    fail(STRATEGY_MEMORY_HOLD.PROVENANCE_MISSING, "observation requires an authoritative run identity (execution id or graph run id); an unkeyed observation cannot be deduped");
+  }
   if (!executionId && refs.length === 0) {
     fail(STRATEGY_MEMORY_HOLD.PROVENANCE_MISSING, "observation requires an execution id or durable evidence refs");
   }
@@ -122,7 +134,7 @@ export function buildStrategyObservation({ attribution, evidenceRefs = [] } = {}
   const observation = {
     schema: EVOLUTION_STRATEGY_OBSERVATION_SCHEMA,
     version: 1,
-    observation_id: strategyObservationId(attribution),
+    observation_id: observationId,
     at: new Date().toISOString(),
     task_class: attribution.task_class ?? "UNCLASSIFIED",
     execution_id: executionId,
@@ -144,6 +156,26 @@ export function buildStrategyObservation({ attribution, evidenceRefs = [] } = {}
     // The strategy VALUES this execution ran under, per dimension (§C names
     // these dimensions; a null value means the axis was unobservable).
     strategy: axes,
+    // §C ATTRIBUTION IDENTITY: a bounded projection of the attribution record
+    // (identifiers/digests/enums only — never prompt text, never secrets) so
+    // one observation is self-describing: run identity, agent identity,
+    // parent/subagent relation, provider/model, decomposition identity and
+    // the terminal outcome travel WITH the sample.
+    attribution_identity: {
+      agent_identity: {
+        phase_ids: (attribution.agent_identity?.phase_ids ?? []).slice(0, 64),
+        stages: (attribution.agent_identity?.stages ?? []).slice(0, 16),
+      },
+      parent_identity: attribution.parent_identity ?? null,
+      provider: attribution.provider ?? null,
+      model: attribution.model ?? null,
+      adapter_kind: attribution.adapter_kind ?? null,
+      task_class: attribution.task_class ?? null,
+      decomposition_identity: attribution.decomposition_strategy?.identity ?? null,
+      terminal_outcome: attribution.outcome ?? null,
+      terminal_hold_code: attribution.terminal_hold_code ?? null,
+      generation: attribution.generation ?? null,
+    },
     provenance: {
       evidence_refs: refs,
       journal_events: attribution.journal_events ?? 0,
@@ -151,7 +183,7 @@ export function buildStrategyObservation({ attribution, evidenceRefs = [] } = {}
       execution_id: executionId,
     },
   };
-  observation.observation_digest = digestOf({ ...observation, observation_digest: undefined });
+  observation.observation_digest = digestOf({ ...observation, observation_digest: undefined, at: undefined });
   return observation;
 }
 
@@ -279,6 +311,8 @@ export function strategyMemoryView({ storeRoot, limit = 32 }) {
       task_class: o.task_class,
       outcome: o.outcome,
       model: o.strategy?.MODEL_ROUTING ?? null,
+      provider: o.attribution_identity?.provider ?? null,
+      agent: (o.attribution_identity?.agent_identity?.phase_ids ?? []).join(",") || null,
       latency_ms: o.latency_ms,
       occupancy_avg: o.occupancy_avg,
       repairs: o.repairs,

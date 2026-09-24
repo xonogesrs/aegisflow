@@ -68,7 +68,10 @@ for a status string.
   telemetry-disabled, and unknown runs. Structured answer:
   `src/telemetry/operator-report.mjs`.
 - "What has the autonomous evolution loop done?" (read-only evolution view:
-  policy, circuit breaker, triggers, candidates, reviews, canary, rollbacks)
+  policy + its generation/history, circuit breaker, triggers, candidates,
+  reviews, canary, rollbacks, the active strategy policy, the strategy
+  performance memory, the every-run attribution feed and its failures, and the
+  resolved production declaration)
   → `node scripts/evolution-operator.mjs [--store <dir>] [--json]`. READ ONLY
   / advisory — zero writes, no production authority consumes its output.
   Structured answer: `src/evolution/operator-view.mjs`.
@@ -76,7 +79,18 @@ for a status string.
   --suspend|--resume|--status` (AUTO_EVOLUTION = ENABLED | SUSPENDED;
   SUSPENDED blocks new evolution cycles only — NORMAL_OPERATION, telemetry
   and in-flight execution are untouched). Production policy issuance:
-  `node scripts/evolution-issue-policy.mjs --store <dir>`. Production store:
+  `node scripts/evolution-issue-policy.mjs --store <dir>`; a successor
+  generation is issued with `--successor [--previous-digest <64hex>]` (the
+  outgoing generation is archived durably under `<store>/evolution-policy-history/`).
+  Every eligible production run is attributed into the strategy memory by the
+  every-run feed — `src/evolution/attribution-feed.mjs`, independent of
+  whether a trigger fires. A deployment declares its evolution inputs
+  (storeRoot / checkpointRoot / repoRoot / taskClass / strategyBaselineValues)
+  through `AUTOLOOP_EVOLUTION_DEPLOYMENT_CONFIG` → that record's shape is
+  `src/evolution/production-declaration.mjs`, and it is authored with
+  `node scripts/evolution-declare-production.mjs --out <path> --store-root …
+  --checkpoint-root … --repo-root … [--task-class …] [--strategy-baseline DIM=value …]`.
+  Production store:
   `/Volumes/NVM2T/Development/evidence/autoloop-evolution`.
 - Anything else structured (admission, budget, evidence manifests) has an
   equivalent module under `src/governance/`, `src/admission/`, `src/budget/`,

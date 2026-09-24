@@ -110,6 +110,14 @@ export function readObservationJournal({ evidenceRoot = null, executionId = null
  * qualified signal actually exists, so a suspended or broken observer can
  * never corrupt it).
  *
+ * PRODUCTION SNAPSHOT SEAM (AUTOLOOP_AGENT_STRATEGY_EVIDENCE_FEED_REPAIR_1 §A):
+ * the production gate pre-reads the journal ONCE and resolves the kill switch
+ * ONCE per run, then hands both to this observer and to the every-run evidence
+ * feed — so the trigger evaluation and the strategy observation are derived
+ * from the SAME durable snapshot (no torn view, no second read). Both params
+ * are OPTIONAL: a direct caller without them gets the original behaviour
+ * (this module reads the journal and resolves the switch itself).
+ *
  * @param {object} p
  * @param {string} p.evidenceRoot — the run's durable evidence root
  * @param {string} p.executionId — the run's execution id (journal owner)
@@ -119,6 +127,8 @@ export function readObservationJournal({ evidenceRoot = null, executionId = null
  * @param {object[]} [p.qualifiedPatterns]
  * @param {string} [p.storeRoot] — evolution store root (kill-switch check)
  * @param {object} [p.env]
+ * @param {object} [p.journal] — pre-read readObservationJournal output (gate seam)
+ * @param {object} [p.switchState] — pre-resolved evolutionSwitchState (gate seam)
  * @returns {{ schema, graph_run_id, switch_state, observed: number,
  *             fired: object[], baseline_events: number, at: string }}
  *   Total: every field present; `fired` is the qualified signal list (may
@@ -131,7 +141,7 @@ export function observeRunForEvolutionTriggers(p) {
     version: 1,
     graph_run_id: p.graphRunId ?? null,
     execution_id: p.executionId ?? null,
-    switch_state: evolutionSwitchState({ env: p.env, storeRoot: p.storeRoot ?? null }),
+    switch_state: p.switchState ?? evolutionSwitchState({ env: p.env, storeRoot: p.storeRoot ?? null }),
     observed: 0,
     fired: [],
     baseline_events: 0,
@@ -144,12 +154,14 @@ export function observeRunForEvolutionTriggers(p) {
   // The run's REAL durable evidence journal. THE shared reader (also used by
   // the production consumer for the fitness baseline side) — one journal
   // contract, never a second journal.
-  const journal = readObservationJournal({
-    evidenceRoot: p.evidenceRoot,
-    executionId: p.executionId,
-    chainId: p.chainId ?? null,
-    checkpointId: p.checkpointId ?? null,
-  });
+  const journal = (p.journal && typeof p.journal === "object" && typeof p.journal.ok === "boolean")
+    ? p.journal
+    : readObservationJournal({
+      evidenceRoot: p.evidenceRoot,
+      executionId: p.executionId,
+      chainId: p.chainId ?? null,
+      checkpointId: p.checkpointId ?? null,
+    });
   if (!journal.ok) return out; // unreadable/broken journal → no observation (fail-open)
   const events = journal.events;
   out.baseline_events = journal.count;

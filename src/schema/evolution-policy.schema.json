@@ -63,6 +63,11 @@
     "issued_at": { "type": "string" },
     "expires_at": { "type": "string" },
     "generation": { "type": "integer", "minimum": 0 },
+    "previous_policy_digest": {
+      "description": "POLICY SUCCESSION: the policy_digest of the generation this record succeeds. Present only on a successor (generation >= 1) issued through issueSuccessorEvolutionPolicy; the outgoing generation stays readable in the policy history archive.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "forbidden_risk_classes": { "type": "array", "items": { "type": "string" } }
   }
 }

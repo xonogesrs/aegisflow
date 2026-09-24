@@ -204,6 +204,17 @@ mutation (R9); the bounded-plan link honours the applier's byte bound and its
 class selection (R10); a broken durable trigger state makes the consumer fail
 OPEN — run PASS, disposition `SCHEDULE_FAILED`, no cycle, no mutation (R11).
 
+> **SUPERSEDED IN PART by `AUTOLOOP_AGENT_STRATEGY_EVIDENCE_FEED_REPAIR_1`.**
+> The post-result chain gained ONE stage BEFORE the observer: the every-run
+> strategy attribution feed (`src/evolution/attribution-feed.mjs`) records a
+> strategy-memory observation for EVERY eligible production run — healthy,
+> non-firing, gated and firing alike — so the memory no longer holds a
+> deficient-run-only sample. The trace above is otherwise unchanged (the
+> observer, the consumer, the durable trigger state and the loop all still run
+> exactly as described, and every disposition below is unchanged); only the
+> attribution's position — and therefore its independence from the trigger —
+> moved. See `autoloop-agent-strategy-evidence-feed-repair-1.md`.
+
 The consumer's terminal dispositions are a frozen closed set
 (`EVOLUTION_CONSUMER_DISPOSITIONS`): `DISABLED`, `NO_QUALIFIED_TRIGGER`,
 `SUSPENDED`, `POLICY_UNAVAILABLE`, `GATED`, `SINGLEFLIGHT`, `CYCLE_STARTED`,
@@ -220,7 +231,12 @@ reading the evolution store.
    `_REVIEWER`). This is deliberate: the previous production wiring had no
    store/checkpoint/repo resolution at all, and inventing defaults would have
    let a misconfigured deployment mutate a repo. An undeclared deployment
-   behaves exactly as before this card.
+   behaves exactly as before this card. **Extended by
+   `AUTOLOOP_AGENT_STRATEGY_EVIDENCE_FEED_REPAIR_1` §J.2**: the same inputs
+   (plus `taskClass` and `strategyBaselineValues`) may instead be declared by a
+   deployment-supplied declaration record
+   (`AUTOLOOP_EVOLUTION_DEPLOYMENT_CONFIG`), so a deployment no longer needs a
+   caller-side object — and never a hardcoded absolute path in source.
 2. **Autonomous promotion requires the deployment to designate the reviewer.**
    `runnerOpts.evolution.reviewerIdentity` (or `AUTOLOOP_EVOLUTION_REVIEWER`)
    is operator configuration, not something the loop invents: without it the

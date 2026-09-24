@@ -60,8 +60,11 @@ import {
 import { evolutionSwitchState, readObservationJournal } from "./production-observer.mjs";
 import { reconcileEvolutionState } from "./recovery.mjs";
 import { deriveAttribution } from "./attribution.mjs";
-import { buildStrategyObservation, recordStrategyObservation } from "./strategy-memory.mjs";
 import { canonicalTaskClass } from "./attribution.mjs";
+import {
+  EVOLUTION_DECLARATION_ENV, readEvolutionProductionDeclaration,
+  declarationInputs, parseStrategyBaselineValues,
+} from "./production-declaration.mjs";
 
 export const EVOLUTION_CONSUMER_SCHEMA = "autoloop.evolution-consumer/v1";
 export const EVOLUTION_CONSUMER_VERSION = 1;
@@ -90,7 +93,7 @@ export const EVOLUTION_CONSUMER_OUTCOME_DISPOSITIONS = Object.freeze([
   "CYCLE_FAILED",          // the cycle threw — recorded, never propagated (§C)
 ]);
 
-/** Configuration inputs (runnerOpts.evolution / env). */
+/** Configuration inputs (runnerOpts.evolution / env / deployment declaration). */
 export const EVOLUTION_CONFIG_ENV = Object.freeze({
   STORE_ROOT: "AUTOLOOP_EVOLUTION_STORE_ROOT",
   CHECKPOINT_ROOT: "AUTOLOOP_EVOLUTION_CHECKPOINT_ROOT",
@@ -98,6 +101,13 @@ export const EVOLUTION_CONFIG_ENV = Object.freeze({
   REVIEWER: "AUTOLOOP_EVOLUTION_REVIEWER",
   TASK_CLASS: "AUTOLOOP_EVOLUTION_TASK_CLASS",
   PROMPT_PROFILE: "AUTOLOOP_EVOLUTION_PROMPT_PROFILE",
+  STRATEGY_DIMENSIONS: "AUTOLOOP_EVOLUTION_STRATEGY_DIMENSIONS",
+  STRATEGY_BASELINE_VALUES: "AUTOLOOP_EVOLUTION_STRATEGY_BASELINE_VALUES",
+  SYNTHETIC: "AUTOLOOP_EVOLUTION_SYNTHETIC",
+  // §J.2: the deployment declaration record (storeRoot / checkpointRoot /
+  // repoRoot / taskClass / strategyBaselineValues) — a PATH supplied by the
+  // deployment, never a machine-specific constant in source.
+  DEPLOYMENT_CONFIG: EVOLUTION_DECLARATION_ENV,
 });
 
 // ── Module state (per process; observability + in-process single-flight) ────
@@ -134,26 +144,58 @@ function cfgValue(cfg, env, key, envKey) {
  * Resolve the evolution execution inputs for ONE production run.
  *
  * The consumer is INERT unless the production caller declares ALL of
- * storeRoot / checkpointRoot / repoRoot (explicit `runnerOpts.evolution`
- * object, or the AUTOLOOP_EVOLUTION_* environment). `reviewerIdentity` is
- * OPTIONAL: without an operator-designated independent reviewer the cycle
- * still runs (mutation + fitness) but the promotion gate fails closed — the
- * loop never self-approves.
+ * storeRoot / checkpointRoot / repoRoot — through (highest precedence first)
+ * an explicit `runnerOpts.evolution` object, the `AUTOLOOP_EVOLUTION_*`
+ * environment, or the deployment's declaration record
+ * (`AUTOLOOP_EVOLUTION_DEPLOYMENT_CONFIG` → production-declaration.mjs §J.2).
+ * `reviewerIdentity` is OPTIONAL: without an operator-designated independent
+ * reviewer the cycle still runs (mutation + fitness) but the promotion gate
+ * fails closed — the loop never self-approves.
+ *
+ * `strategyBaselineValues` (the strategy each task class currently runs under,
+ * per dimension) is a FIRST-CLASS production input: the caller object, the
+ * `AUTOLOOP_EVOLUTION_STRATEGY_BASELINE_VALUES` JSON variable, or the
+ * declaration record. An invalid value is IGNORED and reported
+ * (`strategyBaselineValuesError`) — never silently reinterpreted.
  */
 export function resolveEvolutionProductionConfig({ runnerOpts = {}, env = process.env } = {}) {
   const cfg = runnerOpts?.evolution && typeof runnerOpts.evolution === "object" ? runnerOpts.evolution : {};
-  const storeRoot = cfgValue(cfg, env, "storeRoot", EVOLUTION_CONFIG_ENV.STORE_ROOT);
-  const checkpointRoot = cfgValue(cfg, env, "checkpointRoot", EVOLUTION_CONFIG_ENV.CHECKPOINT_ROOT);
-  const repoRoot = cfgValue(cfg, env, "repoRoot", EVOLUTION_CONFIG_ENV.REPO_ROOT);
-  const reviewerIdentity = cfgValue(cfg, env, "reviewerIdentity", EVOLUTION_CONFIG_ENV.REVIEWER);
-  const taskClassRaw = cfgValue(cfg, env, "taskClass", EVOLUTION_CONFIG_ENV.TASK_CLASS);
-  const promptProfile = cfgValue(cfg, env, "promptProfile", EVOLUTION_CONFIG_ENV.PROMPT_PROFILE);
-  const strategyDimensions = Array.isArray(cfg.strategyDimensions) && cfg.strategyDimensions.length > 0 ? cfg.strategyDimensions : null;
+  // §J.2: read the deployment declaration BEFORE resolving the keys so the
+  // record is the deployment DEFAULT and the explicit surfaces override it.
+  const declaration = readEvolutionProductionDeclaration({
+    path: cfgValue(cfg, env, "deploymentConfig", EVOLUTION_DECLARATION_ENV),
+    env,
+  });
+  const decl = declarationInputs(declaration.declaration);
+  const pick = (key, envKey) => cfgValue(cfg, env, key, envKey) ?? (typeof decl[key] === "string" ? decl[key] : null);
+
+  const storeRoot = pick("storeRoot", EVOLUTION_CONFIG_ENV.STORE_ROOT);
+  const checkpointRoot = pick("checkpointRoot", EVOLUTION_CONFIG_ENV.CHECKPOINT_ROOT);
+  const repoRoot = pick("repoRoot", EVOLUTION_CONFIG_ENV.REPO_ROOT);
+  const reviewerIdentity = pick("reviewerIdentity", EVOLUTION_CONFIG_ENV.REVIEWER);
+  const taskClassRaw = pick("taskClass", EVOLUTION_CONFIG_ENV.TASK_CLASS);
+  const promptProfile = pick("promptProfile", EVOLUTION_CONFIG_ENV.PROMPT_PROFILE);
+
+  // Dimensions: explicit array > comma-separated env > declaration.
+  const dimsEnv = envValue(env, EVOLUTION_CONFIG_ENV.STRATEGY_DIMENSIONS);
+  const strategyDimensions = Array.isArray(cfg.strategyDimensions) && cfg.strategyDimensions.length > 0
+    ? cfg.strategyDimensions
+    : (dimsEnv ? dimsEnv.split(",").map((d) => d.trim()).filter(Boolean) : (decl.strategyDimensions ?? null));
+
   // The strategy each task class is CURRENTLY running under, per dimension.
   // Without this the producer falls back to "most-observed value", which is
   // ambiguous when two strategies have comparable sample counts — so a
   // deployment that knows its current strategy SHOULD declare it.
-  const strategyBaselineValues = cfg.strategyBaselineValues && typeof cfg.strategyBaselineValues === "object" ? cfg.strategyBaselineValues : null;
+  const baselineCandidate = (cfg.strategyBaselineValues && typeof cfg.strategyBaselineValues === "object")
+    ? { values: cfg.strategyBaselineValues, error: null }
+    : (envValue(env, EVOLUTION_CONFIG_ENV.STRATEGY_BASELINE_VALUES)
+      ? parseStrategyBaselineValues(envValue(env, EVOLUTION_CONFIG_ENV.STRATEGY_BASELINE_VALUES))
+      : { values: decl.strategyBaselineValues ?? null, error: null });
+  const strategyBaselineValues = baselineCandidate.values ?? null;
+
+  const syntheticEnv = String(envValue(env, EVOLUTION_CONFIG_ENV.SYNTHETIC) ?? "").toLowerCase();
+  const synthetic = cfg.synthetic === true || decl.synthetic === true || syntheticEnv === "1" || syntheticEnv === "true";
+
   const missing = [];
   if (!storeRoot) missing.push("storeRoot");
   if (!checkpointRoot) missing.push("checkpointRoot");
@@ -169,9 +211,17 @@ export function resolveEvolutionProductionConfig({ runnerOpts = {}, env = proces
     promptProfile,
     strategyDimensions,
     strategyBaselineValues,
+    strategyBaselineValuesError: baselineCandidate.error ?? null,
+    synthetic,
+    declaration: {
+      provided: declaration.provided,
+      path: declaration.path,
+      source: declaration.source,
+      errors: declaration.errors,
+    },
     reviewVerdict: typeof cfg.reviewVerdict === "string" && cfg.reviewVerdict.length > 0 ? cfg.reviewVerdict : "PASS",
-    canaryWindowMs: Number.isFinite(cfg.canaryWindowMs) ? cfg.canaryWindowMs : undefined,
-    thresholds: cfg.thresholds && typeof cfg.thresholds === "object" ? cfg.thresholds : {},
+    canaryWindowMs: Number.isFinite(cfg.canaryWindowMs) ? cfg.canaryWindowMs : (Number.isFinite(decl.canaryWindowMs) ? decl.canaryWindowMs : undefined),
+    thresholds: cfg.thresholds && typeof cfg.thresholds === "object" ? cfg.thresholds : (decl.thresholds ?? {}),
     env,
   };
 }
@@ -203,11 +253,19 @@ function disposition(config, name, extra = {}) {
  * @param {string} [p.evidenceRoot] — the run's durable evidence root (journal)
  * @param {string} [p.executionId] — the run's durable execution id
  * @param {string} [p.graphRunId]
+ * @param {object} [p.attribution] — the attribution derived by THE every-run
+ *   evidence feed (attribution-feed.mjs §A). When present it is REUSED here so
+ *   the loop's plan inputs come from the same derivation the observation was
+ *   built from. When absent (a standalone caller) the consumer derives one for
+ *   the loop — it NEVER writes the strategy memory: the memory write belongs to
+ *   the feed, which runs for EVERY eligible run, not only for firing triggers.
+ * @param {object} [p.attributionFeed] — the feed disposition record (envelope
+ *   observability; never an authority)
  * @returns {object} disposition record (also worth attaching to the envelope)
  */
 export function consumeEvolutionObservationForProduction({
   observation = null, config = null, evidenceRoot = null, executionId = null, graphRunId = null,
-  admission = null,
+  admission = null, attribution = null, attributionFeed = null,
 } = {}) {
   try {
     if (!config?.enabled) {
@@ -279,6 +337,7 @@ export function consumeEvolutionObservationForProduction({
     try {
       scheduled = scheduleCycle({
         config, key, triggerEvent, evidenceRoot, executionId, graphRunId, admission,
+        attribution,
       });
     } catch (e) {
       ACTIVE.delete(key);
@@ -297,6 +356,10 @@ export function consumeEvolutionObservationForProduction({
       policy_id: policy.policy_id,
       reviewer_configured: Boolean(config.reviewerIdentity),
       suppressed_count: suppressed.length,
+      // §A/§G: the attribution observation was recorded by the every-run feed
+      // (BEFORE the trigger was evaluated), independent of this cycle.
+      attribution_disposition: attributionFeed?.disposition ?? null,
+      attribution_recorded: attributionFeed?.recorded === true,
     });
   } catch (e) {
     // §C fail-open: evolution wiring failure is NEVER a run failure.
@@ -342,7 +405,7 @@ function summarizeCycle(result) {
   };
 }
 
-function scheduleCycle({ config, key, triggerEvent, evidenceRoot, executionId, graphRunId, admission = null }) {
+function scheduleCycle({ config, key, triggerEvent, evidenceRoot, executionId, graphRunId, admission = null, attribution = null }) {
   const signature = triggerEvent.signature;
   const lockPath = cycleLockPath(config.storeRoot, signature);
   // Affinity fields MUST be identical for every acquirer of the SAME signature
@@ -389,27 +452,31 @@ function scheduleCycle({ config, key, triggerEvent, evidenceRoot, executionId, g
       // shared reader (production-observer.mjs) — no second journal contract.
       const journal = readObservationJournal({ evidenceRoot, executionId });
 
-      // §A/§D: attribute THIS execution and record it in the bounded strategy
-      // memory. This happens for the cycle's own run (the same journal the
-      // trigger was derived from), so the memory accumulates real evidence
-      // rather than a synthesised stand-in.
-      let attribution = null;
-      try {
-        attribution = deriveAttribution({
-          events: journal.events,
-          admittedBinding: admission?.extensions?.rollover?.provider_binding ?? null,
-          taskClass: config.taskClass,
-          executionId,
-          graphRunId,
-          admissionId: admission?.admission_id ?? null,
-          promptProfile: config.promptProfile,
-        });
-        const obs = buildStrategyObservation({
-          attribution,
-          evidenceRefs: journal.events.map((e) => e.event_id).filter(Boolean),
-        });
-        recordStrategyObservation({ storeRoot: config.storeRoot, observation: obs });
-      } catch { /* attribution is advisory evidence; never a run failure */ }
+      // §A (EVIDENCE FEED REPAIR): the attribution + strategy-memory write now
+      // happen in the every-run feed (attribution-feed.mjs), which runs in the
+      // production POST-RESULT path for EVERY eligible run — BEFORE the trigger
+      // is evaluated and independently of whether a cycle is scheduled. This
+      // scheduler therefore no longer records observations (a memory write
+      // behind a fired trigger was the deficient-run selection bias).
+      //
+      // The feed hands its derivation down here so the loop's plan inputs come
+      // from the SAME attribution the observation was built from. A standalone
+      // caller that supplied none gets a derivation for the loop's inputs only
+      // (still no memory write — the memory belongs to the feed).
+      let cycleAttribution = attribution;
+      if (!cycleAttribution) {
+        try {
+          cycleAttribution = deriveAttribution({
+            events: journal.events,
+            admittedBinding: admission?.extensions?.rollover?.provider_binding ?? null,
+            taskClass: config.taskClass,
+            executionId,
+            graphRunId,
+            admissionId: admission?.admission_id ?? null,
+            promptProfile: config.promptProfile,
+          });
+        } catch { cycleAttribution = null; /* attribution is advisory evidence; never a run failure */ }
+      }
 
       const baselineHead = gitOut(config.repoRoot, ["rev-parse", "HEAD"]);
       if (!/^[0-9a-f]{40}$/.test(baselineHead ?? "")) {
@@ -439,7 +506,7 @@ function scheduleCycle({ config, key, triggerEvent, evidenceRoot, executionId, g
         // §B/§I: the loop's plan/diagnosis inputs. NO plan is passed in — the
         // natural plan producer derives one from the attributed evidence and
         // the strategy memory. A hand-fed patchPlan is never required.
-        attribution,
+        attribution: cycleAttribution,
         taskClass: config.taskClass,
         strategyDimensions: config.strategyDimensions ?? undefined,
         strategyBaselineValues: config.strategyBaselineValues ?? undefined,
