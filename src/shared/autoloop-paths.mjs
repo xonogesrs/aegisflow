@@ -155,6 +155,20 @@ export function assertNamespaceRoot(value, { envName, home = homedir() } = {}) {
   return resolved;
 }
 
+/**
+ * The REAL path of `$HOME` (or a supplied home), canonicalized through its
+ * deepest existing prefix.
+ *
+ * Fences that compare an ALREADY-canonicalized candidate against $HOME must use
+ * this, never a bare `resolve(homedir())`: on a platform that reaches home
+ * through a symlink (macOS `/tmp` → `/private/tmp`) the lexical spelling is a
+ * different string, and a lexical HOME against a resolved candidate silently
+ * disables the fence.
+ */
+export function canonicalHome({ home = homedir() } = {}) {
+  return canonicalizeExistingPrefix(resolve(home));
+}
+
 /** AUTOLOOP_HOME itself (the container for the other defaults). */
 export function autoloopHome({ env = process.env, home = homedir() } = {}) {
   const configured = env?.[AUTOLOOP_HOME_ENV];

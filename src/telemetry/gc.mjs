@@ -44,7 +44,7 @@ import {
   TELEMETRY_STATE_ROOT_ENV,
   resolveTelemetryStateRoot,
 } from "./location.mjs";
-import { resolveEvidenceRoot } from "../shared/autoloop-paths.mjs";
+import { canonicalHome, resolveEvidenceRoot } from "../shared/autoloop-paths.mjs";
 
 // ── Lifecycle vocabulary (S16 Phase F) ──────────────────────────────────────
 
@@ -206,7 +206,11 @@ function assertFlatIdentity(value, label) {
  */
 export function resolveGcNamespace({ graphRunId = null, env = process.env, tempNamespaceRoot = null } = {}) {
   const evidenceRoot = resolveEvidenceRoot({ env });
-  const home = resolve(process.env.HOME ?? "");
+  // The candidate below is realpath-resolved, so the fence must compare it
+  // against a canonical HOME: a lexical `resolve(homedir())` is a different
+  // string when home is reached through a symlink (macOS /tmp → /private/tmp),
+  // and the $HOME fence would silently not fire.
+  const home = canonicalHome();
   if (tempNamespaceRoot != null) {
     if (typeof tempNamespaceRoot !== "string" || !isAbsolute(tempNamespaceRoot)) {
       throw new GcHoldError(GC_HOLD_CODES.ARBITRARY_ROOT, `temp namespace must be absolute: ${tempNamespaceRoot}`);
