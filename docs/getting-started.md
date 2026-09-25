@@ -38,7 +38,7 @@ You should see lines like:
 ```
 # excluded (need external infrastructure):
 #   test/test-c3-colima-pipeline.mjs — Colima + Docker (real container pipeline)
-#   test/pi-rpc-real-smoke.mjs — real `pi` binary + live provider credential
+#   test/test-colima-runtime.mjs — Colima + Docker (runtime adapter; starts an instance)
 ```
 
 If `npm test` passes, the governance core is healthy on your machine. Sandbox
