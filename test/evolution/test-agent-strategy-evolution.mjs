@@ -57,7 +57,7 @@ import { selectRouteForTaskClass, SUPPORTED_ROUTE_VALUES, defaultRoute } from ".
 import { runEvolutionCycle, EVOLUTION_LOOP_VERDICTS } from "../../src/evolution/loop.mjs";
 import { createEvolutionPolicy } from "../../src/evolution/policy.mjs";
 import { readCanary } from "../../src/evolution/canary.mjs";
-import { readTriggerState } from "../../src/evolution/trigger.mjs";
+import { readTriggerState, extractTriggerObservations, evaluateSignals, DEFAULT_SIGNAL_WINDOW_MS } from "../../src/evolution/trigger.mjs";
 import { RunEvidenceStore } from "../../src/evidence/run-evidence-store.mjs";
 
 import * as attributionMod from "../../src/evolution/attribution.mjs";
@@ -143,7 +143,16 @@ function journalFor({
 } = {}) {
   // A durable journal row ALWAYS carries a timestamp (the store writes one);
   // the fixtures must too, or latency/concurrency would be unmeasurable.
-  const base = Date.parse("2026-09-24T00:00:00.000Z");
+  //
+  // The base is RELATIVE to now, and must stay so: the trigger's observation
+  // window is `DEFAULT_SIGNAL_WINDOW_MS` (24h) measured against `Date.now()`,
+  // and `extractTriggerObservations` DROPS any event older than the window.
+  // An absolute fixture date therefore makes every seeded journal expire 24h
+  // after that date: the signals stop crossing their floor, the loop returns
+  // NO_TRIGGER before the candidate stage, and the S13/S16 assertions never
+  // reach the stage they exist to test. This is a property of the fixture, not
+  // of the pipeline — see `SIGNAL_COUNT_FLOOR` in src/evolution/trigger.mjs.
+  const base = Date.now() - 60 * 60 * 1000; // one hour ago: always inside the window
   let tick = 0;
   const stamp = (e) => ({ ...e, timestamp: new Date(base + tick++ * 1000).toISOString() });
   const events = [];
@@ -209,6 +218,21 @@ function seedRuns(storeRoot, n, opts = {}) {
   for (let i = 0; i < n; i++) out.push(recordRun(storeRoot, { ...opts, label: `${opts.label ?? "seed"}-${i}` }));
   return out;
 }
+
+// ── S0: the trigger observation window is a FIXTURE invariant ──────────────
+// Guards the drift that made S13/S16 fail: an absolute fixture timestamp ages
+// out of the 24h trigger window, `extractTriggerObservations` drops every
+// observation, and the loop returns NO_TRIGGER before the candidate stage —
+// so the assertions downstream never execute. The failure surfaces 24h after
+// the fixture date, far from the change that caused it. This makes it local.
+test("S0 trigger window: journalFor fixtures stay inside the 24h observation window", () => {
+  const observations = extractTriggerObservations({ events: journalFor({ outcome: "HOLD", repairs: 3 }) });
+  assert.ok(observations.length > 0, "fixture events must survive the observation window (a stale absolute base makes them vanish)");
+  const fired = evaluateSignals({ observations, thresholds: {} });
+  assert.ok(fired.some((f) => f.signalClass === "REPEATED_REPAIR_REQUIREMENT"), "3 repairs must cross the REPEATED_REPAIR_REQUIREMENT floor");
+  const oldest = Math.min(...observations.map((o) => o.at));
+  assert.ok(Date.now() - oldest < DEFAULT_SIGNAL_WINDOW_MS, "the fixture base must be relative to now, never an absolute date");
+});
 
 // ── S1: §A attribution ─────────────────────────────────────────────────────
 
