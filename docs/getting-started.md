@@ -2,7 +2,7 @@
 
 This walks a clean checkout to a real AutoLoop execution. If you only want to
 see the machinery move without installing an agent runtime, do
-[Step 4a](#step-4a-see-it-work-without-a-provider) first — it needs nothing
+[Step 4a](#step-4a--see-it-work-without-a-provider) first — it needs nothing
 beyond Node.
 
 ## Step 1 — Clone and install
@@ -18,7 +18,7 @@ npm install
 
 `npm install` pulls one runtime dependency (`@earendil-works/pi-ai`). The agent
 runtime `pi` itself is **not** an npm dependency of this repository — you
-install it separately in Step 3.
+install it separately in [Step 4b](#step-4b--run-against-a-real-agent).
 
 ## Step 2 — Verify the checkout
 
