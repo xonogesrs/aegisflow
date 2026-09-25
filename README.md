@@ -144,22 +144,21 @@ npm install
 npm run check
 npm test
 
-# 4. See the operator surface
-node scripts/autoloop-operator.mjs --help
+# 4. See it work without a provider (scripted adapter, exit 0)
+node examples/minimal/run.mjs
 ```
 
 `npm test` runs the host-only suite: every suite that needs nothing beyond
 Node and this checkout. Suites requiring a sandbox or a real agent runtime are
 listed and excluded, never silently skipped:
 ```bash
-node test/run-suite.mjs --list   # the exact file list, and what each exclusion needs
-```
-
-
-```bash
-node test/run-suite.mjs --list          # see exactly what runs and what is excluded
+node test/run-suite.mjs --list                    # the exact file list, and what each exclusion needs
 COLIMA_HOME=/path/to/colima npm run test:colima   # sandbox suites
 ```
+
+The operator surface is not a `--help` command: `scripts/autoloop-operator.mjs`
+treats a missing `--run <graphRunId>` as usage and exits non-zero by design. See
+[Inspect a result](#inspect-a-result) for its real invocation.
 
 ### Inspect a result
 

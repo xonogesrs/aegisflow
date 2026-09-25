@@ -33,11 +33,6 @@ not have; they are listed and excluded rather than silently skipped:
 node test/run-suite.mjs --list
 ```
 
-
-```bash
-node test/run-suite.mjs --list
-```
-
 You should see lines like:
 
 ```
@@ -134,8 +129,9 @@ decides the rest.
 node scripts/c3-colima-task.mjs --card <path-to-card.json> --repo "$PWD"
 ```
 
-`--help` on any script prints its arguments. The card shape and the admission
-fields it maps onto are in [governance.md](governance.md).
+Each script prints its own usage line — and exits non-zero, because usage is not
+a success path — when its required arguments are missing. The card shape and the
+admission fields it maps onto are in [governance.md](governance.md).
 
 ## Step 6 — Inspect the result
 
