@@ -215,3 +215,38 @@ package is `"private": true` and the `aegisflow` name on the public registry
 belongs to an unrelated package — the repository does not take it), the
 benchmark raw results and arm names (`AUTOLOOP_FRESH`, `AUTOLOOP_LEARNED`), and
 every `autoloop.*` persisted identifier.
+
+---
+
+## Follow-up landed on top of this remediation — the OMP integration publication
+
+`AEGISFLOW_OMP_INTEGRATION_PUBLICATION_RECONCILIATION_1` — the OMP
+(`@oh-my-pi/pi-coding-agent`) waiter-lifecycle and terminal-fence extension that
+had been running as a locally deployed extension is now published, installable,
+verifiable and recoverable from this repository.
+
+It is an **agent-host integration**, not core runtime: nothing under `src/` imports
+it, `npm install` and `npm test` still require no agent runtime, and the README
+marks it `CONDITIONAL` with its own document. The publication is a reconciliation
+of a validated deployment, not a rewrite — the delta against the deployed bytes
+is one redacted private session identifier in a comment.
+
+| File | Change |
+|---|---|
+| `integrations/omp/README.md` | NEW: what the integration is, why it exists, install/update/drift/uninstall, the terminal-fence authority contract, core-vs-integration split, known limitations |
+| `integrations/omp/extensions/no-poll-waits.js` | the extension: wait policy gate, auto-background clamp, generation-bound job binding, terminal fence, agent REPORT tool, controller commit command |
+| `integrations/omp/extensions/lib/poll-wait-policy.js` | the pure semantic classifier (`classifyBashWait` / `decideBashWait`) |
+| `integrations/omp/extensions/test/{poll-wait-policy.test.mjs,waiter-fence.acceptance.ts,terminal-fence-authority.acceptance.ts}` | the deployment's own self-test and the two acceptance harnesses that pin the authority contract |
+| `scripts/install-omp-integration.mjs` | NEW: `install` / `check` / `uninstall`, allowlisted file set, layout refusal, backup-before-replace, atomic writes |
+| `scripts/omp-integration/lib.mjs` | NEW: allowlist, layout validation, OMP discovery mirror, deployment classification (`MATCH` / `EQUIVALENT` / `DRIFT`), hashing, atomic write |
+| `scripts/omp-integration/scan-publication.mjs` | NEW: publication hygiene scan — secrets, private paths, personal identifiers |
+| `scripts/omp-integration/run-acceptance.mjs` | NEW: stages the published bytes and runs the three harnesses; reports `PREREQUISITE_MISSING` rather than installing anything |
+| `test/omp-integration/*` (3 suites) | NEW: wait-policy contract, installer + drift-check acceptance (clean install, discovery, `MATCH`/`EQUIVALENT`/`DRIFT`/`MISSING`, layout refusal, backup/restore, confinement), publication hygiene with a negative control |
+| `package.json` | `omp:install` / `omp:check` / `omp:uninstall` / `omp:scan` / `omp:test` |
+| `README.md`, `docs/agent-integration.md`, `docs/operations.md`, `SECURITY.md` | the optional integration, its authority boundary and its operations, stated as an integration feature rather than a core capability |
+
+Deliberately **not** changed: no `autoloop.*` persisted identifier, no AegisFlow
+core source, and no existing extension in any deployed agent directory. The
+extension's own environment contract (`OMP_TERMINAL_FENCE_AUTHORITY`) is a
+launcher-set presence marker documented in `SECURITY.md`; it is never a
+credential.

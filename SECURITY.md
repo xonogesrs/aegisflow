@@ -175,6 +175,33 @@ see the top of this document. Include the platform, the `$HOME` canonical form
 directory is the usual reason a path boundary behaves differently on two
 machines.
 
+## Terminal fence authority (OMP integration)
+
+The optional OMP extension in
+[`integrations/omp/`](integrations/omp/README.md) commits a *terminal fence* —
+the act that invalidates a run generation's pending background deliveries. That
+act is authority-relevant, so it is not something an agent can perform:
+
+- The governed agent has **no tool** that commits a fence. Its only tool is
+  `request_terminal_fence`, which records a disposition and always reports
+  `committed: false`. The hook additionally refuses the legacy tool name
+  `fence_background_waiters` outright, fail closed.
+- The commit is reachable only from the host prompt-command channel
+  (`/fence-generation <STATUS> [reason]`), which a governed model cannot dispatch
+  into its own session.
+- The commit requires the environment marker `OMP_TERMINAL_FENCE_AUTHORITY`,
+  which the **orchestrator that launched the governed process** sets. Without it
+  the command is denied (`CONTROLLER_AUTHORITY_ABSENT`) and the generation stays
+  active, so pending deliveries keep being delivered.
+
+`OMP_TERMINAL_FENCE_AUTHORITY` is a launcher-supplied marker, **not** a
+capability an agent can obtain. It is not derived from model output, not exposed
+as a tool, and not grantable by prompt text or tool payload. Any claim that an
+agent holds it — or any code path that lets a model reach the commit primitive —
+is a security defect; report it as one. Do not place a credential, token or key
+in that variable: it is a presence marker, and the extension tests only whether
+it is non-empty.
+
 ## Handling credentials
 
 - AegisFlow never requires a credential to be placed in this repository.

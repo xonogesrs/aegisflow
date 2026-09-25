@@ -194,3 +194,7 @@ shadow mount of the same name exists.
 - Running and diagnosing it: [operations.md](operations.md)
 - When something breaks: [troubleshooting.md](troubleshooting.md)
 - Coming from AutoLoop (the pre-rename project): [migration-rename.md](migration-rename.md)
+- Optional, if you run agents on OMP (`@oh-my-pi/pi-coding-agent`): the
+  [OMP integration](../integrations/omp/README.md) — waiter policy, terminal
+  fence authority, install/update/drift/uninstall. Not needed for AegisFlow
+  itself.

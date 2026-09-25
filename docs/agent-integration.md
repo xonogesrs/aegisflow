@@ -140,5 +140,29 @@ If you upgrade a provider's model and the pinned model id no longer exists, the
 run fails closed and names the mismatch. That is the intended behaviour: a
 silent model substitution would invalidate every prior review.
 
+## The optional OMP integration
+
+AegisFlow drives Pi; it also publishes an optional extension for **OMP**
+(`@oh-my-pi/pi-coding-agent`), a different agent host. That extension is not part
+of the adapter contract above and is not loaded by AegisFlow — see
+[../integrations/omp/README.md](../integrations/omp/README.md).
+
+It matters to this document for one reason: **when a governed OMP process runs,
+terminal authority must stay on the AegisFlow side of the boundary.**
+
+| Actor | May do | May not do |
+|---|---|---|
+| governed agent (the model) | `request_terminal_fence(status, reason)` — records a disposition; always reports `committed: false` | commit a terminal fence, invalidate a pending delivery, or declare its own generation terminal |
+| trusted controller / orchestrator (whatever launches the governed process) | commit the fence on the host prompt-command channel: `/fence-generation <PASS\|HOLD\|FAIL\|CANCELLED> [reason]`, with `OMP_TERMINAL_FENCE_AUTHORITY` set | — |
+
+`OMP_TERMINAL_FENCE_AUTHORITY` is an environment marker the **launcher** sets; it
+is not a capability an agent can acquire, derive from a payload, or reach through
+a tool. Without it the commit fails closed (`CONTROLLER_AUTHORITY_ABSENT`) and the
+generation stays active, so pending background deliveries keep being delivered.
+
+Nothing in AegisFlow core depends on the extension being installed: `npm install`
+and `npm test` work without an agent runtime, and no file under `src/` imports
+it.
+
 Third-party names and the trademark position:
 [../THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).

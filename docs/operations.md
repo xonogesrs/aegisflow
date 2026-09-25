@@ -168,6 +168,28 @@ allocation is how two runs end up spending one budget.
 - **Treat the journal as append-only.** Never hand-edit; validation will fail
   and the failure will be correct.
 
+## The optional OMP integration
+
+Only relevant if you deploy [`integrations/omp/`](../integrations/omp/README.md)
+into an OMP agent directory. Three operations, all one-shot commands; nothing
+runs in the background.
+
+| Operation | Command | What to look for |
+|---|---|---|
+| deploy / update | `node scripts/install-omp-integration.mjs install` | `INSTALL_RESULT = INSTALLED` or `UP_TO_DATE`; a `backup = …` line means a differing file was preserved first |
+| drift check | `node scripts/install-omp-integration.mjs check` | per-file `MATCH` / `EQUIVALENT` / `DRIFT` / `MISSING`; exit 0 only when nothing drifted or went missing |
+| uninstall / restore | `node scripts/install-omp-integration.mjs uninstall` | `UNINSTALL_RESULT = RESTORED` (from the newest backup) or `REMOVED` |
+
+- A `DRIFT` is a fact about the deployed bytes, not necessarily a fault: someone
+  edited the extension in place, or the checkout moved ahead of the deployment.
+  Resolve it deliberately — `install` to move forward, `uninstall` to go back —
+  rather than by hand-editing the deployed copy.
+- `EQUIVALENT` means the two copies differ only by the private session identifier
+  the published source redacts; `--strict-bytes` if you want byte identity.
+- Grant `OMP_TERMINAL_FENCE_AUTHORITY` only in the environment that launches a
+  governed process, and only when that orchestrator will actually issue
+  `/fence-generation`. See [SECURITY.md](../SECURITY.md).
+
 ## Routine checklist
 
 | Interval | Check |
@@ -178,6 +200,7 @@ allocation is how two runs end up spending one budget.
 | weekly | evolution is in the state you expect (`--status`) |
 | weekly | evidence root backup completed |
 | on upgrade | re-pin the agent runtime identity deliberately |
+| on upgrade | if you deployed the OMP integration, re-run `install` then `check` |
 | on failure | preserve the evidence directory before any remediation |
 
 ## When to stop and ask

@@ -95,6 +95,7 @@ expect it.
 | Canary + rollback | EXPERIMENTAL | promotion is reversible; rollback restores the prior generation |
 | Circuit breaker + kill switch | STABLE | suspends new evolution cycles; normal operation and telemetry are untouched |
 | Self-modification of governance/admission code | NOT_SUPPORTED | structurally forbidden paths; HIGH-risk class denied by construction |
+| OMP waiter + terminal-fence integration | CONDITIONAL | optional agent-host extension in [`integrations/omp/`](integrations/omp/README.md); requires an OMP install and is **not** required by core |
 | Multi-tenant / shared-server operation | NOT_SUPPORTED | single-operator, single-machine design |
 | Windows / Linux host support | NOT_SUPPORTED | macOS host + Colima VM is the only exercised platform |
 
@@ -348,6 +349,7 @@ every variable, its default, and its validation rule — is in
 | [docs/architecture.md](docs/architecture.md) | the control flow and who owns which authority |
 | [docs/configuration.md](docs/configuration.md) | the full public configuration surface |
 | [docs/agent-integration.md](docs/agent-integration.md) | how an agent runtime is invoked, and the adapter contract |
+| [integrations/omp/README.md](integrations/omp/README.md) | the optional OMP extension: waiter policy, terminal fence authority, install/update/drift/uninstall |
 | [docs/durable-execution.md](docs/durable-execution.md) | checkpoints, journal, resume, and the crash-recovery model |
 | [docs/governance.md](docs/governance.md) | admission, budgets, review, closeout, promotion, commit gates |
 | [docs/telemetry-and-operator.md](docs/telemetry-and-operator.md) | telemetry stream, retention, operator reports |
@@ -383,6 +385,36 @@ Scheduled adapters (OpenCode, Claude Code, Codex) are **not** wired in. See
 [docs/agent-integration.md](docs/agent-integration.md) for the adapter
 contract, and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the
 dependency and trademark position.
+
+### Optional: the OMP integration
+
+Independent of the adapter contract above, the repository also publishes an
+optional integration for **OMP** (`@oh-my-pi/pi-coding-agent`) in
+[`integrations/omp/`](integrations/omp/README.md). It is an agent-host extension,
+not part of AegisFlow core:
+
+- it refuses *poll-only* bash waits (including the `async`-unset shape that OMP
+  auto-backgrounds after the hook has run) and clamps admitted short polls under
+  the auto-background threshold, so a waiting agent does not manufacture
+  background jobs whose completions outlive the task;
+- it binds every background job to the run generation that created it, and
+  suppresses a generation's pending deliveries once that generation reaches a
+  terminal state — so a late completion can still be read through `proc://` but
+  can no longer re-invoke the agent, while a *new* task in the same session is
+  unaffected;
+- it separates terminal authority: **the governed agent may request**
+  (`request_terminal_fence`, which never commits), and **only the trusted
+  controller may commit** (`/fence-generation` on the host channel, gated by the
+  `OMP_TERMINAL_FENCE_AUTHORITY` marker the launching orchestrator sets). There is
+  no agent-reachable commit tool, and the legacy one is refused at the hook.
+
+AegisFlow core neither requires nor loads it: `npm install` and `npm test` work
+with no agent runtime installed, and nothing under `src/` imports it. Installing
+it is one command (`node scripts/install-omp-integration.mjs install`), and
+`node scripts/install-omp-integration.mjs check` reports deployment drift as
+`MATCH` / `EQUIVALENT` / `DRIFT` / `MISSING`. See
+[integrations/omp/README.md](integrations/omp/README.md) for installation,
+update, uninstall and the full authority contract.
 
 ---
 

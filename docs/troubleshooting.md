@@ -11,6 +11,20 @@ changing anything.
 
 ## Installation and startup
 
+### Optional: OMP integration symptoms
+
+Only applies if you deployed [`integrations/omp/`](../integrations/omp/README.md).
+
+| Symptom | Cause | Safe action |
+|---|---|---|
+| `node scripts/install-omp-integration.mjs check` reports `DRIFT` | the deployed copy was edited in place, or the checkout moved ahead of the deployment | `install` to move the deployment forward, or `uninstall` to restore the preserved copy. Both back up what they replace. |
+| `check` reports `MISSING` | a deployed file was deleted | `install` |
+| `check` reports `EQUIVALENT` | the two copies differ only by the private session identifier the published source redacts | expected; `--strict-bytes` if you require byte identity |
+| `install` prints `REFUSED — unexpected source layout` | the source tree is not the reviewed set (a missing file, a symlink, an unexpected executable, or a discovery alias) | nothing was copied and the target is untouched; restore the tree from git (`git status --short`) before retrying |
+| `omp --tools …,fence_background_waiters` fails with `Unknown tool` | correct behaviour: no agent-reachable terminal-commit tool exists | use `request_terminal_fence` to report a disposition; the controller commits with `/fence-generation` |
+| `/fence-generation` reports `DENIED (CONTROLLER_AUTHORITY_ABSENT)` | the governed process was not launched with `OMP_TERMINAL_FENCE_AUTHORITY` | this is fail-closed, not a fault: the launch environment sets the marker, never the agent. See [../SECURITY.md](../SECURITY.md). |
+| `OMP_INTEGRATION_ACCEPTANCE=PREREQUISITE_MISSING` | `bun` or `@oh-my-pi/pi-coding-agent` was not found | install `bun` and point `OMP_PI_CODING_AGENT_ROOT` at a copy of the package (the runner's header lists the search order) |
+
 ### `npm test` reports failures in suites you never touched
 
 **Likely cause** — you are running the suite inside a checkout where generated

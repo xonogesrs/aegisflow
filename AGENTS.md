@@ -182,6 +182,11 @@ completes, and the completion notice wakes the agent. Therefore:
   `for`/`while` loop that sleeps and does real work — one job, one
   notification.
 
+On OMP (`@oh-my-pi/pi-coding-agent`) this block is provided by the optional
+extension published in [`integrations/omp/`](integrations/omp/README.md); the
+same document states the terminal-fence authority boundary that goes with it
+(an agent may *request* a terminal fence, never commit one).
+
 ## Repository discipline
 
 - **No machine-local absolute path in `src/` or `scripts/`.** Portability is
