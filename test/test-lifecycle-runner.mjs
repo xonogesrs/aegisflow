@@ -476,3 +476,56 @@ test("VCA-1 Phase 0C: reviewer role always gets a hard no-tools toolPolicy, even
   assert.deepEqual(seenToolPolicy.executor, permissiveToolPolicy, "executor keeps the task card's own toolPolicy");
   assert.deepEqual(seenToolPolicy.reviewer, { mode: "no-tools" }, "reviewer is hard-pinned to no-tools regardless of taskCard.toolPolicy");
 });
+
+// ── ACTIVE-TASK CANCELLATION (CANCEL-CONTRACT-REPAIR-1 §C) ────────────────
+//
+// The phase's abortSignal must reach the harness verification command. Before
+// the repair lifecycle-runner had abortSignal in scope at the
+// runVerificationCommand call site but never forwarded it, so a cancelled run
+// still ran the command to its own timeout (measured: a 45s command survived
+// an abort issued at 2.5s and held the run open for the full 42.6s).
+
+test("cancellation reaches the verification command and yields an explicit abort disposition", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "c1-abort-"));
+  try {
+    const adapter = createScriptedAdapter([
+      { expect: { phase: "executor", attempt: 0 }, result: (req) => completed(evidenceFor(req)) },
+      { expect: { phase: "reviewer", attempt: 0 }, result: completed(verdictJson({ verdict: "PASS", recommended_next_action: "STOP" })) },
+    ]);
+    const ac = new AbortController();
+    // A verification command that outlives the abort by a wide margin: only a
+    // forwarded signal can end this run early.
+    const card = baseCard({ verificationCommand: ["node", "-e", "setTimeout(()=>{}, 45000)"] });
+    setTimeout(() => ac.abort(), 300);
+    const started = Date.now();
+    const outcome = await runLifecycle({
+      cwd: FIXTURE_CWD, taskCard: card, adapter, maxRepairAttempts: 0,
+      timeoutMs: 60000, abortSignal: ac.signal,
+    });
+    const elapsed = Date.now() - started;
+
+    assert.equal(outcome.final, "HOLD");
+    assert.equal(outcome.reason, "VERIFICATION_ABORTED", "abort must be an explicit disposition, not a generic evidence gap");
+    assert.ok(elapsed < 5000, `run must settle promptly on abort (took ${elapsed}ms)`);
+    // The reviewer must never have been invoked for an aborted phase.
+    assert.equal(adapter.callRecord.filter((c) => c.phase === "reviewer").length, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("an already-aborted signal prevents the verification command from running", async () => {
+  const adapter = createScriptedAdapter([
+    { expect: { phase: "executor", attempt: 0 }, result: (req) => completed(evidenceFor(req)) },
+    { expect: { phase: "reviewer", attempt: 0 }, result: completed(verdictJson({ verdict: "PASS", recommended_next_action: "STOP" })) },
+  ]);
+  const ac = new AbortController();
+  ac.abort();
+  const outcome = await runLifecycle({
+    cwd: FIXTURE_CWD, taskCard: baseCard(), adapter, maxRepairAttempts: 0,
+    timeoutMs: 1000, abortSignal: ac.signal,
+  });
+  // Pre-existing contract: an aborted signal is rejected before any work.
+  assert.equal(outcome.final, "HOLD");
+  assert.equal(outcome.reason, "ABORTED_BEFORE_START");
+});

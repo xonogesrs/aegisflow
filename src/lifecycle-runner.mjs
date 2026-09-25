@@ -25,6 +25,7 @@ import {
   buildHarnessOwnedEvidence,
   collectGitBaseline,
   runVerificationCommand,
+  HARNESS_EVIDENCE_ERRORS,
 } from "./v2/harness-evidence.mjs";
 import { classifyHold } from "./hold-taxonomy.mjs";
 import { normalize as normalizeReviewerVerdict, FAIL_CLOSED as REVIEWER_FAIL_CLOSED } from "./normalize-reviewer-json.mjs";
@@ -322,19 +323,29 @@ export async function runLifecycle({
     // facts and builds the implementation-evidence object itself（identity
     // mechanically bound; system-observed test process; schema validated）.
     const evidenceStartedAt = new Date().toISOString();
+    // Cancellation contract: the verification command is the phase's longest
+    // external side effect, so its abort disposition is reported explicitly
+    // rather than degrading into a generic evidence gap. The command is
+    // hoisted out of the evidence call for exactly that reason.
+    let testRun = null;
+    if (Array.isArray(taskCard.verificationCommand)) {
+      testRun = await runVerificationCommand({
+        command: taskCard.verificationCommand,
+        cwd: taskCard.repositoryRoot,
+        environmentAllowlist: taskCard.environmentAllowlist,
+        abortSignal,
+      });
+      if (testRun.code === HARNESS_EVIDENCE_ERRORS.TEST_RUN_ABORTED) {
+        return hold("VERIFICATION_ABORTED", { attempt });
+      }
+    }
     const evidenceBuild = await buildHarnessOwnedEvidence({
       executionId: taskCard.parentExecutionId ?? executionId,
       taskCard,
       attempt,
       scopeCheck: scopeCheck ?? { ok: true, violations: [], delta: [] },
       baseline: taskCard.repositoryRoot ? collectGitBaseline(taskCard.repositoryRoot) : null,
-      testRun: Array.isArray(taskCard.verificationCommand)
-        ? await runVerificationCommand({
-            command: taskCard.verificationCommand,
-            cwd: taskCard.repositoryRoot,
-            environmentAllowlist: taskCard.environmentAllowlist,
-          })
-        : null,
+      testRun,
       phaseStartedAt: lifecycleStartedAt,
       phaseCompletedAt: evidenceStartedAt,
       executorResult,

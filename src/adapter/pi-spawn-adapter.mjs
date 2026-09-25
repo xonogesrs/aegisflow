@@ -19,9 +19,9 @@
 // authority, mutate checkpoints, transfer ownership or declare ACK-readiness:
 // those functions do not exist on this interface (T65/T66).
 
-import { spawn } from "node:child_process";
 import { mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { spawnTaskScoped, terminateProcessGroup } from "../shared/process-group.mjs";
 import {
   registerSpawnAdapterKind,
   SPAWN_RUNTIME_CAPABILITIES,
@@ -135,6 +135,14 @@ export async function spawnSuccessorSession(request) {
   if (request?.env !== undefined || request?.environmentAllowlist !== undefined || request?.extraEnv !== undefined) {
     return { status: "error", error: "caller env expansion forbidden" };
   }
+  // Cancellation seam (AUTOLOOP_ACTIVE_TASK_CANCELLATION_CONTRACT_REPAIR_1 §H):
+  // optional and caller-supplied. Rollover has its own cancellation domain, so
+  // this adapter neither invents nor owns one — when the controller supplies a
+  // signal, an already-aborted one must never start a provider session.
+  const abortSignal = request?.abortSignal ?? null;
+  if (abortSignal && abortSignal.aborted) {
+    return { status: "aborted", error: "successor_spawn_aborted_before_start" };
+  }
   const canon = canonicalizeProviderBinding({
     adapterKind: request?.adapterKind,
     providerKind: request?.providerKind,
@@ -188,7 +196,10 @@ export async function spawnSuccessorSession(request) {
 
   let child;
   try {
-    child = spawn(executable, args, { cwd: process.cwd(), env: envResult.env, detached: true, stdio: ["pipe", "pipe", "pipe"] });
+    // Task-scoped process group (shared convention): the quarantined session
+    // and every descendant it spawns are terminated together, never the
+    // leader alone.
+    child = spawnTaskScoped(executable, args, { cwd: process.cwd(), env: envResult.env, stdio: ["pipe", "pipe", "pipe"] });
   } catch (e) {
     return { status: "error", error: `spawn_failed:${String(e?.message ?? e).slice(0, 160)}` };
   }
@@ -204,9 +215,22 @@ export async function spawnSuccessorSession(request) {
       settledDone = true;
       clearTimeout(timer);
       clearInterval(poll);
+      if (abortSignal?.removeEventListener) abortSignal.removeEventListener("abort", onAbort);
       resolve(result);
     };
+    // Mid-flight cancellation: group teardown, then an explicit aborted
+    // disposition — the session must not continue to provider completion.
+    const onAbort = () => {
+      if (settledDone) return;
+      terminateProcessGroup(child, { graceMs: 0, escalation: 0 });
+      finish({ status: "aborted", error: "successor_spawn_aborted" });
+    };
+    if (abortSignal?.addEventListener) abortSignal.addEventListener("abort", onAbort, { once: true });
+    // Every terminal path reaps the task-scoped group: timeout, abort and
+    // settle alike. A descendant that outlives the session must not survive
+    // the adapter's own terminal transition.
     const timer = setTimeout(() => {
+      terminateProcessGroup(child, { graceMs: 0, escalation: 0 });
       finish({ status: "timed_out", error: `quarantine_session_not_settled_within_${spawnTimeoutMs()}ms` });
     }, spawnTimeoutMs());
     child.stdout.on("data", (d) => {
@@ -228,9 +252,16 @@ export async function spawnSuccessorSession(request) {
       }
     });
     child.stderr.on("data", (d) => { stderrTail = (stderrTail + d.toString("utf8")).slice(-400); });
-    child.on("error", (e) => finish({ status: "error", error: `child_error:${String(e?.message ?? e).slice(0, 160)}` }));
+    child.on("error", (e) => {
+      terminateProcessGroup(child, { graceMs: 0, escalation: 0 });
+      finish({ status: "error", error: `child_error:${String(e?.message ?? e).slice(0, 160)}` });
+    });
     child.on("exit", (code, sig) => {
-      if (!sawSettled) finish({ status: "aborted", error: `child_exited_before_settle code=${code} signal=${sig} stderr=${stderrTail.replace(/\s+/g, " ").slice(-200)}` });
+      if (!sawSettled) {
+        // The leader died without settling: its group may still be alive.
+        terminateProcessGroup(child, { graceMs: 0, escalation: 0 });
+        finish({ status: "aborted", error: `child_exited_before_settle code=${code} signal=${sig} stderr=${stderrTail.replace(/\s+/g, " ").slice(-200)}` });
+      }
     });
     try {
       // Keep the rpc channel OPEN: pi --mode rpc exits when its stdin closes,
@@ -239,7 +270,8 @@ export async function spawnSuccessorSession(request) {
     } catch { /* exit handler decides */ }
     const poll = setInterval(() => {
       if (sawSettled) {
-        try { child.kill("SIGKILL"); } catch { /* already gone */ }
+        // Group-aware: the settled session's descendants must not outlive it.
+        terminateProcessGroup(child, { graceMs: 0, escalation: 0 });
         finish({ status: "ok" });
       }
     }, 100);

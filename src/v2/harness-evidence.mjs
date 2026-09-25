@@ -27,8 +27,11 @@
 // writer-phase test evidence presence, schema validation, serialized size
 // bound, secret-pattern scan.
 
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import {
+  spawnTaskScoped, terminateProcessGroup, DEFAULT_TERMINATION_BUDGET_MS,
+} from "../shared/process-group.mjs";
 import { scanForSecrets, sha256Text } from "../evidence/run-evidence-store.mjs";
 import { validateImplementationEvidence } from "../validate-role-artifacts.mjs";
 import { phaseExecutionId } from "./phase-task-card.mjs";
@@ -44,6 +47,7 @@ export const HARNESS_EVIDENCE_ERRORS = Object.freeze({
   IDENTITY_MISMATCH: "HARNESS_EVIDENCE_IDENTITY_MISMATCH",
   TEST_EVIDENCE_MISSING: "HARNESS_TEST_EVIDENCE_MISSING",
   TEST_RUN_UNAVAILABLE: "HARNESS_TEST_RUN_UNAVAILABLE",
+  TEST_RUN_ABORTED: "HARNESS_TEST_RUN_ABORTED",
   SCHEMA_INVALID: "HARNESS_EVIDENCE_SCHEMA_INVALID",
   OVERSIZE: "HARNESS_EVIDENCE_OVERSIZE",
   SECRET_RISK: "HARNESS_EVIDENCE_SECRET_RISK",
@@ -97,9 +101,17 @@ export function collectGitBaseline(cwd) {
  * never from model text. Returns { ok:true, exit_code, stdout, stderr,
  * duration_ms, truncated } or { ok:false, code, reason }.
  */
-export function runVerificationCommand({ command, cwd, environmentAllowlist = [], timeoutMs = HARNESS_TEST_TIMEOUT_MS, limits = {} } = {}) {
+export function runVerificationCommand({ command, cwd, environmentAllowlist = [], timeoutMs = HARNESS_TEST_TIMEOUT_MS, limits = {}, abortSignal = null } = {}) {
   if (!Array.isArray(command) || command.length === 0 || typeof command[0] !== "string") {
     return { ok: false, code: HARNESS_EVIDENCE_ERRORS.TEST_RUN_UNAVAILABLE, reason: "no verification command configured" };
+  }
+  // Cancellation contract (AUTOLOOP_ACTIVE_TASK_CANCELLATION_CONTRACT_REPAIR_1):
+  // an already-aborted signal must never start a verification process. The
+  // caller's cancellation is authoritative — spawning and then killing would
+  // still have run the command, which is exactly the side effect being
+  // cancelled.
+  if (abortSignal && abortSignal.aborted) {
+    return { ok: false, code: HARNESS_EVIDENCE_ERRORS.TEST_RUN_ABORTED, reason: "verification command aborted before start" };
   }
   const maxStdout = limits.maxStdoutBytes ?? (256 * 1024);
   const maxStderr = limits.maxStderrBytes ?? (64 * 1024);
@@ -114,9 +126,54 @@ export function runVerificationCommand({ command, cwd, environmentAllowlist = []
     let stderrTruncated = false;
     let settled = false;
     const startedAt = Date.now();
-    const child = spawn(command[0], command.slice(1), { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+    // Task-scoped process group: the command is its own group leader, so a
+    // timeout can terminate the whole tree it created, not just the leader.
+    let child;
+    try {
+      child = spawnTaskScoped(command[0], command.slice(1), { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+    } catch (e) {
+      return resolve({
+        ok: false,
+        code: HARNESS_EVIDENCE_ERRORS.TEST_RUN_UNAVAILABLE,
+        reason: `verification command failed to start: ${e.message}`,
+      });
+    }
+    const finish = (result, { releasePipes = false } = {}) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(hardSettleTimer);
+      if (abortSignal?.removeEventListener) abortSignal.removeEventListener("abort", onAbort);
+      // Only the timeout paths release the stdio pipes: a descendant that
+      // outlives the leader may hold them open, and the caller must not wait
+      // on that. The normal path leaves them intact so buffered output is
+      // never truncated.
+      if (releasePipes) {
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+      }
+      resolve(result);
+    };
+    // Mid-flight cancellation: same escalating, group-scoped teardown as the
+    // timeout path (one implementation, not a second child-kill). The pipes
+    // are released for the same reason as on timeout — a surviving descendant
+    // must not be able to block the caller's settle.
+    const onAbort = () => {
+      if (settled) return;
+      terminateProcessGroup(child);
+      finish({ ok: false, code: HARNESS_EVIDENCE_ERRORS.TEST_RUN_ABORTED, reason: "verification command aborted" }, { releasePipes: true });
+    };
+    if (abortSignal?.addEventListener) abortSignal.addEventListener("abort", onAbort, { once: true });
+    // Bounded, pipe-independent settle: the caller is guaranteed to settle by
+    // timeout + the full teardown budget, whatever a descendant does with the
+    // inherited stdio pipes.
+    const hardSettleTimer = setTimeout(() => {
+      finish({ ok: false, code: HARNESS_EVIDENCE_ERRORS.TEST_RUN_UNAVAILABLE, reason: "verification command timed out" }, { releasePipes: true });
+    }, timeoutMs + DEFAULT_TERMINATION_BUDGET_MS);
     const timer = setTimeout(() => {
-      try { child.kill("SIGKILL"); } catch { /* ignore */ }
+      // Escalating, group-scoped teardown; the hard-settle timer above is the
+      // backstop if a descendant still refuses to die.
+      terminateProcessGroup(child);
     }, timeoutMs);
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (c) => {
@@ -136,19 +193,13 @@ export function runVerificationCommand({ command, cwd, environmentAllowlist = []
         stderrTruncated = true;
       }
     });
-    const finish = (result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(result);
-    };
     child.on("error", (e) => {
       finish({ ok: false, code: HARNESS_EVIDENCE_ERRORS.TEST_RUN_UNAVAILABLE, reason: `verification command failed to start: ${e.message}` });
     });
     child.on("exit", (code, signal) => {
-      const timedOut = signal === "SIGKILL";
-      if (timedOut) {
-        finish({ ok: false, code: HARNESS_EVIDENCE_ERRORS.TEST_RUN_UNAVAILABLE, reason: "verification command timed out" });
+      if (settled) return;
+      if (signal === "SIGKILL" || signal === "SIGTERM") {
+        finish({ ok: false, code: HARNESS_EVIDENCE_ERRORS.TEST_RUN_UNAVAILABLE, reason: "verification command timed out" }, { releasePipes: true });
         return;
       }
       finish({
