@@ -1,6 +1,6 @@
 // src/autoloop.mjs
 //
-// C2 — AutoLoop unified library entrypoint (INTERNAL / TEST-ONLY — STACK_A).
+// C2 — AegisFlow unified library entrypoint (INTERNAL / TEST-ONLY — STACK_A).
 //
 // NOT the production entrypoint. Production execution MUST go through
 // runAdmittedGraph (src/admission/admission-gate.mjs), which enforces
@@ -100,7 +100,7 @@ export async function runAutoLoop(_opts = {}) {
 
 /**
  * Internal/test-harness STACK_A engine（legacy v2 pipeline）— NOT a production
- * surface. Run AutoLoop end-to-end (decomposition → DAG execution) in memory.
+ * surface. Run AegisFlow end-to-end (decomposition → DAG execution) in memory.
  *
  * @param {object} opts
  * @param {object} opts.source — { goal?, requirements: [{requirement_id, text}], authority }

@@ -10,7 +10,7 @@
 // What this module IS:
 //   - THE single shared production telemetry seam. runAdmittedGraph resolves
 //     ONE run-scoped telemetry store through resolveTelemetryStateRoot()
-//     (S16 canonical namespace / validated AUTOLOOP_TELEMETRY_STATE_ROOT
+//     (S16 canonical namespace / validated AEGISFLOW_TELEMETRY_STATE_ROOT
 //     override) and forwards it to the graph runners; no production writer
 //     invents its own persistent root, no repo-local fallback, no cwd
 //     fallback (Phase E fence).
@@ -42,6 +42,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolveTelemetryStateRoot, TELEMETRY_STATE_ROOT_ENV } from "./location.mjs";
+import { readConfigEnv } from "../shared/autoloop-paths.mjs";
 import { TelemetryStore } from "./store.mjs";
 import { createTelemetryEvent, LIFECYCLE_OBSERVED_STAGES, TELEMETRY_HOLD_CODES } from "./contract.mjs";
 
@@ -232,7 +233,7 @@ export function attachTelemetryDisposition(result, disposition) {
  *   3. otherwise                       → canonical default-on wiring
  *
  * In a node:test context the canonical default is DISABLED unless the
- * AUTOLOOP_TELEMETRY_STATE_ROOT override is set: node --test child processes
+ * AEGISFLOW_TELEMETRY_STATE_ROOT override is set: node --test child processes
  * would otherwise write every suite's graph runs into the canonical
  * production namespace. This is a TEST-CONTEXT-ONLY refinement of the
  * default — never a production behavior change.
@@ -251,7 +252,7 @@ export async function resolveProductionTelemetryWiring({ telemetryOpt, graphRunI
   if (telemetryOpt && typeof telemetryOpt === "object") {
     return { mode: "caller", wiring: telemetryOpt, disposition: null };
   }
-  const overrideSet = typeof env?.[TELEMETRY_STATE_ROOT_ENV] === "string" && env[TELEMETRY_STATE_ROOT_ENV].trim().length > 0;
+  const overrideSet = readConfigEnv(env, TELEMETRY_STATE_ROOT_ENV) !== null;
   if (!overrideSet && isTestRun(env)) {
     return {
       mode: "test-default-off",

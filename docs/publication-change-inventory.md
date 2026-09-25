@@ -178,3 +178,40 @@ exactly like a resolvable one.
 | `test/v2/test-post-finalization-derived-artifact.mjs` | the `src/c2d` module freeze (L4) now pins the exact sealed module SET instead of a bare count, so it still fails on any addition/removal/rename; `write-containment.mjs` is listed explicitly with its non-state rationale |
 | `docs/governance.md`, `docs/architecture.md`, `docs/troubleshooting.md` | document the second layer and the scope checks it records |
 
+
+## Follow-up landed on top of this remediation — brand rename
+
+`AEGISFLOW_PROJECT_RENAME_AND_COMPATIBILITY_MIGRATION_1` — the project was
+renamed from **AutoLoop** to **AegisFlow**, with positioning "a governed
+execution layer for autonomous agents". The rename is branding-only: it is
+deliberately *not* a protocol, schema or state change, and no state migration is
+required. The classification that governed every edit:
+
+| Class | Decision |
+|---|---|
+| A. public branding (README, docs, CONTRIBUTING, SECURITY, examples, benchmark prose, package description) | renamed |
+| B. user-facing command/path (`scripts/aegisflow-operator.mjs`, `scripts/pi-aegisflow.sh`, `npm run pi:aegisflow`, example temp prefixes) | renamed, forwarding alias kept |
+| C. environment contract (`AEGISFLOW_*`) | brand name primary, `AUTOLOOP_*` still resolved; brand wins when both are set |
+| D. machine/persistence contract (`autoloop.*` schema ids, `~/.autoloop`, `evidence/autoloop*`, `refs/autoloop/candidates/`, `autoloop_format_version`, hash-domain seeds, Colima profile names, `autoloop.card=` label, commit trailer keys) | **unchanged** |
+| E. internal code symbols (`runAutoLoop`, `AutoLoopError`, `autoloop-paths.mjs`, `AUTOLOOP_HOLD`, …) | **unchanged** |
+| F. historical records (committed benchmark results, frozen governance contracts, past commit messages, benchmark arm names) | **unchanged**, no history rewrite |
+
+| File | Change |
+|---|---|
+| `src/shared/autoloop-paths.mjs` | NEW `readConfigEnv` / `legacyEnvName` / `LEGACY_ENV_PREFIX`: one precedence rule (`AEGISFLOW_*` wins, blank counts as unset, never merged) applied by every root, review-surface, mount-gate and executable resolver |
+| `src/telemetry/location.mjs`, `src/telemetry/gc.mjs`, `src/telemetry/production-observer.mjs` | telemetry state-root override resolves through the same rule |
+| `src/memory/local-store.mjs`, `src/runtime/colima-profile-lock.mjs`, `src/runtime/colima-runtime.mjs`, `src/evolution/production-declaration.mjs`, `src/evolution/production-consumer.mjs`, `src/evolution/operator-view.mjs`, `src/admission/policy-projection.mjs`, `src/adapter/pi-spawn-adapter.mjs`, `src/governance/{promotion-authority,review-job}.mjs`, `scripts/shared/evidence-root.mjs`, `scripts/gov-closeout-bundle.mjs`, `scripts/c3-colima-task.mjs`, `pi-extensions/search-scope-governor/index.ts`, `benchmarks/runner/run-benchmark.mjs` | read configuration through the shared rule; the exported `*_ENV` constants now carry the brand spelling while the legacy spelling still resolves |
+| `scripts/aegisflow-operator.mjs`, `scripts/pi-aegisflow.sh` | renamed (was `autoloop-operator.mjs` / `pi-autoloop.sh`); the pre-rename paths are now thin forwarding aliases |
+| `scripts/durable-worktree.sh` | `AEGISFLOW_WORKTREE_*` / `AEGISFLOW_HOME` / `AEGISFLOW_REPO_<PROJECT>` with the `AUTOLOOP_*` spellings as fallbacks; partial mount gates still refuse |
+| `scripts/pi-aegisflow.sh`, `package.json` | `AEGISFLOW_REPO_ROOT` wins, `AUTOLOOP_REPO_ROOT` still honored; `pi:aegisflow` + `operator` are canonical, `pi:autoloop` + `autoloop:operator` are the aliases |
+| `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `NOTICE`, `THIRD_PARTY_NOTICES.md`, `AGENTS.md`, `.gitignore`, `docs/*.md`, `examples/*`, `benchmarks/README.md` | branding, repository URLs and configuration names |
+| `src/schema/*.schema.json` (17), `src/admission/admission-record.mjs` | `title` annotations only — the `$id` / `const` contract strings are untouched, and no validator reads `title` |
+| `docs/migration-rename.md` | NEW: the migration note (what changed, what is frozen, precedence table, GitHub rename semantics) |
+| `test/test-env-compatibility.mjs` | NEW: 17 behavioural assertions over legacy-only, brand-only and both-supplied precedence, persisted-identity freeze, and a real spawned-CLI check |
+| `test/pi-autoloop-launcher`, `test/telemetry/*`, `test/evolution/*`, `test/governance/*`, `test/test-standalone-paths`, `test/v2/*` + others | canonical script/env names; the launcher suite now also pins that the alias forwards instead of duplicating the contract |
+
+Deliberately **not** changed: `package.json` `"name"` stays `autoloop` (the
+package is `"private": true` and the `aegisflow` name on the public registry
+belongs to an unrelated package — the repository does not take it), the
+benchmark raw results and arm names (`AUTOLOOP_FRESH`, `AUTOLOOP_LEARNED`), and
+every `autoloop.*` persisted identifier.

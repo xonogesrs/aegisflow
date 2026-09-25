@@ -1,6 +1,6 @@
 // risk-normalization.mjs
 //
-// Single shared canonical-risk authority for all AutoLoop ingress points
+// Single shared canonical-risk authority for all AegisFlow ingress points
 // (manual candidate creation, candidate producer, run-card.mjs card-input
 // validation, isHighRiskCard routing). Card
 // AURACORE-AUTOLOOP-C4A-TASK-UNDERSTANDING-IMPLEMENTATION-1 §7/§16.

@@ -1,6 +1,6 @@
 // src/v2/checkpoint-bridge.mjs
 //
-// C3 — AutoLoop checkpoint bridge on top of the sealed C2D checkpoint store.
+// C3 — AegisFlow checkpoint bridge on top of the sealed C2D checkpoint store.
 //
 // Reuses（never re-implements）:
 //  - execution-id（mint/validate exec ids, secret digests）
@@ -10,7 +10,7 @@
 //  - lease/permit（acquireLease → permitFromLease → releaseLease）
 //  - fingerprint（collectFingerprint / assertFingerprint）
 //
-// AutoLoop additive snapshot fields ride inside the C2D snapshot so the
+// AegisFlow additive snapshot fields ride inside the C2D snapshot so the
 // existing checksum/CAS/permit/lock authority stays the single writer of
 // CURRENT.json. No second checkpoint authority is introduced.
 
@@ -283,7 +283,7 @@ export function buildConfigurationFingerprint({
   }));
 }
 
-// ── Snapshot construction（C2D required fields + AutoLoop additive）───────
+// ── Snapshot construction（C2D required fields + AegisFlow additive）───────
 
 export function buildCheckpointSnapshot({
   executionId, chainId, checkpointId,
@@ -336,7 +336,7 @@ export function buildCheckpointSnapshot({
     next_transition_candidate: { value: "AUTOLOOP_CONTINUE", advisory_only: true, not_authorization: true },
     input_manifest: { execution_id: executionId, chain_id: chainId },
     checkpoint_integrity: { algorithm: "sha256", digest_basis: "external_current_file" },
-    // ── AutoLoop additive ──
+    // ── AegisFlow additive ──
     autoloop_format_version: AUTOLOOP_CHECKPOINT_FORMAT_VERSION,
     input_fingerprint: inputFingerprint,
     configuration_fingerprint: configurationFingerprint,
@@ -358,7 +358,7 @@ export function buildCheckpointSnapshot({
 }
 
 /**
- * Publish one AutoLoop checkpoint through the sealed C2D publishCurrent
+ * Publish one AegisFlow checkpoint through the sealed C2D publishCurrent
  *（external checksum + CAS + structured lock + secret-bound write permit）.
  * The C2D lease is acquired per publication and released afterwards so a
  * crash never wedges resume: a checkpoint is resumable only when it was
@@ -420,7 +420,7 @@ export async function publishCheckpoint({
 }
 
 /**
- * Read the current AutoLoop checkpoint（checksum-verified by readCurrent）.
+ * Read the current AegisFlow checkpoint（checksum-verified by readCurrent）.
  * Throws C2dHoldError on tamper / absence.
  */
 export function readCheckpoint(root, executionId) {

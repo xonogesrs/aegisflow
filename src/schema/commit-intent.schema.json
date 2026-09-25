@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "AutoLoop C3C commit intent",
+  "title": "AegisFlow C3C commit intent",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "idempotency_key", "execution_id", "card_id", "card_revision", "candidate_id", "candidate_revision", "candidate_tree", "candidate_manifest_digest", "expected_head", "retention_reference", "review_artifact_digest", "review_verdict", "repository_identity", "git_common_dir_identity", "target_ref", "commit_subject", "commit_body", "author_name", "author_email", "author_date", "committer_name", "committer_email", "committer_date", "signing_mode", "authorization_id", "authorization_canonical_digest", "created_at"],

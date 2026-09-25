@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // scripts/c3-colima-task.mjs
 //
-// OFFICIAL C3 entrypoint for running a Colima-backed task through the AutoLoop
+// OFFICIAL C3 entrypoint for running a Colima-backed task through the AegisFlow
 // lifecycle pipeline (read-only tasks AND isolated-worktree writer tasks).
 // The bake-off test runner is NOT part of this path.
 //
@@ -16,7 +16,7 @@
 //                          runtime.expect.stdoutContains = [...markers] for the
 //                          deterministic reviewer.
 //   --out <dir>            where the structured result JSON is written
-//                          (default: $AUTOLOOP_C3_RESULTS_DIR, else <AUTOLOOP_HOME>/review/governance/c3-results
+//                          (default: $AEGISFLOW_C3_RESULTS_DIR, else <AEGISFLOW_HOME>/review/governance/c3-results
 //                          falls back to ./c3-results)
 //
 // Exit code 0 iff final === PASS; 1 otherwise.
@@ -38,7 +38,12 @@ const profile = arg("--profile", "autoloop-c3");
 const repoPath = arg("--repo", fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, ""));
 const scratchRoot = arg("--scratch", `${HOME}/autoloop-runtime`);
 const timeoutMs = Number(arg("--timeout-ms", "90000"));
-const outDir = arg("--out", join(process.env.AUTOLOOP_C3_RESULTS_DIR ?? join(homedir(), ".autoloop", "review", "governance", "c3-results")));
+// Brand name wins; AUTOLOOP_C3_RESULTS_DIR is the pre-rename fallback.
+const outDir = arg("--out", join(
+  process.env.AEGISFLOW_C3_RESULTS_DIR
+    ?? process.env.AUTOLOOP_C3_RESULTS_DIR
+    ?? join(homedir(), ".autoloop", "review", "governance", "c3-results"),
+));
 
 if (!cardPath) {
   console.error("usage: node scripts/c3-colima-task.mjs --card <task-card.json> [--profile autoloop-c3] [--repo ...] [--scratch ...] [--out ...] [--timeout-ms ...]");

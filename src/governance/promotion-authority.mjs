@@ -26,6 +26,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { sha256Text } from "../evidence/run-evidence-store.mjs";
+import { readConfigEnv } from "../shared/autoloop-paths.mjs";
 import { readReviewJob } from "./review-job.mjs";
 
 export const PROMOTION_AUTHORITY_HOLDS = Object.freeze({
@@ -56,8 +57,8 @@ const REVIEW_JOB_ROOT = join("docs", "pi-graph-output");
 export function readReviewJobEvidence(cardId, { cwd = process.cwd(), root = null } = {}) {
   const base = root
     ? resolve(root)
-    : (process.env.AUTOLOOP_PI_GRAPH_OUTPUT
-        ? resolve(process.env.AUTOLOOP_PI_GRAPH_OUTPUT)
+    : (readConfigEnv(process.env, "AEGISFLOW_PI_GRAPH_OUTPUT")
+        ? resolve(readConfigEnv(process.env, "AEGISFLOW_PI_GRAPH_OUTPUT").value)
         : resolve(join(cwd, REVIEW_JOB_ROOT)));
   const r = readReviewJob(cardId, { root: base });
   if (!r.ok) {

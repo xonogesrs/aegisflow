@@ -1,11 +1,11 @@
-# AutoLoop effectiveness benchmark
+# AegisFlow effectiveness benchmark
 
-A reproducible measurement of what AutoLoop's strategy/evolution features
+A reproducible measurement of what AegisFlow's strategy/evolution features
 actually change, comparing the same tasks, the same agent runtime, the same
 provider route and the same acceptance criteria across three arms.
 
-**The purpose is not to show AutoLoop wins.** It is to produce an honest,
-reproducible, publishable measurement — including where AutoLoop loses.
+**The purpose is not to show AegisFlow wins.** It is to produce an honest,
+reproducible, publishable measurement — including where AegisFlow loses.
 
 ```
 benchmarks/
@@ -41,7 +41,7 @@ reader can verify no arm received a better model.
 
 ## What each run actually does
 
-A benchmark run is a **real AutoLoop execution**:
+A benchmark run is a **real AegisFlow execution**:
 
 1. a frozen **admission record** is built from a classification;
 2. the **tool selection** is minted by the production selector against that
@@ -63,7 +63,7 @@ pilot:
 ```bash
 export MERGE_GATEWAY_API_KEY=...                  # your own credential; never committed
 export BENCH_ROUTE=merge-gateway/zai/glm-5.3-flash
-export AUTOLOOP_PI_RUNTIME_PATH="$(command -v pi)"   # optional if pi is on PATH
+export AEGISFLOW_PI_RUNTIME_PATH="$(command -v pi)"   # optional if pi is on PATH
 ```
 
 Then:
@@ -117,7 +117,7 @@ Useful flags:
 ## Task set
 
 Seven task classes, chosen so that different capabilities are stressed and so
-that AutoLoop is **not** only measured on things it is good at:
+that AegisFlow is **not** only measured on things it is good at:
 
 | Task | Class | What it stresses |
 |---|---|---|

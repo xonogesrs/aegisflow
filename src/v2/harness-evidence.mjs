@@ -3,7 +3,7 @@
 // C4Q — harness-owned implementation evidence.
 //
 // Removes the executor final assistant message as the authoritative source of
-// implementation evidence. After the executor completes tool work, AutoLoop
+// implementation evidence. After the executor completes tool work, AegisFlow
 // collects objective execution facts (repository baseline, mutation-scope
 // delta, verification-command process records, tool counters, execution
 // identity) and ASSEMBLES the implementation-evidence object itself. The
@@ -312,7 +312,7 @@ export function buildHarnessOwnedEvidence({
 } = {}) {
   const maxSerializedBytes = limits.maxSerializedBytes ?? HARNESS_EVIDENCE_MAX_SERIALIZED_BYTES;
   // Tool counters are surfaced through the C4N review bundle（objective_facts
-  // is an AutoLoop-owned structure, not the closed evidence schema）.
+  // is an AegisFlow-owned structure, not the closed evidence schema）.
   const phaseId = typeof taskCard?.phaseId === "string" ? taskCard.phaseId : null;
   const phaseExecutionIdValue = typeof taskCard?.executionId === "string" ? taskCard.executionId : null;
   if (!phaseId || !phaseExecutionIdValue) {

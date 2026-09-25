@@ -1,13 +1,13 @@
 # Third-Party Notices
 
-AutoLoop itself is licensed under the Apache License, Version 2.0 (see
+AegisFlow itself is licensed under the Apache License, Version 2.0 (see
 `LICENSE`). This file records the third-party components and services that
-AutoLoop uses, and the trademark position that applies to the names of those
+AegisFlow uses, and the trademark position that applies to the names of those
 components.
 
-## Scope: what AutoLoop redistributes
+## Scope: what AegisFlow redistributes
 
-**AutoLoop redistributes no third-party source code, object code, container
+**AegisFlow redistributes no third-party source code, object code, container
 image, or binary artifact.**
 
 - No third-party file is committed to this repository. The tree contains only
@@ -17,10 +17,10 @@ image, or binary artifact.**
 - `node_modules/` is not tracked and is not part of any published artifact;
   it is recreated by `npm install` from the public npm registry, where each
   package carries its own license and notice files.
-- AutoLoop produces no bundled build output (no bundler, no committed
+- AegisFlow produces no bundled build output (no bundler, no committed
   `dist/`, no published npm package).
 - Consequently, no third-party license text, `NOTICE` file, or attribution is
-  required to be reproduced by this repository today. If AutoLoop later ships
+  required to be reproduced by this repository today. If AegisFlow later ships
   a bundled artifact (npm package, container image, or single-file build),
   the obligations below become live and must be discharged for whichever
   packages are actually included.
@@ -37,14 +37,14 @@ across **93** resolved packages: `Apache-2.0` (47), `MIT` (33), `BSD-3-Clause` (
 | --- | --- | --- | --- |
 | @earendil-works/pi-ai | 0.83.0 | MIT | registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-0.83.0.tgz |
 
-`@earendil-works/pi-ai` is the provider-neutral LLM API library AutoLoop uses
+`@earendil-works/pi-ai` is the provider-neutral LLM API library AegisFlow uses
 for provider access. It is a normal npm dependency: installed by the consumer,
 never vendored into this repository.
 
 ### Transitive dependencies (92 packages)
 
 These are pulled in by the direct dependency's own manifest. They are listed
-so that a redistributor can see the complete obligation set; AutoLoop does not
+so that a redistributor can see the complete obligation set; AegisFlow does not
 ship them.
 
 | Package | Version | License | Source |
@@ -144,7 +144,7 @@ ship them.
 
 Unknown declared licenses across the whole resolution: **0**.
 
-Required attribution if these packages are ever redistributed with AutoLoop:
+Required attribution if these packages are ever redistributed with AegisFlow:
 retain each package's own license and copyright notice (MIT, ISC, BSD-3-Clause,
 0BSD), and additionally propagate each Apache-2.0 package's `NOTICE` file if
 one exists.
@@ -153,16 +153,16 @@ one exists.
 
 | Component | License | Status |
 | --- | --- | --- |
-| `@earendil-works/pi-coding-agent` | MIT | Optional peer: the Pi agent CLI that AutoLoop's Pi extension integrates with. Declared under `peerDependencies` with `optional: true`; supplied by the operator's own installation. AutoLoop redistributes none of it — the extension imports the host's types and executes the host's CLI. |
-| Temporal TypeScript SDK (`@temporalio/*`) | MIT | **Not a dependency of this repository.** It was used in a one-off durability evaluation that compared an external workflow engine against AutoLoop's in-process durable layer. That evaluation harness is internal operational tooling and is not part of the published tree; no source file imports it, and it is deliberately absent from `dependencies`, `optionalDependencies` and the lockfile. The comparison's conclusion (keep the in-process layer) is summarised in `docs/durable-execution.md`. |
-| Restate (`@restatedev/restate-server`) | BSL (source-available, non-OSI) | **Evaluated and rejected.** Recorded only so the evaluation is not mistaken for a dependency: the candidate was eliminated by AutoLoop's own gate (a default phone-home analytics dependency plus a non-OSI licence) and was never adopted, bundled or declared. |
+| `@earendil-works/pi-coding-agent` | MIT | Optional peer: the Pi agent CLI that AegisFlow's Pi extension integrates with. Declared under `peerDependencies` with `optional: true`; supplied by the operator's own installation. AegisFlow redistributes none of it — the extension imports the host's types and executes the host's CLI. |
+| Temporal TypeScript SDK (`@temporalio/*`) | MIT | **Not a dependency of this repository.** It was used in a one-off durability evaluation that compared an external workflow engine against AegisFlow's in-process durable layer. That evaluation harness is internal operational tooling and is not part of the published tree; no source file imports it, and it is deliberately absent from `dependencies`, `optionalDependencies` and the lockfile. The comparison's conclusion (keep the in-process layer) is summarised in `docs/durable-execution.md`. |
+| Restate (`@restatedev/restate-server`) | BSL (source-available, non-OSI) | **Evaluated and rejected.** Recorded only so the evaluation is not mistaken for a dependency: the candidate was eliminated by AegisFlow's own gate (a default phone-home analytics dependency plus a non-OSI licence) and was never adopted, bundled or declared. |
 
 ## EXTERNAL TOOL — executed by the operator, never bundled
 
 | Tool | Role | Distribution |
 | --- | --- | --- |
-| `pi` (Pi coding agent CLI) | The agent runtime AutoLoop drives; its runtime identity and tool vocabulary are pinned by the admission contract, and it is launched as a subprocess. | Installed and licensed by the operator. |
-| Colima + Docker | Sandbox runtime for isolated task containers. AutoLoop invokes the CLIs; it does not ship them, nor any image but a pinned public `alpine` digest reference. | Installed and licensed by the operator. |
+| `pi` (Pi coding agent CLI) | The agent runtime AegisFlow drives; its runtime identity and tool vocabulary are pinned by the admission contract, and it is launched as a subprocess. | Installed and licensed by the operator. |
+| Colima + Docker | Sandbox runtime for isolated task containers. AegisFlow invokes the CLIs; it does not ship them, nor any image but a pinned public `alpine` digest reference. | Installed and licensed by the operator. |
 | `git`, `gh` | Repository operations and (optionally) GitHub API access from operator-run scripts. | Installed and licensed by the operator. |
 
 ## NETWORK SERVICE — contacted at runtime, no code exchanged
@@ -183,8 +183,8 @@ Claude, OpenAI, GPT, Google, Gemini, Mistral, DeepSeek, Z.ai, GLM, Amazon Web
 Services, Bedrock, Temporal, Restate, Docker, Colima, GitHub, and Node.js —
 are the property of their respective owners.
 
-They are used for identification purposes only. AutoLoop is an independent
+They are used for identification purposes only. AegisFlow is an independent
 project: it is **not affiliated with, sponsored by, certified by, or endorsed
 by** any of these owners, and no statement in this repository should be read
-as claiming otherwise. AutoLoop is not an official integration of any provider
+as claiming otherwise. AegisFlow is not an official integration of any provider
 unless a provider states so separately.

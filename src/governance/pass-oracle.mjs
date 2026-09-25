@@ -26,7 +26,7 @@
 //     "semantic") may never override a deterministic FAIL because both are
 //     just records here and ANY accepted required FAIL blocks PASS.
 //   - No second verdict vocabulary: decisions are PASS | NOT_PASS; the
-//     failure taxonomy codes map onto existing AutoLoop terminal semantics
+//     failure taxonomy codes map onto existing AegisFlow terminal semantics
 //     (HOLD / REPAIR) at the call sites. This module never mints HOLD/REPAIR
 //     itself.
 //

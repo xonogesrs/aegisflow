@@ -2,16 +2,16 @@
   "name": "autoloop",
   "version": "0.0.0",
   "private": true,
-  "description": "AutoLoop — agent governance harness for spec-driven development: admission authority, durable execution, independent review, and bounded autonomous evolution.",
+  "description": "AegisFlow — a governed execution layer for autonomous agents: admission authority, durable execution, independent review, and bounded autonomous evolution.",
   "type": "module",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xonogesrs/autoloop.git"
+    "url": "git+https://github.com/xonogesrs/aegisflow.git"
   },
-  "homepage": "https://github.com/xonogesrs/autoloop#readme",
+  "homepage": "https://github.com/xonogesrs/aegisflow#readme",
   "bugs": {
-    "url": "https://github.com/xonogesrs/autoloop/issues"
+    "url": "https://github.com/xonogesrs/aegisflow/issues"
   },
   "engines": {
     "node": ">=24.0.0"
@@ -43,9 +43,11 @@
     "test:external": "node test/run-suite.mjs --include-external",
     "example:minimal": "node examples/minimal/run.mjs",
     "example:subagent": "node examples/subagent/run.mjs",
-    "pi:autoloop": "bash scripts/pi-autoloop.sh",
+    "pi:aegisflow": "bash scripts/pi-aegisflow.sh",
     "run:c3": "node scripts/c3-colima-task.mjs",
-    "operator": "node scripts/autoloop-operator.mjs",
+    "operator": "node scripts/aegisflow-operator.mjs",
+    "pi:autoloop": "bash scripts/pi-autoloop.sh",
+    "autoloop:operator": "node scripts/autoloop-operator.mjs",
     "evolution:status": "node scripts/evolution-operator.mjs",
     "evolution:kill-switch": "node scripts/evolution-kill-switch.mjs",
     "gov:effective": "node scripts/gov-effective-authority.mjs",

@@ -1,4 +1,4 @@
-# AutoLoop — operative instructions for the agent runtime
+# AegisFlow — operative instructions for the agent runtime
 
 This file is auto-discovered by Pi (AGENTS.md/CLAUDE.md discovery) whenever a
 session's working directory is this repository. It exists to close a real
@@ -9,37 +9,40 @@ whole-home `grep`/`find` pair, no progress).
 
 ## Where you are
 
-This is the AutoLoop repository. Its location is whatever directory this file
+This is the AegisFlow repository. Its location is whatever directory this file
 was loaded from — derive it, do not search for it:
 
 ```
 git rev-parse --show-toplevel
 ```
 
-If a task mentions AutoLoop and you are not already in this repository, `cd`
+If a task mentions AegisFlow and you are not already in this repository, `cd`
 to the path given by the task. You should never need to *search* for this
 repository's location.
 
 The supported interactive entrypoint derives it for you:
 
 ```
-bash scripts/pi-autoloop.sh        # or: npm run pi:autoloop
+bash scripts/pi-aegisflow.sh        # or: npm run pi:aegisflow
 ```
+
+(`scripts/pi-autoloop.sh` and `npm run pi:autoloop` still work — they forward.)
 
 It does two things a bare `pi` invocation does not: it `cd`s into this
 repository before the agent starts (so AGENTS.md discovery loads these
 instructions with no manual trust step) and passes `--approve` (project-local
 trust for the run). The launcher resolves its own location, so it works from
-any clone; `AUTOLOOP_REPO_ROOT` overrides it explicitly.
+any clone; `AEGISFLOW_REPO_ROOT` overrides it explicitly (the pre-rename
+`AUTOLOOP_REPO_ROOT` is still honored).
 
-A bare `pi` launched at an arbitrary cwd is NOT a supported AutoLoop
+A bare `pi` launched at an arbitrary cwd is NOT a supported AegisFlow
 entrypoint — outside this repository the agent discovers none of these
 instructions. This is launcher-contract enforcement for the supported
 entrypoint, not OS-wide `pi` prevention.
 
 ## AUTHORITATIVE_SOURCE_FIRST (mandatory)
 
-When you need to know AutoLoop state, read the structured authoritative source
+When you need to know AegisFlow state, read the structured authoritative source
 directly. Do not answer a state question by grepping the filesystem for a
 status string.
 
@@ -52,14 +55,14 @@ status string.
 - **"Is a card awaiting external review?"** (a DIFFERENT question — the
   unresolved external review awaiting a verdict) → `currentSurfaceReviewStatus()`
   in `src/governance/review-bundle.mjs`; the inbox is
-  `<review archive>/Current/delivery.json` (env: `AUTOLOOP_REVIEW_SURFACE`).
+  `<review archive>/Current/delivery.json` (env: `AEGISFLOW_REVIEW_SURFACE`).
   A pending inbox occupant never blocks the latest execution review, and vice
   versa.
 - **"What's a card's closeout state / requiresReview / evidence?"** → `readCloseoutState()`
   in `src/governance/closeout-state.mjs` against that card's own `outDir`.
 - **"What did a graph run actually do?"** (status, phases, rollover
   transitions, provider usage, diagnostics) →
-  `node scripts/autoloop-operator.mjs --run <graphRunId> [--json]`. READ ONLY /
+  `node scripts/aegisflow-operator.mjs --run <graphRunId> [--json]`. READ ONLY /
   advisory — zero writes, no production authority consumes its output; safe
   against active, completed, partially retained, telemetry-disabled, and
   unknown runs. Contract: `src/telemetry/operator-report.mjs`.
@@ -79,7 +82,7 @@ status string.
   archived durably under `<store>/evolution-policy-history/`.
 - **Deployment declaration**: a deployment declares its evolution inputs
   (storeRoot / checkpointRoot / repoRoot / taskClass / strategyBaselineValues)
-  through `AUTOLOOP_EVOLUTION_DEPLOYMENT_CONFIG`; the record's shape is
+  through `AEGISFLOW_EVOLUTION_DEPLOYMENT_CONFIG`; the record's shape is
   `src/evolution/production-declaration.mjs`, authored with
   `node scripts/evolution-declare-production.mjs --out <path> --store-root …
   --checkpoint-root … --repo-root …`.
@@ -134,8 +137,8 @@ implementation, anything you expect to return to) is DURABLE. Create durable
 worktrees only via:
 
 ```
-scripts/durable-worktree.sh autoloop <card-id> [base-ref]
-→ $AUTOLOOP_HOME/worktrees/autoloop/<card-id>/
+scripts/durable-worktree.sh aegisflow <card-id> [base-ref]
+→ $AEGISFLOW_HOME/worktrees/aegisflow/<card-id>/
 ```
 
 The helper fails clearly rather than falling back. Never `git worktree add` a

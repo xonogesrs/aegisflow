@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "AutoLoop C3C durable commit authorization",
+  "title": "AegisFlow C3C durable commit authorization",
   "type": "object",
   "additionalProperties": false,
   "required": [

@@ -1,9 +1,9 @@
 // test/test-pi-autoloop-launcher.mjs
 //
-// R-03 — canonical AutoLoop interactive-entrypoint contract.
+// R-03 — canonical AegisFlow interactive-entrypoint contract.
 //
-// scripts/pi-autoloop.sh is THE supported interactive Pi entrypoint for
-// AutoLoop work: it establishes the repository cwd BEFORE pi starts (so
+// scripts/pi-aegisflow.sh is THE supported interactive Pi entrypoint for
+// AegisFlow work: it establishes the repository cwd BEFORE pi starts (so
 // AGENTS.md auto-discovery loads the operative instructions with no manual
 // trust prompt) and passes --approve for the same reason. These tests pin that
 // contract so a future edit cannot silently turn the launcher into a bare-pi
@@ -12,13 +12,18 @@
 //
 // PORTABILITY (scope of this test): the launcher must work from ANY clone
 // location. It derives the repo root from its own file location, with
-// AUTOLOOP_REPO_ROOT as an explicit override. The behavioral tests therefore
+// AEGISFLOW_REPO_ROOT as an explicit override (the pre-rename AUTOLOOP_REPO_ROOT
+// is still honored as a fallback). The behavioral tests therefore
 // run the REAL launcher with a stub `pi` first on PATH and assert the cwd it
 // lands in — no path rewriting, no dependency on where this checkout lives.
 //
+// RENAME COMPATIBILITY: scripts/pi-autoloop.sh no longer holds the launcher
+// body — it forwards to the canonical file — so both names are asserted here
+// (the alias must not be allowed to rot into a standalone copy).
+//
 // Boundary (explicit): this is launcher-contract enforcement for the SUPPORTED
-// AutoLoop entrypoint — NOT OS-wide `pi` prevention. Executing a globally
-// installed `pi` binary outside AutoLoop is outside scope.
+// AegisFlow entrypoint — NOT OS-wide `pi` prevention. Executing a globally
+// installed `pi` binary outside AegisFlow is outside scope.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -29,7 +34,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
-const LAUNCHER = join(REPO_ROOT, "scripts", "pi-autoloop.sh");
+const LAUNCHER = join(REPO_ROOT, "scripts", "pi-aegisflow.sh");
+const LEGACY_LAUNCHER = join(REPO_ROOT, "scripts", "pi-autoloop.sh");
 
 /** Create a PATH dir holding a `pi` stub that reports the cwd it was invoked from. */
 function piStubDir() {
@@ -62,7 +68,8 @@ test("R-03: launcher exists, is executable, and derives the repo root from its o
   // Portable root resolution: no absolute checkout path may be baked in.
   assert.doesNotMatch(text, /^REPO_ROOT="\/[^"]*"/m, "launcher must not hardcode an absolute checkout path");
   assert.match(text, /SCRIPT_DIR=/, "launcher must derive its own directory");
-  assert.match(text, /AUTOLOOP_REPO_ROOT:-/, "launcher must honor the AUTOLOOP_REPO_ROOT override");
+  assert.match(text, /AEGISFLOW_REPO_ROOT:-/, "launcher must honor the AEGISFLOW_REPO_ROOT override");
+  assert.match(text, /\$\{AUTOLOOP_REPO_ROOT:-/, "launcher must still honor the pre-rename AUTOLOOP_REPO_ROOT");
   assert.match(text, /^cd "\$REPO_ROOT"$/m, "launcher must establish repo cwd before execution");
   assert.match(text, /exec pi --approve/, "launcher must pass --approve (project-local trust without interactive prompt)");
 
@@ -101,15 +108,30 @@ test("R-03: launcher from an unrelated repository still resolves this checkout (
   }
 });
 
-test("R-03: AUTOLOOP_REPO_ROOT override wins; a non-directory override fails rather than silently using the default", () => {
+test("R-03: AEGISFLOW_REPO_ROOT override wins; the legacy name still works; a non-directory override fails rather than silently using the default", () => {
   const target = mkdtempSync(join(tmpdir(), "r03-override-"));
   try {
-    const ok = runLauncher({ cwd: tmpdir(), env: { AUTOLOOP_REPO_ROOT: target } });
+    const ok = runLauncher({ cwd: tmpdir(), env: { AEGISFLOW_REPO_ROOT: target } });
     assert.equal(ok.status, 0, ok.stderr);
     assert.equal(ok.stdout.trim().split("\n")[0], `PI_CWD=${target}`, "explicit override is honored");
 
+    // The pre-rename variable is still resolved (deployment compatibility).
+    const legacy = runLauncher({ cwd: tmpdir(), env: { AUTOLOOP_REPO_ROOT: target } });
+    assert.equal(legacy.status, 0, legacy.stderr);
+    assert.equal(legacy.stdout.trim().split("\n")[0], `PI_CWD=${target}`, "legacy override is honored");
+
+    // Both set to different roots: the AegisFlow name wins, deterministically.
+    const other = mkdtempSync(join(tmpdir(), "r03-both-"));
+    try {
+      const both = runLauncher({ cwd: tmpdir(), env: { AEGISFLOW_REPO_ROOT: target, AUTOLOOP_REPO_ROOT: other } });
+      assert.equal(both.status, 0, both.stderr);
+      assert.equal(both.stdout.trim().split("\n")[0], `PI_CWD=${target}`, "brand name wins over the legacy name");
+    } finally {
+      rmSync(other, { recursive: true, force: true });
+    }
+
     const missing = join(target, "does-not-exist");
-    const bad = runLauncher({ cwd: tmpdir(), env: { AUTOLOOP_REPO_ROOT: missing } });
+    const bad = runLauncher({ cwd: tmpdir(), env: { AEGISFLOW_REPO_ROOT: missing } });
     assert.notEqual(bad.status, 0, "a nonexistent override must fail (set -e via cd), never silently fall back");
 
     // …and it must not have run pi against the wrong directory either.
@@ -117,6 +139,30 @@ test("R-03: AUTOLOOP_REPO_ROOT override wins; a non-directory override fails rat
     mkdirSync(target, { recursive: true });
   } finally {
     rmSync(target, { recursive: true, force: true });
+  }
+});
+
+test("R-03: the pre-rename launcher name is a forwarding alias, not a second copy of the contract", () => {
+  const st = statSync(LEGACY_LAUNCHER);
+  assert.equal(st.isFile(), true, "the alias must exist");
+  assert.equal(st.mode & 0o111 ? true : false, true, "the alias must be executable");
+  const text = readFileSync(LEGACY_LAUNCHER, "utf8");
+  assert.match(text, /pi-aegisflow\.sh/, "the alias must forward to the canonical launcher");
+  assert.doesNotMatch(text, /^exec pi /m, "the alias must not execute pi itself");
+
+  // Behavioural: invoked through the alias, the session still lands on THIS
+  // checkout (the canonical launcher resolves its own location).
+  const stubDir = piStubDir();
+  try {
+    const viaAlias = spawnSync("bash", [LEGACY_LAUNCHER], {
+      cwd: tmpdir(),
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${stubDir}:${process.env.PATH}` },
+    });
+    assert.equal(viaAlias.status, 0, viaAlias.stderr);
+    assert.equal(viaAlias.stdout.trim().split("\n")[0], `PI_CWD=${REPO_ROOT}`);
+  } finally {
+    rmSync(stubDir, { recursive: true, force: true });
   }
 });
 

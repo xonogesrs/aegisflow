@@ -2,7 +2,7 @@
 //
 // AUTOLOOP_BACKGROUND_WAITER_COALESCING_AND_PROFILE_SINGLEFLIGHT_1 — F/G.
 //
-// Single-flight serialization for AutoLoop-owned Colima profiles.
+// Single-flight serialization for AegisFlow-owned Colima profiles.
 //
 // Root cause this guards (AUTOLOOP_BACKGROUND_DEDUP_AUDIT_1, 2026-09-23):
 // two DIFFERENT logical work items (test:colima-all × test:writeback; a
@@ -47,7 +47,7 @@
 // storage as the profiles they serialize.
 
 import { isAbsolute, join, resolve } from "node:path";
-import { autoloopHome, configuredColimaHome } from "../shared/autoloop-paths.mjs";
+import { autoloopHome, configuredColimaHome, readConfigEnv } from "../shared/autoloop-paths.mjs";
 import {
   C2dHoldError,
   HOLD,
@@ -72,18 +72,18 @@ export const COLIMA_PROFILE_LOCK_ALLOWED = Object.freeze([
 
 // Lock root: a sibling of the Colima profile directories under the configured
 // runtime home (so lock records live on the same storage as the profiles they
-// serialize). Resolution order, mirroring AUTOLOOP_TELEMETRY_STATE_ROOT /
-// AUTOLOOP_MEMORY_STATE_ROOT:
-//   AUTOLOOP_COLIMA_PROFILE_LOCK_ROOT → <COLIMA_HOME>/autoloop-locks → <AUTOLOOP_HOME>/colima-locks
-export const COLIMA_PROFILE_LOCK_ROOT_ENV = "AUTOLOOP_COLIMA_PROFILE_LOCK_ROOT";
+// serialize). Resolution order, mirroring AEGISFLOW_TELEMETRY_STATE_ROOT /
+// AEGISFLOW_MEMORY_STATE_ROOT:
+//   AEGISFLOW_COLIMA_PROFILE_LOCK_ROOT → <COLIMA_HOME>/autoloop-locks → <AEGISFLOW_HOME>/colima-locks
+export const COLIMA_PROFILE_LOCK_ROOT_ENV = "AEGISFLOW_COLIMA_PROFILE_LOCK_ROOT";
 
 export function colimaProfileLockDefaultRoot({ env = process.env } = {}) {
-  const configured = env?.[COLIMA_PROFILE_LOCK_ROOT_ENV];
-  if (typeof configured === "string" && configured.trim().length > 0) {
-    if (!isAbsolute(configured.trim())) {
-      throw new Error(`${COLIMA_PROFILE_LOCK_ROOT_ENV} must be an absolute path: ${configured}`);
+  const configured = readConfigEnv(env, COLIMA_PROFILE_LOCK_ROOT_ENV);
+  if (configured) {
+    if (!isAbsolute(configured.value.trim())) {
+      throw new Error(`${configured.name} must be an absolute path: ${configured.value}`);
     }
-    return resolve(configured.trim());
+    return resolve(configured.value.trim());
   }
   const colimaHome = configuredColimaHome({ env });
   return colimaHome === null
@@ -121,11 +121,11 @@ function fixedIdentityFields(profile) {
 const CAPABILITY = new WeakMap();
 
 /**
- * Acquire the single-flight lock for one AutoLoop-owned Colima profile.
+ * Acquire the single-flight lock for one AegisFlow-owned Colima profile.
  * Non-blocking: contention is a structured HOLD, never a wait.
  *
  * @param {object} opts
- * @param {string} opts.profile — AutoLoop test-owned profile name
+ * @param {string} opts.profile — AegisFlow test-owned profile name
  *   (COLIMA_PROFILE_LOCK_ALLOWED member; mirrors the AUTOLOOP_TEST_PROFILES
  *   fence that gates every ensureInstance mutation).
  * @param {string} [opts.actorId] — who is acquiring (graph/execution id,
@@ -140,13 +140,13 @@ export function acquireColimaProfileLock({ profile, actorId = "unknown", session
   if (typeof profile !== "string" || profile.trim().length === 0) {
     throw new C2dHoldError(COLIMA_PROFILE_LOCK_HOLD.NOT_TEST_OWNED, "profile required");
   }
-  // Mirror the AUTOLOOP_TEST_PROFILES fence: only AutoLoop-owned profiles are
+  // Mirror the AUTOLOOP_TEST_PROFILES fence: only AegisFlow-owned profiles are
   // ever locked/mutated by this runtime. Locking an unowned profile would
   // imply a mutation path that does not (and must not) exist.
   if (!COLIMA_PROFILE_LOCK_ALLOWED.includes(profile)) {
     throw new C2dHoldError(
       COLIMA_PROFILE_LOCK_HOLD.NOT_TEST_OWNED,
-      `profile ${profile} is not an AutoLoop-owned ephemeral test profile; refusing to lock`,
+      `profile ${profile} is not an AegisFlow-owned ephemeral test profile; refusing to lock`,
       { profile },
     );
   }

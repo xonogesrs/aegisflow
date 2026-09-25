@@ -44,7 +44,7 @@ import {
   TELEMETRY_STATE_ROOT_ENV,
   resolveTelemetryStateRoot,
 } from "./location.mjs";
-import { canonicalHome, resolveEvidenceRoot } from "../shared/autoloop-paths.mjs";
+import { canonicalHome, readConfigEnv, resolveEvidenceRoot } from "../shared/autoloop-paths.mjs";
 
 // ── Lifecycle vocabulary (S16 Phase F) ──────────────────────────────────────
 
@@ -257,9 +257,9 @@ export function resolveGcNamespace({ graphRunId = null, env = process.env, tempN
   // Namespace-wide sweep. With an override in effect the sweep root is the
   // override (the isolated store root); without one it is the canonical
   // TELEMETRY_ROOT whose children are the run-scoped stores.
-  const override = env?.[TELEMETRY_STATE_ROOT_ENV];
-  const sweepRoot = (typeof override === "string" && override.trim().length > 0 && isAbsolute(override))
-    ? resolve(override)
+  const override = readConfigEnv(env, TELEMETRY_STATE_ROOT_ENV);
+  const sweepRoot = (override && isAbsolute(override.value))
+    ? resolve(override.value)
     : resolve(TELEMETRY_ROOT);
   return { kind: "CANONICAL_SWEEP", root: sweepRoot };
 }
@@ -593,7 +593,7 @@ function dirBytes(dir) {
 
 function planTempNamespace({ nsRoot, plan }) {
   // An admitted temporary namespace is GC-eligible ONLY when it carries the
-  // AutoLoop temporary-admission marker; anything else inside is AMBIGUOUS.
+  // AegisFlow temporary-admission marker; anything else inside is AMBIGUOUS.
   const marker = join(nsRoot, ".autoloop-gc-temp");
   if (!existsSync(marker)) {
     plan.AMBIGUOUS.push({ path: nsRoot, reason: "TEMP_NAMESPACE_UNMARKED" });

@@ -20,6 +20,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalJson, sha256Text as sha256Hex } from "../evidence/run-evidence-store.mjs";
+import { readConfigEnv } from "../shared/autoloop-paths.mjs";
 import {
   readTriggerState, EVOLUTION_SIGNAL_CLASSES,
 } from "./trigger.mjs";
@@ -76,7 +77,7 @@ function listCanarySafe(storeRoot) {
  * Total: every section present; absent data is UNKNOWN/empty, never invented.
  */
 export function buildEvolutionReport({ storeRoot, env = process.env } = {}) {
-  const root = storeRoot ?? env.AUTOLOOP_EVOLUTION_STORE_ROOT ?? null;
+  const root = storeRoot ?? readConfigEnv(env, "AEGISFLOW_EVOLUTION_STORE_ROOT")?.value ?? null;
   const report = {
     schema: EVOLUTION_OPERATOR_REPORT_SCHEMA,
     storeRoot: root,
@@ -254,7 +255,7 @@ export function buildEvolutionReport({ storeRoot, env = process.env } = {}) {
 /** Human-readable rendering (same conventions as the R-07 renderer). */
 export function renderEvolutionReportText(report) {
   const lines = [];
-  lines.push(`AutoLoop evolution report — ${report.storeRoot ?? "(no store)"}`);
+  lines.push(`AegisFlow evolution report — ${report.storeRoot ?? "(no store)"}`);
   lines.push(`policy: ${report.policy.state}${report.policy.policyName ? ` (${report.policy.policyName})` : ""}${report.policy.expiresAt ? ` expires ${report.policy.expiresAt}` : ""}`);
   if (report.policy.generation !== null && report.policy.generation !== undefined) {
     lines.push(`policy generation: ${report.policy.generation}${report.policy.previousPolicyDigest ? ` (succeeds ${String(report.policy.previousPolicyDigest).slice(0, 12)})` : ""}; preserved generations: ${(report.policy.history ?? []).length}`);

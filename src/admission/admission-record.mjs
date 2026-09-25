@@ -32,7 +32,9 @@ export const ADMISSION_SCHEMA_VERSION = 1;
 export const ADMISSION_SCHEMA_DEFINITION = {
   $schema: "http://json-schema.org/draft-07/schema#",
   $id: "autoloop.task-admission/v1",
-  title: "AutoLoop Task Admission Result",
+  // Brand-only annotation: the validator never reads `title`, and the persisted
+  // identifier is `$id` above, which is unchanged.
+  title: "AegisFlow Task Admission Result",
   type: "object",
   additionalProperties: false,
   required: [

@@ -1,6 +1,6 @@
 // src/evidence/run-evidence-store.mjs
 //
-// C3 — AutoLoop durable evidence store.
+// C3 — AegisFlow durable evidence store.
 //
 // Responsibilities:
 //  - Owner-only durable execution directory（<root>/<executionId>/）.

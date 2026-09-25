@@ -1,11 +1,11 @@
 # Contributing
 
-Thanks for considering it. AutoLoop is a community, best-effort project — see
+Thanks for considering it. AegisFlow is a community, best-effort project — see
 [Support](#support) for what that means in practice.
 
 ## Before you start
 
-**Open an issue first for anything non-trivial.** AutoLoop's whole point is
+**Open an issue first for anything non-trivial.** AegisFlow's whole point is
 bounded, admitted change; a surprise 2000-line PR is not reviewable and will
 likely be declined on that basis alone.
 
@@ -17,8 +17,8 @@ are welcome as direct PRs.
 Requirements: Node ≥ 24, npm, git. Nothing else for the host suite.
 
 ```bash
-git clone https://github.com/xonogesrs/autoloop.git
-cd autoloop
+git clone https://github.com/xonogesrs/aegisflow.git
+cd aegisflow
 npm install
 npm run check      # syntax-check all source
 npm test           # host-only suite (no external infrastructure needed)
@@ -38,7 +38,7 @@ governance core is testable on the host.
 ## Tests
 
 - **Run the suite before opening a PR.** `npm test` must pass.
-- **Add a test for behaviour you change.** AutoLoop's tests are mostly
+- **Add a test for behaviour you change.** AegisFlow's tests are mostly
   contract/negative tests: they assert that a fence *refuses*, not just that a
   happy path works. A change to a gate without a failing-before test is not
   reviewable.

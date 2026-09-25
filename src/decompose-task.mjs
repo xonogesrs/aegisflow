@@ -1,6 +1,6 @@
 // decompose-task.mjs
 //
-// AutoLoop Card 2 — Shadow-mode task decomposer (repaired).
+// AegisFlow Card 2 — Shadow-mode task decomposer (repaired).
 // F1: no edge normalization before validator (Card 1 handles it)
 // F2: strict manifest item + parentCard validation before provider call
 // F3: raw_output_summary replaced with safe metadata

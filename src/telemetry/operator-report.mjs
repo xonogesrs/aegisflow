@@ -12,7 +12,7 @@
 // What this module IS:
 //   - THE canonical telemetry reader for one graphRunId. Storage resolves
 //     ONLY through resolveTelemetryStateRoot() (S16 §5): the canonical
-//     namespace child or the validated AUTOLOOP_TELEMETRY_STATE_ROOT
+//     namespace child or the validated AEGISFLOW_TELEMETRY_STATE_ROOT
 //     override. No arbitrary root, no cwd fallback, no repo-local fallback.
 //   - Bounded: reads ONLY the run-scoped namespace (no traversal outside the
 //     graphRunId namespace), a bounded chunk count and byte budget; over the
@@ -653,7 +653,7 @@ export function buildOperatorReport({ graphRunId, env = process.env } = {}) {
 export function renderOperatorReportText(report) {
   const lines = [];
   const t = (x) => `${x.value ?? "—"} [${x.evidence ?? "?"}]`;
-  lines.push(`AutoLoop operator report — ${report.graphRunId}`);
+  lines.push(`AegisFlow operator report — ${report.graphRunId}`);
   lines.push(`availability: ${report.availability.state}${report.availability.reason ? ` (${report.availability.reason})` : ""} root=${report.availability.stateRoot ?? "—"}`);
   lines.push(`status: ${t(report.runStatus.status)}`);
   if (report.runStatus.observedFinalState.value) {

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "autoloop.evolution-policy/v1",
-  "title": "AutoLoop Autonomous Evolution Policy (preauthorization)",
+  "title": "AegisFlow Autonomous Evolution Policy (preauthorization)",
   "type": "object",
   "additionalProperties": false,
   "required": [

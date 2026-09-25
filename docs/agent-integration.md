@@ -1,18 +1,18 @@
 # Agent integration
 
-AutoLoop is provider-neutral. It talks to two independent things:
+AegisFlow is provider-neutral. It talks to two independent things:
 
 | Layer | What it is | Today |
 |---|---|---|
 | **Agent runtime** | the process that executes a task and calls tools | Pi (`@earendil-works/pi-coding-agent`) |
 | **Provider** | the model behind the agent | any provider the runtime is configured for, reached through `@earendil-works/pi-ai` |
 
-AutoLoop does not bundle either one. You install the agent runtime; you
+AegisFlow does not bundle either one. You install the agent runtime; you
 configure the provider in the runtime's own configuration.
 
 ## The pinned runtime identity
 
-AutoLoop does not simply "run whatever `pi` is on PATH". The runtime it will
+AegisFlow does not simply "run whatever `pi` is on PATH". The runtime it will
 use is *pinned*: its resolved path and content digest are resolved before tool
 selection runs, recorded in the admission contract, and re-checked on resume.
 
@@ -23,8 +23,8 @@ frozenRuntimeIdentity()   // { realpath, sha256, version } — resolved lazily
 
 Resolution order:
 
-1. `AUTOLOOP_PI_RUNTIME_PATH` (must be absolute), with
-   `AUTOLOOP_PI_RUNTIME_SHA256` / `AUTOLOOP_PI_RUNTIME_VERSION` to pin exactly;
+1. `AEGISFLOW_PI_RUNTIME_PATH` (must be absolute), with
+   `AEGISFLOW_PI_RUNTIME_SHA256` / `AEGISFLOW_PI_RUNTIME_VERSION` to pin exactly;
 2. otherwise, `pi` discovered through `PATH` / the platform default binary
    directories.
 
@@ -42,12 +42,12 @@ and the live runtime is a fail-closed HOLD
 Upgrading `pi` therefore requires an explicit re-pin:
 
 ```bash
-export AUTOLOOP_PI_RUNTIME_PATH="$(command -v pi)"
-export AUTOLOOP_PI_RUNTIME_SHA256=$(node -e '
+export AEGISFLOW_PI_RUNTIME_PATH="$(command -v pi)"
+export AEGISFLOW_PI_RUNTIME_SHA256=$(node -e '
   const c = require("node:crypto"), f = require("node:fs");
   process.stdout.write(c.createHash("sha256").update(f.readFileSync(process.argv[1])).digest("hex"));
-' "$AUTOLOOP_PI_RUNTIME_PATH")
-export AUTOLOOP_PI_RUNTIME_VERSION="$(pi --version)"
+' "$AEGISFLOW_PI_RUNTIME_PATH")
+export AEGISFLOW_PI_RUNTIME_VERSION="$(pi --version)"
 ```
 
 ## The tool vocabulary
@@ -113,7 +113,7 @@ configuration change, not a default.
 
 ## Adding a runtime or provider
 
-- **Another provider**: configure it in the agent runtime. AutoLoop's only
+- **Another provider**: configure it in the agent runtime. AegisFlow's only
   provider-facing code is `src/v2/pi-transport-adapter.mjs`, which pins a
   provider/model/effort/token budget for the V2 structured transport and
   guards the request (host allowlist, single request, no retry). Adding a

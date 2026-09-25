@@ -66,18 +66,18 @@ before(() => {
   INBOX = join(ROOT, "inbox-current");
   INBOX_ARCHIVE = join(ROOT, "inbox-archive");
   mkdirSync(ROOT, { recursive: true });
-  process.env.AUTOLOOP_EXECUTION_REVIEW_SURFACE = SURFACE;
-  process.env.AUTOLOOP_EXECUTION_REVIEW_ARCHIVE = ARCHIVE;
-  process.env.AUTOLOOP_REVIEW_SURFACE = INBOX;
-  process.env.AUTOLOOP_REVIEW_ARCHIVE = INBOX_ARCHIVE;
+  process.env.AEGISFLOW_EXECUTION_REVIEW_SURFACE = SURFACE;
+  process.env.AEGISFLOW_EXECUTION_REVIEW_ARCHIVE = ARCHIVE;
+  process.env.AEGISFLOW_REVIEW_SURFACE = INBOX;
+  process.env.AEGISFLOW_REVIEW_ARCHIVE = INBOX_ARCHIVE;
 });
 
 after(() => {
   rmSync(ROOT, { recursive: true, force: true });
-  delete process.env.AUTOLOOP_EXECUTION_REVIEW_SURFACE;
-  delete process.env.AUTOLOOP_EXECUTION_REVIEW_ARCHIVE;
-  delete process.env.AUTOLOOP_REVIEW_SURFACE;
-  delete process.env.AUTOLOOP_REVIEW_ARCHIVE;
+  delete process.env.AEGISFLOW_EXECUTION_REVIEW_SURFACE;
+  delete process.env.AEGISFLOW_EXECUTION_REVIEW_ARCHIVE;
+  delete process.env.AEGISFLOW_REVIEW_SURFACE;
+  delete process.env.AEGISFLOW_REVIEW_ARCHIVE;
 });
 
 const source = ({ executionId = "EXEC-A", cardId = "TEST-CARD", outcome = "PASS", overrides = {} } = {}) => ({

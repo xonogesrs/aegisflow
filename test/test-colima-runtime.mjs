@@ -46,7 +46,7 @@ function withRealColimaHome(fn) {
 }
 // The gate these tests configure: the mount that CONTAINS CANON, so the
 // containment check is exercised with a coherent pair.
-const GATE = Object.freeze({ AUTOLOOP_COLIMA_MOUNT: "/srv/autoloop", AUTOLOOP_COLIMA_MOUNT_UUID: "UUID-1" });
+const GATE = Object.freeze({ AEGISFLOW_COLIMA_MOUNT: "/srv/autoloop", AEGISFLOW_COLIMA_MOUNT_UUID: "UUID-1" });
 /** Injected filesystem/id observations so no real volume is required. */
 const okFacts = Object.freeze({
   statOf: () => ({ isDirectory: () => true }),
@@ -120,7 +120,7 @@ test("N6: a shadow mount of the gated volume fails closed — no guessing", () =
     () =>
       assertColimaHome({
         env: { COLIMA_HOME: CANON, ...GATE },
-        uuidOf: () => GATE.AUTOLOOP_COLIMA_MOUNT_UUID,
+        uuidOf: () => GATE.AEGISFLOW_COLIMA_MOUNT_UUID,
         volumesOf: () => ["autoloop", "autoloop 1"],
         ...okFacts,
       }),
@@ -143,7 +143,7 @@ test("gate passes with a configured mount and matching volume identity", () => {
   assert.equal(
     assertColimaHome({
       env: { COLIMA_HOME: CANON, ...GATE },
-      uuidOf: () => GATE.AUTOLOOP_COLIMA_MOUNT_UUID,
+      uuidOf: () => GATE.AEGISFLOW_COLIMA_MOUNT_UUID,
       volumesOf: () => ["autoloop"],
       ...okFacts,
     }),

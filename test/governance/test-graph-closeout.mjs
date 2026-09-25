@@ -67,13 +67,13 @@ before(() => {
   mkdirSync(OUT2, { recursive: true });
   // RB-1H hard rule: requiresReview closeouts default-deliver to the fixed
   // surface — redirect it away from the real Desktop inbox during tests.
-  process.env.AUTOLOOP_REVIEW_SURFACE = join(ROOT, "surface");
-  process.env.AUTOLOOP_REVIEW_ARCHIVE = join(ROOT, "archive");
+  process.env.AEGISFLOW_REVIEW_SURFACE = join(ROOT, "surface");
+  process.env.AEGISFLOW_REVIEW_ARCHIVE = join(ROOT, "archive");
 });
 after(() => {
   rmSync(ROOT, { recursive: true, force: true });
-  delete process.env.AUTOLOOP_REVIEW_SURFACE;
-  delete process.env.AUTOLOOP_REVIEW_ARCHIVE;
+  delete process.env.AEGISFLOW_REVIEW_SURFACE;
+  delete process.env.AEGISFLOW_REVIEW_ARCHIVE;
 });
 
 // ── realistic structured Graph result fixtures（shapes match what

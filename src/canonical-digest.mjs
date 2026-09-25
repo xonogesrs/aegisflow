@@ -1,6 +1,6 @@
 // canonical-digest.mjs
 //
-// Minimal canonical-JSON + SHA-256 digest helper for AutoLoop task-
+// Minimal canonical-JSON + SHA-256 digest helper for AegisFlow task-
 // understanding artifacts (authority record, task-understanding contract,
 // provenance, challenge, bundles). Card
 // AURACORE-AUTOLOOP-C4A-TASK-UNDERSTANDING-IMPLEMENTATION-1 §5/§9.

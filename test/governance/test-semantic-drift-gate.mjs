@@ -57,13 +57,13 @@ const surface = (n) => join(ROOT, `surface-${n}`);
 before(() => {
   rmSync(ROOT, { recursive: true, force: true });
   mkdirSync(OUT, { recursive: true });
-  process.env.AUTOLOOP_REVIEW_SURFACE = join(ROOT, "env-surface");
-  process.env.AUTOLOOP_REVIEW_ARCHIVE = join(ROOT, "archive");
+  process.env.AEGISFLOW_REVIEW_SURFACE = join(ROOT, "env-surface");
+  process.env.AEGISFLOW_REVIEW_ARCHIVE = join(ROOT, "archive");
 });
 after(() => {
   rmSync(ROOT, { recursive: true, force: true });
-  delete process.env.AUTOLOOP_REVIEW_SURFACE;
-  delete process.env.AUTOLOOP_REVIEW_ARCHIVE;
+  delete process.env.AEGISFLOW_REVIEW_SURFACE;
+  delete process.env.AEGISFLOW_REVIEW_ARCHIVE;
 });
 
 // ── realistic structured Graph result（matches what runColimaGraph returns）──

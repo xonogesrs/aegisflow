@@ -17,7 +17,7 @@
 //   second engine, no process-memory truth.
 //
 // Counter conformance note (frozen CONTRACT §6 timeline mapped onto this
-// stack): the v2 AutoLoop spine advances snapshot revisions without writing
+// stack): the v2 AegisFlow spine advances snapshot revisions without writing
 // C2D journal rows, so TWO counters exist. H (the pinned verified clean head)
 // is the LIVE CURRENT revision at the safe point; the C2D journal counter is
 // gapless from 1 (validateContinuity). The intent pins checkpointRevision=H /

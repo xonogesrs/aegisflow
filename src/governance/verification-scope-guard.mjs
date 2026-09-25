@@ -8,7 +8,7 @@
 // broad filesystem scan instead of calling the authoritative reader
 // (readCloseoutState / externalReviewSurfaceDir). This module is the single
 // place that decides whether a verification root is authorized so both
-// AutoLoop's own scripts and agent-generated shell commands have one gate
+// AegisFlow's own scripts and agent-generated shell commands have one gate
 // to call before traversing.
 //
 // This is a bootstrap-scope guard (VCA-1 Phase 0), not the full VCA-1

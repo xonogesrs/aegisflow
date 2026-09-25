@@ -232,11 +232,11 @@ function writeFakePi(dir, { settle }) {
 test("pi successor spawn terminates its process group after settle", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pgr-case2a-"));
   const prevExe = process.env.PI_EXECUTABLE;
-  const prevTimeout = process.env.AUTOLOOP_ROLLOVER_SPAWN_TIMEOUT_MS;
+  const prevTimeout = process.env.AEGISFLOW_ROLLOVER_SPAWN_TIMEOUT_MS;
   try {
     const fake = writeFakePi(dir, { settle: true });
     process.env.PI_EXECUTABLE = fake;
-    process.env.AUTOLOOP_ROLLOVER_SPAWN_TIMEOUT_MS = "8000";
+    process.env.AEGISFLOW_ROLLOVER_SPAWN_TIMEOUT_MS = "8000";
 
     const r = await spawnSuccessorSession({
       adapterKind: "pi-builtin",
@@ -258,7 +258,7 @@ test("pi successor spawn terminates its process group after settle", async () =>
     assert.deepEqual(await survivorsAfter(dir), [], "settled session descendants must not survive");
   } finally {
     if (prevExe === undefined) delete process.env.PI_EXECUTABLE; else process.env.PI_EXECUTABLE = prevExe;
-    if (prevTimeout === undefined) delete process.env.AUTOLOOP_ROLLOVER_SPAWN_TIMEOUT_MS; else process.env.AUTOLOOP_ROLLOVER_SPAWN_TIMEOUT_MS = prevTimeout;
+    if (prevTimeout === undefined) delete process.env.AEGISFLOW_ROLLOVER_SPAWN_TIMEOUT_MS; else process.env.AEGISFLOW_ROLLOVER_SPAWN_TIMEOUT_MS = prevTimeout;
     for (const pid of readPids(dir)) { try { process.kill(pid, "SIGKILL"); } catch { /* gone */ } }
     cleanup(dir);
   }
@@ -267,11 +267,11 @@ test("pi successor spawn terminates its process group after settle", async () =>
 test("pi successor spawn terminates its process group on timeout", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pgr-case2b-"));
   const prevExe = process.env.PI_EXECUTABLE;
-  const prevTimeout = process.env.AUTOLOOP_ROLLOVER_SPAWN_TIMEOUT_MS;
+  const prevTimeout = process.env.AEGISFLOW_ROLLOVER_SPAWN_TIMEOUT_MS;
   try {
     const fake = writeFakePi(dir, { settle: false });
     process.env.PI_EXECUTABLE = fake;
-    process.env.AUTOLOOP_ROLLOVER_SPAWN_TIMEOUT_MS = "800";
+    process.env.AEGISFLOW_ROLLOVER_SPAWN_TIMEOUT_MS = "800";
 
     const r = await spawnSuccessorSession({
       adapterKind: "pi-builtin",
@@ -290,7 +290,7 @@ test("pi successor spawn terminates its process group on timeout", async () => {
     assert.deepEqual(await survivorsAfter(dir), [], "timed-out session descendants must not survive");
   } finally {
     if (prevExe === undefined) delete process.env.PI_EXECUTABLE; else process.env.PI_EXECUTABLE = prevExe;
-    if (prevTimeout === undefined) delete process.env.AUTOLOOP_ROLLOVER_SPAWN_TIMEOUT_MS; else process.env.AUTOLOOP_ROLLOVER_SPAWN_TIMEOUT_MS = prevTimeout;
+    if (prevTimeout === undefined) delete process.env.AEGISFLOW_ROLLOVER_SPAWN_TIMEOUT_MS; else process.env.AEGISFLOW_ROLLOVER_SPAWN_TIMEOUT_MS = prevTimeout;
     for (const pid of readPids(dir)) { try { process.kill(pid, "SIGKILL"); } catch { /* gone */ } }
     cleanup(dir);
   }
@@ -381,11 +381,11 @@ test("verification abort settles in bounded time while a descendant holds the st
 test("successor spawn aborts mid-flight and reaps its process group", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pgr-abor3-"));
   const prevExe = process.env.PI_EXECUTABLE;
-  const prevTimeout = process.env.AUTOLOOP_ROLLOVER_SPAWN_TIMEOUT_MS;
+  const prevTimeout = process.env.AEGISFLOW_ROLLOVER_SPAWN_TIMEOUT_MS;
   try {
     const fake = writeFakePi(dir, { settle: false });
     process.env.PI_EXECUTABLE = fake;
-    process.env.AUTOLOOP_ROLLOVER_SPAWN_TIMEOUT_MS = "30000"; // only the abort can end it
+    process.env.AEGISFLOW_ROLLOVER_SPAWN_TIMEOUT_MS = "30000"; // only the abort can end it
     const ac = new AbortController();
     const started = Date.now();
     const p = spawnSuccessorSession({
@@ -404,7 +404,7 @@ test("successor spawn aborts mid-flight and reaps its process group", async () =
     assert.deepEqual(await survivorsAfter(dir), [], "aborted session descendants must not survive");
   } finally {
     if (prevExe === undefined) delete process.env.PI_EXECUTABLE; else process.env.PI_EXECUTABLE = prevExe;
-    if (prevTimeout === undefined) delete process.env.AUTOLOOP_ROLLOVER_SPAWN_TIMEOUT_MS; else process.env.AUTOLOOP_ROLLOVER_SPAWN_TIMEOUT_MS = prevTimeout;
+    if (prevTimeout === undefined) delete process.env.AEGISFLOW_ROLLOVER_SPAWN_TIMEOUT_MS; else process.env.AEGISFLOW_ROLLOVER_SPAWN_TIMEOUT_MS = prevTimeout;
     for (const pid of readPids(dir)) { try { process.kill(pid, "SIGKILL"); } catch { /* gone */ } }
     cleanup(dir);
   }

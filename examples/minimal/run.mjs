@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // examples/minimal/run.mjs
 //
-// The smallest complete AutoLoop execution, end to end.
+// The smallest complete AegisFlow execution, end to end.
 //
 // WHAT THIS DEMONSTRATES
 //   task → classify → admit → project → execute → review → scope gate → verdict
@@ -39,7 +39,7 @@ const hr = (title) => console.log(`\n${"─".repeat(72)}\n${title}\n${"─".repe
 
 // ── A throwaway git repo to act on ─────────────────────────────────────────
 function fixtureRepo() {
-  const dir = mkdtempSync(join(tmpdir(), "autoloop-example-"));
+  const dir = mkdtempSync(join(tmpdir(), "aegisflow-example-"));
   execFileSync("git", ["init", "-b", "main"], { cwd: dir, stdio: "ignore" });
   execFileSync("git", ["config", "user.email", "example@example.invalid"], { cwd: dir, stdio: "ignore" });
   execFileSync("git", ["config", "user.name", "example"], { cwd: dir, stdio: "ignore" });

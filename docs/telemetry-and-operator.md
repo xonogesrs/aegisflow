@@ -80,8 +80,8 @@ consumes their output.
 ### Run inspection
 
 ```bash
-node scripts/autoloop-operator.mjs --run <graphRunId>
-node scripts/autoloop-operator.mjs --run <graphRunId> --json
+node scripts/aegisflow-operator.mjs --run <graphRunId>
+node scripts/aegisflow-operator.mjs --run <graphRunId> --json
 ```
 
 Reports:
@@ -127,7 +127,7 @@ execution**'s review.
 node scripts/gov-execution-review.mjs --status
 ```
 
-It reads a fixed surface (`AUTOLOOP_EXECUTION_REVIEW_SURFACE`) where the most
+It reads a fixed surface (`AEGISFLOW_EXECUTION_REVIEW_SURFACE`) where the most
 recent execution review is published and previous ones rotate into an archive.
 This is a different question from "is a card awaiting external review" — a
 pending external-review inbox occupant never blocks the latest execution

@@ -39,7 +39,7 @@ const cliCwd = cliFlags.cwd || process.cwd();
  * Library entry (R-11): runs the same attestation with injected flags/surface
  * for test-only dependency injection — identical code path to the CLI main.
  * Production CLIs never pass `surfaceDir`; the surface comes from --surface
- * or the canonical default (AUTOLOOP_REVIEW_SURFACE).
+ * or the canonical default (AEGISFLOW_REVIEW_SURFACE).
  */
 export function runCommitIntegration({ flags: flagsIn, cwd: cwdIn, surfaceDir } = {}) {
   const f = { ...(flagsIn ?? cliFlags), ...(surfaceDir ? { surface: surfaceDir } : {}) };
@@ -106,7 +106,7 @@ function attestationMain(flags, cwd) {
     fail(rj.code, rj.errors.join("; "));
   }
   if (!surface) {
-    fail("HOLD / DELIVERY_MISSING", "commit integration requires the canonical external-review delivery surface (--surface, default AUTOLOOP_REVIEW_SURFACE)");
+    fail("HOLD / DELIVERY_MISSING", "commit integration requires the canonical external-review delivery surface (--surface, default AEGISFLOW_REVIEW_SURFACE)");
   }
   const dl = readDeliveryEvidence(surface);
   if (!dl.ok) {

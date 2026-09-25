@@ -66,16 +66,16 @@ function evidenceRootFor(dir) {
 // bare remotes are never part of the production remote policy). The
 // canonical surface is always the fixture surface at <dir>/out/surface.
 function pushGate(argv, dir) {
-  const prev = process.env.AUTOLOOP_PI_GRAPH_OUTPUT;
-  process.env.AUTOLOOP_PI_GRAPH_OUTPUT = evidenceRootFor(dir);
+  const prev = process.env.AEGISFLOW_PI_GRAPH_OUTPUT;
+  process.env.AEGISFLOW_PI_GRAPH_OUTPUT = evidenceRootFor(dir);
   try {
     const report = runPushGate({ argv, cwd: dir, surfaceDir: join(dir, "out", "surface"), remotePolicy: testRemoteMatch });
     return { status: 0, report, stderr: "" };
   } catch (e) {
     return { status: 1, report: null, stderr: `${e.code ?? ""}\n${e.message}` };
   } finally {
-    if (prev === undefined) delete process.env.AUTOLOOP_PI_GRAPH_OUTPUT;
-    else process.env.AUTOLOOP_PI_GRAPH_OUTPUT = prev;
+    if (prev === undefined) delete process.env.AEGISFLOW_PI_GRAPH_OUTPUT;
+    else process.env.AEGISFLOW_PI_GRAPH_OUTPUT = prev;
   }
 }
 
@@ -84,8 +84,8 @@ function pushGate(argv, dir) {
 // and the same fixture surface. The retired external-review-result.json is
 // never consulted by the migrated gate.
 function integrationAttest(argv, dir) {
-  const prev = process.env.AUTOLOOP_PI_GRAPH_OUTPUT;
-  process.env.AUTOLOOP_PI_GRAPH_OUTPUT = evidenceRootFor(dir);
+  const prev = process.env.AEGISFLOW_PI_GRAPH_OUTPUT;
+  process.env.AEGISFLOW_PI_GRAPH_OUTPUT = evidenceRootFor(dir);
   try {
     const { flags } = parseArgs(argv);
     const report = runCommitIntegration({ flags, cwd: dir, surfaceDir: join(dir, "out", "surface") });
@@ -93,15 +93,15 @@ function integrationAttest(argv, dir) {
   } catch (e) {
     return { status: 1, stdout: "", report: null, stderr: `${e.code ?? ""}\n${e.message}` };
   } finally {
-    if (prev === undefined) delete process.env.AUTOLOOP_PI_GRAPH_OUTPUT;
-    else process.env.AUTOLOOP_PI_GRAPH_OUTPUT = prev;
+    if (prev === undefined) delete process.env.AEGISFLOW_PI_GRAPH_OUTPUT;
+    else process.env.AEGISFLOW_PI_GRAPH_OUTPUT = prev;
   }
 }
 
 // PGMA1: materialize the canonical promotion evidence for the fixture card —
 // review-job ACCEPTED (identity recomputed over the candidate domain) +
 // surface delivery (PASS/PENDING) + delivered bundle (body digest bound).
-// The review-job lives OUTSIDE the repo (AUTOLOOP_PI_GRAPH_OUTPUT seam) so
+// The review-job lives OUTSIDE the repo (AEGISFLOW_PI_GRAPH_OUTPUT seam) so
 // it never dirties the fixture worktree for unmigrated legacy gates.
 function materializeCanonicalEvidence(dir, { status = "PASS", evidenceRoot = null } = {}) {
   const git = (args) => execFileSync("git", args, { cwd: dir, encoding: "utf8" });
@@ -789,8 +789,8 @@ test("[neg 11] custom PR body missing card/result binding is rejected", (t) => {
   // a custom body without card/result binding must be rejected for CREATE
   const unboundBody = join(outDir, "unbound-body.md");
   writeFileSync(unboundBody, "## unrelated content\nno card binding here\n");
-  const prevEv = process.env.AUTOLOOP_PI_GRAPH_OUTPUT;
-  process.env.AUTOLOOP_PI_GRAPH_OUTPUT = fx.evidenceRoot;
+  const prevEv = process.env.AEGISFLOW_PI_GRAPH_OUTPUT;
+  process.env.AEGISFLOW_PI_GRAPH_OUTPUT = fx.evidenceRoot;
   try {
     const draft = run("gov-draft-pr.mjs", [
       "--authority-file", authorityPath, "--cwd", dir,
@@ -800,8 +800,8 @@ test("[neg 11] custom PR body missing card/result binding is rejected", (t) => {
     assert.notEqual(draft.status, 0);
     assert.match(draft.stderr, /PR_NOT_BOUND_TO_PARENT_CARD/);
   } finally {
-    if (prevEv === undefined) delete process.env.AUTOLOOP_PI_GRAPH_OUTPUT;
-    else process.env.AUTOLOOP_PI_GRAPH_OUTPUT = prevEv;
+    if (prevEv === undefined) delete process.env.AEGISFLOW_PI_GRAPH_OUTPUT;
+    else process.env.AEGISFLOW_PI_GRAPH_OUTPUT = prevEv;
   }
 });
 

@@ -2,7 +2,7 @@
 //
 // Provider-neutral executor/reviewer adapter contract. Not Pi-specific, not
 // bound to any LLM provider. Defines only the request/result shape an
-// AutoLoop-callable adapter must satisfy and validates values against it.
+// AegisFlow-callable adapter must satisfy and validates values against it.
 //
 // This contract intentionally carries no authority: a validated result only
 // means "well-formed", never "PASS", never "evidence is trustworthy", never

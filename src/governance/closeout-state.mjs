@@ -458,7 +458,7 @@ export function validateGraphEvidence(input, opts = {}) {
   }
 
   // ── GATE F — node normalization (runner/evidence shapes → one form) ───
-  // Accept ONLY the two shapes canonical AutoLoop code produces:
+  // Accept ONLY the two shapes canonical AegisFlow code produces:
   //   runner-shaped   graphResult.nodeResults[] (in-memory path)
   //   evidence-shaped evidence.nodes[] (persisted v1 snapshot)
   // Arbitrary aliases (nodeResults on disk-only evidence, nodes on runner
@@ -550,7 +550,7 @@ export function validateGraphEvidence(input, opts = {}) {
 
 /**
  * GATE F — node-collection normalization. Accepts exactly the shapes
- * canonical AutoLoop code produces:
+ * canonical AegisFlow code produces:
  *   - graphResult-shaped input: `nodeResults[]` (colima-graph-runner,
  *     subagent runner, durable graph — in-memory authority path)
  *   - evidence-shaped input: `nodes[]` (the persisted

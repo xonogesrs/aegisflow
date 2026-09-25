@@ -1,10 +1,17 @@
-# AutoLoop
+# AegisFlow
 
-**An agent governance harness for spec-driven development.** AutoLoop turns a
-task card into an *admitted, bounded, evidenced* agent execution: it decides
-what may be touched, runs the work in an isolated sandbox through an agent
-runtime (Pi today), independently reviews the result, and only then allows a
-commit — with a durable record for every step.
+**A governed execution layer for autonomous agents.**
+
+AegisFlow turns a task card into an *admitted, bounded, evidenced* agent
+execution: it decides what may be touched, runs the work in an isolated sandbox
+through an agent runtime (Pi today), independently reviews the result, and only
+then allows a commit — with a durable record for every step.
+
+> **formerly AutoLoop.** The project was renamed from AutoLoop to AegisFlow.
+> Existing `AUTOLOOP_*` environment variables still work (the `AEGISFLOW_*`
+> name wins when both are set), persisted `autoloop.*` schema identifiers are
+> unchanged, and **no state migration is required** — see the
+> [migration note](docs/migration-rename.md).
 
 Apache-2.0 licensed. See [LICENSE](LICENSE), [NOTICE](NOTICE), and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
@@ -15,11 +22,11 @@ Apache-2.0 licensed. See [LICENSE](LICENSE), [NOTICE](NOTICE), and
 
 ---
 
-## What AutoLoop is
+## What AegisFlow is
 
 Most agent runners execute a prompt and report the model's own summary of what
 it did. That is fine for a script and insufficient for anything you have to
-audit. AutoLoop's position is that the *harness* — not the model — owns the
+audit. AegisFlow's position is that the *harness* — not the model — owns the
 authority, the limits, and the evidence.
 
 Concretely, three design principles distinguish it from a prompt loop or a
@@ -44,7 +51,7 @@ generic agent runner:
 
 ### How this differs from a script loop
 
-| | Script/agent loop | AutoLoop |
+| | Script/agent loop | AegisFlow |
 |---|---|---|
 | What the agent may touch | whatever it decides | frozen admission scope, enforced before the executor starts |
 | Success signal | process exit code, model summary | harness-collected facts + an independent reviewer verdict |
@@ -93,7 +100,7 @@ expect it.
 
 ### Risk boundaries (do not misread this)
 
-AutoLoop's autonomous path is **not** unrestricted self-modification:
+AegisFlow's autonomous path is **not** unrestricted self-modification:
 
 - **LOW risk** — the autonomous loop may propose, validate, review, promote and
   roll back on its own, but only inside a policy that an operator issued in
@@ -120,13 +127,16 @@ AutoLoop's autonomous path is **not** unrestricted self-modification:
 | Sandbox runtime | optional; **required** for container-isolated execution (Colima + Docker) |
 | Provider credentials | optional; **required** only when contacting a model provider |
 
-Nothing above is installed for you. AutoLoop orchestrates tools you already
+Nothing above is installed for you. AegisFlow orchestrates tools you already
 have; it does not bundle an agent, a container runtime, or a model.
 
-**AutoLoop is not published to npm.** The `autoloop` name on the npm registry
-belongs to an unrelated package, and this repository does not publish under it:
-`package.json` sets `"private": true` deliberately. Install AutoLoop by cloning
-this repository — that is the only supported distribution channel today.
+**AegisFlow is not published to npm.** `package.json` sets `"private": true`
+deliberately, and the internal package name stays `autoloop`: the `aegisflow`
+name on the public npm registry already belongs to an unrelated package, and
+this project will not fight another project for a name it does not need. The
+internal name is not a user-facing surface — the repository, the documentation
+and the product name are AegisFlow. Install AegisFlow by cloning this
+repository; that is the only supported distribution channel today.
 
 ---
 
@@ -134,8 +144,8 @@ this repository — that is the only supported distribution channel today.
 
 ```bash
 # 1. Clone
-git clone https://github.com/xonogesrs/autoloop.git
-cd autoloop
+git clone https://github.com/xonogesrs/aegisflow.git
+cd aegisflow
 
 # 2. Install the single runtime dependency
 npm install
@@ -156,7 +166,7 @@ node test/run-suite.mjs --list                    # the exact file list, and wha
 COLIMA_HOME=/path/to/colima npm run test:colima   # sandbox suites
 ```
 
-The operator surface is not a `--help` command: `scripts/autoloop-operator.mjs`
+The operator surface is not a `--help` command: `scripts/aegisflow-operator.mjs`
 treats a missing `--run <graphRunId>` as usage and exits non-zero by design. See
 [Inspect a result](#inspect-a-result) for its real invocation.
 
@@ -166,8 +176,8 @@ The operator view is read-only and safe against unknown, partial or
 telemetry-disabled runs:
 
 ```bash
-node scripts/autoloop-operator.mjs --run <graphRunId>          # human view
-node scripts/autoloop-operator.mjs --run <graphRunId> --json   # machine view
+node scripts/aegisflow-operator.mjs --run <graphRunId>          # human view
+node scripts/aegisflow-operator.mjs --run <graphRunId> --json   # machine view
 ```
 
 It reports status, phases, rollover transitions, provider usage and
@@ -177,7 +187,7 @@ diagnostics, and performs zero writes.
 
 ## Minimal example
 
-The smallest complete AutoLoop task: classify → admit → execute → review →
+The smallest complete AegisFlow task: classify → admit → execute → review →
 evidence. This runs entirely on the host with a scripted adapter, so it needs
 no provider, no `pi`, and no container.
 
@@ -196,7 +206,7 @@ same flow against a real agent.
 ## Multi-agent example
 
 A parent task that decomposes into a fan-out of writer subagents with an
-independent reviewer and a join, demonstrating what AutoLoop is actually for:
+independent reviewer and a join, demonstrating what AegisFlow is actually for:
 work that must be split, bounded per node, and verified as a whole.
 
 ```bash
@@ -209,7 +219,7 @@ See [examples/subagent/README.md](examples/subagent/README.md).
 
 ## Autonomous evolution
 
-AutoLoop can improve its own *operating strategy* — never its authority — when
+AegisFlow can improve its own *operating strategy* — never its authority — when
 an operator has pre-authorised it. The loop is:
 
 ```
@@ -254,7 +264,7 @@ See [docs/autonomous-evolution.md](docs/autonomous-evolution.md).
 
 ## Cross-agent learning
 
-AutoLoop can carry measured experience from one agent execution to the next:
+AegisFlow can carry measured experience from one agent execution to the next:
 
 ```
 Agent A / Agent B execution evidence
@@ -303,19 +313,23 @@ Full detail: [docs/architecture.md](docs/architecture.md) and
 
 ## Configuration
 
-AutoLoop works with zero configuration for local exploration: all state defaults
-to a single namespace (`AUTOLOOP_HOME`, default `~/.autoloop`). Point anything
+AegisFlow works with zero configuration for local exploration: all state defaults
+to a single namespace (`AEGISFLOW_HOME`, default `~/.autoloop`). Point anything
 elsewhere with environment variables — a configured root must be absolute, and
-state may not be scattered outside the AutoLoop namespace.
+state may not be scattered outside the AegisFlow namespace.
+
+The pre-rename `AUTOLOOP_*` spelling of every variable below still resolves, so
+an existing AutoLoop deployment needs no edit; when both are set, the AegisFlow
+name wins. See [docs/migration-rename.md](docs/migration-rename.md).
 
 ```bash
-AUTOLOOP_HOME=~/.autoloop              # root of all AutoLoop state
-AUTOLOOP_EVIDENCE_ROOT=…               # durable evidence (default: $AUTOLOOP_HOME/evidence/autoloop)
-AUTOLOOP_TELEMETRY_ROOT=…              # telemetry, must be OUTSIDE the evidence namespace
-AUTOLOOP_LEARNING_ROOT=…               # transfer-metrics / incident storage
-AUTOLOOP_SCRATCH_ROOT=…                # scratch for fixture work
+AEGISFLOW_HOME=~/.autoloop              # root of all AegisFlow state
+AEGISFLOW_EVIDENCE_ROOT=…               # durable evidence (default: $AEGISFLOW_HOME/evidence/autoloop)
+AEGISFLOW_TELEMETRY_ROOT=…              # telemetry, must be OUTSIDE the evidence namespace
+AEGISFLOW_LEARNING_ROOT=…               # transfer-metrics / incident storage
+AEGISFLOW_SCRATCH_ROOT=…                # scratch for fixture work
 COLIMA_HOME=…                          # Colima runtime home (machine-level container state)
-AUTOLOOP_PI_RUNTIME_PATH=…             # absolute path to the `pi` CLI entry point
+AEGISFLOW_PI_RUNTIME_PATH=…             # absolute path to the `pi` CLI entry point
 ```
 
 Provider credentials are read from the environment or the provider CLI's own
@@ -330,6 +344,7 @@ every variable, its default, and its validation rule — is in
 | Document | Contents |
 |---|---|
 | [docs/getting-started.md](docs/getting-started.md) | clean clone → install → configure → first real task |
+| [docs/migration-rename.md](docs/migration-rename.md) | the AutoLoop → AegisFlow rename: what changed, what is frozen, and why no state migration is needed |
 | [docs/architecture.md](docs/architecture.md) | the control flow and who owns which authority |
 | [docs/configuration.md](docs/configuration.md) | the full public configuration surface |
 | [docs/agent-integration.md](docs/agent-integration.md) | how an agent runtime is invoked, and the adapter contract |
@@ -351,17 +366,17 @@ every variable, its default, and its validation rule — is in
 
 ## Agent and provider integration
 
-AutoLoop is provider-neutral by design. Two layers:
+AegisFlow is provider-neutral by design. Two layers:
 
 - An **agent runtime** executes the work. Today this is Pi
-  (`@earendil-works/pi-coding-agent`), which AutoLoop drives with a pinned
+  (`@earendil-works/pi-coding-agent`), which AegisFlow drives with a pinned
   identity — its executable path and content digest are part of the admission
   contract, so a runtime swap is a visible, intentional act rather than a
   silent drift. The runtime's tool vocabulary is captured from the real binary,
   never assumed.
 - A **provider** answers the model calls, reached through
   `@earendil-works/pi-ai` (the only runtime npm dependency). Providers are
-  configured by name in the runtime's own configuration; AutoLoop does not
+  configured by name in the runtime's own configuration; AegisFlow does not
   hardcode an endpoint.
 
 Scheduled adapters (OpenCode, Claude Code, Codex) are **not** wired in. See
@@ -424,10 +439,10 @@ retry: 5 of 35 control runs) from variance.
 ## Support
 
 Community, best-effort project. Issues and pull requests are welcome at
-<https://github.com/xonogesrs/autoloop/issues>.
+<https://github.com/xonogesrs/aegisflow/issues>.
 
 There is **no commercial support, no SLA, and no guaranteed provider
-compatibility**. AutoLoop is an independent project; it is not affiliated with,
+compatibility**. AegisFlow is an independent project; it is not affiliated with,
 certified by, or endorsed by any agent runtime, model provider, or container
 vendor whose name appears in this repository. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

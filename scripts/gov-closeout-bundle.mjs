@@ -65,6 +65,7 @@ import {
   deriveAuthoritativeCloseoutStage,
 } from "../src/governance/review-bundle.mjs";
 import { readCloseoutState } from "../src/governance/closeout-state.mjs";
+import { readConfigEnv } from "../src/shared/autoloop-paths.mjs";
 import { readReviewJob, findingsPath, verdictPath } from "../src/governance/review-job.mjs";
 import { sha256Text } from "../src/evidence/run-evidence-store.mjs";
 import { readFileSync as _readFileSync } from "node:fs";
@@ -146,7 +147,8 @@ if (mode === "enumerate-review-job") {
 if (mode === "generate") {
   const sourcePath = arg("--generate", null);
   const repoPath = arg("--repo", fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, ""));
-  const outDir = arg("--out", process.env.AUTOLOOP_REVIEW_SURFACE ?? join(homedir(), ".autoloop", "review", "Current"));
+  const outDir = arg("--out", readConfigEnv(process.env, "AEGISFLOW_REVIEW_SURFACE")?.value
+  ?? join(homedir(), ".autoloop", "review", "Current"));
   const timeoutMs = Number(arg("--timeout-ms", "30000"));
   const fileName = arg("--file", null);
 

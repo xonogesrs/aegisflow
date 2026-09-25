@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // benchmarks/runner/run-benchmark.mjs
 //
-// AutoLoop effectiveness benchmark — the runner.
+// AegisFlow effectiveness benchmark — the runner.
 //
 // Compares three arms on the same tasks, the same agent runtime, the same
 // provider route and the same acceptance criteria:
@@ -10,7 +10,7 @@
 //   AUTOLOOP_FRESH    treatment ON, no accumulated strategy memory (T0)
 //   AUTOLOOP_LEARNED  treatment ON, after a learning period (T1)
 //
-// Every run is a REAL AutoLoop execution: a frozen admission record, a
+// Every run is a REAL AegisFlow execution: a frozen admission record, a
 // projected per-node tool selection, a real `pi` agent subprocess with exactly
 // the admitted tools, harness-run acceptance tests, and a harness-derived
 // success verdict (the test exit code, never the model's opinion).
@@ -330,7 +330,7 @@ async function runOnce({ task, arm, runIndex, storeRoot, scratchParent, route, e
     // hard-pinned to no-tools, so a reviewer can never mutate anything.
     const adapterEnv = [...DEFAULT_ENV_ALLOWLIST, ...PROVIDER_ENV_KEYS(route.route)];
     const executorAdapter = createPiRpcAdapter({
-      piExecutable: process.env.AUTOLOOP_PI_RUNTIME_PATH || "pi",
+      piExecutable: (process.env.AEGISFLOW_PI_RUNTIME_PATH ?? process.env.AUTOLOOP_PI_RUNTIME_PATH) || "pi",
       provider: providerOf(route.route),
       model: modelOf(route.route),
       environmentAllowlist: adapterEnv,
@@ -338,7 +338,7 @@ async function runOnce({ task, arm, runIndex, storeRoot, scratchParent, route, e
       graceMs: 500,
     });
     const reviewerAdapter = createPiRpcAdapter({
-      piExecutable: process.env.AUTOLOOP_PI_RUNTIME_PATH || "pi",
+      piExecutable: (process.env.AEGISFLOW_PI_RUNTIME_PATH ?? process.env.AUTOLOOP_PI_RUNTIME_PATH) || "pi",
       provider: providerOf(route.route),
       model: modelOf(route.route),
       environmentAllowlist: adapterEnv,
@@ -372,7 +372,7 @@ async function runOnce({ task, arm, runIndex, storeRoot, scratchParent, route, e
     record.changed_paths = porcelain;
     record.scope_clean = porcelain.every((p) => task.fixture.expected_changed_paths.some((a) => p === a || p.startsWith(`${a}/`)));
 
-    // ── AutoLoop outcome + metrics ────────────────────────────────────────
+    // ── AegisFlow outcome + metrics ────────────────────────────────────────
     record.lifecycle_final = result.final;
     record.lifecycle_reason = result.reason ?? null;
     // A "repair" is the lifecycle LOOPING BACK for another attempt: the executor
@@ -490,7 +490,7 @@ function explorationArg() {
 
 /** Print usage and exit — guards against an accidental bare invocation. */
 function usage() {
-  console.log(`AutoLoop effectiveness benchmark runner
+  console.log(`AegisFlow effectiveness benchmark runner
 
   node benchmarks/runner/run-benchmark.mjs --arm <ARM> [--runs N] [options]
   node benchmarks/runner/run-benchmark.mjs --all [--runs N] [options]
@@ -509,7 +509,8 @@ Options:
 
 Environment:
   BENCH_ROUTE            pin the provider route for every arm (recorded in the manifest)
-  AUTOLOOP_PI_RUNTIME_PATH   absolute path to the 'pi' CLI when it is not on PATH
+  AEGISFLOW_PI_RUNTIME_PATH   absolute path to the 'pi' CLI when it is not on PATH
+                              (the pre-rename AUTOLOOP_PI_RUNTIME_PATH is still honored)
 
 Results: benchmarks/results/<ARM>.jsonl plus manifest.json`);
 }

@@ -26,9 +26,9 @@ import { createIdentityBinder, mintPrincipal } from "./identities.mjs";
 import { TransferMetricsWriter } from "./writer.mjs";
 import { resolveScratchRoot } from "../../shared/autoloop-paths.mjs";
 
-// Fixture scratch parent. Portable by default (<AUTOLOOP_HOME>/learning/scratch,
+// Fixture scratch parent. Portable by default (<AEGISFLOW_HOME>/learning/scratch,
 // i.e. inside the learning storage namespace these fixtures must live under);
-// relocate with AUTOLOOP_SCRATCH_ROOT.
+// relocate with AEGISFLOW_SCRATCH_ROOT.
 export const TMP_PARENT = resolveScratchRoot();
 
 /**

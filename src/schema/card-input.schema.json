@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "AutoLoop card input",
+  "title": "AegisFlow card input",
   "type": "object",
   "required": ["card_id", "mode", "worktree_path", "base_branch", "executor", "reviewer", "scope", "limits", "card_body"],
   "additionalProperties": true,

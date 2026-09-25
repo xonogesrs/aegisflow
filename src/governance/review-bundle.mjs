@@ -187,7 +187,7 @@ export const EXTERNAL_REVIEW_DELIVERY_RECORD_SCHEMA = "autoloop.external-review-
 // The reviewer's inbox is a SINGLE fixed location — never scattered across
 // per-card output dirs. Two responsibilities are strictly separated:
 //   internal evidence store  = repo docs/pi-graph-output/<run>/（durable）
-//   external review surface  = the external-review inbox (AUTOLOOP_REVIEW_SURFACE)
+//   external review surface  = the external-review inbox (AEGISFLOW_REVIEW_SURFACE)
 // The surface holds at most ONE card:
 //   Current/review-bundle.txt   the current valid bundle（atomic copy）
 //   Current/delivery.json      delivery/verdict state（identity, sha,
@@ -196,7 +196,7 @@ export const EXTERNAL_REVIEW_DELIVERY_RECORD_SCHEMA = "autoloop.external-review-
 // A requiresReview card that fails to atomically deliver to the fixed
 // surface stays AWAITING_BUNDLE_DELIVERY（fail-closed; hard rule enforced
 // by runCloseoutGate's default surface deliverer）. After PASS / REPAIR /
-// HOLD the surface is rotated into the review archive (AUTOLOOP_REVIEW_ARCHIVE)
+// HOLD the surface is rotated into the review archive (AEGISFLOW_REVIEW_ARCHIVE)
 //（flat, never nested）; Current/ never retains the previous card.
 // Paths are resolved LAZILY（env override for tests / CI isolation）.
 

@@ -1,7 +1,7 @@
 // src/runtime/colima-pipeline.mjs
 //
 // C3 Colima isolated-writer pipeline — the OFFICIAL entry path for running
-// Colima-backed tasks through AutoLoop's lifecycle runner. Read-only tasks
+// Colima-backed tasks through AegisFlow's lifecycle runner. Read-only tasks
 // and isolated-worktree writer tasks BOTH flow through this module; nothing
 // calls the bake-off test runner directly anymore.
 //
@@ -61,7 +61,7 @@ export class ColimaPipelineError extends Error {
 }
 
 /**
- * Run one Colima task through the official AutoLoop lifecycle.
+ * Run one Colima task through the official AegisFlow lifecycle.
  *
  * @param {object} opts
  * @param {object} opts.taskCard — { id?, executionId?, runtime: { mode,

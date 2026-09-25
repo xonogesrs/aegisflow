@@ -3,7 +3,7 @@
 // AUTOLOOP_AUTONOMOUS_EVOLUTION_PRODUCTION_ACTIVATION_1 — Section I:
 // crash/restart recovery reconciliation for the evolution store.
 //
-// After an AutoLoop restart/crash mid-cycle the durable artifacts are the
+// After an AegisFlow restart/crash mid-cycle the durable artifacts are the
 // ONLY truth (same convention as the C2D checkpoint reconciliation). This
 // module rebuilds a consistent evolution state from those artifacts and
 // proves the card §I invariants:

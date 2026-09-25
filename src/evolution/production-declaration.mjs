@@ -27,7 +27,7 @@
 //   }
 //
 // WHERE the file lives is a DEPLOYMENT decision, never a source constant: the
-// path is supplied per deployment (`AUTOLOOP_EVOLUTION_DEPLOYMENT_CONFIG`, or
+// path is supplied per deployment (`AEGISFLOW_EVOLUTION_DEPLOYMENT_CONFIG`, or
 // `runnerOpts.evolution.deploymentConfig`). No machine-specific absolute path
 // is burned into this repository.
 //
@@ -43,10 +43,11 @@
 
 import { existsSync, readFileSync } from "node:fs";
 
+import { readConfigEnv } from "../shared/autoloop-paths.mjs";
 import { STRATEGY_DIMENSIONS, canonicalTaskClass } from "./attribution.mjs";
 
 export const EVOLUTION_DECLARATION_SCHEMA = "autoloop.evolution-production-declaration/v1";
-export const EVOLUTION_DECLARATION_ENV = "AUTOLOOP_EVOLUTION_DEPLOYMENT_CONFIG";
+export const EVOLUTION_DECLARATION_ENV = "AEGISFLOW_EVOLUTION_DEPLOYMENT_CONFIG";
 
 /** The bounded key set of a declaration record. Anything else is an error. */
 export const EVOLUTION_DECLARATION_KEYS = Object.freeze([
@@ -133,11 +134,10 @@ export function validateEvolutionDeclaration(record) {
  * @param {object} [p.env]
  */
 export function readEvolutionProductionDeclaration({ path = null, env = process.env } = {}) {
+  const configured = readConfigEnv(env, EVOLUTION_DECLARATION_ENV);
   const chosen = (typeof path === "string" && path.trim().length > 0)
     ? path.trim()
-    : (typeof env?.[EVOLUTION_DECLARATION_ENV] === "string" && env[EVOLUTION_DECLARATION_ENV].trim().length > 0
-      ? env[EVOLUTION_DECLARATION_ENV].trim()
-      : null);
+    : (configured ? configured.value.trim() : null);
   if (!chosen) return { provided: false, path: null, source: null, declaration: null, errors: [] };
   if (!existsSync(chosen)) {
     return { provided: true, path: chosen, source: "file", declaration: null, errors: [`unreadable: no declaration at ${chosen}`] };

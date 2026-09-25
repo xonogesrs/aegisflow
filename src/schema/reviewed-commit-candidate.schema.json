@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "AutoLoop reviewed commit candidate",
+  "title": "AegisFlow reviewed commit candidate",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "candidate_id", "candidate_revision", "status", "execution_id", "card_id", "card_revision", "source_checkpoint_revision", "authority_record_digest", "execution_context_digest", "mutation_authority_digest", "review_artifact_digest", "review_verdict", "repository_identity", "git_common_dir_identity", "source_worktree_identity", "expected_head", "expected_origin_master", "candidate_tree", "candidate_parent", "exact_changed_paths", "tree_entries", "candidate_manifest_digest", "retention_kind", "retention_reference", "created_at", "expires_at"],

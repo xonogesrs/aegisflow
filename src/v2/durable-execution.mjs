@@ -1,6 +1,6 @@
 // src/v2/durable-execution.mjs
 //
-// C3 — Durable AutoLoop execution（evidence journal + atomic checkpoint +
+// C3 — Durable AegisFlow execution（evidence journal + atomic checkpoint +
 // safe resume + final manifest）.
 //
 // Composition:
@@ -183,7 +183,7 @@ export class DurableHoldError extends Error {
   }
 }
 
-// ── AutoLoop source component hashes（runtime compatibility fingerprint）──
+// ── AegisFlow source component hashes（runtime compatibility fingerprint）──
 
 const SOURCE_COMPONENTS = [
   "src/autoloop.mjs",
@@ -510,7 +510,7 @@ class DurableRun {
           self.state.activeLifecycleStage = "executor_completed";
           try {
             // C4Q: the persisted artifact is the harness-owned implementation
-            // evidence（AutoLoop-assembled; executor text is non-authoritative）.
+            // evidence（AegisFlow-assembled; executor text is non-authoritative）.
             self.store.writePhaseArtifact(phaseId, `implementation-evidence-${attempt ?? 0}.json`, evidence ?? {});
           } catch (e) {
             if (e instanceof EvidenceHoldError) throw new DurableHoldError("DURABLE_EVIDENCE_SECRET_RISK", e.message);
@@ -944,7 +944,7 @@ function findJournalEventByHead(store, headSequence, headSha256) {
 }
 
 /**
- * Resume an AutoLoop run from its durable checkpoint.
+ * Resume an AegisFlow run from its durable checkpoint.
  * The caller provides ONLY runtime capability（adapter factories）; the
  * original source / parent / manifest / IR are read from the frozen durable
  * artifacts. Every fingerprint mismatch fails closed.

@@ -4,7 +4,7 @@
 node examples/minimal/run.mjs      # or: npm run example:minimal
 ```
 
-Runs the whole AutoLoop pipeline once, against a throwaway git repo, with a
+Runs the whole AegisFlow pipeline once, against a throwaway git repo, with a
 scripted adapter instead of a real agent. Nothing to install beyond Node.
 
 ## What it walks through

@@ -22,6 +22,7 @@
 import { mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { spawnTaskScoped, terminateProcessGroup } from "../shared/process-group.mjs";
+import { readConfigEnv } from "../shared/autoloop-paths.mjs";
 import {
   registerSpawnAdapterKind,
   SPAWN_RUNTIME_CAPABILITIES,
@@ -39,8 +40,9 @@ const FORBIDDEN_ARGS = new Set([
 ]);
 
 function spawnTimeoutMs() {
-  // R2: window sizing is configuration, never a magic constant.
-  const raw = Number(process.env.AUTOLOOP_ROLLOVER_SPAWN_TIMEOUT_MS ?? "");
+  // R2: window sizing is configuration, never a magic constant. The brand name
+  // wins; the pre-rename AUTOLOOP_ROLLOVER_SPAWN_TIMEOUT_MS is the fallback.
+  const raw = Number(readConfigEnv(process.env, "AEGISFLOW_ROLLOVER_SPAWN_TIMEOUT_MS")?.value ?? "");
   return Number.isFinite(raw) && raw > 0 ? raw : 180000;
 }
 
@@ -241,7 +243,7 @@ export async function spawnSuccessorSession(request) {
         if (!line.trim()) continue;
         try {
           const evt = JSON.parse(line);
-          if (process.env.AUTOLOOP_SPAWN_DEBUG) process.stderr.write(`[spawn-dbg] ${evt.type} ${String(lastAssistantText).slice(0, 60)}\n`);
+          if (readConfigEnv(process.env, "AEGISFLOW_SPAWN_DEBUG")) process.stderr.write(`[spawn-dbg] ${evt.type} ${String(lastAssistantText).slice(0, 60)}\n`);
           if (evt.type === "agent_settled") sawSettled = true;
           if ((evt.type === "message_update" || evt.type === "message_end")
               && evt.message?.role === "assistant" && Array.isArray(evt.message.content)) {

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "AutoLoop Task Decomposition Output",
+  "title": "AegisFlow Task Decomposition Output",
   "description": "Three-way union: NOT_BENEFICIAL / DECOMPOSED / BLOCKED",
 
   "oneOf": [

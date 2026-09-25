@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "AutoLoop execution context — non-authoritative, write-once runtime projection",
+  "title": "AegisFlow execution context — non-authoritative, write-once runtime projection",
   "type": "object",
   "additionalProperties": false,
   "required": [

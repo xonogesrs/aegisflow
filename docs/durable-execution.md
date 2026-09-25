@@ -1,23 +1,23 @@
 # Durable execution
 
-AutoLoop's durability is in-process plus local filesystem. There is no external
+AegisFlow's durability is in-process plus local filesystem. There is no external
 workflow server, no database tier, and no consensus protocol — and that is a
 deliberate choice, not a missing feature.
 
 ## Why not a workflow engine
 
-AutoLoop's graph model is a bounded DAG of phases with no durable timers, no
+AegisFlow's graph model is a bounded DAG of phases with no durable timers, no
 signals, and no cross-restart sleeps. A workflow engine would add a server
 process, a database, network listeners, a worker lifecycle, and workflow
-versioning — in exchange for automatic re-dispatch that AutoLoop does not
+versioning — in exchange for automatic re-dispatch that AegisFlow does not
 currently need.
 
 That trade was measured rather than assumed. A live bake-off ran a candidate
-external engine against AutoLoop's own durable layer under the same SIGKILL
+external engine against AegisFlow's own durable layer under the same SIGKILL
 failure classes. The external engine recovered automatically, which is a real
 advantage — but it re-executed the whole writer activity after a mid-activity
 kill and duplicated a committed side effect unless the application added an
-idempotency pattern. AutoLoop's already-fail-closed writer (zero duplicates
+idempotency pattern. AegisFlow's already-fail-closed writer (zero duplicates
 under the tests) had no such gap. The conclusion recorded was to harden the
 in-process layer rather than adopt a server.
 
@@ -64,13 +64,13 @@ every artifact digest before continuing. Any mismatch is a specific HOLD:
 | journal chain broken | HOLD (no gap repair) |
 | permitted-dirty set drifted | HOLD (never guess) |
 
-Resume never "proceeds anyway". If AutoLoop cannot prove it is resuming the
+Resume never "proceeds anyway". If AegisFlow cannot prove it is resuming the
 same work, it stops.
 
 ## Crash recovery at a writer boundary
 
 The hardest case: the process dies mid-write, after a side effect is committed
-but before the successor phase is scheduled. AutoLoop handles it by classifying
+but before the successor phase is scheduled. AegisFlow handles it by classifying
 from durable truth rather than guessing:
 
 - a **writer side-effect identity** is deterministic and per-phase, so a

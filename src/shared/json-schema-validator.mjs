@@ -1,6 +1,6 @@
 // shared/json-schema-validator.mjs
 //
-// Minimal JSON Schema draft-07 validator for AutoLoop schemas.
+// Minimal JSON Schema draft-07 validator for AegisFlow schemas.
 // Supports: type (including "integer"), required, properties, additionalProperties,
 // enum, const, oneOf, minItems, maxItems, minLength, minimum, items, default.
 

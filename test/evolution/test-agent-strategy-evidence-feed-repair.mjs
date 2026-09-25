@@ -1025,10 +1025,10 @@ test("F10 §J.2 the deployment declares storeRoot/checkpointRoot/repoRoot/taskCl
   }, null, 2));
 
   const savedDecl = process.env[EVOLUTION_DECLARATION_ENV];
-  const savedBaseline = process.env.AUTOLOOP_EVOLUTION_STRATEGY_BASELINE_VALUES;
+  const savedBaseline = process.env.AEGISFLOW_EVOLUTION_STRATEGY_BASELINE_VALUES;
   try {
     process.env[EVOLUTION_DECLARATION_ENV] = declPath;
-    delete process.env.AUTOLOOP_EVOLUTION_STRATEGY_BASELINE_VALUES;
+    delete process.env.AEGISFLOW_EVOLUTION_STRATEGY_BASELINE_VALUES;
 
     // No runnerOpts.evolution at all: the declaration alone enables the seam.
     const cfg = resolveEvolutionProductionConfig({ runnerOpts: {} });
@@ -1044,10 +1044,10 @@ test("F10 §J.2 the deployment declares storeRoot/checkpointRoot/repoRoot/taskCl
     assert.deepEqual(cfg.declaration.errors, []);
 
     // an env override wins over the declaration (documented precedence)
-    process.env.AUTOLOOP_EVOLUTION_STRATEGY_BASELINE_VALUES = JSON.stringify({ MODEL_ROUTING: DEEPSEEK_ROUTE });
+    process.env.AEGISFLOW_EVOLUTION_STRATEGY_BASELINE_VALUES = JSON.stringify({ MODEL_ROUTING: DEEPSEEK_ROUTE });
     const overridden = resolveEvolutionProductionConfig({ runnerOpts: {} });
     assert.deepEqual(overridden.strategyBaselineValues, { MODEL_ROUTING: DEEPSEEK_ROUTE });
-    delete process.env.AUTOLOOP_EVOLUTION_STRATEGY_BASELINE_VALUES;
+    delete process.env.AEGISFLOW_EVOLUTION_STRATEGY_BASELINE_VALUES;
 
     // a production run with NO runnerOpts.evolution feeds the declared store.
     const run = await productionRun({ events: healthyJournal(), verdict: "PASS", binding: DEEPSEEK, label: "f10-run" });
@@ -1069,11 +1069,11 @@ test("F10 §J.2 the deployment declares storeRoot/checkpointRoot/repoRoot/taskCl
       `operator report must surface the invalid declaration: ${JSON.stringify(report.diagnostics)}`);
 
     // an invalid baseline-values env variable is refused, never reinterpreted
-    process.env.AUTOLOOP_EVOLUTION_STRATEGY_BASELINE_VALUES = "{not json";
+    process.env.AEGISFLOW_EVOLUTION_STRATEGY_BASELINE_VALUES = "{not json";
     const badBaseline = resolveEvolutionProductionConfig({ runnerOpts: {} });
     assert.equal(badBaseline.strategyBaselineValues, null);
     assert.ok(badBaseline.strategyBaselineValuesError, "the invalid baseline declaration is reported");
-    delete process.env.AUTOLOOP_EVOLUTION_STRATEGY_BASELINE_VALUES;
+    delete process.env.AEGISFLOW_EVOLUTION_STRATEGY_BASELINE_VALUES;
 
     // THE OPERATOR LANE: the deployment declaration is written by the CLI, and
     // the gate then resolves it from the environment alone.
@@ -1103,7 +1103,7 @@ test("F10 §J.2 the deployment declares storeRoot/checkpointRoot/repoRoot/taskCl
   } finally {
     if (savedDecl === undefined) delete process.env[EVOLUTION_DECLARATION_ENV];
     else process.env[EVOLUTION_DECLARATION_ENV] = savedDecl;
-    if (savedBaseline === undefined) delete process.env.AUTOLOOP_EVOLUTION_STRATEGY_BASELINE_VALUES;
-    else process.env.AUTOLOOP_EVOLUTION_STRATEGY_BASELINE_VALUES = savedBaseline;
+    if (savedBaseline === undefined) delete process.env.AEGISFLOW_EVOLUTION_STRATEGY_BASELINE_VALUES;
+    else process.env.AEGISFLOW_EVOLUTION_STRATEGY_BASELINE_VALUES = savedBaseline;
   }
 });

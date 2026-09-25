@@ -55,7 +55,7 @@ export const KNOWN_CONTROL_STATES = new Set([
   "RECOVERY_REQUIRED",
   "REVIEW_HOLD",
   "ROLLBACK_FAILED",
-  // C3 AutoLoop additive states（checkpoint-bridge 使用；不影響既有 callers）
+  // C3 AegisFlow additive states（checkpoint-bridge 使用；不影響既有 callers）
   "AUTOLOOP_RUNNING",
   "AUTOLOOP_RESUMABLE",
   "AUTOLOOP_TERMINAL_PASS",

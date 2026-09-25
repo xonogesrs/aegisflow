@@ -16,7 +16,7 @@
 // The written record is validated by readEvolutionProductionDeclaration before
 // it is published (exclusive-create; an identical re-declaration is
 // idempotent and a conflicting one fails closed). The file is then read by the
-// production gate through `AUTOLOOP_EVOLUTION_DEPLOYMENT_CONFIG`, so a
+// production gate through `AEGISFLOW_EVOLUTION_DEPLOYMENT_CONFIG`, so a
 // deployment declares its paths in ONE place — no machine-specific absolute
 // path belongs in source.
 //

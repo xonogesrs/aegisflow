@@ -1,6 +1,6 @@
 # Autonomous evolution
 
-AutoLoop can improve its own **operating strategy** — never its authority. This
+AegisFlow can improve its own **operating strategy** — never its authority. This
 document describes the loop, what each stage guarantees, and the boundaries that
 make it safe to leave switched on.
 
@@ -148,7 +148,7 @@ node scripts/evolution-kill-switch.mjs --store <dir> --suspend
 node scripts/evolution-kill-switch.mjs --store <dir> --resume
 ```
 
-The declaration is read through `AUTOLOOP_EVOLUTION_DEPLOYMENT_CONFIG`. Without
+The declaration is read through `AEGISFLOW_EVOLUTION_DEPLOYMENT_CONFIG`. Without
 a resolvable declaration, evolution refuses to run.
 
 ### What the kill switch does and does not do

@@ -1,7 +1,7 @@
 // src/governance/holds.mjs
 //
 // Reversible lifecycle governance HOLD taxonomy. Reuses C2dHoldError from
-// c2d/fs-atomic.mjs so all AutoLoop hold paths share one error class.
+// c2d/fs-atomic.mjs so all AegisFlow hold paths share one error class.
 // New codes are additive; existing C3B/C3C codes are untouched.
 
 import { C2dHoldError } from "../c2d/fs-atomic.mjs";

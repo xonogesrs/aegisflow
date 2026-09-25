@@ -6,7 +6,7 @@
 // into the Pi agent's OWN shell-execution seam — the `bash` tool's pre-spawn
 // admission (`tool_call`) and the `!`/`!!` user-bash seam (`user_bash`).
 //
-// The RB-SSG commit (4dd04a3) governed only the AutoLoop container-launch
+// The RB-SSG commit (4dd04a3) governed only the AegisFlow container-launch
 // boundary (src/subagent/subagent-executor-adapter.mjs) and the subagent
 // envelope (src/subagent/subagent-contract.mjs). Interactive/direct Pi shell
 // commands execute through the Pi agent's `bash` tool → spawn path, which

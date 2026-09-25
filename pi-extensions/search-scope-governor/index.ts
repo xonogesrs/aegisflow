@@ -16,13 +16,15 @@
 //      back into it.
 //
 // Deployment convergence: the governor + admission bridge are BUNDLED into
-// ./vendor (byte-identical to the authoritative AutoLoop source). The
+// ./vendor (byte-identical to the authoritative AegisFlow source). The
 // installed extension therefore does NOT depend on a specific checkout path
 // at runtime.
 //
 // Resolution order (fail-closed):
 //   1. bundled ./vendor/pi-command-admission.mjs  (authoritative runtime copy)
-//   2. AUTOLOOP_SRC override                       (dev/testing only, optional)
+//   2. AEGISFLOW_SRC override                       (dev/testing only, optional;
+//                                                    the pre-rename AUTOLOOP_SRC
+//                                                    is still honored)
 //   else -> recursive-search commands are BLOCKED (never admitted ungoverned).
 
 import {
@@ -32,7 +34,10 @@ import {
 
 const VENDOR_BRIDGE = "./vendor/pi-command-admission.mjs";
 const VENDOR_GOVERNOR = "./vendor/search-scope-governor.mjs";
-const AUTOLOOP_SRC_OVERRIDE = process.env.AUTOLOOP_SRC?.trim().replace(/\/+$/, "");
+// Brand name wins; AUTOLOOP_SRC is the pre-rename fallback. The extension is
+// self-contained by design (it vendors its own copy of the governor), so this
+// fallback is implemented locally rather than imported from the checkout.
+const AUTOLOOP_SRC_OVERRIDE = (process.env.AEGISFLOW_SRC ?? process.env.AUTOLOOP_SRC)?.trim().replace(/\/+$/, "");
 
 /** Crude fail-closed heuristic for search commands when the governor is down. */
 const LOOKS_LIKE_SEARCH = /(^|[;&|(]\s*)(find|rg|ripgrep|grep|egrep|fgrep)(\s|$)/;

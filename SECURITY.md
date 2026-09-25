@@ -8,7 +8,7 @@ problem.**
 Report privately through GitHub's **private vulnerability reporting** for this
 repository:
 
-1. go to <https://github.com/xonogesrs/autoloop/security/advisories/new>, or
+1. go to <https://github.com/xonogesrs/aegisflow/security/advisories/new>, or
 2. from the repository page: **Security** → **Report a vulnerability**.
 
 That channel opens a private advisory visible only to you and the maintainers.
@@ -33,13 +33,13 @@ arranged.
 - any configuration needed to reproduce;
 - whether you have already disclosed it elsewhere.
 
-**Be careful with the payload.** AutoLoop's evidence path scans for credential
+**Be careful with the payload.** AegisFlow's evidence path scans for credential
 shapes and refuses to write them, but your report is not going through that
 path. Redact real secrets — describe the shape, do not paste the value.
 
 ### What to expect
 
-AutoLoop is a **community, best-effort project with no SLA**. Reports will be
+AegisFlow is a **community, best-effort project with no SLA**. Reports will be
 read and taken seriously, and there is no response-time commitment. Please do
 not interpret delay as dismissal.
 
@@ -54,7 +54,7 @@ Please do **not** publicly disclose before a fix lands or a decision is made.
 
 ## What counts as a security issue here
 
-AutoLoop is a governance harness, so the interesting failures are *authority*
+AegisFlow is a governance harness, so the interesting failures are *authority*
 failures — a component doing something it was not admitted to do.
 
 **In scope**
@@ -92,13 +92,13 @@ failures — a component doing something it was not admitted to do.
   model's output alone is not.
 - **Evidence of a compromise in your own deployment** (a leaked key of yours,
   a compromised host). Rotate your credentials first; report here only if
-  AutoLoop contributed to the exposure.
+  AegisFlow contributed to the exposure.
 - **Missing hardening without a demonstrated impact** — e.g. "this could be
   stricter". Useful as an issue, not as a vulnerability. Note that
   host-process isolation without Colima is documented as weaker than sandboxed
   execution; that is a known limitation, not a vulnerability.
 - **Findings in upstream dependencies** without a demonstrated impact through
-  AutoLoop. Report those upstream; tell us if AutoLoop's integration makes them
+  AegisFlow. Report those upstream; tell us if AegisFlow's integration makes them
   exploitable.
 - **Volume/bundle size, UI/UX, documentation errors.**
 
@@ -120,7 +120,7 @@ Please read these before reporting — they are deliberate, not oversights:
 
 ## Mutation containment — what it guarantees
 
-AutoLoop fences mutation with several independent layers: the admission gate and
+AegisFlow fences mutation with several independent layers: the admission gate and
 its canonical `mutation_scope` projection, a git-delta scope gate over the
 isolated worktree, and a **git-independent filesystem write-containment audit**
 (`src/c2d/write-containment.mjs`) that runs immediately before and after an
@@ -137,7 +137,7 @@ What that buys, precisely:
 
 What it does **not** buy — stated so that it is not mistaken for isolation:
 
-- **AutoLoop is not a sandbox.** Without Colima there is no filesystem or
+- **AegisFlow is not a sandbox.** Without Colima there is no filesystem or
   syscall mediation. The containment audit is a *detection* control: it decides
   on the tree it can observe, and fails closed when the tree has already been
   changed in a way it can see.
@@ -177,7 +177,7 @@ machines.
 
 ## Handling credentials
 
-- AutoLoop never requires a credential to be placed in this repository.
+- AegisFlow never requires a credential to be placed in this repository.
 - Provider credentials belong in your shell environment or the agent runtime's
   own credential store.
 - The child-process environment is an explicit **allowlist**; credentials are
@@ -194,7 +194,7 @@ There are no releases and no supported-version matrix. Development happens on
 
 ## Third-party components
 
-AutoLoop redistributes no third-party source code. Each dependency is resolved
+AegisFlow redistributes no third-party source code. Each dependency is resolved
 at install time from the public npm registry and carries its own license and
 security posture. The dependency, integration and trademark inventory is in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

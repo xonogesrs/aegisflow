@@ -1,6 +1,6 @@
 # Cross-agent learning
 
-AutoLoop can carry measured experience from one agent execution to the next.
+AegisFlow can carry measured experience from one agent execution to the next.
 This is the least mature capability in the project; this document states what it
 does, what it refuses to do, and where it should not be trusted yet.
 
@@ -106,7 +106,7 @@ Read these before quoting anything from this subsystem:
 - **Correlation, not causation.** If a route wins, the win may be a property of
   the tasks assigned to it rather than of the route.
 - **No cross-machine sharing.** Memory is local. Two machines learn separately.
-- **Whatever you do, do not read it as a performance claim about AutoLoop.**
+- **Whatever you do, do not read it as a performance claim about AegisFlow.**
   That is what [benchmark.md](benchmark.md) is for, and it reports its own
   sample sizes and negative results.
 

@@ -70,10 +70,10 @@ export const EXTERNAL_SUITES = Object.freeze({
   "test/test-pi-lifecycle-integration.mjs": "real `pi` RPC surface",
   "test/memory/test-writeback-authority.mjs": "Colima + Docker (real graph run for writeback authority)",
   // NOT external — but the deployment half of test-rb-ssg-vendor-integrity.mjs
-  // is opt-in via AUTOLOOP_PI_EXTENSION_DIR and skips cleanly otherwise, so a
+  // is opt-in via AEGISFLOW_PI_EXTENSION_DIR and skips cleanly otherwise, so a
   // fresh clone gets a green suite. Listed here only for discoverability of
   // that switch:
-  //   AUTOLOOP_PI_EXTENSION_DIR=<installed dir> node --test test/admission/test-rb-ssg-vendor-integrity.mjs
+  //   AEGISFLOW_PI_EXTENSION_DIR=<installed dir> node --test test/admission/test-rb-ssg-vendor-integrity.mjs
   "test/tool-selection/test-tool-selection-contract.mjs": "real `pi` runtime vocabulary capture",
   "test/tool-selection/test-tool-selection-production-wiring.mjs": "real `pi` runtime identity",
   "test/tool-selection/test-tool-selection-durable-resume.mjs": "real `pi` runtime identity",

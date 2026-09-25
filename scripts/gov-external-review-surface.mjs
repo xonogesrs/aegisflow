@@ -12,8 +12,8 @@
 //     evidence.json                      this card's closeout evidence
 //   <review archive>/           flat archive of reviewed/rotated cards
 //
-// Env overrides（tests / CI isolation）: AUTOLOOP_REVIEW_SURFACE,
-// AUTOLOOP_REVIEW_ARCHIVE.
+// Env overrides（tests / CI isolation）: AEGISFLOW_REVIEW_SURFACE,
+// AEGISFLOW_REVIEW_ARCHIVE.
 //
 //   --status
 //       Print the current surface: files present + parsed delivery state.

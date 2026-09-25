@@ -12,7 +12,7 @@
 //   when it is not.
 //
 // Deliberately not computed: any composite "score". The point is to show the
-// raw distributions, including the ones that look bad for AutoLoop.
+// raw distributions, including the ones that look bad for AegisFlow.
 //
 // Usage:
 //   node benchmarks/analysis/analyze.mjs                     # all arms present
@@ -223,7 +223,7 @@ function pct(x) {
 
 function printReport(a) {
   if (a.runs === 0) { console.log(a.note); return; }
-  console.log(`AutoLoop effectiveness benchmark — analysis`);
+  console.log(`AegisFlow effectiveness benchmark — analysis`);
   console.log(`generated: ${a.generated_at}`);
   console.log(`runs: ${a.runs}   arms: ${a.arms.join(", ")}   baseline: ${a.baseline}`);
   if (a.manifest) {
@@ -266,7 +266,7 @@ function printReport(a) {
   console.log("  • Proportions and differences are reported with their sample sizes.");
   console.log("  • Confidence intervals are omitted below n=10 rather than approximated.");
   console.log("  • No composite score is computed: every metric above, including the ones");
-  console.log("    unfavourable to AutoLoop, is part of the reported result.");
+  console.log("    unfavourable to AegisFlow, is part of the reported result.");
   const negative = [];
   for (const c of a.comparisons) {
     if ((c.metrics.task_success.absolute_difference ?? 0) < 0) negative.push(`${c.arm}: success rate lower than baseline`);

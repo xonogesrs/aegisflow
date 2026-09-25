@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # operator-tick.sh
 #
-# Safe operator wrapper for the sealed AutoLoop scheduler dry-run tick.
+# Safe operator wrapper for the sealed AegisFlow scheduler dry-run tick.
 #
 # Enforces safety:
 #   - --metadata-dir is REQUIRED (never default to tracked docs/loop/metadata)

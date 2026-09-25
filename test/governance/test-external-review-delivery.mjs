@@ -218,13 +218,13 @@ before(() => {
   mkdirSync(OUT2, { recursive: true });
   // RB-1H: requiresReview closeouts now default-deliver to the fixed
   // surface — redirect it away from the real Desktop inbox during tests.
-  process.env.AUTOLOOP_REVIEW_SURFACE = SURFACE;
-  process.env.AUTOLOOP_REVIEW_ARCHIVE = ARCHIVE;
+  process.env.AEGISFLOW_REVIEW_SURFACE = SURFACE;
+  process.env.AEGISFLOW_REVIEW_ARCHIVE = ARCHIVE;
 });
 after(() => {
   rmSync(ROOT, { recursive: true, force: true });
-  delete process.env.AUTOLOOP_REVIEW_SURFACE;
-  delete process.env.AUTOLOOP_REVIEW_ARCHIVE;
+  delete process.env.AEGISFLOW_REVIEW_SURFACE;
+  delete process.env.AEGISFLOW_REVIEW_ARCHIVE;
 });
 
 // ── 1. requiresReview=true -> bundle MUST be generated ─────────────────────

@@ -7,7 +7,7 @@
 //（card identity + bundle identity + cryptographic content sha + lifecycle
 // state）, never a filesystem discovery（filename / mtime / newest-file /
 // cached path）. The fixed external-review surface is exercised ONLY through
-// env-isolated dirs（AUTOLOOP_REVIEW_SURFACE / AUTOLOOP_REVIEW_ARCHIVE）— the
+// env-isolated dirs（AEGISFLOW_REVIEW_SURFACE / AEGISFLOW_REVIEW_ARCHIVE）— the
 // real ~/Desktop/AutoLoop-Review surface is never touched.
 
 import { test } from "node:test";

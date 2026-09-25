@@ -31,7 +31,7 @@ import { randomBytes } from "node:crypto";
 import { createMutationAuthorization } from "../c2d/mutation-authority.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-// The apply helper lives in THIS repository (AutoLoop), never in the target
+// The apply helper lives in THIS repository (AegisFlow), never in the target
 // repo the candidate mutates — the mutation target may be any fixture/repo.
 export const EVOLUTION_APPLY_PATCH_SCRIPT = join(HERE, "..", "..", "scripts", "evolution-apply-patch.mjs");
 import { collectFingerprint } from "../c2d/fingerprint.mjs";

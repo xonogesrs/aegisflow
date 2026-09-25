@@ -28,7 +28,7 @@ export const ALLOWED_FIELDS = Object.freeze(Object.keys(SCHEMA.properties));
 export const TERMINAL_STATE = "CANDIDATE_MATERIALIZED_VERIFIED_COMPLETE";
 
 // Only master is ever a valid commit target in this repository's baseline
-// protocol (every AutoLoop card in this lineage pins BASELINE_SHA against
+// protocol (every AegisFlow card in this lineage pins BASELINE_SHA against
 // master). Extend explicitly, never wildcard, if a future card needs another
 // branch. CANONICAL_TARGET_REF is the single sealed policy value a C3C
 // consumer derives its expectedBindings.target_ref from — never a caller

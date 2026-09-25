@@ -26,7 +26,7 @@ import { createHash } from "node:crypto";
 import { isAbsolute } from "node:path";
 import { TOOL_PERMISSIONS } from "../subagent/subagent-contract.mjs";
 import { resolveCapabilityId, capabilityRegistry, resolveCapability } from "./registry.mjs";
-import { resolveExecutable } from "../shared/autoloop-paths.mjs";
+import { readConfigEnv, resolveExecutable } from "../shared/autoloop-paths.mjs";
 import { canonicalScopeEntry, canonicalScopeEntries, isWithinCanonicalScope } from "../c2d/mutation-scope.mjs";
 
 export const PROJECTION_SCHEMA = "autoloop.policy-projection/v1";
@@ -435,12 +435,12 @@ export const TOOL_SELECTION_FAILURE_CODES = Object.freeze([
  * This is the contract authority the §4 drift fence compares an OBSERVED
  * runtime against. It is CONFIGURATION, not a hardcoded install path:
  *
- *   AUTOLOOP_PI_RUNTIME_PATH     absolute path to the `pi` CLI entry point
- *   AUTOLOOP_PI_RUNTIME_SHA256   expected sha256 of that file (optional:
+ *   AEGISFLOW_PI_RUNTIME_PATH     absolute path to the `pi` CLI entry point
+ *   AEGISFLOW_PI_RUNTIME_SHA256   expected sha256 of that file (optional:
  *                                computed from the file when absent)
- *   AUTOLOOP_PI_RUNTIME_VERSION  expected version string (optional)
+ *   AEGISFLOW_PI_RUNTIME_VERSION  expected version string (optional)
  *
- * When AUTOLOOP_PI_RUNTIME_PATH is unset the identity is self-observed from
+ * When AEGISFLOW_PI_RUNTIME_PATH is unset the identity is self-observed from
  * the `pi` executable found on PATH, so a fresh checkout works without
  * configuration while still pinning exactly one artifact for the run.
  *
@@ -448,20 +448,20 @@ export const TOOL_SELECTION_FAILURE_CODES = Object.freeze([
  * TOOL_SELECTION_CONTRACT_MISSING — there is never a permissive fallback
  * identity. Resolution is memoized per (path, sha, version) tuple.
  */
-export const PI_RUNTIME_PATH_ENV = "AUTOLOOP_PI_RUNTIME_PATH";
-export const PI_RUNTIME_SHA256_ENV = "AUTOLOOP_PI_RUNTIME_SHA256";
-export const PI_RUNTIME_VERSION_ENV = "AUTOLOOP_PI_RUNTIME_VERSION";
+export const PI_RUNTIME_PATH_ENV = "AEGISFLOW_PI_RUNTIME_PATH";
+export const PI_RUNTIME_SHA256_ENV = "AEGISFLOW_PI_RUNTIME_SHA256";
+export const PI_RUNTIME_VERSION_ENV = "AEGISFLOW_PI_RUNTIME_VERSION";
 
 const runtimeIdentityCache = new Map();
 
 /** Absolute path of the `pi` executable, from env override or PATH. */
 export function resolvePiExecutable({ env = process.env } = {}) {
-  const override = env?.[PI_RUNTIME_PATH_ENV];
-  if (typeof override === "string" && override.trim().length > 0) {
-    if (!isAbsolute(override.trim())) {
-      throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", `${PI_RUNTIME_PATH_ENV} must be an absolute path: ${override}`);
+  const override = readConfigEnv(env, PI_RUNTIME_PATH_ENV);
+  if (override) {
+    if (!isAbsolute(override.value.trim())) {
+      throw new ToolSelectionError("TOOL_SELECTION_CONTRACT_MISSING", `${override.name} must be an absolute path: ${override.value}`);
     }
-    return override.trim();
+    return override.value.trim();
   }
   return resolveExecutable("pi", { env });
 }
@@ -473,12 +473,8 @@ export function resolvePiExecutable({ env = process.env } = {}) {
  */
 export function frozenRuntimeIdentity({ env = process.env, resolveExecutablePath = resolvePiExecutable, existsOf = existsSync } = {}) {
   const candidate = resolveExecutablePath({ env });
-  const shaOverride = typeof env?.[PI_RUNTIME_SHA256_ENV] === "string" && env[PI_RUNTIME_SHA256_ENV].trim().length > 0
-    ? env[PI_RUNTIME_SHA256_ENV].trim()
-    : null;
-  const version = typeof env?.[PI_RUNTIME_VERSION_ENV] === "string" && env[PI_RUNTIME_VERSION_ENV].trim().length > 0
-    ? env[PI_RUNTIME_VERSION_ENV].trim()
-    : null;
+  const shaOverride = readConfigEnv(env, PI_RUNTIME_SHA256_ENV)?.value.trim() ?? null;
+  const version = readConfigEnv(env, PI_RUNTIME_VERSION_ENV)?.value.trim() ?? null;
   const cacheKey = `${candidate}\u0000${shaOverride ?? ""}\u0000${version ?? ""}`;
   const cached = runtimeIdentityCache.get(cacheKey);
   if (cached) return cached;

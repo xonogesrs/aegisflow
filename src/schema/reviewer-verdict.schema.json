@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "AutoLoop reviewer verdict",
+  "title": "AegisFlow reviewer verdict",
   "type": "object",
   "required": ["verdict", "confidence", "model", "summary", "recommended_next_action"],
   "additionalProperties": true,

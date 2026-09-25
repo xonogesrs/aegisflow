@@ -50,6 +50,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
 import { C2dHoldError, HOLD } from "../c2d/fs-atomic.mjs";
+import { readConfigEnv } from "../shared/autoloop-paths.mjs";
 import { acquireStructuredLock } from "../c2d/lock.mjs";
 import { collectFingerprint } from "../c2d/fingerprint.mjs";
 import { readEvolutionPolicy } from "./policy.mjs";
@@ -95,15 +96,15 @@ export const EVOLUTION_CONSUMER_OUTCOME_DISPOSITIONS = Object.freeze([
 
 /** Configuration inputs (runnerOpts.evolution / env / deployment declaration). */
 export const EVOLUTION_CONFIG_ENV = Object.freeze({
-  STORE_ROOT: "AUTOLOOP_EVOLUTION_STORE_ROOT",
-  CHECKPOINT_ROOT: "AUTOLOOP_EVOLUTION_CHECKPOINT_ROOT",
-  REPO_ROOT: "AUTOLOOP_EVOLUTION_REPO_ROOT",
-  REVIEWER: "AUTOLOOP_EVOLUTION_REVIEWER",
-  TASK_CLASS: "AUTOLOOP_EVOLUTION_TASK_CLASS",
-  PROMPT_PROFILE: "AUTOLOOP_EVOLUTION_PROMPT_PROFILE",
-  STRATEGY_DIMENSIONS: "AUTOLOOP_EVOLUTION_STRATEGY_DIMENSIONS",
-  STRATEGY_BASELINE_VALUES: "AUTOLOOP_EVOLUTION_STRATEGY_BASELINE_VALUES",
-  SYNTHETIC: "AUTOLOOP_EVOLUTION_SYNTHETIC",
+  STORE_ROOT: "AEGISFLOW_EVOLUTION_STORE_ROOT",
+  CHECKPOINT_ROOT: "AEGISFLOW_EVOLUTION_CHECKPOINT_ROOT",
+  REPO_ROOT: "AEGISFLOW_EVOLUTION_REPO_ROOT",
+  REVIEWER: "AEGISFLOW_EVOLUTION_REVIEWER",
+  TASK_CLASS: "AEGISFLOW_EVOLUTION_TASK_CLASS",
+  PROMPT_PROFILE: "AEGISFLOW_EVOLUTION_PROMPT_PROFILE",
+  STRATEGY_DIMENSIONS: "AEGISFLOW_EVOLUTION_STRATEGY_DIMENSIONS",
+  STRATEGY_BASELINE_VALUES: "AEGISFLOW_EVOLUTION_STRATEGY_BASELINE_VALUES",
+  SYNTHETIC: "AEGISFLOW_EVOLUTION_SYNTHETIC",
   // §J.2: the deployment declaration record (storeRoot / checkpointRoot /
   // repoRoot / taskClass / strategyBaselineValues) — a PATH supplied by the
   // deployment, never a machine-specific constant in source.
@@ -130,8 +131,8 @@ function rememberOutcome(entry) {
 // ── §A configuration ───────────────────────────────────────────────────────
 
 function envValue(env, key) {
-  const v = env?.[key];
-  return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
+  const resolved = readConfigEnv(env, key);
+  return resolved ? resolved.value.trim() : null;
 }
 
 function cfgValue(cfg, env, key, envKey) {
@@ -147,14 +148,14 @@ function cfgValue(cfg, env, key, envKey) {
  * storeRoot / checkpointRoot / repoRoot — through (highest precedence first)
  * an explicit `runnerOpts.evolution` object, the `AUTOLOOP_EVOLUTION_*`
  * environment, or the deployment's declaration record
- * (`AUTOLOOP_EVOLUTION_DEPLOYMENT_CONFIG` → production-declaration.mjs §J.2).
+ * (`AEGISFLOW_EVOLUTION_DEPLOYMENT_CONFIG` → production-declaration.mjs §J.2).
  * `reviewerIdentity` is OPTIONAL: without an operator-designated independent
  * reviewer the cycle still runs (mutation + fitness) but the promotion gate
  * fails closed — the loop never self-approves.
  *
  * `strategyBaselineValues` (the strategy each task class currently runs under,
  * per dimension) is a FIRST-CLASS production input: the caller object, the
- * `AUTOLOOP_EVOLUTION_STRATEGY_BASELINE_VALUES` JSON variable, or the
+ * `AEGISFLOW_EVOLUTION_STRATEGY_BASELINE_VALUES` JSON variable, or the
  * declaration record. An invalid value is IGNORED and reported
  * (`strategyBaselineValuesError`) — never silently reinterpreted.
  */

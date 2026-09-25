@@ -1,6 +1,6 @@
 # Benchmark: methodology and results
 
-A reproducible effectiveness measurement of AutoLoop's strategy/evolution
+A reproducible effectiveness measurement of AegisFlow's strategy/evolution
 features. The harness, task set, raw results and analysis code are all in
 [`benchmarks/`](../benchmarks/README.md).
 
@@ -81,7 +81,7 @@ around.
 
 ## 2. What a run actually is
 
-Every benchmark run is a **real AutoLoop execution**, not a simulation:
+Every benchmark run is a **real AegisFlow execution**, not a simulation:
 
 1. a frozen **admission record** is built from a deterministic classification;
 2. the **tool selection** is minted by the production selector against that
@@ -144,7 +144,7 @@ Seven classes, each with its own fixture and acceptance suite. Full definitions:
 | `06-context-pressure` | `CONTEXT_PRESSURE` | one defect inside a 40-export module |
 | `07-route-sensitive-reasoning` | `MODEL_ROUTE_SENSITIVE` | under-specified requirement, explicit assumption |
 
-The set is not curated toward AutoLoop's strengths: `06` and `07` in particular
+The set is not curated toward AegisFlow's strengths: `06` and `07` in particular
 are the kinds of tasks where a single-phase agent harness has no structural
 advantage, and `01` is a task any competent agent should pass — so it mostly
 measures noise.
@@ -266,7 +266,7 @@ Below those thresholds the tool emits an explicit
 `interval omitted (… not defensible)` note instead of approximating. **At the
 pilot's sample size most intervals are omitted.** That is the honest state of
 the evidence, and it is why this document does not make claims of the form
-"AutoLoop improves X by Y%".
+"AegisFlow improves X by Y%".
 
 ### Negative results
 
@@ -295,7 +295,7 @@ have). Therefore:
   `evidence_sufficient` per value is trivially reached (3+ samples of the same
   value) and the learned preference selects that same value;
 - **the model-routing effect is NOT measurable in this pilot.** Any claim that
-  AutoLoop "routes better" would be unsupported by this data.
+  AegisFlow "routes better" would be unsupported by this data.
 
 To measure routing you need two reachable routes and enough runs per
 (task class × route) to compare them. The harness supports it: set
@@ -403,7 +403,7 @@ Stated plainly. These bound what the numbers can support.
    Treat any smaller difference as noise.
 2. **One route.** Only one supported provider route was reachable, so the
    model-routing dimension is unmeasured (§6).
-3. **No sandbox.** These runs used host-process isolation, not Colima. AutoLoop's
+3. **No sandbox.** These runs used host-process isolation, not Colima. AegisFlow's
    sandboxed path has extra latency and different failure modes that this pilot
    does not capture.
 4. **One provider, one model family.** Results are not transferable to another
@@ -417,7 +417,7 @@ Stated plainly. These bound what the numbers can support.
    variance more than capability.
 8. **Single-phase execution.** These tasks run one phase, so the fan-out,
    decomposition and rollover machinery is **not exercised**. A result here says
-   nothing about multi-phase work, where the structural argument for AutoLoop is
+   nothing about multi-phase work, where the structural argument for AegisFlow is
    strongest — and which this pilot therefore does not test.
 9. **No cost signal.** The gateway reports no per-call cost, so
    `estimated_provider_cost_usd` is 0 and cost cannot be compared.
@@ -450,7 +450,7 @@ To reproduce:
 
 ```bash
 export BENCH_ROUTE=<route from manifest.json>       # your own credential
-export AUTOLOOP_PI_RUNTIME_PATH="$(command -v pi)"
+export AEGISFLOW_PI_RUNTIME_PATH="$(command -v pi)"
 
 # 1. CONTROL — the baseline (repair budget 0)
 node benchmarks/runner/run-benchmark.mjs --arm CONTROL --runs <n from manifest>
@@ -501,5 +501,5 @@ The README summarises this benchmark only in the form the data supports:
 
 > In our benchmark under the recorded configuration, … across N runs.
 
-Any sentence of the form "AutoLoop improves agent performance" is **not**
+Any sentence of the form "AegisFlow improves agent performance" is **not**
 supported by this pilot and does not appear in this repository.

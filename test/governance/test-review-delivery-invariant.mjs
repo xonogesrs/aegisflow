@@ -283,7 +283,7 @@ test("T10. non-formal / test helper path -> no surface publication", { timeout: 
   const surfaceDir = nextSurface();
   // simulate a configured surface: a non-formal PASS closeout must not write
   // to it, even though delivery machinery is fully wired.
-  process.env.AUTOLOOP_REVIEW_SURFACE = surfaceDir;
+  process.env.AEGISFLOW_REVIEW_SURFACE = surfaceDir;
   try {
     const r = await gate(mkSource()); // NO formal, NO deliver hook
     assert.equal(r.final, "PASS", `non-formal PASS unchanged (${r.reason})`);
@@ -301,7 +301,7 @@ test("T10. non-formal / test helper path -> no surface publication", { timeout: 
     assert.equal(r2.final, "PASS", "explicit test opt-out allowed on non-formal path");
     assert.equal(r2.externalReview.delivery.attempted, false);
   } finally {
-    delete process.env.AUTOLOOP_REVIEW_SURFACE;
+    delete process.env.AEGISFLOW_REVIEW_SURFACE;
   }
 });
 
@@ -309,7 +309,7 @@ test("T10. non-formal / test helper path -> no surface publication", { timeout: 
 
 test("N1. deliveryRequired:true on a NON-formal path has no authority（no publication）", { timeout: 30000 }, async () => {
   const surfaceDir = nextSurface();
-  process.env.AUTOLOOP_REVIEW_SURFACE = surfaceDir;
+  process.env.AEGISFLOW_REVIEW_SURFACE = surfaceDir;
   try {
     const source = mkSource({ externalReview: { deliveryRequired: true, status: "AWAITING_EXTERNAL_REVIEW", supersedes: null } });
     const r = await gate(source); // non-formal — the flag alone must not publish
@@ -317,7 +317,7 @@ test("N1. deliveryRequired:true on a NON-formal path has no authority（no publi
     assert.equal(r.externalReview.delivery.attempted, false, "flag is informational only — never the publication authority");
     assert.equal(surfaceTrio(surfaceDir).bundle, false, "no publication");
   } finally {
-    delete process.env.AUTOLOOP_REVIEW_SURFACE;
+    delete process.env.AEGISFLOW_REVIEW_SURFACE;
   }
 });
 

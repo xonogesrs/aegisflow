@@ -1,6 +1,6 @@
-// AutoLoop scratch ownership boundary.
+// AegisFlow scratch ownership boundary.
 //
-// Callers provide only a scratch namespace. AutoLoop owns one deterministic
+// Callers provide only a scratch namespace. AegisFlow owns one deterministic
 // child per execution and may recursively delete that child only after its
 // marker, path, and repository binding verify.
 
@@ -254,7 +254,7 @@ export function assertOwnedScratchRoot({ ownedRoot, executionId = null, repoPath
   assertNoSymlinkComponents(input, "owned scratch root");
   const canonical = realpathSync(input);
   if (basename(dirname(canonical)) !== SCRATCH_OWNER_DIR || !/^[0-9a-f]{32}$/.test(basename(canonical))) {
-    throw new ScratchOwnershipError("target is not an AutoLoop owned execution child");
+    throw new ScratchOwnershipError("target is not an AegisFlow owned execution child");
   }
   const marker = readOwnerMarker(canonical);
   if (marker.owner !== "autoloop") {

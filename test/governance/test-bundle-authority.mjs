@@ -149,8 +149,8 @@ const supersededIn = (dir) => {
 // Per-run isolated review surfaces（RB-1H）.
 let runSeq = 0;
 const SURFACE_ROOT = mkdtempSync(join(tmpdir(), "vca1-s9-surface-"));
-process.env.AUTOLOOP_REVIEW_SURFACE = join(SURFACE_ROOT, "current");
-process.env.AUTOLOOP_REVIEW_ARCHIVE = join(SURFACE_ROOT, "archive");
+process.env.AEGISFLOW_REVIEW_SURFACE = join(SURFACE_ROOT, "current");
+process.env.AEGISFLOW_REVIEW_ARCHIVE = join(SURFACE_ROOT, "archive");
 
 test("S9/1: generationKeyFromBundleText parses cardId + supersede target", () => {
   const key = generationKeyFromBundleText(

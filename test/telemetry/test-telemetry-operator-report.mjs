@@ -51,7 +51,7 @@ function tmpRoot(label) {
   ROOTS.push(r);
   return r;
 }
-const envFor = (root) => ({ AUTOLOOP_TELEMETRY_STATE_ROOT: root });
+const envFor = (root) => ({ AEGISFLOW_TELEMETRY_STATE_ROOT: root });
 const HEADER = JSON.stringify({ createdAt: null, schema: "autoloop.telemetry-store/v1", schemaVersion: 1 });
 
 function wiring(root, graphRunId) {
@@ -74,7 +74,7 @@ test("E1. reader resolves ONLY through the S16 location contract (override honor
   assert.match(refused.reason, /ROOT_RESOLUTION_REFUSED/);
 
   // $HOME override rejected by the S16 resolver (fail-closed, no fallback)
-  const homeRefused = readRunTelemetry({ graphRunId: "g-e1", env: { AUTOLOOP_TELEMETRY_STATE_ROOT: join(homedir(), "Desktop", "telemetry-forbidden") } });
+  const homeRefused = readRunTelemetry({ graphRunId: "g-e1", env: { AEGISFLOW_TELEMETRY_STATE_ROOT: join(homedir(), "Desktop", "telemetry-forbidden") } });
   assert.equal(homeRefused.ok, false);
 });
 
@@ -183,23 +183,23 @@ test("G1. CLI --json produces the machine-readable contract; human output is the
   const built = wiring(root, "g-cli");
   built.wiring.lifecycle.emit("run.start", { outcome: "STARTED" });
   built.wiring.lifecycle.emit("run.final", { outcome: "PASS" });
-  const out = execFileSync("node", ["scripts/autoloop-operator.mjs", "--run", "g-cli", "--root", root, "--json"], { encoding: "utf8", cwd: process.cwd() });
+  const out = execFileSync("node", ["scripts/aegisflow-operator.mjs", "--run", "g-cli", "--root", root, "--json"], { encoding: "utf8", cwd: process.cwd() });
   const parsed = JSON.parse(out);
   assert.equal(parsed.schema, "autoloop.telemetry-operator-report/v1");
   assert.equal(parsed.runStatus.status.value, "OBSERVED_TERMINAL");
-  const text = execFileSync("node", ["scripts/autoloop-operator.mjs", "--run", "g-cli", "--root", root], { encoding: "utf8", cwd: process.cwd() });
-  assert.match(text, /AutoLoop operator report — g-cli/);
+  const text = execFileSync("node", ["scripts/aegisflow-operator.mjs", "--run", "g-cli", "--root", root], { encoding: "utf8", cwd: process.cwd() });
+  assert.match(text, /AegisFlow operator report — g-cli/);
   assert.match(text, /OBSERVED_TERMINAL/);
 });
 
 test("G2. CLI exits 0 on a safe report for unknown/malformed runs; usage error exits 2", () => {
   const root = tmpRoot("g2");
-  const unknown = execFileSync("node", ["scripts/autoloop-operator.mjs", "--run", "g-absent", "--root", root], { encoding: "utf8", cwd: process.cwd() });
+  const unknown = execFileSync("node", ["scripts/aegisflow-operator.mjs", "--run", "g-absent", "--root", root], { encoding: "utf8", cwd: process.cwd() });
   assert.match(unknown, /status: UNKNOWN \[UNKNOWN\]/);
   assert.match(unknown, /ACTIVE_CHUNK_ABSENT/);
   let failed = false;
   try {
-    execFileSync("node", ["scripts/autoloop-operator.mjs", "--run", "x", "--root", "relative/path"], { encoding: "utf8", cwd: process.cwd(), stdio: "pipe" });
+    execFileSync("node", ["scripts/aegisflow-operator.mjs", "--run", "x", "--root", "relative/path"], { encoding: "utf8", cwd: process.cwd(), stdio: "pipe" });
   } catch (e) {
     failed = true;
     assert.equal(e.status, 2);
@@ -371,7 +371,7 @@ test("D1. the operator surface performs ZERO writes (mutation-path census over t
   for (const banned of ["mkdirSync", "writeFileSync", "appendFileSync", "renameSync", "rmSync", "unlinkSync", "rmdirSync", "truncateSync", "chmodSync"]) {
     assert.equal(src.includes(`${banned}(`), false, `operator module must not call ${banned}`);
   }
-  const cli = readFileSync(new URL("../../scripts/autoloop-operator.mjs", import.meta.url), "utf8");
+  const cli = readFileSync(new URL("../../scripts/aegisflow-operator.mjs", import.meta.url), "utf8");
   for (const banned of ["mkdirSync", "writeFileSync", "appendFileSync", "renameSync", "rmSync"]) {
     assert.equal(cli.includes(`${banned}(`), false, `operator CLI must not call ${banned}`);
   }

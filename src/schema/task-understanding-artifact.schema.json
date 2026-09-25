@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "AutoLoop task-understanding artifact — runner-constructed, binds payload to authority",
+  "title": "AegisFlow task-understanding artifact — runner-constructed, binds payload to authority",
   "type": "object",
   "additionalProperties": false,
   "required": [

@@ -1,6 +1,6 @@
 # Operations
 
-Running AutoLoop day to day: what to watch, how to inspect it, and how to
+Running AegisFlow day to day: what to watch, how to inspect it, and how to
 recover. Everything here is read-only unless stated otherwise.
 
 ## Normal operation
@@ -22,8 +22,8 @@ lock enforces this and a second attempt fails fast with
 
 ```bash
 # What happened in a run
-node scripts/autoloop-operator.mjs --run <graphRunId>
-node scripts/autoloop-operator.mjs --run <graphRunId> --json
+node scripts/aegisflow-operator.mjs --run <graphRunId>
+node scripts/aegisflow-operator.mjs --run <graphRunId> --json
 
 # Latest formal execution review
 node scripts/gov-execution-review.mjs --status
@@ -57,9 +57,9 @@ A HOLD is a structured refusal with a stable code. The workflow:
 | `COLIMA_PROFILE_BUSY` | another operation holds the sandbox profile | wait for it to finish; do not retry in a loop, and do not "clean up" the lock file while the owner lives |
 | `COLIMA_HOME_NOT_CANONICAL` | `COLIMA_HOME` is unset, relative, or under `$HOME` | set an absolute `COLIMA_HOME` outside `$HOME` |
 | `COLIMA_MOUNT_IDENTITY_FAILED` | the configured volume's UUID does not match | verify the mount; do not bypass the gate |
-| `COLIMA_SHADOW_MOUNT` | a shadow mount of the same volume name exists | unmount the shadow; AutoLoop will not guess which is real |
+| `COLIMA_SHADOW_MOUNT` | a shadow mount of the same volume name exists | unmount the shadow; AegisFlow will not guess which is real |
 | `TOOL_SELECTION_RUNTIME_VOCABULARY_DRIFT` | the agent runtime changed under the pinned identity | re-pin the runtime identity deliberately |
-| `TOOL_SELECTION_CONTRACT_MISSING` | the runtime could not be located | set `AUTOLOOP_PI_RUNTIME_PATH` |
+| `TOOL_SELECTION_CONTRACT_MISSING` | the runtime could not be located | set `AEGISFLOW_PI_RUNTIME_PATH` |
 | `MUTATION_SCOPE_VIOLATION` | a write landed outside the admitted scope | inspect the delta; the scope is the admission's, not the model's |
 | `HARNESS_TEST_EVIDENCE_MISSING` | a writer phase had no harness-run verification command | check `verificationCommand` is configured for the phase |
 | `HARNESS_EVIDENCE_IDENTITY_MISMATCH` | evidence belongs to a different execution identity | do not reconcile by hand; investigate which run produced it |
@@ -73,13 +73,13 @@ A HOLD is a structured refusal with a stable code. The workflow:
 
 ## Crash and resume
 
-1. **Do not restart from scratch while durable state exists.** AutoLoop's
+1. **Do not restart from scratch while durable state exists.** AegisFlow's
    resume re-derives from the journal and checkpoints; a fresh run creates a
    second, conflicting execution.
 2. **Check what the durable state says first:**
 
    ```bash
-   node scripts/autoloop-operator.mjs --run <graphRunId> --json
+   node scripts/aegisflow-operator.mjs --run <graphRunId> --json
    ```
 
 3. **Resume through the runner**, not by editing files:
@@ -97,13 +97,13 @@ See [durable-execution.md](durable-execution.md) for the model.
 ```bash
 # Is a profile in use?
 # (The lock makes an overlap fail fast rather than corrupt state.)
-node scripts/autoloop-operator.mjs --run <graphRunId> --json
+node scripts/aegisflow-operator.mjs --run <graphRunId> --json
 ```
 
 Rules that keep the sandbox predictable:
 
 - **serialise sandbox work.** Never run two sandbox operations concurrently.
-- **never `docker` by hand against an AutoLoop profile.** Use the adapter, so
+- **never `docker` by hand against an AegisFlow profile.** Use the adapter, so
   the mount allowlist and the socket pinning apply.
 - **never create `~/.colima` as a fallback.** The gate refuses a `$HOME` Colima
   home on purpose: an unpremeditated VM state is how a sandbox ends up
@@ -115,7 +115,7 @@ Rules that keep the sandbox predictable:
 
 ```bash
 # Read a run's telemetry through the report (bounded, safe)
-node scripts/autoloop-operator.mjs --run <graphRunId> --json
+node scripts/aegisflow-operator.mjs --run <graphRunId> --json
 ```
 
 - A missing telemetry namespace surfaces as `NO_TELEMETRY_ROOT` — an explicit
@@ -159,8 +159,8 @@ allocation is how two runs end up spending one budget.
 ## Backup and retention
 
 - **Back up the evidence root.** It is the authority record: no replication,
-  no server-side recovery. `AUTOLOOP_EVIDENCE_ROOT` (default
-  `$AUTOLOOP_HOME/evidence/autoloop`).
+  no server-side recovery. `AEGISFLOW_EVIDENCE_ROOT` (default
+  `$AEGISFLOW_HOME/evidence/autoloop`).
 - **Telemetry is reproducible in principle, evidence is not.** If you must
   choose what to protect, protect evidence.
 - **The learning store is derived.** Losing it costs accumulated experience,
@@ -173,7 +173,7 @@ allocation is how two runs end up spending one budget.
 | Interval | Check |
 |---|---|
 | each run | the operator report is `PASS` or a HOLD you understand |
-| daily | no unexpected `AUTOLOOP_*` state outside your `AUTOLOOP_HOME` |
+| daily | no unexpected `AEGISFLOW_*` state outside your `AEGISFLOW_HOME` |
 | daily | `git status` in the repo is clean of generated artifacts |
 | weekly | evolution is in the state you expect (`--status`) |
 | weekly | evidence root backup completed |

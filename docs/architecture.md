@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes what AutoLoop actually does, in the order control
+This document describes what AegisFlow actually does, in the order control
 flows, and names who owns authority at each step. Every claim here maps to a
 module you can read.
 
@@ -132,8 +132,8 @@ Sandbox execution uses a Colima-hosted Docker VM. The runtime adapter enforces:
 - a single-flight lock per profile, so two operations can never interleave
   stop/start underneath each other (a second one fails with
   `COLIMA_PROFILE_BUSY`);
-- an optional storage gate: with `AUTOLOOP_COLIMA_MOUNT` +
-  `AUTOLOOP_COLIMA_MOUNT_UUID` configured, the runtime home must sit on that
+- an optional storage gate: with `AEGISFLOW_COLIMA_MOUNT` +
+  `AEGISFLOW_COLIMA_MOUNT_UUID` configured, the runtime home must sit on that
   volume with a matching UUID and no shadow mount, or nothing runs.
 
 Without Colima, execution falls back to host-process isolation, which is

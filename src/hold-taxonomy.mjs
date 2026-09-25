@@ -25,7 +25,7 @@ export const HOLD_TYPES = Object.freeze([
 // were removed here — grep-confirmed zero production call sites anywhere in
 // the repository (they were aspirational entries for HOLD origins this
 // runtime-baseline card never wires up). Per card §10.4 boundary: this card
-// only owns runtime-baseline origins; classifying every other AutoLoop HOLD
+// only owns runtime-baseline origins; classifying every other AegisFlow HOLD
 // site is explicitly out of scope, so speculative entries for that future
 // work don't belong here either. CODE_FAILURE and SCOPE_EXPANSION_REQUIRED
 // remain valid HOLD_TYPES values (reachable once a real call site is wired),

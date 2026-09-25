@@ -32,8 +32,8 @@ export const MAX_REDUCER_EVENTS = 65536;
 export const CLOCK_SKEW_SECONDS = 300;
 
 // Storage-identity prefix every recorded writer/authority root must live
-// under. Portable by default (<AUTOLOOP_HOME>/learning/); relocate with
-// AUTOLOOP_LEARNING_ROOT. Kept with a trailing separator because consumers
+// under. Portable by default (<AEGISFLOW_HOME>/learning/); relocate with
+// AEGISFLOW_LEARNING_ROOT. Kept with a trailing separator because consumers
 // test membership by string prefix.
 export const ALLOWED_ROOT_PREFIX = resolveLearningRoot();
 

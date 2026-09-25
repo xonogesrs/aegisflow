@@ -3,7 +3,7 @@
 Known failure modes, in the form: **symptom → likely cause → inspection → safe
 action**.
 
-The general rule throughout: AutoLoop fails closed on purpose. A refusal is
+The general rule throughout: AegisFlow fails closed on purpose. A refusal is
 information about a fence, not a bug to route around. Preserve evidence before
 changing anything.
 
@@ -31,7 +31,7 @@ you ran them concurrently you will have hit
 
 ### `Cannot find module` on an imported `node:` builtin
 
-**Likely cause** — Node is older than 24. AutoLoop uses `node:sqlite` and the
+**Likely cause** — Node is older than 24. AegisFlow uses `node:sqlite` and the
 modern `node:test` runner.
 
 **Inspection** — `node --version`
@@ -57,16 +57,16 @@ production entrypoints are unconditionally refused for non-production callers.
 ### `TOOL_SELECTION_CONTRACT_MISSING`
 
 **Likely cause** — the `pi` executable could not be located, or
-`AUTOLOOP_PI_RUNTIME_PATH` points at a non-existent/relative path.
+`AEGISFLOW_PI_RUNTIME_PATH` points at a non-existent/relative path.
 
 **Inspection**
 
 ```bash
 command -v pi
-echo "$AUTOLOOP_PI_RUNTIME_PATH"
+echo "$AEGISFLOW_PI_RUNTIME_PATH"
 ```
 
-**Safe action** — install the runtime, or set `AUTOLOOP_PI_RUNTIME_PATH` to an
+**Safe action** — install the runtime, or set `AEGISFLOW_PI_RUNTIME_PATH` to an
 absolute path. There is no fallback identity by design.
 
 ### `TOOL_SELECTION_RUNTIME_VOCABULARY_DRIFT`
@@ -112,7 +112,7 @@ scope comes from the admission, never from the model's intent.
 **Inspection**
 
 ```bash
-node scripts/autoloop-operator.mjs --run <graphRunId> --json
+node scripts/aegisflow-operator.mjs --run <graphRunId> --json
 ```
 
 The detail carries the changed paths and the classification
@@ -195,7 +195,7 @@ makes every prior review unfounded.
 ### `JOURNAL_CHAIN_INVALID`
 
 **Likely cause** — a journal row was edited, reordered, or truncated (by a tool
-outside AutoLoop, or by truncating an append that was in flight).
+outside AegisFlow, or by truncating an append that was in flight).
 
 **Inspection** — the validator reports which row.
 
@@ -224,7 +224,7 @@ the exact failure the generation fence prevents.
 error naming a symlink component of a state root), when the configured root
 lives under a path that contains a symlink.
 
-**Likely cause** — AutoLoop rejects a **symlink component** anywhere in a
+**Likely cause** — AegisFlow rejects a **symlink component** anywhere in a
 storage root. This is deliberate: a symlinked component can be repointed after
 validation, so accepting one would make the containment check meaningless.
 
@@ -242,11 +242,11 @@ python3 -c 'import os; print(os.path.realpath("<your root>"))'
 **Safe action** — configure the **resolved** path:
 
 ```bash
-export AUTOLOOP_SCRATCH_ROOT=/private/tmp/autoloop-scratch
+export AEGISFLOW_SCRATCH_ROOT=/private/tmp/autoloop-scratch
 ```
 
 Do **not** work around it by disabling the check. If you need ephemeral scratch,
-point `AUTOLOOP_SCRATCH_ROOT` at a real directory (or the OS temp directory's
+point `AEGISFLOW_SCRATCH_ROOT` at a real directory (or the OS temp directory's
 resolved form); the guard only rejects the symlink, not the location.
 
 ---
@@ -255,7 +255,7 @@ resolved form); the guard only rejects the symlink, not the location.
 
 ### `HOLD / COLIMA_PROFILE_BUSY`
 
-**Likely cause** — another AutoLoop operation holds the profile lock. This is
+**Likely cause** — another AegisFlow operation holds the profile lock. This is
 the single-flight lock doing its job, not a defect.
 
 **Inspection** — figure out which operation is running. If you launched a
@@ -275,7 +275,7 @@ and removing it lets two operations interleave stop/start on one profile.
 echo "COLIMA_HOME=[${COLIMA_HOME:-unset}]"
 ```
 
-**Safe action** — set an absolute `COLIMA_HOME` outside `$HOME`. AutoLoop
+**Safe action** — set an absolute `COLIMA_HOME` outside `$HOME`. AegisFlow
 refuses to fall back to `~/.colima` deliberately: an unplanned VM state is how a
 sandbox ends up holding the wrong data.
 
@@ -378,7 +378,7 @@ malfunction.
 
 **Likely cause** — no resolvable production declaration.
 
-**Inspection** — check `AUTOLOOP_EVOLUTION_DEPLOYMENT_CONFIG` resolves to a
+**Inspection** — check `AEGISFLOW_EVOLUTION_DEPLOYMENT_CONFIG` resolves to a
 readable declaration.
 
 **Safe action** — author one with
@@ -401,7 +401,7 @@ git check-ignore -v <path>
 ```
 
 **Safe action** — for state, point the roots outside the checkout
-(`AUTOLOOP_EVIDENCE_ROOT`, `AUTOLOOP_TELEMETRY_ROOT`). `.gitignore` covers the
+(`AEGISFLOW_EVIDENCE_ROOT`, `AEGISFLOW_TELEMETRY_ROOT`). `.gitignore` covers the
 common cases, including `/file:` and `/learning-incidents*`. If a **suite**
 created them, that is a bug worth reporting: suites must write to the OS temp
 directory.

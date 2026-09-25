@@ -1,6 +1,6 @@
 // src/evidence/run-manifest.mjs
 //
-// C3 — AutoLoop final run manifest.
+// C3 — AegisFlow final run manifest.
 //
 // Terminal artifact pinning every durable artifact of a run. Written
 // atomically with an external .sha256 sidecar. Never overwritten; repeated

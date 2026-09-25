@@ -1,6 +1,6 @@
 // validate-decomposition.mjs
 //
-// AutoLoop Task Decomposition Validator — Card 1 (repaired v2)
+// AegisFlow Task Decomposition Validator — Card 1 (repaired v2)
 // F1 (v2): REPAIR no longer bypasses mutation authority
 // F2 (v2): empty parent allowed_paths = nothing allowed
 // F3 (v2): schema invalid → fail-closed return

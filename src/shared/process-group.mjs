@@ -3,7 +3,7 @@
 // Task-scoped process-group ownership.
 //
 // WHY THIS MODULE EXISTS
-// Every AutoLoop adapter that runs an external process must, on
+// Every AegisFlow adapter that runs an external process must, on
 // timeout/cancel/HOLD, terminate not just the process it spawned but every
 // descendant that process created. Terminating only the leader leaves
 // descendants reparented to init, still consuming CPU and — when they inherit
@@ -27,7 +27,7 @@
 //
 // SAFETY: a negative pid is only ever sent for children this module itself
 // spawned detached, tracked in GROUP_LEADERS. That is what guarantees
-// `process.kill(-pid)` can never address AutoLoop's own process group or any
+// `process.kill(-pid)` can never address AegisFlow's own process group or any
 // foreign process group.
 
 import { spawn } from "node:child_process";

@@ -7,13 +7,13 @@
 // reviewer cannot independently review anything and correctly answers
 // NEEDS_SUPPLEMENT (C4M: REVIEWER_EVIDENCE_GAP). This module builds the
 // missing piece: a bounded, credential-safe, content-addressed review
-// bundle assembled by AutoLoop code (never by the model) and delivered to
+// bundle assembled by AegisFlow code (never by the model) and delivered to
 // the reviewer inside its adapter request.
 //
 // Design contract:
 //   - The bundle is assembled ONLY from system facts (task card, execution
 //     identity, mutation-scope delta, read-only git state) and the
-//     implementation-evidence object assembled by the AutoLoop harness
+//     implementation-evidence object assembled by the AegisFlow harness
 //     (C4Q: harness-owned; the executor final message is non-authoritative).
 //     The evidence has already passed schema validation in the harness
 //     builder before it reaches this bundle.
@@ -127,7 +127,7 @@ export function buildReviewEvidenceBundle({
     return {
       ok: false,
       code: REVIEW_EVIDENCE_ERRORS.IDENTITY_MISMATCH,
-      reason: "evidence.contract_id does not match the phase execution id issued by AutoLoop",
+      reason: "evidence.contract_id does not match the phase execution id issued by AegisFlow",
     };
   }
 
@@ -142,7 +142,7 @@ export function buildReviewEvidenceBundle({
       return {
         ok: false,
         code: SYSTEM_DELTA_ERRORS.IDENTITY_MISMATCH,
-        reason: "system delta contract_id does not match the phase execution id issued by AutoLoop",
+        reason: "system delta contract_id does not match the phase execution id issued by AegisFlow",
       };
     }
     const patchText = systemDelta.patch?.text;
@@ -216,7 +216,7 @@ export function buildReviewEvidenceBundle({
     },
     // C4S: reviewer-visible system-observed delta（bounded inline diff +
     // durable artifact references）. source=system_observed / authoritative
-    // / producer=harness — assembled by AutoLoop from baseline + sandbox
+    // / producer=harness — assembled by AegisFlow from baseline + sandbox
     // state, never from model text.
     system_delta: systemDelta ? {
       format_version: systemDelta.format_version ?? SYSTEM_DELTA_FORMAT_VERSION,

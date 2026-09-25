@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "AutoLoop C3C commit completion",
+  "title": "AegisFlow C3C commit completion",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "idempotency_key", "candidate_id", "candidate_manifest_digest", "review_artifact_digest", "commit_sha", "parent_sha", "tree_sha", "target_ref", "commit_message_digest", "authorship_digest", "changed_paths", "verified", "ahead", "behind", "completed_at"],

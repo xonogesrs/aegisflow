@@ -2,7 +2,7 @@
 //
 // TA-2 — authoritative Capability Registry（AUTOLOOP-TA2 section C）.
 //
-// ONE registry of every capability AutoLoop can grant. Every entry carries
+// ONE registry of every capability AegisFlow can grant. Every entry carries
 // the machine-checkable attributes the admission decision projects from:
 //   capability_id / purpose / required_permissions / mutation_capability /
 //   network_capability / isolation_requirement / durability_relevance /
@@ -275,7 +275,7 @@ const CAPABILITIES = [
   },
   {
     capability_id: "CAP.EXTERNAL_REVIEW_DELIVERY",
-    purpose: "Fixed inbox at the external-review surface (AUTOLOOP_REVIEW_SURFACE); atomic publish under single-owner lock; occupancy fail-closed; verdict is the sole receipt",
+    purpose: "Fixed inbox at the external-review surface (AEGISFLOW_REVIEW_SURFACE); atomic publish under single-owner lock; occupancy fail-closed; verdict is the sole receipt",
     required_permissions: [],
     mutation_capability: false,
     network_capability: false,

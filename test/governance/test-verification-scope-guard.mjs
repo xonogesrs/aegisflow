@@ -59,7 +59,7 @@ test("NEG8: bounded authorized repo scan is allowed", () => {
 });
 
 test("NEG8b: the configured review surface is an authorized root", () => {
-  // The surface is CONFIGURED (AUTOLOOP_REVIEW_SURFACE), not a fixed Desktop
+  // The surface is CONFIGURED (AEGISFLOW_REVIEW_SURFACE), not a fixed Desktop
   // path: the test asks the same resolver the deliverer uses, so it cannot
   // drift from where the surface actually is.
   const surface = externalReviewSurfaceDir();

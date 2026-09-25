@@ -135,7 +135,7 @@ test("O4 the CLI exits 0 with a safe report in both forms", () => {
   populateStore(store);
   const text = spawnSync(process.execPath, [join(process.cwd(), "scripts", "evolution-operator.mjs"), "--store", store], { encoding: "utf8" });
   assert.equal(text.status, 0, `text form failed: ${text.stderr}`);
-  assert.ok(text.stdout.includes("AutoLoop evolution report"));
+  assert.ok(text.stdout.includes("AegisFlow evolution report"));
   const json = spawnSync(process.execPath, [join(process.cwd(), "scripts", "evolution-operator.mjs"), "--store", store, "--json"], { encoding: "utf8" });
   assert.equal(json.status, 0, `json form failed: ${json.stderr}`);
   const parsed = JSON.parse(json.stdout);

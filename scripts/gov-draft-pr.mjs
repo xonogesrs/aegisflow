@@ -65,7 +65,7 @@ export function prBoundToCanonicalIdentity({ body, reviewJob, delivery, bundleSh
  * @param {string[]} [opts.argv] — CLI-style argv.
  * @param {string} [opts.cwd] — repository worktree (--cwd / process.cwd()).
  * @param {string} [opts.surfaceDir] — external review surface
- *   (--surface / AUTOLOOP_REVIEW_SURFACE).
+ *   (--surface / AEGISFLOW_REVIEW_SURFACE).
  * @returns {object} the report (also printed to stdout for the CLI).
  */
 export function runDraftPr({ argv, cwd, surfaceDir } = {}) {

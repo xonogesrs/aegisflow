@@ -2,7 +2,7 @@
 // examples/subagent/run.mjs
 //
 // Fan-out with per-node authority and an independent join review — the thing
-// AutoLoop is actually for.
+// AegisFlow is actually for.
 //
 // WHAT THIS DEMONSTRATES
 //   one parent admission
@@ -32,7 +32,7 @@ import { TOOL_PERMISSIONS } from "../../src/subagent/subagent-contract.mjs";
 const hr = (title) => console.log(`\n${"─".repeat(72)}\n${title}\n${"─".repeat(72)}`);
 
 function fixtureRepo() {
-  const dir = mkdtempSync(join(tmpdir(), "autoloop-subagent-"));
+  const dir = mkdtempSync(join(tmpdir(), "aegisflow-subagent-"));
   execFileSync("git", ["init", "-b", "main"], { cwd: dir, stdio: "ignore" });
   execFileSync("git", ["config", "user.email", "example@example.invalid"], { cwd: dir, stdio: "ignore" });
   execFileSync("git", ["config", "user.name", "example"], { cwd: dir, stdio: "ignore" });

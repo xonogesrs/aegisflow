@@ -16,7 +16,7 @@
 //      a fresh clone has no extension installed, and failing the suite for that
 //      would be reporting an environment fact as a code defect.
 //
-//      Set AUTOLOOP_PI_EXTENSION_DIR to the installed extension directory to
+//      Set AEGISFLOW_PI_EXTENSION_DIR to the installed extension directory to
 //      enable it. It is strictly opt-in: a repo suite must not depend on
 //      whether this machine happens to have an extension installed. A
 //      configured-but-diverged or incomplete installation FAILS — never skipped.
@@ -33,7 +33,7 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 /**
  * Where the extension is installed for an agent runtime.
  *
- * STRICTLY OPT-IN: only AUTOLOOP_PI_EXTENSION_DIR enables the deployment
+ * STRICTLY OPT-IN: only AEGISFLOW_PI_EXTENSION_DIR enables the deployment
  * check. Autodetecting a conventional install location would make this
  * repository's suite depend on machine-local state — an operator who happens
  * to have a stale extension installed would get a red `npm test` for something
@@ -42,7 +42,7 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
  * explicit reason.
  */
 export function installedExtensionDir({ env = process.env } = {}) {
-  const configured = env.AUTOLOOP_PI_EXTENSION_DIR;
+  const configured = env.AEGISFLOW_PI_EXTENSION_DIR;
   if (typeof configured === "string" && configured.trim().length > 0) {
     return configured.trim();
   }
@@ -80,14 +80,14 @@ for (const [sourceRel, _vendorRel] of PAIRS) {
   const base = sourceRel.split("/").pop();
   test(`installed runtime copy matches authoritative source: ${base}`, (t) => {
     if (installedVendor === null) {
-      t.skip("deployment check disabled: set AUTOLOOP_PI_EXTENSION_DIR to the installed extension directory to verify it");
+      t.skip("deployment check disabled: set AEGISFLOW_PI_EXTENSION_DIR to the installed extension directory to verify it");
       return;
     }
     const installedPath = join(installedVendor, base);
     if (!existsSync(installedPath)) {
       // Configured but incomplete: that IS a defect in the deployment, so it
       // fails rather than skipping.
-      assert.fail(`AUTOLOOP_PI_EXTENSION_DIR is set but ${installedPath} is missing`);
+      assert.fail(`AEGISFLOW_PI_EXTENSION_DIR is set but ${installedPath} is missing`);
     }
     const source = readFileSync(join(repoRoot, sourceRel));
     const installed = readFileSync(installedPath);

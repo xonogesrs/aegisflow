@@ -1,18 +1,18 @@
 # Getting started
 
-This walks a clean checkout to a real AutoLoop execution. If you only want to
+This walks a clean checkout to a real AegisFlow execution. If you only want to
 see the machinery move without installing an agent runtime, do
 [Step 4a](#step-4a--see-it-work-without-a-provider) first — it needs nothing
 beyond Node.
 
 ## Step 1 — Clone and install
 
-Requirements: **Node >= 24** (AutoLoop uses `node:sqlite` and the modern
+Requirements: **Node >= 24** (AegisFlow uses `node:sqlite` and the modern
 `node:test` runner), npm, and git.
 
 ```bash
-git clone https://github.com/xonogesrs/autoloop.git
-cd autoloop
+git clone https://github.com/xonogesrs/aegisflow.git
+cd aegisflow
 npm install
 ```
 
@@ -46,23 +46,23 @@ suites come later.
 
 ## Step 3 — Configure
 
-AutoLoop needs **no configuration** for local exploration: all state defaults
+AegisFlow needs **no configuration** for local exploration: all state defaults
 to one namespace.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `AUTOLOOP_HOME` | `~/.autoloop` | root of all AutoLoop state |
-| `AUTOLOOP_EVIDENCE_ROOT` | `$AUTOLOOP_HOME/evidence/autoloop` | durable evidence |
-| `AUTOLOOP_TELEMETRY_ROOT` | `$AUTOLOOP_HOME/evidence/autoloop-telemetry` | telemetry stream |
-| `AUTOLOOP_LEARNING_ROOT` | `$AUTOLOOP_HOME/learning` | cross-agent learning store |
+| `AEGISFLOW_HOME` | `~/.autoloop` | root of all AegisFlow state |
+| `AEGISFLOW_EVIDENCE_ROOT` | `$AEGISFLOW_HOME/evidence/autoloop` | durable evidence |
+| `AEGISFLOW_TELEMETRY_ROOT` | `$AEGISFLOW_HOME/evidence/autoloop-telemetry` | telemetry stream |
+| `AEGISFLOW_LEARNING_ROOT` | `$AEGISFLOW_HOME/learning` | cross-agent learning store |
 | `COLIMA_HOME` | *(unset)* | Colima runtime home; required only for sandbox execution |
 
 Two rules the resolver enforces, both fail-closed:
 
 - A configured root must be **absolute**. A relative value is an error, never
   silently resolved against your shell's cwd.
-- State may not be scattered outside the AutoLoop namespace. `$HOME` itself is
-  rejected; a path inside `$HOME` must live under `AUTOLOOP_HOME`. A telemetry
+- State may not be scattered outside the AegisFlow namespace. `$HOME` itself is
+  rejected; a path inside `$HOME` must live under `AEGISFLOW_HOME`. A telemetry
   root inside the evidence namespace is rejected — keeping observability
   separate from authority is a structural fence, not a preference.
 
@@ -93,20 +93,20 @@ npm install -g @earendil-works/pi-coding-agent
 # Provider credential: provisioned in Pi's own auth store, NOT in this repo
 pi auth check --provider <provider> --model <model>
 
-# Tell AutoLoop where the runtime lives (needed only if `pi` is not on PATH)
-export AUTOLOOP_PI_RUNTIME_PATH="$(command -v pi)"
+# Tell AegisFlow where the runtime lives (needed only if `pi` is not on PATH)
+export AEGISFLOW_PI_RUNTIME_PATH="$(command -v pi)"
 ```
 
-AutoLoop pins the runtime it will use: the executable's resolved path and
+AegisFlow pins the runtime it will use: the executable's resolved path and
 content digest become part of the admission contract. If you later upgrade
 `pi`, the pinned digest no longer matches and the gate **fails closed with a
 drift HOLD** instead of silently running a different binary. That is
 intentional. To accept a new runtime, re-pin it explicitly:
 
 ```bash
-export AUTOLOOP_PI_RUNTIME_PATH=/path/to/pi            # new executable
-export AUTOLOOP_PI_RUNTIME_SHA256=<sha256 of that file> # pin it explicitly
-export AUTOLOOP_PI_RUNTIME_VERSION=<version>
+export AEGISFLOW_PI_RUNTIME_PATH=/path/to/pi            # new executable
+export AEGISFLOW_PI_RUNTIME_SHA256=<sha256 of that file> # pin it explicitly
+export AEGISFLOW_PI_RUNTIME_VERSION=<version>
 ```
 
 Compute the digest with:
@@ -120,7 +120,7 @@ Details of the runtime contract: [agent-integration.md](agent-integration.md).
 
 ## Step 5 — Run a task
 
-A task enters AutoLoop as a **task card**: a goal, an acceptance criterion, and
+A task enters AegisFlow as a **task card**: a goal, an acceptance criterion, and
 whatever scope hints the operator wants to give. The harness — not the model —
 decides the rest.
 
@@ -140,8 +140,8 @@ telemetry-disabled runs and both performing zero writes:
 
 ```bash
 # What did a graph run actually do?
-node scripts/autoloop-operator.mjs --run <graphRunId>
-node scripts/autoloop-operator.mjs --run <graphRunId> --json
+node scripts/aegisflow-operator.mjs --run <graphRunId>
+node scripts/aegisflow-operator.mjs --run <graphRunId> --json
 
 # What has the autonomous evolution loop done?
 node scripts/evolution-operator.mjs --json
@@ -154,7 +154,7 @@ missing it says `UNKNOWN` — it never fabricates state.
 ## Step 7 — Where things live
 
 ```
-$AUTOLOOP_HOME/
+$AEGISFLOW_HOME/
   evidence/autoloop/            durable evidence, checkpoints, journals
   evidence/autoloop-telemetry/  telemetry stream (separate namespace)
   learning/                     transfer-metrics log, incident records
@@ -167,7 +167,7 @@ Each root is independently relocatable — see
 
 ## Step 8 — Sandbox execution (optional)
 
-Container isolation needs Colima + Docker. AutoLoop refuses to run sandbox
+Container isolation needs Colima + Docker. AegisFlow refuses to run sandbox
 work without an explicit runtime home rather than silently falling back to host
 execution:
 
@@ -180,11 +180,11 @@ If your runtime home sits on a dedicated volume and you want the mount-identity
 gate (so a mis-mounted or shadow volume can never absorb sandbox state):
 
 ```bash
-export AUTOLOOP_COLIMA_MOUNT=/Volumes/YourVolume
-export AUTOLOOP_COLIMA_MOUNT_UUID=$(diskutil info -plist /Volumes/YourVolume | plutil -extract VolumeUUID raw -o - -)
+export AEGISFLOW_COLIMA_MOUNT=/Volumes/YourVolume
+export AEGISFLOW_COLIMA_MOUNT_UUID=$(diskutil info -plist /Volumes/YourVolume | plutil -extract VolumeUUID raw -o - -)
 ```
 
-With both set, AutoLoop verifies the volume UUID and refuses to run when a
+With both set, AegisFlow verifies the volume UUID and refuses to run when a
 shadow mount of the same name exists.
 
 ## Where to go next
@@ -193,3 +193,4 @@ shadow mount of the same name exists.
 - Every configuration knob: [configuration.md](configuration.md)
 - Running and diagnosing it: [operations.md](operations.md)
 - When something breaks: [troubleshooting.md](troubleshooting.md)
+- Coming from AutoLoop (the pre-rename project): [migration-rename.md](migration-rename.md)

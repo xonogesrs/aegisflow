@@ -1,14 +1,14 @@
 // lifecycle-runner.mjs
 //
 // Minimal, provider-neutral unified lifecycle runner: Task Card -> executor
-// adapter -> normalized adapter result -> AutoLoop core validation ->
+// adapter -> normalized adapter result -> AegisFlow core validation ->
 // reviewer adapter -> reviewer verdict -> PASS / REPAIR / HOLD.
 //
 // This module owns lifecycle sequencing and fail-closed judgment. It never
 // delegates PASS/HOLD authority to the adapter: adapter results are only
 // ever "well-formed" or not (see adapter/contract.mjs); every substantive
 // judgment (evidence validity, mutation scope, reviewer verdict shape,
-// repair-budget exhaustion) is made here, against existing AutoLoop schemas
+// repair-budget exhaustion) is made here, against existing AegisFlow schemas
 // and gates, not invented in parallel.
 //
 // REPAIR is an in-loop transition, never a final state: runLifecycle()
@@ -319,7 +319,7 @@ export async function runLifecycle({
       }
     }
 
-    // C4Q: harness-owned evidence assembly — AutoLoop collects the objective
+    // C4Q: harness-owned evidence assembly — AegisFlow collects the objective
     // facts and builds the implementation-evidence object itself（identity
     // mechanically bound; system-observed test process; schema validated）.
     const evidenceStartedAt = new Date().toISOString();

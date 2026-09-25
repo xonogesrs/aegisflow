@@ -77,7 +77,7 @@ export function listInstances() { return [{ profile: "autoloop-graph", status: "
 // ever issued, no machine is touched.
 export function planInstanceAction({ profile } = {}) {
   if (!AUTOLOOP_TEST_PROFILES.includes(profile)) {
-    return { action: INSTANCE_ACTION.HOLD, holdCode: "COLIMA_PROFILE_NOT_TEST_OWNED", reason: `profile ${profile} is not an AutoLoop-owned ephemeral test profile` };
+    return { action: INSTANCE_ACTION.HOLD, holdCode: "COLIMA_PROFILE_NOT_TEST_OWNED", reason: `profile ${profile} is not an AegisFlow-owned ephemeral test profile` };
   }
   return { action: INSTANCE_ACTION.REUSE, holdCode: null, reason: "e2 engine mode: zero VM lifecycle" };
 }

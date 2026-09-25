@@ -31,6 +31,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import {
   TELEMETRY_ROOT_ENV as AUTOLOOP_TELEMETRY_ROOT_ENV,
   assertStateRootAllowed,
+  readConfigEnv,
   resolveEvidenceRoot,
   resolveTelemetryRoot,
 } from "../shared/autoloop-paths.mjs";
@@ -39,8 +40,8 @@ import {
 // never inside it. Separation is the authority fence, not aesthetics: the two
 // namespaces have disjoint retention classes.
 //
-// Portable default: <AUTOLOOP_HOME>/evidence/autoloop-telemetry (see
-// src/shared/autoloop-paths.mjs). Set AUTOLOOP_TELEMETRY_ROOT explicitly to
+// Portable default: <AEGISFLOW_HOME>/evidence/autoloop-telemetry (see
+// src/shared/autoloop-paths.mjs). Set AEGISFLOW_TELEMETRY_ROOT explicitly to
 // place it anywhere else; a value inside the evidence namespace fails closed.
 export const TELEMETRY_ROOT = resolveTelemetryRoot();
 
@@ -53,9 +54,9 @@ export function telemetryEvidenceRoot({ env = process.env } = {}) {
 }
 
 // Env override for the exact store root (tests / CI isolation), mirroring
-// AUTOLOOP_MEMORY_STATE_ROOT. Never a fallback creator: when the env var is
+// AEGISFLOW_MEMORY_STATE_ROOT. Never a fallback creator: when the env var is
 // unset the canonical namespace is used as the PARENT of the run-scoped child.
-export const TELEMETRY_STATE_ROOT_ENV = "AUTOLOOP_TELEMETRY_STATE_ROOT";
+export const TELEMETRY_STATE_ROOT_ENV = "AEGISFLOW_TELEMETRY_STATE_ROOT";
 
 // Retention classes (contract Phase F).
 export const RETENTION_CLASSES = Object.freeze(["R0", "R1", "R2", "R3", "R4"]);
@@ -86,7 +87,7 @@ export const TELEMETRY_RETENTION_ASSIGNMENT = Object.freeze({
   ownedScratchResults: "R3", // WP1 continuation truth — GC_PROTECTED until release
   probeScratchLeftovers: "R0", // orphaned; GC_AMBIGUOUS until adjudicated
   legacyHomeTelemetryDirs: "R2", // orphaned; GC_AMBIGUOUS until adjudicated
-  colimaRuntimeHome: null, // environmental — outside AutoLoop retention authority
+  colimaRuntimeHome: null, // environmental — outside AegisFlow retention authority
   rrcForensics: "R4",
   providerUsageObservationRows: "R3", // rides the authority journal (replay-safe)
   harnessSystemDeltaReviewArtifacts: "R3",
@@ -139,22 +140,22 @@ export function resolveTelemetryStateRoot({ graphRunId, env = process.env } = {}
   if (graphRunId.includes("/") || graphRunId.includes("\\") || graphRunId.includes("..")) {
     throw new Error(`S16 telemetry location: graphRunId must be a flat identity: ${graphRunId}`);
   }
-  const override = env?.[TELEMETRY_STATE_ROOT_ENV];
-  if (typeof override === "string" && override.trim().length > 0) {
-    if (!isAbsolute(override)) {
-      throw new Error(`S16 telemetry location: ${TELEMETRY_STATE_ROOT_ENV} must be absolute: ${override}`);
+  const override = readConfigEnv(env, TELEMETRY_STATE_ROOT_ENV);
+  if (override) {
+    if (!isAbsolute(override.value)) {
+      throw new Error(`S16 telemetry location: ${override.name} must be absolute: ${override.value}`);
     }
     let resolved;
     try {
-      resolved = assertStateRootAllowed(override, { env });
+      resolved = assertStateRootAllowed(override.value, { env });
     } catch (e) {
-      throw new Error(`S16 telemetry location: ${TELEMETRY_STATE_ROOT_ENV} rejected (${e.code}): ${override}`);
+      throw new Error(`S16 telemetry location: ${override.name} rejected (${e.code}): ${override.value}`);
     }
     rejectHomeNamespace(resolved);
     return resolved;
   }
   // The namespace root is re-resolved from THIS env (not the import-time
-  // constant) so an explicit AUTOLOOP_TELEMETRY_ROOT is honored per call.
+  // constant) so an explicit AEGISFLOW_TELEMETRY_ROOT is honored per call.
   const namespace = resolveTelemetryRoot({ env });
   const resolved = join(namespace, graphRunId);
   rejectHomeNamespace(resolved);

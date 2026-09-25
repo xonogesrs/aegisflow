@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "AutoLoop task-understanding payload — exact Designer-emittable object",
+  "title": "AegisFlow task-understanding payload — exact Designer-emittable object",
   "type": "object",
   "additionalProperties": false,
   "required": [

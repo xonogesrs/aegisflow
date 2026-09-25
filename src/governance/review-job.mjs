@@ -25,6 +25,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha256Text } from "../evidence/run-evidence-store.mjs";
+import { readConfigEnv } from "../shared/autoloop-paths.mjs";
 import { validateAgainstSchema } from "./lifecycle-authorization.mjs";
 import {
   writeJsonExclusiveCreate,
@@ -103,7 +104,7 @@ export function assertReviewJobTransition(from, to) {
 // ── Path derivation ──────────────────────────────────────────────────────
 
 export function reviewJobRoot(opts = {}) {
-  const root = opts.root ?? process.env.AUTOLOOP_PI_GRAPH_OUTPUT ?? null;
+  const root = opts.root ?? readConfigEnv(process.env, "AEGISFLOW_PI_GRAPH_OUTPUT")?.value ?? null;
   if (root) return root;
   return join(process.cwd(), "docs", "pi-graph-output");
 }

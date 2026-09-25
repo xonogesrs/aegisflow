@@ -12,8 +12,8 @@
 //（the review surface + archive）— a pending external review
 // never blocks an execution review, and this CLI never touches the inbox.
 //
-// Env overrides（tests / CI isolation）: AUTOLOOP_EXECUTION_REVIEW_SURFACE,
-// AUTOLOOP_EXECUTION_REVIEW_ARCHIVE.
+// Env overrides（tests / CI isolation）: AEGISFLOW_EXECUTION_REVIEW_SURFACE,
+// AEGISFLOW_EXECUTION_REVIEW_ARCHIVE.
 //
 //   --publish <source.json> [--repo <path>] [--surface <dir>] [--archive <dir>]
 //       Validate + render + secret-scan + rotate previous Latest + atomically

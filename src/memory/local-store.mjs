@@ -3,9 +3,9 @@
 // CBM-3 — LocalMemoryStore（SQLite primary + append-only JSONL hash-chain
 // journal）.
 //
-// Store location（card §6）: no pre-existing AutoLoop memory state root exists,
+// Store location（card §6）: no pre-existing AegisFlow memory state root exists,
 // so this card establishes `~/.autoloop/memory/` with the env override
-// `AUTOLOOP_MEMORY_STATE_ROOT`（tests / CI always use an isolated tmpdir —
+// `AEGISFLOW_MEMORY_STATE_ROOT`（tests / CI always use an isolated tmpdir —
 // never the production root, never inside a git worktree）.
 //
 //   <root>/
@@ -46,13 +46,13 @@ import { MEMORY_STORE_IDENTITY_SCHEMA } from "./query-schema.mjs";
 import { MEMORY_SCHEMA_VERSION } from "./contract.mjs";
 import { deriveEventId } from "./identity.mjs";
 import { recursiveCanonicalJson, utcNowIso } from "./canonical.mjs";
-import { autoloopDefault } from "../shared/autoloop-paths.mjs";
+import { autoloopDefault, readConfigEnv } from "../shared/autoloop-paths.mjs";
 import { sha256Text } from "../evidence/run-evidence-store.mjs";
 
-export const MEMORY_STATE_ROOT_ENV = "AUTOLOOP_MEMORY_STATE_ROOT";
-// Resolved through the single configuration seam so AUTOLOOP_HOME actually
+export const MEMORY_STATE_ROOT_ENV = "AEGISFLOW_MEMORY_STATE_ROOT";
+// Resolved through the single configuration seam so AEGISFLOW_HOME actually
 // governs this root (the previous literal ~/.autoloop/memory bypassed it,
-// making the documented "AUTOLOOP_HOME moves all AutoLoop state" false).
+// making the documented "AEGISFLOW_HOME moves all AegisFlow state" false).
 export const DEFAULT_MEMORY_STATE_ROOT = autoloopDefault("memory");
 export const MEMORY_STORE_FILES = Object.freeze(["memory.db", "journal.jsonl"]);
 
@@ -72,8 +72,8 @@ export class MemoryStoreInvalidError extends MemoryStoreError {
 /** Resolve the memory state root（env override wins; never inside a worktree）. */
 export function resolveMemoryStateRoot(root = null) {
   if (root) return resolve(root);
-  const env = process.env[MEMORY_STATE_ROOT_ENV];
-  return resolve(env && env.trim().length > 0 ? env : DEFAULT_MEMORY_STATE_ROOT);
+  const env = readConfigEnv(process.env, MEMORY_STATE_ROOT_ENV);
+  return resolve(env ? env.value.trim() : DEFAULT_MEMORY_STATE_ROOT);
 }
 
 /**

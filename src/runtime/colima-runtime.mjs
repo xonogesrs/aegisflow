@@ -1,6 +1,6 @@
 // src/runtime/colima-runtime.mjs
 //
-// Colima runtime adapter for AutoLoop.
+// Colima runtime adapter for AegisFlow.
 //
 // Guarantees enforced here (and asserted by tests):
 //   1. Pinned instance + socket: every docker invocation uses
@@ -33,6 +33,7 @@ import {
   DOCKER_BIN_ENV,
   colimaMountGate,
   configuredColimaHome,
+  readConfigEnv,
   resolveExecutable,
 } from "../shared/autoloop-paths.mjs";
 
@@ -57,17 +58,17 @@ export class ColimaRuntimeError extends Error {
 //
 // The gate is CONFIGURATION-DRIVEN, never a hardcoded volume:
 //   COLIMA_HOME                     required, absolute, outside $HOME
-//   AUTOLOOP_COLIMA_MOUNT           optional: the volume the runtime must live on
-//   AUTOLOOP_COLIMA_MOUNT_UUID      optional: that volume's identity (with the
+//   AEGISFLOW_COLIMA_MOUNT           optional: the volume the runtime must live on
+//   AEGISFLOW_COLIMA_MOUNT_UUID      optional: that volume's identity (with the
 //                                   mount var, enables the UUID + shadow-mount gate)
-//   AUTOLOOP_COLIMA_SKIP_MOUNT_GATE optional "1": disable the volume gate
+//   AEGISFLOW_COLIMA_SKIP_MOUNT_GATE optional "1": disable the volume gate
 //                                   entirely (still requires an absolute,
 //                                   non-$HOME COLIMA_HOME)
 // Setting the two mount variables reproduces the original deployment's exact
 // behavior (canonical volume + UUID + shadow-mount refusal).
 // ---------------------------------------------------------------------------
 
-export const COLIMA_SKIP_MOUNT_GATE_ENV = "AUTOLOOP_COLIMA_SKIP_MOUNT_GATE";
+export const COLIMA_SKIP_MOUNT_GATE_ENV = "AEGISFLOW_COLIMA_SKIP_MOUNT_GATE";
 
 function isUnder(child, parent) {
   const c = resolve(child);
@@ -115,7 +116,7 @@ export function assertColimaHome({
       { configured, home },
     );
   }
-  const gate = env?.[COLIMA_SKIP_MOUNT_GATE_ENV] === "1" ? null : colimaMountGate({ env });
+  const gate = readConfigEnv(env, COLIMA_SKIP_MOUNT_GATE_ENV)?.value.trim() === "1" ? null : colimaMountGate({ env });
   if (gate) {
     if (!isUnder(configured, gate.mount)) {
       throw new ColimaRuntimeError(
@@ -307,7 +308,7 @@ export function planInstanceAction({ profile, desiredFingerprint, runtimeFingerp
     return {
       action: INSTANCE_ACTION.HOLD,
       holdCode: "COLIMA_PROFILE_NOT_TEST_OWNED",
-      reason: `profile ${profile} is not an AutoLoop-owned ephemeral test profile; refusing to mutate`,
+      reason: `profile ${profile} is not an AegisFlow-owned ephemeral test profile; refusing to mutate`,
     };
   }
   if (runtimeFingerprint === null) {
@@ -415,7 +416,7 @@ export function roundTripProbe({ profile, scratchRoot, image = TEST_IMAGE }) {
 }
 
 /**
- * Start (create if needed) an AutoLoop-dedicated Colima instance with an
+ * Start (create if needed) an AegisFlow-dedicated Colima instance with an
  * explicit mount set. Passing mounts explicitly REPLACES the default whole-$HOME
  * mount in Colima, so the caller must list every needed path (repo ro + scratch rw).
  *

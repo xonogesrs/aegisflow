@@ -100,14 +100,14 @@ before(() => {
   mkdirSync(OUT, { recursive: true });
   // RB-1H hard rule: requiresReview closeouts default-deliver to the fixed
   // surface — redirect it away from the real Desktop inbox during tests.
-  process.env.AUTOLOOP_REVIEW_SURFACE = join(OUT, "surface");
-  process.env.AUTOLOOP_REVIEW_ARCHIVE = join(OUT, "archive");
+  process.env.AEGISFLOW_REVIEW_SURFACE = join(OUT, "surface");
+  process.env.AEGISFLOW_REVIEW_ARCHIVE = join(OUT, "archive");
 });
 after(() => {
   rmSync(SCRATCH, { recursive: true, force: true });
   rmSync(OUT, { recursive: true, force: true });
-  delete process.env.AUTOLOOP_REVIEW_SURFACE;
-  delete process.env.AUTOLOOP_REVIEW_ARCHIVE;
+  delete process.env.AEGISFLOW_REVIEW_SURFACE;
+  delete process.env.AEGISFLOW_REVIEW_ARCHIVE;
   const now = spawnSync("git", ["-C", REPO_A, "status", "--porcelain"], { encoding: "utf8" }).stdout.trim().split("\n").filter(Boolean).length;
   const beforeCount = spawnSync("git", ["-C", REPO_A, "status", "--porcelain"], { encoding: "utf8" }).stdout.trim().split("\n").filter(Boolean).length;
   assert.equal(now, beforeCount, "main repo entries unchanged by the test");

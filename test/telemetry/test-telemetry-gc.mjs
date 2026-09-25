@@ -51,7 +51,7 @@ function envFor(root) {
 }
 
 function makeRunRoot(root, runId = "grun1", { rotated = 0, active = true, malformed = [] } = {}) {
-  // With AUTOLOOP_TELEMETRY_STATE_ROOT=<root>, the run-scoped store root IS
+  // With AEGISFLOW_TELEMETRY_STATE_ROOT=<root>, the run-scoped store root IS
   // <root> (override-is-exact-root semantics); runId is identity bookkeeping.
   const runRoot = root;
   mkdirSync(runRoot, { recursive: true });
@@ -86,7 +86,7 @@ test("C1. namespace admission: arbitrary roots rejected (GC_ARBITRARY_ROOT_DELET
 
 test("C2. namespace admission: run-scoped + canonical sweep admitted; identity binding mandatory", () => {
   const root = tmpRoot("ns");
-  // AUTOLOOP_TELEMETRY_STATE_ROOT is the EXACT store root (location.mjs L4),
+  // AEGISFLOW_TELEMETRY_STATE_ROOT is the EXACT store root (location.mjs L4),
   // so the RUN namespace root is the override itself.
   const ns = resolveGcNamespace({ graphRunId: "grun1", env: envFor(root) });
   assert.equal(ns.kind, "RUN");

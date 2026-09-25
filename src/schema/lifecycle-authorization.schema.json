@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "autoloop.lifecycle-authorization/v2",
-  "title": "AutoLoop Review-Unit Lifecycle Authorization",
+  "title": "AegisFlow Review-Unit Lifecycle Authorization",
   "description": "Entry-card-level authorization for one coherent review unit: decompose → execute internal milestones → local checkpoint commits → full verification → desktop external review bundle → WAITING_FOR_EXTERNAL_REVIEW → external PASS → integration commit → feature-branch push → draft PR (integration record only). Fail-closed: any capability not explicitly allowed is denied; restrictive requirements can never be cancelled by a looser runtime.",
   "type": "object",
   "additionalProperties": false,

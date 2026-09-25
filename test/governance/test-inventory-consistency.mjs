@@ -162,16 +162,16 @@ before(() => {
   git(["add", "-A"]);
   git(["commit", "-qm", "init"]);
   // isolate the external-review surface（never touch the real Current/）.
-  process.env.AUTOLOOP_REVIEW_SURFACE = join(ROOT, "surface-env");
-  process.env.AUTOLOOP_REVIEW_ARCHIVE = join(ROOT, "archive-env");
+  process.env.AEGISFLOW_REVIEW_SURFACE = join(ROOT, "surface-env");
+  process.env.AEGISFLOW_REVIEW_ARCHIVE = join(ROOT, "archive-env");
 });
 
 after(() => {
   rmSync(ROOT, { recursive: true, force: true });
   rmSync(REPO, { recursive: true, force: true });
   rmSync(REPO_CLEAN, { recursive: true, force: true });
-  delete process.env.AUTOLOOP_REVIEW_SURFACE;
-  delete process.env.AUTOLOOP_REVIEW_ARCHIVE;
+  delete process.env.AEGISFLOW_REVIEW_SURFACE;
+  delete process.env.AEGISFLOW_REVIEW_ARCHIVE;
 });
 
 // ══════════════════════════════════════════════════════════════════════════

@@ -104,13 +104,13 @@ const closeoutOpts = (overrides = {}) => ({
 before(() => {
   rmSync(ROOT, { recursive: true, force: true });
   mkdirSync(OUT, { recursive: true });
-  process.env.AUTOLOOP_REVIEW_SURFACE = join(ROOT, "surface");
-  process.env.AUTOLOOP_REVIEW_ARCHIVE = join(ROOT, "archive");
+  process.env.AEGISFLOW_REVIEW_SURFACE = join(ROOT, "surface");
+  process.env.AEGISFLOW_REVIEW_ARCHIVE = join(ROOT, "archive");
 });
 after(() => {
   rmSync(ROOT, { recursive: true, force: true });
-  delete process.env.AUTOLOOP_REVIEW_SURFACE;
-  delete process.env.AUTOLOOP_REVIEW_ARCHIVE;
+  delete process.env.AEGISFLOW_REVIEW_SURFACE;
+  delete process.env.AEGISFLOW_REVIEW_ARCHIVE;
 });
 
 test("1. section 9 renders CARD_IMPLEMENTATION_FILES / GRAPH_CLOSEOUT_OUTPUTS / PRE_EXISTING_DIRTY_FILES", { timeout: 30000 }, async () => {

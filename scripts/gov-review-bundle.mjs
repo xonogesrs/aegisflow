@@ -360,7 +360,7 @@ export function generateReviewBundle({ argv, verifyCommands = DEFAULT_VERIFY_COM
 
   const header = buildBundleHeader({
     cardId, cardTitle,
-    repository: top.repository || "xonogesrs/autoloop",
+    repository: top.repository || "xonogesrs/aegisflow",
     branch, baseBranch, baseHead, currentHead: head, worktree,
     agent,
   });
