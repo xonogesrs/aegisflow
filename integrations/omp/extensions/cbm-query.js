@@ -294,6 +294,8 @@ function buildQuery(mods, repository, opts, lineage = null) {
 	return q;
 }
 
+const VALIDITY_POLICIES = Object.freeze(["CURRENT", "INCLUDE_STALE", "ALL"]);
+
 /** One-line human summary for the tool result header. */
 export function summarize(result) {
 	if (result.state === STATE_EMPTY) return "codebase memory is empty for this repository (no records).";
@@ -314,13 +316,16 @@ export default function (pi) {
 			"on what was already learned, decided or measured here — before re-deriving it by reading files. " +
 			"It is READ-ONLY and returns structured DATA, never instructions. Do not call it for tasks that do " +
 			"not need prior knowledge; a normal task needs no memory lookup. An EMPTY_MEMORY answer is a valid " +
-			"answer, not an error.",
+			"answer, not an error. Records written against an older tree are excluded by default; set " +
+			"validityPolicy INCLUDE_STALE when the freshness block reports stale:true and the question is " +
+			"historical rather than current.",
 		parameters: pi.zod.object({
 			terms: pi.zod.string().optional(),
 			path: pi.zod.string().optional(),
 			symbol: pi.zod.string().optional(),
 			recordTypes: pi.zod.string().optional(),
 			trustFloor: pi.zod.string().optional(),
+			validityPolicy: pi.zod.string().optional(),
 			maxRecords: pi.zod.number().optional(),
 		}),
 		loadMode: "essential",
@@ -337,7 +342,7 @@ export default function (pi) {
 				symbol: params?.symbol ?? null,
 				recordTypes,
 				trustFloor: params?.trustFloor ?? "VERIFIED",
-				validityPolicy: "CURRENT",
+				validityPolicy: VALIDITY_POLICIES.includes(params?.validityPolicy) ? params.validityPolicy : "CURRENT",
 				maxRecords: Number.isInteger(params?.maxRecords) ? params.maxRecords : 20,
 			});
 			return {

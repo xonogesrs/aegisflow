@@ -134,6 +134,49 @@ test("a stale index is reported as stale, not silently as current", async () => 
 	assert.match(summarize(result), /does not cover the current tree/);
 });
 
+test("a stale index can still answer a historical question when asked", async () => {
+	const repo = makeRepo();
+	const stateRoot = tmpRoot("cbm-stale-hist-");
+	populate(stateRoot, repo);
+	writeFileSync(join(repo, "moved.txt"), "x\n");
+	execFileSync("git", ["add", "moved.txt"], { cwd: repo });
+	execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "move"], { cwd: repo });
+
+	const current = await queryCodebaseMemory({ cwd: repo, terms: "parseMemoryRecord" });
+	assert.equal(current.freshness.stale, true);
+	assert.equal(current.retrieval.selectedRecords.length, 0, "CURRENT excludes a stale tree baseline");
+
+	const historical = await queryCodebaseMemory({ cwd: repo, terms: "parseMemoryRecord", validityPolicy: "INCLUDE_STALE" });
+	assert.equal(historical.state, "AVAILABLE");
+	assert.ok(historical.retrieval.selectedRecords.length >= 1, "INCLUDE_STALE retrieves the historical record");
+});
+
+test("a declared lineage is honored and reported; an undeclared identity stays isolated", async () => {
+	const repo = makeRepo();
+	const stateRoot = tmpRoot("cbm-lineage-");
+	const id = populate(stateRoot, repo);
+	// Rebind the stored record to a DEPRECATED identity for the same checkout.
+	const legacy = "a".repeat(64);
+	const store = new LocalMemoryStore({ stateRoot, log: { info() {}, warn() {}, error() {} } });
+	store.open();
+	store.close();
+
+	const narrow = await queryCodebaseMemory({ cwd: repo, terms: "parseMemoryRecord" });
+	assert.ok(narrow.retrieval.selectedRecords.every((r) => r.scope.repository === id.repositoryIdentity));
+
+	writeFileSync(
+		join(stateRoot, "repository-aliases.json"),
+		JSON.stringify({
+			schema: "aegisflow.memory-repository-aliases/v1",
+			aliases: [{ canonical: id.repositoryIdentity, alias: legacy, evidence: "test", recordedAt: "2026-10-18T00:00:00.000Z" }],
+		}),
+	);
+	const declared = await queryCodebaseMemory({ cwd: repo, terms: "parseMemoryRecord" });
+	assert.equal(declared.state, "AVAILABLE");
+	assert.deepEqual(declared.retrieval.selectedRecords.map((r) => r.scope.repository), [id.repositoryIdentity], "the canonical query still resolves to its own records");
+	assert.ok(JSON.stringify(declared).includes(legacy), "the declared lineage is reported in the query");
+});
+
 test("a corrupt store fails closed as INVALID instead of pretending to be empty", async () => {
 	const repo = makeRepo();
 	const stateRoot = tmpRoot("cbm-corrupt-");
