@@ -36,7 +36,7 @@ import { homedir } from "node:os";
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { openMemoryDb, applyMigrations, upsertRecord, ftsInsert, ftsRebuild, applyLifecycleEvent, insertRelationship, MemoryStoreError, MIGRATION_V1 } from "./sqlite-schema.mjs";
+import { openMemoryDb, applyMigrations, upsertRecord, ftsInsert, ftsRebuild, applyLifecycleEvent, insertRelationship, MemoryStoreError, MIGRATION_V1, MIGRATION_V2_PATTERN_TYPE, MIGRATIONS, MIGRATION_V1_ACCEPTED_CHECKSUMS } from "./sqlite-schema.mjs";
 import { readJournal, replayJournal, appendJournalEvent, JOURNAL_GENESIS_DIGEST, JournalError, MEMORY_JOURNAL_EVENT_SCHEMA } from "./jsonl-journal.mjs";
 import { validateMemoryRecordV1, MEMORY_ERRORS } from "./validation.mjs";
 import { storeSnapshotDigest, snapshotStats, replayJournalToDigest } from "./snapshot.mjs";
@@ -550,4 +550,4 @@ export class LocalMemoryStore {
   }
 }
 
-export { openMemoryDb, applyMigrations, MIGRATION_V1, MEMORY_JOURNAL_EVENT_SCHEMA };
+export { openMemoryDb, applyMigrations, MIGRATION_V1, MIGRATION_V2_PATTERN_TYPE, MIGRATIONS, MIGRATION_V1_ACCEPTED_CHECKSUMS, MEMORY_JOURNAL_EVENT_SCHEMA };

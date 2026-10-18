@@ -216,6 +216,51 @@ outside AegisFlow, or by truncating an append that was in flight).
 **Safe action** — do not hand-repair the chain. Preserve and investigate; the
 recovery path depends on how the state was damaged.
 
+### `MEMORY_STORE_INVALID: MIGRATION_INVALID: ... checksum mismatch`
+
+**Likely cause** — a released migration's DDL was edited in place. Every store
+records the checksum of the migration it applied, so changing `cbm2-v1`'s bytes
+makes every existing store fail closed — including stores on machines that never
+ran the edited code.
+
+This is a release defect, not local corruption. It was measured once: the R2
+commit widened `memory_records.record_type` to accept `PATTERN` by editing
+`cbm2-v1` instead of adding a migration, and `~/.autoloop/memory` became
+unopenable by `main` (`MIGRATION_INVALID`, applied
+`ff058edc…`, expected `93280234…`).
+
+**Inspection**
+
+```bash
+node scripts/autoloop-memory-query.mjs --repo . --json | head -5
+```
+
+`state: "INVALID"` with a checksum mismatch confirms it. Preserve the store
+directory before touching anything.
+
+**Safe action** — none locally. A released migration is immutable; the fix is a
+**new** migration that reconciles forward (`cbm2-v1-pattern-type` rebuilds the
+table, verifies `PRAGMA foreign_key_check`, and recreates the indexes). Do not
+edit `DDL_V1`, and do not hand-edit the `memory_migrations` row: both make the
+next store diverge the same way. Stores created during the window are accepted
+once and re-stamped to the canonical checksum.
+
+### `cbm_query` reports `UNAVAILABLE`
+
+**Likely cause** — the extension could not locate an AegisFlow checkout (its own
+deployed copy lives under `~/.omp/agent/extensions/`, where "three directories
+up" is not a checkout).
+
+**Safe action** — point it at one:
+
+```bash
+export AEGISFLOW_REPO_ROOT=/path/to/aegisflow
+```
+
+An `EMPTY_MEMORY` state is **not** this: it means the store opened and holds no
+records for this repository identity. `INVALID` means the store is corrupt and
+retrieval is refused on purpose.
+
 ### A resume "hangs" with `CROSS_SESSION_ROLLOVER_IN_PROGRESS_*`
 
 **Likely cause** — a session handover was interrupted. The successor generation

@@ -1,9 +1,9 @@
 # OMP integration (optional)
 
-This directory publishes the **optional** OMP integration: a single agent-host
-extension that makes a governed agent's *background waits* and *task
-termination* behaviour safe. It is a separate artifact from AegisFlow core —
-see [Core feature vs. integration feature](#core-feature-vs-integration-feature)
+This directory publishes the **optional** OMP integration: two agent-host
+extensions — waiter/terminal-fence safety, and the read-only codebase-memory
+tool. It is a separate artifact from AegisFlow core — see
+[Core feature vs. integration feature](#core-feature-vs-integration-feature)
 before assuming anything here applies to AegisFlow itself.
 
 - **Target**: OMP (`@oh-my-pi/pi-coding-agent`), the Oh My Pi coding agent.
@@ -13,8 +13,9 @@ before assuming anything here applies to AegisFlow itself.
 
 ```
 ~/.omp/agent/extensions/
-  no-poll-waits.js                          <- the only module the host loads
-  lib/poll-wait-policy.js                   <- pure policy, imported by it
+  no-poll-waits.js                          <- extension: waiters + terminal fence
+  cbm-query.js                              <- extension: cbm_query (read-only CBM)
+  lib/poll-wait-policy.js                   <- pure policy, imported by no-poll-waits
   test/poll-wait-policy.test.mjs            <- policy self-test (plain node)
   test/waiter-fence.acceptance.ts           <- lifecycle acceptance (bun)
   test/terminal-fence-authority.acceptance.ts <- authority acceptance (bun)
@@ -22,8 +23,9 @@ before assuming anything here applies to AegisFlow itself.
 
 `lib/` and `test/` are deliberately **not** load candidates: they have no
 `index.js`, no `index.ts` and no `package.json`, so extension discovery resolves
-exactly one module. `scripts/install-omp-integration.mjs` refuses any source
-layout that would change that, rather than reason about the consequence.
+exactly the two reviewed modules. `scripts/install-omp-integration.mjs` refuses
+any source layout that would change that, rather than reason about the
+consequence.
 
 ---
 
@@ -68,10 +70,48 @@ Deployed behaviour, all of it exercised by the harnesses in
 | Agent self-fence denial | No tool in the agent's vocabulary can commit a fence; the legacy name is refused at the hook, fail closed |
 | Trusted controller commit path | `/fence-generation <PASS\|HOLD\|FAIL\|CANCELLED> [reason]` on the host channel, with `OMP_TERMINAL_FENCE_AUTHORITY` set |
 | Active / new-generation delivery preservation | Fencing invalidates *only* the fenced generation; the session advances and the next task's deliveries are untouched |
+| Read-only codebase-memory access | `cbm_query` — one tool over the CBM store, same engine as the harness CLI, DATA-only, fail-closed |
 
 Real work that merely contains a legitimate sleep (`for i in 1 2 3; do sleep 30;
 npm test; done`) is never poll-only and is always admitted with its timeout
 untouched.
+
+---
+
+## Codebase memory tool (`cbm_query`)
+
+`cbm-query.js` gives a governed agent ONE read-only tool over AegisFlow's CBM
+store (`src/memory/`, CBM-2/CBM-3). Before it existed, memory was reachable only
+through `scripts/autoloop-memory-query.mjs` — a **harness** CLI. An interactive
+session has no harness, so in a normal session the agent had no memory tool at
+all; measured by asking a live session for one, which answered `NO_SUCH_TOOL`.
+
+| Property | How |
+|---|---|
+| One tool, read-only | `cbm_query` calls `LocalMemoryStore.query()` and nothing else; there is no write path in the module |
+| Same engine as the harness CLI | `resolveRepositoryIdentity` + `retrieveMemory` are imported from `src/memory/`, not reimplemented |
+| Repository isolation | identity is resolved from the **session cwd**, so another repository's records are excluded by the existing eligibility filter |
+| DATA, never instructions | every result carries `kind: "MEMORY_CONTEXT_DATA"` and the authority-boundary statement |
+| Fail-closed, never a crash | `EMPTY_MEMORY` = a valid answer; `INVALID` = corrupt/irreconcilable store; `UNAVAILABLE` = no checkout or no store module, with the reason |
+| Not mandatory | nothing injects memory into the prompt; a task that needs no prior knowledge never calls it |
+| Not path-pinned | the checkout is found via `AEGISFLOW_REPO_ROOT` / `AUTOLOOP_REPO_ROOT`, then this file's own location, then a walk up from cwd |
+
+Locating the checkout matters because the deployed copy lives under the agent's
+own directory. Set `AEGISFLOW_REPO_ROOT` for a deployed installation whose
+checkout is elsewhere:
+
+```sh
+export AEGISFLOW_REPO_ROOT=/path/to/aegisflow
+```
+
+The store root is the same one the harness uses (`AEGISFLOW_MEMORY_STATE_ROOT`,
+default `~/.autoloop/memory`), so a session and a governed run read the same
+memory.
+
+**Observation, not a filter.** Memory content is reported as retrieved. If a
+record's claim contradicts the source tree, resolving that is the agent's job —
+the tool does not judge truth, and the fence below is about *deliveries*, not
+about *facts*.
 
 ---
 
@@ -194,7 +234,7 @@ node scripts/install-omp-integration.mjs uninstall
 Each deployed file is restored from the **newest** backup of that file if one
 exists, and removed otherwise. Only the five known paths are touched: an
 unrelated extension in the same directory stays exactly as it was. To remove the
-integration after a fresh install (no backups), this simply deletes the five
+integration after a fresh install (no backups), this simply deletes the six
 files. The last line reports `UNINSTALL_RESULT = RESTORED` when a backup was
 used, or `REMOVED` when there was none.
 

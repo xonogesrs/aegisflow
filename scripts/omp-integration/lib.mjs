@@ -40,6 +40,7 @@ export const SOURCE_ROOT = join(INTEGRATION_ROOT, "extensions");
  */
 export const KNOWN_FILES = Object.freeze([
 	"no-poll-waits.js",
+	"cbm-query.js",
 	"lib/poll-wait-policy.js",
 	"test/poll-wait-policy.test.mjs",
 	"test/waiter-fence.acceptance.ts",

@@ -21,6 +21,7 @@ import {
   ftsRebuild,
   ftsMatch,
   MIGRATION_V1,
+  DDL_V1,
   MEMORY_ERRORS,
   buildLifecycleEvent,
   validateMemoryRecordV1,
@@ -47,9 +48,14 @@ test("1. DDL clean database creation + migration checksum", () => {
   for (const t of ["memory_records", "memory_lifecycle_events", "memory_evidence", "memory_relationships", "memory_conflicts", "memory_migrations", "memory_fts"]) {
     assert.ok(tables.includes(t), `table ${t} present`);
   }
-  const applied = db.prepare("SELECT migration_id, checksum FROM memory_migrations").all();
-  assert.equal(applied.length, 1);
-  assert.equal(applied[0].checksum, MIGRATION_V1.checksum);
+  const applied = db.prepare("SELECT migration_id, checksum FROM memory_migrations ORDER BY migration_id").all();
+  assert.deepEqual(
+    applied.map((r) => r.migration_id),
+    ["cbm2-v1", "cbm2-v1-pattern-type"],
+    "a schema change is a NEW migration; cbm2-v1 stays frozen",
+  );
+  const v1 = applied.find((r) => r.migration_id === "cbm2-v1");
+  assert.equal(v1.checksum, MIGRATION_V1.checksum);
   db.close();
 });
 
@@ -300,10 +306,12 @@ test("R2-S1. record_type CHECK accepts PATTERN on a NEW store (CHECK IN-list ext
   db.close();
 });
 
-test("R2-S2. old-CHECK store rejects PATTERN inserts until rebuild (reconcile-from-reality, never patched in place)", () => {
-  // simulate an EXISTING store created before the extension (frozen §3.3a:
-  // journal is truth; sqlite ⊆ journal rebuild is the standing recovery
-  // path; no destructive ALTER and no in-place migration).
+test("R2-S2. an old-CHECK store is rebuilt forward by the pattern-type migration (data preserved)", () => {
+  // A store created before the R2 extension has record_type CHECK without
+  // PATTERN. `applyMigrations` must widen it by rebuilding the table (the
+  // documented SQLite 12-step procedure), never by editing the frozen v1
+  // migration bytes — editing them in place is what made every deployed store
+  // unopenable (measured on ~/.autoloop/memory, 2026-10-18).
   const db = openMemoryDb(join(ROOT, "legacy.db"));
   db.exec(`CREATE TABLE memory_records (
     record_id TEXT PRIMARY KEY,
@@ -320,6 +328,14 @@ test("R2-S2. old-CHECK store rejects PATTERN inserts until rebuild (reconcile-fr
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL, json TEXT NOT NULL,
     UNIQUE (logical_key, content_hash)
   )`);
+  // Everything except memory_records is the real baseline DDL; only the
+  // record_type CHECK above is the pre-R2 shape. The table already exists, so
+  // the baseline CREATE is skipped while its indexes still apply.
+  for (const ddl of DDL_V1) if (!/CREATE TABLE IF NOT EXISTS memory_records\b/.test(ddl)) db.exec(ddl);
+  db.prepare("INSERT INTO memory_migrations (migration_id, schema_version, checksum, applied_at) VALUES (?,?,?,?)")
+    .run(MIGRATION_V1.id, MIGRATION_V1.schemaVersion, MIGRATION_V1.checksum, "2026-08-07T00:00:00.000Z");
+  const legacy = baseCodeRecord();
+  insertRecord(db, legacy, { validate });
   let threw = false;
   try {
     insertRecord(db, patternRecord(), { validate });
@@ -327,7 +343,14 @@ test("R2-S2. old-CHECK store rejects PATTERN inserts until rebuild (reconcile-fr
     threw = true;
     assert.ok(String(e?.message ?? e).includes("CHECK") || String(e?.message ?? e).includes("SCHEMA_INVALID"));
   }
-  assert.equal(threw, true, "old CHECK store must reject PATTERN inserts (fail-closed)");
+  assert.equal(threw, true, "an un-migrated old-CHECK store still rejects PATTERN (fail-closed)");
+
+  const r = applyMigrations(db);
+  assert.equal(r.migrationsApplied, 2);
+  insertRecord(db, patternRecord(), { validate });
+  assert.equal(queryRecords(db, { recordType: "PATTERN" }).length, 1);
+  assert.equal(queryRecords(db, { recordType: "CODE" }).length, 1, "the rebuild preserves existing records");
+  assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   db.close();
 });
 

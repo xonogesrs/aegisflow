@@ -142,10 +142,27 @@ silent model substitution would invalidate every prior review.
 
 ## The optional OMP integration
 
-AegisFlow drives Pi; it also publishes an optional extension for **OMP**
-(`@oh-my-pi/pi-coding-agent`), a different agent host. That extension is not part
-of the adapter contract above and is not loaded by AegisFlow — see
+AegisFlow drives Pi; it also publishes optional extensions for **OMP**
+(`@oh-my-pi/pi-coding-agent`), a different agent host. They are not part of the
+adapter contract above and are not loaded by AegisFlow — see
 [../integrations/omp/README.md](../integrations/omp/README.md).
+
+Two extensions ship there:
+
+| Extension | Purpose |
+|---|---|
+| `no-poll-waits.js` | waiter lifecycle + terminal-fence authority (below) |
+| `cbm-query.js` | the `cbm_query` tool: the agent's own read-only access to the CBM store |
+
+`cbm_query` exists because the memory engine was reachable only through
+`scripts/autoloop-memory-query.mjs`, a harness CLI. A harness has an agent
+vocabulary; an interactive session does not, so memory was invisible there and an
+agent could not use knowledge the repository had already recorded. The tool
+imports the same `resolveRepositoryIdentity` / `LocalMemoryStore.query` surface
+the CLI uses — there is no second store and no second ranking path — and returns
+`kind: "MEMORY_CONTEXT_DATA"` with an explicit authority boundary. It is
+read-only, never mandatory, and reports `EMPTY_MEMORY` / `INVALID` /
+`UNAVAILABLE` rather than an empty success.
 
 It matters to this document for one reason: **when a governed OMP process runs,
 terminal authority must stay on the AegisFlow side of the boundary.**

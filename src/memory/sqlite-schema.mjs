@@ -43,7 +43,7 @@ export const DDL_V1 = Object.freeze([
     record_id TEXT PRIMARY KEY,
     logical_key TEXT NOT NULL,
     schema_version TEXT NOT NULL,
-    record_type TEXT NOT NULL CHECK (record_type IN ('CODE','EXECUTION','DECISION','PATTERN')),
+    record_type TEXT NOT NULL CHECK (record_type IN ('CODE','EXECUTION','DECISION')),
     trust TEXT NOT NULL CHECK (trust IN ('RAW','UNVERIFIED','VERIFIED','REVIEWED','CONFIRMED')),
     trust_rank INTEGER NOT NULL,
     validity_status TEXT NOT NULL CHECK (validity_status IN ('CURRENT','STALE','INVALIDATED','TOMBSTONED','CONFLICTED')),
@@ -128,6 +128,15 @@ export const DDL_V1 = Object.freeze([
   )`,
 ]);
 
+/**
+ * `cbm2-v1` is FROZEN. Its DDL bytes are the historical baseline, because the
+ * applied checksum is recorded inside every store: editing the DDL in place
+ * makes every existing store fail closed with MIGRATION_INVALID (measured —
+ * the R2 commit widened this CHECK here instead of adding a migration, and the
+ * deployed store at ~/.autoloop/memory became unopenable by `main`).
+ *
+ * A schema change is therefore ALWAYS a new migration, never an edit here.
+ */
 export const MIGRATION_V1 = Object.freeze({
   id: "cbm2-v1",
   schemaVersion: MEMORY_SCHEMA_VERSION,
@@ -135,6 +144,120 @@ export const MIGRATION_V1 = Object.freeze({
   checksum: sha256Hex(recursiveCanonicalJson(DDL_V1)),
   description: "Memory Contract v1 baseline: records / lifecycle / evidence / relationships / conflicts / migrations + pinned-tokenizer FTS5.",
 });
+
+/**
+ * Checksums a store's `cbm2-v1` row may legitimately carry.
+ *
+ *  #1 the frozen baseline above (every store created before the in-place edit)
+ *  #2 the transient in-place edit shipped in commit 14a0deb, which recorded a
+ *     DIFFERENT checksum for the same migration id on freshly created stores.
+ *
+ * Accepting #2 is not a loosening: it is the only way to open a store created
+ * during that window without rewriting it. It is normalized to #1 on open (the
+ * row is re-stamped), so the window closes and a future tamper of either value
+ * still fails closed.
+ */
+export const MIGRATION_V1_ACCEPTED_CHECKSUMS = Object.freeze([
+  MIGRATION_V1.checksum,
+  "932802343199c95251d75b06bfe63874ff4b65e7b4b0e8907dc34da6422e6347",
+]);
+
+/** True when `memory_records.record_type` accepts PATTERN. */
+function recordTypeAllowsPattern(db) {
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='memory_records'").get();
+  if (!row?.sql) return false;
+  return /record_type\s+TEXT\s+NOT\s+NULL\s+CHECK\s*\(\s*record_type\s+IN\s*\([^)]*'PATTERN'/.test(row.sql);
+}
+
+/**
+ * `cbm2-v1-pattern-type` — widen the record_type CHECK to include PATTERN.
+ *
+ * The R2 chain added PATTERN to RECORD_TYPES (contract.mjs) but shipped the
+ * corresponding CHECK change by editing `cbm2-v1` in place. Forward-only repair:
+ * SQLite cannot alter a CHECK constraint, so this rebuilds `memory_records`
+ * (the documented 12-step procedure) with foreign keys suspended and verified
+ * afterwards, then re-creates the indexes the rebuild dropped.
+ *
+ * Idempotent: a table that already accepts PATTERN is left untouched.
+ */
+export const MIGRATION_V2_PATTERN_TYPE = Object.freeze({
+  id: "cbm2-v1-pattern-type",
+  schemaVersion: MEMORY_SCHEMA_VERSION,
+  ddl: Object.freeze([]),
+  checksum: sha256Hex(recursiveCanonicalJson(["cbm2-v1-pattern-type", "record_type accepts PATTERN"])),
+  description: "Widen memory_records.record_type CHECK to include PATTERN (R2) without editing the frozen v1 migration.",
+  apply(db) {
+    if (recordTypeAllowsPattern(db)) return { rebuilt: false };
+    const wasOn = Number(db.prepare("PRAGMA foreign_keys").get()?.foreign_keys ?? 0) === 1;
+    if (wasOn) db.exec("PRAGMA foreign_keys = OFF");
+    try {
+      db.exec("BEGIN");
+      try {
+        db.exec(`CREATE TABLE memory_records__rebuild (
+          record_id TEXT PRIMARY KEY,
+          logical_key TEXT NOT NULL,
+          schema_version TEXT NOT NULL,
+          record_type TEXT NOT NULL CHECK (record_type IN ('CODE','EXECUTION','DECISION','PATTERN')),
+          trust TEXT NOT NULL CHECK (trust IN ('RAW','UNVERIFIED','VERIFIED','REVIEWED','CONFIRMED')),
+          trust_rank INTEGER NOT NULL,
+          validity_status TEXT NOT NULL CHECK (validity_status IN ('CURRENT','STALE','INVALIDATED','TOMBSTONED','CONFLICTED')),
+          scope_repository TEXT,
+          scope_worktree TEXT,
+          scope_commit TEXT,
+          scope_tree TEXT,
+          scope_path TEXT,
+          scope_symbol TEXT,
+          scope_content_hash TEXT,
+          scope_graph_run TEXT,
+          scope_task TEXT,
+          scope_global INTEGER NOT NULL DEFAULT 0,
+          content_hash TEXT NOT NULL,
+          source TEXT NOT NULL,
+          source_identity TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          json TEXT NOT NULL,
+          UNIQUE (logical_key, content_hash)
+        )`);
+        db.exec(`INSERT INTO memory_records__rebuild (
+          record_id, logical_key, schema_version, record_type, trust, trust_rank,
+          validity_status, scope_repository, scope_worktree, scope_commit, scope_tree,
+          scope_path, scope_symbol, scope_content_hash, scope_graph_run, scope_task,
+          scope_global, content_hash, source, source_identity, created_at, updated_at, json
+        ) SELECT
+          record_id, logical_key, schema_version, record_type, trust, trust_rank,
+          validity_status, scope_repository, scope_worktree, scope_commit, scope_tree,
+          scope_path, scope_symbol, scope_content_hash, scope_graph_run, scope_task,
+          scope_global, content_hash, source, source_identity, created_at, updated_at, json
+        FROM memory_records`);
+        db.exec("DROP TABLE memory_records");
+        db.exec("ALTER TABLE memory_records__rebuild RENAME TO memory_records");
+        // The rebuild dropped the table's indexes with it — recreate them.
+        db.exec("CREATE INDEX IF NOT EXISTS idx_records_tree ON memory_records(scope_tree)");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_records_worktree ON memory_records(scope_worktree)");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_records_content_hash ON memory_records(content_hash)");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_records_trust_rank ON memory_records(trust_rank)");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_records_type_validity ON memory_records(record_type, validity_status)");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_records_graph_run ON memory_records(scope_graph_run)");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_records_created ON memory_records(created_at)");
+        db.exec("COMMIT");
+      } catch (e) {
+        try { db.exec("ROLLBACK"); } catch { /* already rolled back */ }
+        throw e;
+      }
+      const violations = db.prepare("PRAGMA foreign_key_check").all();
+      if (violations.length > 0) {
+        throw new Error(`rebuild left ${violations.length} foreign-key violation(s)`);
+      }
+      return { rebuilt: true };
+    } finally {
+      if (wasOn) db.exec("PRAGMA foreign_keys = ON");
+    }
+  },
+});
+
+/** Every migration, in application order. */
+export const MIGRATIONS = Object.freeze([MIGRATION_V1, MIGRATION_V2_PATTERN_TYPE]);
 
 export function sha256Hex(text) {
   return createHash("sha256").update(String(text)).digest("hex");
@@ -162,7 +285,7 @@ export function openMemoryDb(path = ":memory:") {
  * Apply pending migrations. v1 baseline only; an unknown FUTURE version or a
  * checksum mismatch fails closed（MIGRATION_INVALID）.
  */
-export function applyMigrations(db, { migrations = [MIGRATION_V1] } = {}) {
+export function applyMigrations(db, { migrations = MIGRATIONS } = {}) {
   db.exec(`CREATE TABLE IF NOT EXISTS memory_migrations (
     migration_id TEXT PRIMARY KEY,
     schema_version INTEGER NOT NULL,
@@ -174,9 +297,27 @@ export function applyMigrations(db, { migrations = [MIGRATION_V1] } = {}) {
   for (const m of migrations) {
     if (appliedIds.has(m.id)) {
       const rec = applied.find((r) => r.migration_id === m.id);
-      if (rec.checksum !== m.checksum) {
+      const accepted = m.id === MIGRATION_V1.id ? MIGRATION_V1_ACCEPTED_CHECKSUMS : [m.checksum];
+      if (!accepted.includes(rec.checksum)) {
         throw new MemoryStoreError(MEMORY_ERRORS.MIGRATION_INVALID, `migration ${m.id} checksum mismatch (applied ${rec.checksum}, expected ${m.checksum})`);
       }
+      if (rec.checksum !== m.checksum) {
+        // Normalize a store created during the in-place-edit window so the
+        // accepted set cannot widen again.
+        db.prepare("UPDATE memory_migrations SET checksum = ? WHERE migration_id = ?").run(m.checksum, m.id);
+      }
+      continue;
+    }
+    if (typeof m.apply === "function") {
+      // The migration owns its transaction (a rebuild must run with foreign
+      // keys suspended, and PRAGMA is a no-op inside a transaction).
+      try {
+        m.apply(db);
+      } catch (e) {
+        throw new MemoryStoreError(MEMORY_ERRORS.MIGRATION_INVALID, `migration ${m.id} failed: ${String(e?.message ?? e)}`);
+      }
+      db.prepare("INSERT INTO memory_migrations (migration_id, schema_version, checksum, applied_at) VALUES (?, ?, ?, ?)")
+        .run(m.id, m.schemaVersion, m.checksum, utcNowIso());
       continue;
     }
     db.exec("BEGIN");
