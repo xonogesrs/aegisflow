@@ -47,6 +47,7 @@ import { MEMORY_SCHEMA_VERSION } from "./contract.mjs";
 import { deriveEventId } from "./identity.mjs";
 import { recursiveCanonicalJson, utcNowIso } from "./canonical.mjs";
 import { autoloopDefault, readConfigEnv } from "../shared/autoloop-paths.mjs";
+import { aliasFileFor, readAliasRegistry, repositoryLineageFor } from "./repository-aliases.mjs";
 import { sha256Text } from "../evidence/run-evidence-store.mjs";
 
 export const MEMORY_STATE_ROOT_ENV = "AEGISFLOW_MEMORY_STATE_ROOT";
@@ -118,6 +119,30 @@ export function resolveRepositoryIdentity(repoPath) {
     branch: gitOrNull(repoPath, ["branch", "--show-current"]),
     canonicalPath,
     remote,
+  };
+}
+
+/**
+ * The repository lineage a store at `stateRoot` declares for `repositoryIdentity`.
+ *
+ * Returns the canonical identity alone when the store declares no aliases —
+ * which is every store on a machine that never recorded a relocation. A
+ * malformed or unreadable registry also yields the canonical identity alone
+ * (fail closed to the narrowest visibility, never to a guess) and reports why.
+ *
+ * @returns {{ lineage: string[], canonical: string, aliases: string[], reason: string|null, file: string }}
+ */
+export function resolveRepositoryLineage(repositoryIdentity, { stateRoot = null } = {}) {
+  const root = resolveMemoryStateRoot(stateRoot);
+  const file = aliasFileFor(root);
+  const read = readAliasRegistry(file);
+  const lineage = repositoryLineageFor(read.registry, repositoryIdentity);
+  return {
+    canonical: repositoryIdentity,
+    lineage,
+    aliases: lineage.slice(1),
+    reason: read.reason,
+    file,
   };
 }
 

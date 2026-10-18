@@ -98,6 +98,11 @@ export const QUERY_PATTERN_CONDITION_FIELDS = Object.freeze(["field", "op", "val
 
 export const QUERY_CONTEXT_FIELDS = Object.freeze([
   "repository",
+  // Declared lineage of DEPRECATED identities for `repository` (superset of
+  // `repository` itself). OPTIONAL and omitted when absent, so a query that
+  // declares no lineage is byte-identical to the pre-lineage form and its
+  // queryIdentity does not move. Records keep their own recorded scope.
+  "repositoryLineage",
   "worktree",
   "commit",
   "tree",
@@ -181,6 +186,16 @@ export function validateMemoryQueryV1(input) {
       const v = input.context[k];
       if (v !== undefined && v !== null && (typeof v !== "string" || v.length === 0)) {
         errors.push(`${QUERY_ERRORS.QUERY_MALFORMED}:context.${k}_must_be_non_empty_string_or_null`);
+      }
+    }
+    const lineage = input.context.repositoryLineage;
+    if (lineage !== undefined && lineage !== null) {
+      if (!Array.isArray(lineage) || lineage.length === 0) {
+        errors.push(`${QUERY_ERRORS.QUERY_MALFORMED}:context.repositoryLineage_must_be_non_empty_array_or_null`);
+      } else if (!lineage.every((id) => typeof id === "string" && HEX64.test(id))) {
+        errors.push(`${QUERY_ERRORS.QUERY_MALFORMED}:context.repositoryLineage_must_be_hex64`);
+      } else if (new Set(lineage).size !== lineage.length) {
+        errors.push(`${QUERY_ERRORS.QUERY_MALFORMED}:context.repositoryLineage_has_duplicates`);
       }
     }
   }
@@ -331,6 +346,11 @@ export function validateMemoryQueryV1(input) {
   const q = defaultQuery();
   const ctx = input.context ?? {};
   q.context.repository = ctx.repository;
+  // Omitted entirely (never null) when absent: the pre-lineage query form and
+  // its queryIdentity stay byte-identical for every store that declares none.
+  if (Array.isArray(ctx.repositoryLineage) && ctx.repositoryLineage.length > 0) {
+    q.context.repositoryLineage = [...ctx.repositoryLineage];
+  }
   q.context.worktree = ctx.worktree ?? null;
   q.context.commit = ctx.commit ?? null;
   q.context.tree = ctx.tree ?? null;

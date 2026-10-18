@@ -45,6 +45,7 @@ export const KNOWN_FILES = Object.freeze([
 	"test/poll-wait-policy.test.mjs",
 	"test/waiter-fence.acceptance.ts",
 	"test/terminal-fence-authority.acceptance.ts",
+	"test/terminal-fence-ordering.acceptance.ts",
 ]);
 
 /** Suffixes that make a file executable code (and therefore deployment-relevant). */

@@ -109,6 +109,38 @@ export function validateMemoryRecordLight(rec) {
 }
 
 // ---------------------------------------------------------------------------
+// Repository lineage（declared, never inferred）
+// ---------------------------------------------------------------------------
+
+/**
+ * The repository identities this query may see.
+ *
+ * `context.repository` is mandatory; `context.repositoryLineage` is an OPTIONAL
+ * declared superset of DEPRECATED identities (see repository-aliases.mjs). The
+ * canonical identity is always included, so a query that declares nothing has
+ * exactly one acceptable identity and no record gains visibility.
+ */
+export function acceptedRepositoryIdentities(query) {
+  const canonical = query?.context?.repository;
+  const out = [];
+  if (typeof canonical === "string" && canonical.length > 0) out.push(canonical);
+  for (const id of query?.context?.repositoryLineage ?? []) {
+    if (typeof id === "string" && id.length > 0 && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+/**
+ * True when a record's stored repository is the canonical identity or one of
+ * its DECLARED deprecated identities. Nothing else matches: an undeclared
+ * identity — or an alias declared for a different canonical — is isolated
+ * exactly as before.
+ */
+function repositoryMatchesScope(repo, query) {
+  return acceptedRepositoryIdentities(query).includes(repo);
+}
+
+// ---------------------------------------------------------------------------
 // Eligibility pipeline（card §9）
 // ---------------------------------------------------------------------------
 
@@ -131,8 +163,8 @@ function eligibilityDecision(record, query, { explicitlySelected = false, explic
     } else {
       return { eligible: false, conflicted: false, reasons: ["repository:no_repository_binding_and_not_global"], validityStatus };
     }
-  } else {
-    if (repo !== query.context.repository) return { eligible: false, conflicted: false, reasons: ["repository:mismatch"], validityStatus };
+  } else if (!repositoryMatchesScope(repo, query)) {
+    return { eligible: false, conflicted: false, reasons: ["repository:mismatch"], validityStatus };
   }
 
   // 2. worktree isolation（hard per-record boundary）
@@ -333,13 +365,16 @@ export function retrieveMemory({ db, query }) {
     where.push(`record_type IN (${query.recordTypes.map(() => "?").join(",")})`);
     args.push(...query.recordTypes);
   }
-  // repository（hard first boundary）
+  // repository（hard first boundary; a declared lineage widens the acceptable
+  // identities — it never widens anything else）
+  const repoIds = acceptedRepositoryIdentities(query);
+  const repoIn = repoIds.map(() => "?").join(",");
   if (query.scope.global === false) {
-    where.push("scope_repository = ?");
-    args.push(query.context.repository);
+    where.push(`scope_repository IN (${repoIn})`);
+    args.push(...repoIds);
   } else {
-    where.push("(scope_repository = ? OR scope_global = 1)");
-    args.push(query.context.repository);
+    where.push(`(scope_repository IN (${repoIn}) OR scope_global = 1)`);
+    args.push(...repoIds);
   }
   // worktree isolation
   if (query.context.worktree) {
@@ -398,7 +433,10 @@ export function retrieveMemory({ db, query }) {
   // semantics）: each stage counts how many records pass the cumulative
   // filters, so exclusions are attributed to the FIRST filter that rejects
   // them — coherent with the eligibility pipeline and digest-stable.
-  const fragRepo = { sql: query.scope.global === false ? "scope_repository = ?" : "(scope_repository = ? OR scope_global = 1)", args: [query.context.repository] };
+  const fragRepo = {
+    sql: query.scope.global === false ? `scope_repository IN (${repoIn})` : `(scope_repository IN (${repoIn}) OR scope_global = 1)`,
+    args: [...repoIds],
+  };
   const fragWt = query.context.worktree
     ? { sql: "(scope_worktree = ? OR scope_worktree IS NULL)", args: [query.context.worktree] }
     : { sql: "scope_worktree IS NULL", args: [] };
@@ -596,6 +634,9 @@ export function retrieveMemory({ db, query }) {
   const digestInput = {
     schema: MEMORY_RETRIEVAL_DIGEST_SCHEMA,
     queryIdentity: queryIdentity(query),
+    // Lineage is part of the query identity (it changes what is visible) and
+    // therefore of the digest — a lineage query can never collide with the
+    // canonical-only query it broadens.
     context: { ...query.context },
     storeSnapshotDigest: snapshotDigest,
     selectedRecordIds: selectedRecords.map((r) => r.recordId),

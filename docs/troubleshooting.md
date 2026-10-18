@@ -261,6 +261,52 @@ An `EMPTY_MEMORY` state is **not** this: it means the store opened and holds no
 records for this repository identity. `INVALID` means the store is corrupt and
 retrieval is refused on purpose.
 
+### A populated store returns `selectedRecords: 0` (`excluded.repository` = N)
+
+**Likely cause** — the repository identity moved. `repositoryIdentity` is
+`sha256(canonical({remote, canonicalPath}))` and is an input to every record's
+`recordId`, so it is **frozen by design**: moving the checkout or renaming the
+remote produces a new identity and every record bound to the old one is excluded
+by the hard repository boundary. The store is healthy — it is answering
+correctly for an identity that no longer describes this checkout.
+
+This was measured: `~/.autoloop/memory` held 8 records bound to
+`a8d935…` (`{remote: …/autoloop.git, path: /Volumes/NVM2T/Development/autoloop}`)
+and `29dcbe…` (`{…, path: /tmp/autoloop}`), while the canonical checkout resolves
+to `e3cc9b…` (`{remote: …/aegisflow.git, path: …/repos/autoloop}`). Retrieval
+reported `selectedRecords: 0`, `excluded.repository: 8`.
+
+**Inspection**
+
+```bash
+node scripts/autoloop-memory-query.mjs --repo . --validity ALL --trust-floor RAW
+node scripts/autoloop-memory-lineage.mjs show --repo .
+node scripts/autoloop-memory-lineage.mjs list
+```
+
+`excluded.repository` equal to the record count, with `storeRecords` non-zero, is
+this case. Do not edit the records: `scope.repository` feeds `recordId`, so
+rewriting it rewrites identity and the journal chain.
+
+**Safe action** — declare the deprecated identity for the current one, with
+evidence:
+
+```bash
+node scripts/autoloop-memory-lineage.mjs declare --repo . \
+  --alias <deprecated-hex64> --evidence <file-or-statement>
+```
+
+`declare` refuses an alias that no record carries, and refuses an empty evidence
+text. The edge is written to `repository-aliases.json` **beside the store**, is
+one-directional (only the canonical identity sees it), is never transitive, and
+is part of the query identity — so a lineage query can never collide with the
+canonical-only query it broadens. A malformed or unreadable registry fails
+closed to "no lineage declared" and reports why; it never guesses a lineage,
+because a guessed lineage would merge two repositories' memory.
+
+Revoke with `revoke --alias <hex64>`; records themselves are untouched by both
+operations.
+
 ### A resume "hangs" with `CROSS_SESSION_ROLLOVER_IN_PROGRESS_*`
 
 **Likely cause** — a session handover was interrupted. The successor generation

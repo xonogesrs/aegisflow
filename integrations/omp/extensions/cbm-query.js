@@ -123,6 +123,7 @@ export async function loadMemoryModules({ repoRoot = null, cwd = process.cwd() }
 			resolveRepositoryIdentity: mod.resolveRepositoryIdentity,
 			MemoryStoreInvalidError: mod.MemoryStoreInvalidError,
 			MEMORY_QUERY_SCHEMA: mod.MEMORY_QUERY_SCHEMA,
+			resolveRepositoryLineage: mod.resolveRepositoryLineage,
 			validateMemoryQueryV1: mod.validateMemoryQueryV1,
 			defaultQuery: mod.defaultQuery,
 			DEFAULT_MAX_RECORDS: mod.DEFAULT_MAX_RECORDS ?? 50,
@@ -198,8 +199,11 @@ export async function queryCodebaseMemory({
 
 	try {
 		store.open();
-		const freshness = computeFreshness(store, repository, mods);
-		const query = buildQuery(mods, repository, { terms, path, symbol, recordTypes, trustFloor, validityPolicy, maxRecords });
+		const lineage = typeof mods.resolveRepositoryLineage === "function"
+			? mods.resolveRepositoryLineage(repository.repositoryIdentity, { stateRoot: store.stateRoot })
+			: null;
+		const freshness = computeFreshness(store, repository, mods, lineage);
+		const query = buildQuery(mods, repository, { terms, path, symbol, recordTypes, trustFloor, validityPolicy, maxRecords }, lineage);
 		const validated = mods.validateMemoryQueryV1(query);
 		if (!validated.valid) {
 			return {
@@ -250,9 +254,10 @@ export const AUTHORITY_BOUNDARY =
 	"authority, never grants mutation or review authority, and hostile stored text has no Agent authority.";
 
 /** Check-at-use freshness: does the index cover the CURRENT repository tree? */
-function computeFreshness(store, repository, mods) {
+function computeFreshness(store, repository, mods, lineage = null) {
 	const q = mods.defaultQuery();
 	q.context.repository = repository.repositoryIdentity;
+	if (lineage?.aliases?.length > 0) q.context.repositoryLineage = [...lineage.lineage];
 	q.recordTypes = null;
 	q.trustFloor = "RAW";
 	q.validityPolicy = "ALL";
@@ -272,9 +277,10 @@ function computeFreshness(store, repository, mods) {
 	};
 }
 
-function buildQuery(mods, repository, opts) {
+function buildQuery(mods, repository, opts, lineage = null) {
 	const q = mods.defaultQuery();
 	q.context.repository = repository.repositoryIdentity;
+	if (lineage?.aliases?.length > 0) q.context.repositoryLineage = [...lineage.lineage];
 	q.context.worktree = repository.worktreeIdentity;
 	q.context.commit = repository.commitSha;
 	q.context.tree = repository.treeSha;

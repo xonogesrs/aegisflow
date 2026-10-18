@@ -62,6 +62,13 @@ const SUITES = [
 		expect: /^AUTHORITY_ACCEPTANCE=PASS$/m,
 		label: "TERMINAL_FENCE_AUTHORITY",
 	},
+	{
+		name: "terminal-fence-ordering",
+		file: "test/terminal-fence-ordering.acceptance.ts",
+		runtime: "bun",
+		expect: /^ORDERING_ACCEPTANCE=PASS\b/m,
+		label: "TERMINAL_FENCE_ORDERING",
+	},
 ];
 
 function which(candidates) {

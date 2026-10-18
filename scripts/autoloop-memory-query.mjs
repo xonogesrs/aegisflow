@@ -42,7 +42,7 @@
 // retrieval eligibility pipeline.
 
 import { parseArgs } from "node:util";
-import { LocalMemoryStore, resolveRepositoryIdentity, MemoryStoreInvalidError } from "../src/memory/local-store.mjs";
+import { LocalMemoryStore, resolveRepositoryIdentity, resolveRepositoryLineage, MemoryStoreInvalidError } from "../src/memory/local-store.mjs";
 import {
   MEMORY_QUERY_SCHEMA,
   validateMemoryQueryV1,
@@ -72,10 +72,14 @@ function usageError(message) {
 }
 
 /** Check-at-use freshness: does the index cover the CURRENT repository tree? */
-function computeFreshness(store, repository) {
+function computeFreshness(store, repository, lineage) {
   const enumQuery = validateMemoryQueryV1({
     schema: MEMORY_QUERY_SCHEMA,
-    context: { repository: repository.repositoryIdentity, worktree: null, commit: null, tree: null, graphRunId: null, task: null },
+    context: {
+      repository: repository.repositoryIdentity,
+      ...(lineage?.aliases?.length > 0 ? { repositoryLineage: lineage.lineage } : {}),
+      worktree: null, commit: null, tree: null, graphRunId: null, task: null,
+    },
     recordTypes: null,
     trustFloor: "RAW",
     validityPolicy: "ALL",
@@ -100,9 +104,10 @@ function computeFreshness(store, repository) {
   };
 }
 
-function buildQuery(repository, values) {
+function buildQuery(repository, values, lineage = null) {
   const q = defaultQuery();
   q.context.repository = repository.repositoryIdentity;
+  if (lineage?.aliases?.length > 0) q.context.repositoryLineage = [...lineage.lineage];
   q.context.worktree = repository.worktreeIdentity;
   q.context.commit = repository.commitSha;
   q.context.tree = repository.treeSha;
@@ -161,10 +166,11 @@ function main() {
 
   try {
     store.open();
-    const freshness = computeFreshness(store, repository);
+    const lineage = resolveRepositoryLineage(repository.repositoryIdentity, { stateRoot: store.stateRoot });
+    const freshness = computeFreshness(store, repository, lineage);
     let query;
     try {
-      query = buildQuery(repository, values);
+      query = buildQuery(repository, values, lineage);
     } catch (e) {
       console.error(`query build failed: ${e.message}`);
       return 3;

@@ -21,7 +21,7 @@
 // never silently treated as empty memory）.
 
 import { MEMORY_CONTEXT_SCHEMA, MEMORY_QUERY_SCHEMA, validateMemoryQueryV1, DEFAULT_MAX_RECORDS, DEFAULT_MAX_BYTES } from "./query-schema.mjs";
-import { LocalMemoryStore, resolveRepositoryIdentity, MemoryStoreInvalidError, MEMORY_STORE_HOLD_CODES } from "./local-store.mjs";
+import { LocalMemoryStore, resolveRepositoryIdentity, resolveRepositoryLineage, MemoryStoreInvalidError, MEMORY_STORE_HOLD_CODES } from "./local-store.mjs";
 
 export const MEMORY_CONTEXT_DATA = "MEMORY_CONTEXT_DATA";
 export const MEMORY_CONTEXT_AUTHORITY_BOUNDARY =
@@ -57,6 +57,10 @@ export function buildMemoryContext({ retrieval, repository, query }) {
     kind: MEMORY_CONTEXT_DATA,
     authorityBoundary: MEMORY_CONTEXT_AUTHORITY_BOUNDARY,
     repository,
+    // Reported so a reader can tell that a record was reached through a
+    // DECLARED deprecated identity rather than this checkout's own. Absent
+    // when the store declares no lineage.
+    ...(query?.context?.repositoryLineage ? { repositoryLineage: [...query.context.repositoryLineage] } : {}),
     queryIdentity: retrieval.queryIdentity,
     storeSnapshotDigest: retrieval.storeSnapshotDigest,
     retrievalDigest: retrieval.retrievalDigest,
@@ -100,10 +104,14 @@ export function createGraphMemoryProvider({ stateRoot = null, authorizedDirs = [
           };
         }
         store.open();
+        // Declared deprecated identities (never inferred) — empty on a store
+        // that declares no relocation, which leaves the query shape unchanged.
+        const lineage = resolveRepositoryLineage(repository.repositoryIdentity, { stateRoot: store.stateRoot });
         const query = {
           schema: MEMORY_QUERY_SCHEMA,
           context: {
             repository: repository.repositoryIdentity,
+            ...(lineage.aliases.length > 0 ? { repositoryLineage: lineage.lineage } : {}),
             worktree: repository.worktreeIdentity,
             commit: repository.commitSha,
             tree: repository.treeSha,

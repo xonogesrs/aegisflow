@@ -164,6 +164,14 @@ the CLI uses — there is no second store and no second ranking path — and ret
 read-only, never mandatory, and reports `EMPTY_MEMORY` / `INVALID` /
 `UNAVAILABLE` rather than an empty success.
 
+The tool inherits the store's DECLARED lineage: when a machine has recorded that
+a deprecated repository identity belongs to this checkout (see
+[troubleshooting](troubleshooting.md#a-populated-store-returns-selectedrecords-0-excludedrepository--n)),
+`cbm_query` sees those records too and reports the lineage alongside the result.
+An undeclared identity stays isolated exactly as before, and the tool never
+declares an alias itself — that requires evidence and is a deliberate operator
+action (`scripts/autoloop-memory-lineage.mjs`).
+
 It matters to this document for one reason: **when a governed OMP process runs,
 terminal authority must stay on the AegisFlow side of the boundary.**
 
@@ -171,6 +179,14 @@ terminal authority must stay on the AegisFlow side of the boundary.**
 |---|---|---|
 | governed agent (the model) | `request_terminal_fence(status, reason)` — records a disposition; always reports `committed: false` | commit a terminal fence, invalidate a pending delivery, or declare its own generation terminal |
 | trusted controller / orchestrator (whatever launches the governed process) | commit the fence on the host prompt-command channel: `/fence-generation <PASS\|HOLD\|FAIL\|CANCELLED> [reason]`, with `OMP_TERMINAL_FENCE_AUTHORITY` set | — |
+
+A committed terminal transition runs in one ordered, synchronous sequence —
+`TERMINAL_COMMITTED → GENERATION_FENCED → DELIVERIES_INVALIDATED →
+TERMINAL_GENERATION_STATE → FINAL_DELIVERY_ALLOWED` — and the final report is
+released through the release barrier (`releaseFinalResponse` /
+`/release-final`), which refuses while the generation is not both committed and
+fenced. The measured failure this closes: a report released *before* the fence,
+a late completion delivered into that gap, and a fence landing afterwards.
 
 `OMP_TERMINAL_FENCE_AUTHORITY` is an environment marker the **launcher** sets; it
 is not a capability an agent can acquire, derive from a payload, or reach through

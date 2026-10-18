@@ -19,6 +19,7 @@ before assuming anything here applies to AegisFlow itself.
   test/poll-wait-policy.test.mjs            <- policy self-test (plain node)
   test/waiter-fence.acceptance.ts           <- lifecycle acceptance (bun)
   test/terminal-fence-authority.acceptance.ts <- authority acceptance (bun)
+  test/terminal-fence-ordering.acceptance.ts  <- terminal-ordering acceptance (bun)
 ```
 
 `lib/` and `test/` are deliberately **not** load candidates: they have no
@@ -168,6 +169,35 @@ OMP_TERMINAL_FENCE_AUTHORITY=1 omp --mode rpc …   # launch the governed proces
 An orchestrator that never issues the command does not need the marker: the
 `agent_end` leg and the wait policy work without it.
 
+### Terminal-transition ordering (the final-delivery barrier)
+
+A fence that commits *after* the report it is meant to silence is useless. That
+was measured: a final report became visible at 16:41:53.189Z, a late completion
+was delivered at 16:48:10.838Z and woke the agent into a stale no-op turn, and
+only then did a fence land at 16:48:16.873Z, invalidating 59 pending deliveries.
+The commit was correct; its **position** was not.
+
+Every terminal transition therefore completes in ONE synchronous sequence, with
+no `await` between the steps, so no delivery callback, stop-hook pass or host
+command can observe a half-applied transition:
+
+```text
+TERMINAL_COMMITTED → GENERATION_FENCED → DELIVERIES_INVALIDATED
+                   → TERMINAL_GENERATION_STATE → FINAL_DELIVERY_ALLOWED
+```
+
+Two enforcement points:
+
+| Barrier | Behaviour |
+|---|---|
+| RELEASE BARRIER | `releaseFinalResponse()` is the only sanctioned release path. It REFUSES (`FINAL_DELIVERY_BARRIER_CLOSED`) unless the generation is both `TERMINAL_COMMITTED` and `GENERATION_FENCED`, and refuses a second release of the same generation (`FINAL_DELIVERY_ALREADY_RELEASED`). A report cannot be handed to the user ahead of the fence that silences its deliveries. |
+| SETTLE BARRIER | The final response generation and the controller's commit are different events, so `session_stop` couples them: while a generation is terminal-BOUND and still owns pending deliveries whose fence is uncommitted, the settle is held once. A controller that never commits gets its run back after the bounded hold (`BARRIER_BLOCK_LIMIT = 1`), recorded as `TERMINAL_COMMIT_NOT_OBSERVED` — an ordering violation, never a claimed suppression. |
+
+Arming the barrier fences nothing: an active task's legitimate completions keep
+being delivered right up to the controller's commit. A governed process releases
+its final report through `/release-final [generation]`, which requires the
+ordered commit.
+
 ---
 
 ## Installation
@@ -182,7 +212,7 @@ cd aegisflow
 node scripts/install-omp-integration.mjs install
 ```
 
-That writes the five files above into `~/.omp/agent/extensions`, which is where
+That writes the six files above into `~/.omp/agent/extensions`, which is where
 OMP discovers extensions. Override the destination with `--target <dir>` or
 `OMP_EXTENSIONS_DIR`. Other options: `--dry-run`, `--json`, `--source <dir>` (the
 extension source tree, for testing), `--backup-root <dir>`.
@@ -209,8 +239,8 @@ npm run omp:test        # the acceptance harnesses (needs bun, see Tests)
   differs is copied to `<parent of target>/omp-integration-backups/<timestamp>/`
   byte for byte before it is replaced. The backup root is outside the extension
   directory on purpose: a backup must not be a load candidate.
-- **Never reads or copies secrets.** Only the five source files and, at the
-  destination, those same five paths are opened. `models.yml`, provider keys and
+- **Never reads or copies secrets.** Only the six source files and, at the
+  destination, those same six paths are opened. `models.yml`, provider keys and
   API credentials are not read, written, hashed or globbed — the deployment's own
   test asserts this with an unreadable config file next to the target.
 - **Never rewrites unrelated extensions.** Files under the extension directory
@@ -232,7 +262,7 @@ node scripts/install-omp-integration.mjs uninstall
 ```
 
 Each deployed file is restored from the **newest** backup of that file if one
-exists, and removed otherwise. Only the five known paths are touched: an
+exists, and removed otherwise. Only the six known paths are touched: an
 unrelated extension in the same directory stays exactly as it was. To remove the
 integration after a fresh install (no backups), this simply deletes the six
 files. The last line reports `UNINSTALL_RESULT = RESTORED` when a backup was
@@ -300,8 +330,9 @@ node scripts/omp-integration/scan-publication.mjs
 | `test/poll-wait-policy.test.mjs` (deployed copy) | 21 classifier cases: the incident's exact waiter shapes, and the real-work shapes that must stay allowed |
 | `test/waiter-fence.acceptance.ts` | waiter lifecycle end to end: 8 refused waiters, 6 delayed completions maturing post-terminal with `POST_TERMINAL_AGENT_INVOCATIONS=0`, an un-fenced negative control reproducing 6 wakes, 4 concurrent legitimate jobs all delivered, new generation unaffected |
 | `test/terminal-fence-authority.acceptance.ts` | the authority contract: `SELF_FENCE=DENIED`, forged terminal `DENIED` for all four dispositions, `COMMIT_WITHOUT_CAPABILITY=DENIED`, controller commit `PASS`, `AGENT_FENCE_TOOL_EXPOSURE=NONE`, `AGENT_REPORT_TOOL=REQUEST_ONLY`, `REAL_CONCURRENT_WORK=UNAFFECTED` |
+| `test/terminal-fence-ordering.acceptance.ts` | the terminal-transition ORDER: 24 delayed completions per run, 552 late completions across the run, `FENCE_BEFORE_FINAL=YES`, `POST_TERMINAL_AGENT_INVOCATIONS=0`, `POST_TERMINAL_VISIBLE_OUTPUT=0`, `FINAL_DELIVERY_BARRIER`, duplicate-release refusal, and a pre-repair negative control that reproduces the incident ordering |
 
-Harnesses 3 (the `.ts` files) need `bun` (>= 1.3) and
+Harnesses 2–4 (the `.ts` files) need `bun` (>= 1.3) and
 `@oh-my-pi/pi-coding-agent`, because the package's `./async` export resolves to
 TypeScript source. That dependency is deliberately **not** declared in
 `package.json`: AegisFlow's host-only suite must stay installable on a machine

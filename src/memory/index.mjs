@@ -14,4 +14,5 @@ export * from "./query-schema.mjs";
 export * from "./snapshot.mjs";
 export * from "./retrieval.mjs";
 export * from "./local-store.mjs";
+export * from "./repository-aliases.mjs";
 export * from "./graph-context.mjs";

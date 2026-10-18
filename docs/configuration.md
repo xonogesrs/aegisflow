@@ -55,8 +55,32 @@ all state defaults into `~/.autoloop`.
 | `AEGISFLOW_TELEMETRY_ROOT` | `$AEGISFLOW_HOME/evidence/autoloop-telemetry` | Telemetry stream. **Must not be inside the evidence root** — the resolver rejects that outright. |
 | `AEGISFLOW_LEARNING_ROOT` | `$AEGISFLOW_HOME/learning` | Cross-agent learning storage (transfer-event log, incident records). |
 | `AEGISFLOW_SCRATCH_ROOT` | `$AEGISFLOW_HOME/learning/scratch` | Scratch space for fixture/sandbox work. |
-| `AEGISFLOW_MEMORY_STATE_ROOT` | `$AEGISFLOW_HOME/memory` | Memory store root (tests and CI isolate themselves with this). |
+| `AEGISFLOW_MEMORY_STATE_ROOT` | `$AEGISFLOW_HOME/memory` | Memory store root (tests and CI isolate themselves with this). Relocating it does not move records between repositories — see the identity note below. |
 | `AEGISFLOW_PI_GRAPH_OUTPUT` | *(unset → `docs/pi-graph-output`)* | Where the governance engine writes per-run evidence inside the checkout. |
+
+#### Memory store identity and relocation
+
+A memory record is bound to `repositoryIdentity = sha256(canonical({remote,
+canonicalPath}))`, and that identity is an input to every record's `recordId`.
+It is therefore **frozen**: moving the checkout or renaming the remote produces
+a new identity and the records bound to the old one stop matching (correct
+isolation, but indistinguishable from an empty store at a glance).
+
+Nothing rewrites them. Instead, record the deprecated identity for the current
+one, with evidence:
+
+```bash
+node scripts/autoloop-memory-lineage.mjs declare --repo . \
+  --alias <deprecated-hex64> --evidence <file-or-statement>
+```
+
+The declaration lands in `repository-aliases.json` **in the store root**, not in
+an environment variable: it is per-store evidence, not a global setting. It is
+one-directional (only the canonical identity sees the alias), never transitive,
+part of the query identity, and inert on any machine that declares nothing.
+`npm run memory:lineage` is the same entry point. See
+[troubleshooting](troubleshooting.md#a-populated-store-returns-selectedrecords-0-excludedrepository--n)
+for the symptom and the diagnostics.
 
 ### Human-facing review surfaces
 

@@ -60,6 +60,7 @@
     "omp:scan": "node scripts/omp-integration/scan-publication.mjs",
     "omp:test": "node scripts/omp-integration/run-acceptance.mjs",
     "omp:cbm-test": "node --test test/omp-integration/test-omp-cbm-query.mjs",
+    "memory:lineage": "node scripts/autoloop-memory-lineage.mjs",
     "test:pi-rpc-adapter": "node --test test/test-pi-rpc-adapter.mjs test/test-pi-lifecycle-integration.mjs",
     "test:pi-rpc-smoke": "node test/pi-rpc-real-smoke.mjs",
     "test:scripted-lifecycle": "node --test test/test-scripted-adapter.mjs test/test-lifecycle-runner.mjs test/test-standalone-paths.mjs test/test-normalize-reviewer-json.mjs",
