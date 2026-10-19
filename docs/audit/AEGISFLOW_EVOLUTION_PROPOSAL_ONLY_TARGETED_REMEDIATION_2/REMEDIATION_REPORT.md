@@ -12,7 +12,7 @@ belongs to a reviewer session that did not write this code.
 
 ---
 
-## 1. Environment note — why the review had three more findings than my run
+## 1. Environment note — why the review had five more findings than my run
 
 The implementation session ran the evolution suite and the host-only suite at
 `23cbe67`. The review reproduced five defects beyond the three the implementation
@@ -221,19 +221,24 @@ treated as an owner) were fixed in the SOURCE, not in the tests.
 
 ## 4. Regression assessment
 
-`git diff --stat` at the time of writing:
+`git show --stat` of the landed commit `9184961`:
 
 ```
- docs/autonomous-evolution.md                       |  60 +++-
- src/evolution/candidate.mjs                        | 152 ++++++--
- src/evolution/loop.mjs                             | 150 +++++---
- src/evolution/production-consumer.mjs              |  95 ++++-
- src/evolution/production-declaration.mjs           |  44 ++-
- test/evolution/test-agent-strategy-evolution.mjs   |  15 +-
- test/evolution/test-evolution-loop.mjs             |  13 +-
- test/evolution/test-evolution-production-activation.mjs | 12 +-
- test/evolution/test-evolution-targeted-remediation-2.mjs | 640 +++++ (new)
+ docs/audit/.../REMEDIATION_REPORT.md                    | 281 +++++++
+ docs/autonomous-evolution.md                            |  60 +-
+ src/evolution/candidate.mjs                             | 162 +++-
+ src/evolution/loop.mjs                                  | 154 ++--
+ src/evolution/production-consumer.mjs                   |  95 +-
+ src/evolution/production-declaration.mjs                |  57 +-
+ test/evolution/test-agent-strategy-evolution.mjs        |  15 +-
+ test/evolution/test-evolution-loop.mjs                  |  13 +-
+ test/evolution/test-evolution-production-activation.mjs |  12 +-
+ test/evolution/test-evolution-targeted-remediation-2.mjs | 872 +++++ (new)
+ 10 files changed, 1610 insertions(+), 111 deletions(-)
 ```
+
+Five source files, four test files, one doc and one report. No new module, no new
+dependency, no new store, no schema change.
 
 Behaviour deliberately preserved:
 
@@ -279,3 +284,53 @@ Two further notes, offered because they affect how the numbers above read:
 - It does not claim the host-only suite is green. It is compared against the
   baseline failure set, per the card's instruction.
 - It does not treat any synthetic fixture as production acceptance.
+
+---
+
+## 7. Durable landing
+
+Precondition check, before any edit (the prior card's landing was already
+published, and was NOT reset, amended or rewritten):
+
+| Check | Value |
+|---|---|
+| `git rev-parse HEAD` (pre-edit) | `23cbe6790facf79757817c8d8f952c7cdb612b3f` |
+| `git rev-parse origin/feat/omp-cbm-recovery` | same |
+| `git ls-remote origin refs/heads/feat/omp-cbm-recovery` | same |
+| `git rev-list --count origin/…..HEAD` | `0` |
+| `git status --porcelain` | empty |
+| `git stash list` | empty |
+| worktrees | `autoloop` @ `8bb72a5`; `aegis-repair-1` @ `23cbe67` |
+
+Post-push verification (after the allowlist commit):
+
+| Check | Value |
+|---|---|
+| local `HEAD` | `9184961158cbd6da8bc2618c5c7adf9f35987260` |
+| `origin/feat/omp-cbm-recovery` (post-fetch) | `9184961158cbd6da8bc2618c5c7adf9f35987260` |
+| `git ls-remote origin refs/heads/feat/omp-cbm-recovery` | `9184961158cbd6da8bc2618c5c7adf9f35987260` |
+| unpushed commits | `0` |
+| `git status --porcelain` | empty |
+| `git stash list` | empty |
+
+The commit contains exactly the 10 files itemised in §4. The temporary baseline
+worktree used for the host-suite comparison was removed; the throwaway probes
+were deleted. `23cbe67` remains reachable, unamended, and published — this card
+adds one commit on top of it.
+
+## 8. Handoff to independent review
+
+This card's disposition is **REMEDIATION READY FOR INDEPENDENT RERUN**, not
+PASS. Suggested rerun focus, in order:
+
+1. Re-run the three reviewer probes that reproduced F3 and F1/F5 against
+   `9184961` and confirm both now fail closed / derive both families.
+2. Adversarially verify F2: construct declarations combining a valid ceiling
+   with each invalid key, an unparsable file, an empty file, and a
+   `proposalOnly` of `0`, `1`, `"true"`, `null`; confirm the resolved ceiling and
+   the consumer disposition in every case.
+3. Verify F4 by making the index path unwritable in a COPY of a store that
+   already holds a candidate, and confirm the artifact survives and the retry
+   indexes it without a duplicate.
+4. Confirm `test/evolution` is 104/104 at `9184961` and that the host-only
+   failure set is a SUBSET of the baseline set.
