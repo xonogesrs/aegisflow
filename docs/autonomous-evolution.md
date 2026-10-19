@@ -172,6 +172,77 @@ changes, not the machinery that runs work.
 - the every-run attribution feed and any feed failures;
 - the resolved production declaration.
 
+## Proposal-only mode
+
+A second, **default-OFF** execution ceiling: the loop analyses evidence and
+saves a reviewable proposal, then stops. It is a governed setting — it cannot
+be raised by a plan, a trigger event, or the agent.
+
+```
+node scripts/evolution-declare-production.mjs --out <path> ... --proposal-only
+# or per run/process:
+AEGISFLOW_EVOLUTION_PROPOSAL_ONLY=1
+# or runnerOpts.evolution.proposalOnly = true
+```
+
+With it on, one qualifying cycle runs:
+
+```
+evidence (qualified) → trigger → plan → candidate → DERIVED → durable write
+                                                        ↓
+                                              PROPOSAL_RECORDED  (STOP)
+```
+
+and **never** enters authorization, mutation, fitness, review, promotion,
+canary, commit, push, or strategy activation. The returned
+`loop_verdict` is `PROPOSAL_RECORDED`; the cycle result carries the proposal's
+`candidate_id`, `candidate_digest`, durable path, evidence references and
+measurement plan so it can be reviewed from the operator surface. Nothing is
+applied, so there is nothing to roll back — the disable path is the setting
+itself plus the existing kill switch.
+
+Fail-closed rules:
+
+| Condition | Result |
+|---|---|
+| `proposalOnly` is not a boolean | `HOLD / EVOLUTION_LOOP_PROPOSAL_ONLY_INVALID`; the consumer reports `CONFIGURATION_INVALID` and starts no cycle |
+| evidence is synthetic, test-only, or not a durable journal row | `HOLD / EVOLUTION_LOOP_EVIDENCE_UNQUALIFIED` before any trigger or write |
+| the proposal cannot be durably written or read back | `HOLD / EVOLUTION_LOOP_CANDIDATE_NOT_PERSISTED` — a proposal is never claimed without its artifact |
+| `AUTO_EVOLUTION = SUSPENDED` | unchanged: the cycle never starts |
+
+With it off, the loop behaves exactly as documented above.
+
+## Proposal durability
+
+A strategy proposal is written to the **existing** candidate store
+(`<store>/evolution-candidates/`, `autoloop.evolution-candidate/v1`) with the
+same exclusive-create, identity-dedup and derivation-index semantics the source
+family uses — no second store and no new format. The write happens **before**
+authorization, so a proposal survives a cycle that is later refused or
+rejected, and it is visible to `scripts/evolution-operator.mjs` and to crash
+reconciliation.
+
+Identity is deterministic: the same trigger at the same baseline re-derives the
+same `candidate_id`, a retry is an `EXISTING` no-op, and an artifact whose
+immutable content differs is a conflict that fails closed. `created_at` is not
+part of that identity — a replayed event keeps the first write's record.
+
+## Evidence qualification
+
+Synthetic evidence is refused at the **trigger entry**, not only by the
+attribution feed:
+
+- a deployment that declares itself synthetic;
+- a durable record declaring `payload.synthetic` / `payload.test_only`, or
+  carrying a `SYNTHETIC_EVIDENCE` row;
+- a row that is not a verifiable journal row (no durable event id / sequence).
+
+Detection is declared, never guessed: a record that declares nothing is
+production evidence. The refusal is reported on the envelope
+(`evolutionObservation.evidence_qualified: false`, `evidence_exclusion`) and by
+the consumer as `NO_QUALIFIED_TRIGGER` with its reason — no trigger is recorded
+and no cycle starts.
+
 ## Honest limitations
 
 - **LOW-risk only.** The dimension set is genuinely narrow.

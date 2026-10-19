@@ -7,6 +7,7 @@
 //     → telemetry/evidence (durable journal — untouched)
 //     → improvement trigger        (trigger.mjs — gated, dedup'd, provenance-bound)
 //     → candidate derivation       (candidate.mjs — deterministic, dedup'd)
+//     → durable proposal           (candidate.mjs — EXISTING candidate store)
 //     → risk classification        (policy.mjs — LOW/MEDIUM/HIGH)
 //     → policy preauthorization    (policy.mjs — durable artifact; LOW only)
 //     → isolated mutation          (mutation.mjs → C3B runMutation)
@@ -29,11 +30,15 @@
 //     NORMAL_OPERATION (evolution failure is never a run failure).
 //   - every stage is driven by durable evidence; a stage that cannot prove
 //     its inputs HOLDs the candidate, never guesses.
+//   - PROPOSAL-ONLY (default OFF, §G3): `proposalOnly:true` stops the cycle at
+//     the durable proposal and returns PROPOSAL_RECORDED — authorization,
+//     mutation, fitness, review, promotion and canary are never entered. The
+//     flag is a governed configuration input, never inferred from a plan.
 
 import { C2dHoldError } from "../c2d/fs-atomic.mjs";
 import { digestOf } from "../canonical-digest.mjs";
 import { readEvolutionPolicy, authorizeUnderPolicy, EVOLUTION_POLICY_HOLD } from "./policy.mjs";
-import { deriveImprovementCandidate, readCandidate } from "./candidate.mjs";
+import { deriveImprovementCandidate, readCandidate, persistCandidate, candidateFilePath, proposalContentDigest } from "./candidate.mjs";
 import { issueCandidateMutationAuthorization, runCandidateMutation } from "./mutation.mjs";
 import { evaluateFitness } from "./fitness.mjs";
 import {
@@ -55,6 +60,7 @@ export const EVOLUTION_LOOP_VERDICTS = Object.freeze([
   "HOLD",                        // failed closed at a stage (see hold_code / stage)
   "NO_TRIGGER",                  // no signal crossed its threshold
   "CANDIDATE_EXISTS",            // already derived for this signature@baseline
+  "PROPOSAL_RECORDED",           // PROPOSAL-ONLY: durable proposal written; nothing authorized, mutated or promoted
   "AWAITING_OPERATOR_PROMOTION", // MEDIUM: evaluated autonomously, promotion is the operator boundary
   "ROLLED_BACK",                 // canary regressed; the evolution branch was restored
   "PROMOTED",                    // committed + promoted + canary window open
@@ -69,6 +75,7 @@ import { produceImprovementPlan } from "./plan-producer.mjs";
 import { deriveStrategyCandidate, classifyStrategyRisk } from "./candidate-strategy.mjs";
 import { evaluateStrategyFitness } from "./fitness-strategy.mjs";
 import { readStrategyPolicy, activateStrategyValue } from "./strategy-store.mjs";
+import { syntheticEvidenceReason, assessEvidenceProvenance } from "./attribution-feed.mjs";
 
 export const EVOLUTION_LOOP_HOLD = Object.freeze({
   SUSPENDED: "HOLD / EVOLUTION_SUSPENDED",
@@ -77,6 +84,9 @@ export const EVOLUTION_LOOP_HOLD = Object.freeze({
   TRIGGER_GATED: "HOLD / EVOLUTION_LOOP_TRIGGER_GATED",
   CANDIDATE_UNSUPPORTED: "HOLD / EVOLUTION_LOOP_CANDIDATE_UNSUPPORTED",
   CANDIDATE_INCONCLUSIVE: "HOLD / EVOLUTION_LOOP_CANDIDATE_INCONCLUSIVE",
+  CANDIDATE_NOT_PERSISTED: "HOLD / EVOLUTION_LOOP_CANDIDATE_NOT_PERSISTED",
+  EVIDENCE_UNQUALIFIED: "HOLD / EVOLUTION_LOOP_EVIDENCE_UNQUALIFIED",
+  PROPOSAL_ONLY_INVALID: "HOLD / EVOLUTION_LOOP_PROPOSAL_ONLY_INVALID",
   MUTATION_FAILED: "HOLD / EVOLUTION_LOOP_MUTATION_FAILED",
   FITNESS_REJECTED: "HOLD / EVOLUTION_LOOP_FITNESS_REJECTED",
   PROMOTION_HELD: "HOLD / EVOLUTION_LOOP_PROMOTION_HELD",
@@ -137,6 +147,13 @@ function normalizePlanInput(input) {
  * @param {object} [p.env] — env override for the kill switch (tests); default process.env
  * @param {boolean} [p.storeSuspended] — precomputed suspension (tests); when absent the
  *        durable marker under policyRoot is read
+ * @param {boolean} [p.proposalOnly=false] — §G3 HARD STOP. When true the cycle
+ *        ends right after the candidate is DERIVED and DURABLY WRITTEN, with
+ *        `loop_verdict: "PROPOSAL_RECORDED"`. It never enters authorization,
+ *        never issues a mutation authorization, never mutates, never evaluates
+ *        fitness, never reviews, never promotes, never opens a canary, and
+ *        never touches a branch or the production checkout. Default false, so
+ *        the normal mode's semantics are unchanged.
  */
 export async function runEvolutionCycle(p) {
   const startedAt = new Date().toISOString();
@@ -150,6 +167,17 @@ export async function runEvolutionCycle(p) {
   const suspension = p.storeSuspended === true || readEvolutionSuspension(p.policyRoot);
   if (suspension) {
     return { ...hold(EVOLUTION_LOOP_HOLD.SUSPENDED, `AUTO_EVOLUTION=SUSPENDED (${suspension.reason ?? "durable marker"})`, { stage: "kill_switch" }), trace };
+  }
+
+  // §G3 FAIL CLOSED on an unusable ceiling. `proposalOnly` is a boolean or
+  // absent; anything else is refused outright rather than treated as false —
+  // a malformed ceiling must never silently downgrade to the mutating mode.
+  if (p.proposalOnly !== undefined && typeof p.proposalOnly !== "boolean") {
+    return {
+      ...hold(EVOLUTION_LOOP_HOLD.PROPOSAL_ONLY_INVALID,
+        `proposalOnly must be a boolean, got ${typeof p.proposalOnly}`, { stage: "proposal_only" }),
+      trace,
+    };
   }
 
   // ── Stage 0: policy availability (the loop is OFF without it) ───────────
@@ -180,6 +208,19 @@ export async function runEvolutionCycle(p) {
     triggerEvent = p.triggerEvent;
     step("trigger", { trigger_id: triggerEvent.trigger_id, signal_class: triggerEvent.signal_class, source: "production-consumer" });
   } else {
+    // §G1 THE EVIDENCE FENCE (trigger entry): a self-deriving cycle evaluates
+    // the journal itself, so it must apply the same provenance rule the
+    // production observer applies. Synthetic / test-only declarations can
+    // NEVER fire a Production Evolution trigger.
+    const synthetic = syntheticEvidenceReason({ events: p.baselineEvents ?? [] });
+    if (synthetic) {
+      return {
+        ...hold(EVOLUTION_LOOP_HOLD.EVIDENCE_UNQUALIFIED,
+          `synthetic evidence refused before trigger evaluation (${synthetic})`,
+          { stage: "evidence" }),
+        trace,
+      };
+    }
     const observations = extractTriggerObservations({ events: p.baselineEvents ?? [] });
     const fired = evaluateSignals({
       observations,
@@ -201,6 +242,24 @@ export async function runEvolutionCycle(p) {
     state = recordTrigger(state, triggerEvent);
     writeTriggerState(p.policyRoot, state);
     step("trigger", { trigger_id: triggerEvent.trigger_id, signal_class: triggerEvent.signal_class, suppressed: gated.suppressed.length });
+  }
+
+  // ── Stage 0b: PROPOSAL-ONLY EVIDENCE FENCE (§G1/G3) ───────────────────
+  // The proposal-only mode is admitted ONLY on verifiable production
+  // evidence: a real durable journal (event id + sequence on every row),
+  // never a synthetic declaration and never a hand-built array. It runs
+  // BEFORE the trigger is evaluated and BEFORE any durable write, so an
+  // unqualified run leaves no trigger record and no proposal artifact — not a
+  // persisted proposal a later HOLD would have to disown.
+  if (p.proposalOnly === true) {
+    const provenance = assessEvidenceProvenance({ config: null, events: p.baselineEvents ?? [] });
+    if (!provenance.eligible) {
+      return {
+        ...hold(EVOLUTION_LOOP_HOLD.EVIDENCE_UNQUALIFIED,
+          `proposal-only refused: ${provenance.reason}`, { stage: "evidence" }),
+        trace,
+      };
+    }
   }
 
   // ── Stage 2: candidate derivation ────────────────────────────────────────
@@ -284,6 +343,93 @@ export async function runEvolutionCycle(p) {
     candidate_id: candidate.candidate_id, candidate_kind: candidate.candidate_kind ?? "SOURCE",
     risk_class: candidate.risk_class, dimension: candidate.strategy_plan?.dimension ?? null,
   });
+
+  // ── Stage 2b: durable proposal (§G2) ────────────────────────────────────
+  // A strategy candidate is returned by derivation as DATA. Before this repair
+  // nothing wrote it, so a proposal that was later rejected (or that stopped at
+  // the proposal-only ceiling) left no artifact at all: the operator view and
+  // crash recovery read only `evolution-candidates/`, and the diagnosis existed
+  // solely in the in-process trace.
+  //
+  // The write reuses THE existing governed store (same directory, same schema,
+  // same derivation index, exclusive-create + identity dedup). It happens
+  // BEFORE authorization/mutation, so a proposal survives a refused cycle. A
+  // write that cannot be proven is a HOLD — never a claimed proposal.
+  // (Source candidates are already persisted by their derivation.)
+  if (isStrategy) {
+    try {
+      const persisted = persistCandidate(p.policyRoot, candidate);
+      candidate = persisted.candidate;
+      step("proposal", {
+        candidate_id: candidate.candidate_id,
+        candidate_kind: "AGENT_STRATEGY",
+        path: persisted.path,
+        write_status: persisted.status,
+        candidate_digest: candidate.candidate_digest,
+      });
+    } catch (e) {
+      return {
+        ...hold(EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_PERSISTED,
+          `proposal not persisted: ${String(e?.code ?? "").trim()}${e?.code ? ": " : ""}${String(e?.message ?? e).slice(0, 300)}`,
+          { stage: "proposal", candidate_id: candidate.candidate_id }),
+        plan, trace,
+      };
+    }
+  }
+
+  // ── Stage 2c: PROPOSAL-ONLY HARD STOP (§G3) ─────────────────────────────
+  // The ceiling is BEFORE authorization: proposal-only may not enter
+  // authorization, mutation, fitness, review, promotion or canary at all.
+  // Everything it depends on has already happened:
+  //
+  //   evidence (Stage 1 gate) → plan → candidate → DERIVED → durable write
+  //
+  // The flag is a governed configuration input (resolved by
+  // production-consumer.mjs from the operator's declaration / explicit env /
+  // runnerOpts), never something a plan, a trigger event or an agent can set.
+  // Anything other than the exact boolean `true` keeps the normal mode.
+  if (p.proposalOnly === true) {
+    // Prove the artifact before reporting it: the durable record must be
+    // readable AND identical to what derivation produced (compared over the
+    // IMMUTABLE content, so a replayed event that re-derived the same proposal
+    // at a later instant still verifies against the FIRST durable write).
+    const persisted = readCandidate(p.policyRoot, candidate.candidate_id);
+    if (!persisted || proposalContentDigest(persisted) !== proposalContentDigest(candidate)) {
+      return {
+        ...hold(EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_PERSISTED,
+          `proposal-only refused: ${candidate.candidate_id} is not durably readable`,
+          { stage: "proposal", candidate_id: candidate.candidate_id }),
+        plan, trace,
+      };
+    }
+    step("proposal_only_stop", {
+      candidate_id: persisted.candidate_id,
+      candidate_digest: persisted.candidate_digest,
+      evidence_refs: persisted.evidence_refs.length,
+    });
+    return {
+      loop_verdict: "PROPOSAL_RECORDED",
+      proposal_only: true,
+      candidate_kind: isStrategy ? "AGENT_STRATEGY" : "SOURCE",
+      candidate_id: persisted.candidate_id,
+      candidate_digest: persisted.candidate_digest,
+      proposal: {
+        path: candidateFilePath(p.policyRoot, persisted.candidate_id),
+        candidate_id: persisted.candidate_id,
+        candidate_digest: persisted.candidate_digest,
+        created_at: persisted.created_at,
+        status: persisted.status,
+        risk_class: persisted.risk_class,
+        evidence_refs: [...(persisted.evidence_refs ?? [])],
+        affected_scope: [...(persisted.affected_scope ?? [])],
+        measurement_plan: persisted.measurement_plan ?? null,
+        expected_improvement: persisted.expected_improvement ?? null,
+      },
+      reason: "proposal-only: the proposal is durable; no authorization, mutation, fitness, review, promotion or canary was entered",
+      completedAt: new Date().toISOString(),
+      plan, trace,
+    };
+  }
 
   // ── Stage 3: risk classification + policy preauthorization ──────────────
   // The classification is RE-DERIVED here (never trusted from the candidate

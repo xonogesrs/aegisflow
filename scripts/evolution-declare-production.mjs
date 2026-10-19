@@ -11,6 +11,7 @@
 //     --strategy-baseline MODEL_ROUTING=provider/model [--strategy-baseline ...] \
 //     [--strategy-dimension MODEL_ROUTING] [--reviewer <identity>] \
 //     [--prompt-profile <token>] [--canary-window-ms <int>] \
+//     [--proposal-only] \
 //     [--declared-by <identity>] [--json]
 //
 // The written record is validated by readEvolutionProductionDeclaration before
@@ -50,7 +51,7 @@ const usage = () => {
   console.error("      [--task-class <token>] [--strategy-baseline DIM=value ...] \\");
   console.error("      [--strategy-dimension DIM ...] [--reviewer <identity>] \\");
   console.error("      [--prompt-profile <token>] [--canary-window-ms <int>] \\");
-  console.error("      [--declared-by <identity>] [--json]");
+  console.error("      [--proposal-only] [--declared-by <identity>] [--json]");
   console.error("");
   console.error(`The declaration is read from ${EVOLUTION_DECLARATION_ENV} by the production gate.`);
   console.error("A declaration is OPTIONAL: leaving it unset keeps the env / caller-object inputs.");
@@ -87,6 +88,9 @@ const record = {
   ...(arg("--reviewer") ? { reviewerIdentity: arg("--reviewer") } : {}),
   ...(arg("--prompt-profile") ? { promptProfile: arg("--prompt-profile") } : {}),
   ...(canaryRaw ? { canaryWindowMs: Number(canaryRaw) } : {}),
+  // §G3: the operator's explicit proposal-only ceiling. Absent = OFF (the
+  // default); a deployment that wants it declared here must say so.
+  ...(process.argv.includes("--proposal-only") ? { proposalOnly: true } : {}),
 };
 
 const errors = validateEvolutionDeclaration(record);

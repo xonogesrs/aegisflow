@@ -23,7 +23,8 @@
 //     "strategyDimensions": ["MODEL_ROUTING", ...],          // optional
 //     "reviewerIdentity": "...", "promptProfile": "...",     // optional
 //     "canaryWindowMs": 3600000, "thresholds": { ... },      // optional
-//     "synthetic": false                                     // optional
+//     "synthetic": false,                                    // optional
+//     "proposalOnly": false                                  // optional (G3)
 //   }
 //
 // WHERE the file lives is a DEPLOYMENT decision, never a source constant: the
@@ -55,6 +56,10 @@ export const EVOLUTION_DECLARATION_KEYS = Object.freeze([
   "storeRoot", "checkpointRoot", "repoRoot", "taskClass",
   "strategyBaselineValues", "strategyDimensions",
   "reviewerIdentity", "promptProfile", "canaryWindowMs", "thresholds", "synthetic",
+  // §G3: the operator's explicit proposal-only ceiling. Default OFF; only a
+  // boolean `true` here (or in `runnerOpts.evolution.proposalOnly` /
+  // AEGISFLOW_EVOLUTION_PROPOSAL_ONLY=1) enables it.
+  "proposalOnly",
 ]);
 
 /** The keys that carry a bounded path/token string. */
@@ -119,6 +124,7 @@ export function validateEvolutionDeclaration(record) {
   }
   if (record.canaryWindowMs !== undefined && (!Number.isFinite(record.canaryWindowMs) || record.canaryWindowMs <= 0)) errors.push("canaryWindowMs_invalid");
   if (record.synthetic !== undefined && typeof record.synthetic !== "boolean") errors.push("synthetic_invalid");
+  if (record.proposalOnly !== undefined && typeof record.proposalOnly !== "boolean") errors.push("proposalOnly_invalid");
   if (record.thresholds !== undefined && (typeof record.thresholds !== "object" || record.thresholds === null || Array.isArray(record.thresholds))) errors.push("thresholds_invalid");
   return errors;
 }
@@ -168,5 +174,6 @@ export function declarationInputs(declaration) {
   if (Number.isFinite(declaration.canaryWindowMs)) out.canaryWindowMs = declaration.canaryWindowMs;
   if (declaration.thresholds && typeof declaration.thresholds === "object") out.thresholds = declaration.thresholds;
   if (declaration.synthetic === true) out.synthetic = true;
+  if (declaration.proposalOnly === true) out.proposalOnly = true;
   return out;
 }

@@ -44,6 +44,9 @@ export const EVOLUTION_CANDIDATE_HOLD = Object.freeze({
   DERIVATION_UNSUPPORTED: "HOLD / EVOLUTION_CANDIDATE_DERIVATION_UNSUPPORTED",
   ALREADY_DERIVED: "HOLD / EVOLUTION_CANDIDATE_ALREADY_DERIVED",
   MALFORMED: "HOLD / EVOLUTION_CANDIDATE_MALFORMED",
+  // PROPOSAL-ONLY REPAIR (G2): the durable write could not be proven. A
+  // proposal that is not on disk is never reported as created.
+  PERSIST_FAILED: "HOLD / EVOLUTION_CANDIDATE_PERSIST_FAILED",
 });
 
 // Deterministic repair strategies the derivation can plan for a trigger
@@ -108,6 +111,105 @@ export function readCandidate(policyRoot, candidateId) {
     if (c?.schema !== EVOLUTION_CANDIDATE_SCHEMA) return null;
     return c;
   } catch { return null; }
+}
+
+/**
+ * The IMMUTABLE content digest of a candidate: everything except its own
+ * digest and the wall-clock `created_at`.
+ *
+ * `created_at` is deliberately excluded: a candidate identity is deterministic
+ * over its facts, so a retried event re-derives the SAME proposal at a later
+ * instant. Two artifacts that differ only in `created_at` are the same
+ * proposal (first write wins), never an identity conflict.
+ */
+export function proposalContentDigest(candidate) {
+  return digestOf({ ...candidate, candidate_digest: undefined, created_at: undefined });
+}
+
+/**
+ * THE durable candidate write (PROPOSAL-ONLY REPAIR §G2).
+ *
+ * Writes one already-derived candidate into the EXISTING governed candidate
+ * store — same directory, same schema, same derivation index, same
+ * exclusive-create semantics as `deriveImprovementCandidate`. There is no
+ * second store and no new file format: a strategy proposal lands exactly where
+ * the operator view (`listCandidatesSafe`) and crash recovery
+ * (`reconcileEvolutionState`) already look.
+ *
+ * Idempotency: a candidate identity is deterministic, so a repeat write is an
+ * `EXISTING` no-op — the same event retried can never fan out into duplicate
+ * proposals. An existing artifact with a DIFFERENT immutable content digest is
+ * a conflict and fails closed (`PERSIST_FAILED`): identity must not silently
+ * alias two different proposals.
+ *
+ * Failure is never silent: the on-disk artifact is re-read and its digest
+ * re-derived before the write is reported as `CREATED`. Anything else throws a
+ * C2dHoldError so the caller cannot claim a proposal exists.
+ *
+ * @param {string} storeRoot — the evolution store root
+ * @param {object} candidate — an `autoloop.evolution-candidate/v1` record
+ * @returns {{ status: "CREATED"|"EXISTING", candidate: object, path: string }}
+ */
+export function persistCandidate(storeRoot, candidate) {
+  if (!storeRoot || typeof storeRoot !== "string") {
+    fail(EVOLUTION_CANDIDATE_HOLD.PERSIST_FAILED, "no evolution store root for the candidate write");
+  }
+  if (candidate?.schema !== EVOLUTION_CANDIDATE_SCHEMA) {
+    fail(EVOLUTION_CANDIDATE_HOLD.MALFORMED, "candidate is not autoloop.evolution-candidate/v1");
+  }
+  if (typeof candidate.candidate_id !== "string" || !/^ecand_[0-9a-f]{40}$/.test(candidate.candidate_id)) {
+    fail(EVOLUTION_CANDIDATE_HOLD.MALFORMED, `candidate id is not deterministic: ${String(candidate.candidate_id)}`);
+  }
+  const recorded = candidate.candidate_digest;
+  if (typeof recorded !== "string" || !/^[0-9a-f]{64}$/.test(recorded)) {
+    fail(EVOLUTION_CANDIDATE_HOLD.MALFORMED, "candidate carries no content digest");
+  }
+  if (digestOf({ ...candidate, candidate_digest: undefined }) !== recorded) {
+    fail(EVOLUTION_CANDIDATE_HOLD.MALFORMED, "candidate content does not re-derive its own digest");
+  }
+
+  const path = candidateFilePath(storeRoot, candidate.candidate_id);
+  let status = "CREATED";
+  try {
+    writeJsonExclusiveCreate(path, candidate);
+  } catch (e) {
+    const existing = readCandidate(storeRoot, candidate.candidate_id);
+    if (!existing) throw e;
+    if (proposalContentDigest(existing) !== proposalContentDigest(candidate)) {
+      fail(EVOLUTION_CANDIDATE_HOLD.PERSIST_FAILED,
+        `candidate id ${candidate.candidate_id} already exists with different content (identity conflict)`);
+    }
+    status = "EXISTING";
+  }
+
+  // The artifact that is on disk is the authority from here on: a retry keeps
+  // the FIRST write's `created_at`, so a replayed proposal never rewrites the
+  // durable record it already produced.
+  const persisted = readCandidate(storeRoot, candidate.candidate_id);
+  if (!persisted) {
+    fail(EVOLUTION_CANDIDATE_HOLD.PERSIST_FAILED,
+      `candidate ${candidate.candidate_id} was not durably readable after the write`);
+  }
+  if (proposalContentDigest(persisted) !== proposalContentDigest(candidate)) {
+    fail(EVOLUTION_CANDIDATE_HOLD.PERSIST_FAILED,
+      `candidate ${candidate.candidate_id} on disk does not match the derived proposal`);
+  }
+  if (digestOf({ ...persisted, candidate_digest: undefined }) !== persisted.candidate_digest) {
+    fail(EVOLUTION_CANDIDATE_HOLD.PERSIST_FAILED,
+      `candidate ${candidate.candidate_id} does not re-derive its own stored digest`);
+  }
+
+  // Index the derivation (signature@baseline → candidate id) so the existing
+  // same-baseline dedup and the operator generation count see the proposal.
+  // NEVER clobber another candidate family's entry for the same key: the
+  // source family owns its own dedup and must not be rewritten here.
+  const index = readDerivationIndex(storeRoot);
+  const key = `${persisted.problem_signature}@${persisted.baseline_head}`;
+  if (index.derivations[key] === undefined) {
+    index.derivations[key] = persisted.candidate_id;
+    writeDerivationIndex(storeRoot, index);
+  }
+  return { status, candidate: persisted, path };
 }
 
 // ── Derivation ──────────────────────────────────────────────────────────────

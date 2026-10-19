@@ -50,6 +50,7 @@ import { join } from "node:path";
 import { RunEvidenceStore } from "../evidence/run-evidence-store.mjs";
 import { extractTriggerObservations, evaluateSignals, readTriggerState } from "./trigger.mjs";
 import { EVOLUTION_SUSPENSION_SCHEMA, readEvolutionSuspension } from "./kill-switch.mjs";
+import { assessEvidenceProvenance } from "./attribution-feed.mjs";
 
 export const EVOLUTION_OBSERVATION_SCHEMA = "autoloop.evolution-observation/v1";
 
@@ -129,10 +130,16 @@ export function readObservationJournal({ evidenceRoot = null, executionId = null
  * @param {object} [p.env]
  * @param {object} [p.journal] — pre-read readObservationJournal output (gate seam)
  * @param {object} [p.switchState] — pre-resolved evolutionSwitchState (gate seam)
+ * @param {object} [p.config] — resolveEvolutionProductionConfig output (the
+ *   DECLARED provenance; carries `synthetic`). §G1: the trigger refuses a
+ *   synthetic deployment exactly like the every-run feed does.
  * @returns {{ schema, graph_run_id, switch_state, observed: number,
- *             fired: object[], baseline_events: number, at: string }}
+ *             fired: object[], baseline_events: number, at: string,
+ *             evidence_qualified: boolean, evidence_exclusion: string|null }}
  *   Total: every field present; `fired` is the qualified signal list (may
- *   be empty — most runs produce NO trigger).
+ *   be empty — most runs produce NO trigger). `evidence_qualified:false`
+ *   means NO signal was evaluated: the evidence is synthetic or lacks
+ *   durable journal identity, so it can never form a production trigger.
  */
 export function observeRunForEvolutionTriggers(p) {
   const at = new Date().toISOString();
@@ -145,6 +152,8 @@ export function observeRunForEvolutionTriggers(p) {
     observed: 0,
     fired: [],
     baseline_events: 0,
+    evidence_qualified: true,
+    evidence_exclusion: null,
     at,
   };
   // Kill switch: suspended → observe nothing at all (no state reads, no
@@ -165,6 +174,18 @@ export function observeRunForEvolutionTriggers(p) {
   if (!journal.ok) return out; // unreadable/broken journal → no observation (fail-open)
   const events = journal.events;
   out.baseline_events = journal.count;
+
+  // §G1 THE EVIDENCE FENCE: synthetic / non-durable evidence is refused HERE,
+  // at the entry of the evolution pipeline, before any signal is counted. The
+  // every-run feed already refuses it; without this guard the trigger path
+  // evaluated the same journal independently and could start (and promote) a
+  // cycle derived from fixture evidence.
+  const provenance = assessEvidenceProvenance({ config: p.config ?? null, events });
+  if (!provenance.eligible) {
+    out.evidence_qualified = false;
+    out.evidence_exclusion = provenance.reason;
+    return out;
+  }
 
   try {
     const observations = extractTriggerObservations({ events });

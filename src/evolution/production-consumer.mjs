@@ -83,6 +83,9 @@ export const EVOLUTION_CONSUMER_DISPOSITIONS = Object.freeze([
   "SINGLEFLIGHT",          // an identical cycle is already active (§D)
   "CYCLE_STARTED",         // durable trigger recorded; runEvolutionCycle scheduled
   "SCHEDULE_FAILED",       // the consumer failed open — no cycle (never a run failure)
+  "CONFIGURATION_INVALID", // §G3: an unusable governed input (e.g. a non-boolean
+                           // proposalOnly) — NO cycle is started; never a silent
+                           // downgrade to the mutating mode
 ]);
 
 /** Every disposition the SCHEDULED CYCLE writes to the bounded outcome log
@@ -105,6 +108,10 @@ export const EVOLUTION_CONFIG_ENV = Object.freeze({
   STRATEGY_DIMENSIONS: "AEGISFLOW_EVOLUTION_STRATEGY_DIMENSIONS",
   STRATEGY_BASELINE_VALUES: "AEGISFLOW_EVOLUTION_STRATEGY_BASELINE_VALUES",
   SYNTHETIC: "AEGISFLOW_EVOLUTION_SYNTHETIC",
+  // §G3: the explicit, default-OFF proposal-only ceiling. An operator turns it
+  // on here (declaration / explicit env / runnerOpts); nothing in the
+  // evolution pipeline can raise its own execution authority.
+  PROPOSAL_ONLY: "AEGISFLOW_EVOLUTION_PROPOSAL_ONLY",
   // §J.2: the deployment declaration record (storeRoot / checkpointRoot /
   // repoRoot / taskClass / strategyBaselineValues) — a PATH supplied by the
   // deployment, never a machine-specific constant in source.
@@ -197,6 +204,29 @@ export function resolveEvolutionProductionConfig({ runnerOpts = {}, env = proces
   const syntheticEnv = String(envValue(env, EVOLUTION_CONFIG_ENV.SYNTHETIC) ?? "").toLowerCase();
   const synthetic = cfg.synthetic === true || decl.synthetic === true || syntheticEnv === "1" || syntheticEnv === "true";
 
+  // §G3 PROPOSAL-ONLY (default OFF). Three governed surfaces can set it,
+  // highest precedence first: the caller's explicit object, the operator's
+  // environment variable, the deployment declaration. An explicit boolean
+  // STOPS the search, so a caller that says `false` cannot be overridden by a
+  // broader surface. Nothing in the evolution pipeline can raise it (not a
+  // plan, not a trigger event, not the agent). An uninterpretable value is NOT
+  // guessed: `proposalOnlyInvalid` carries it so the consumer refuses to start
+  // a cycle, and the resolved flag stays false.
+  const proposalEnv = String(envValue(env, EVOLUTION_CONFIG_ENV.PROPOSAL_ONLY) ?? "").toLowerCase();
+  let proposalOnly = false;
+  let proposalOnlyInvalid = null;
+  if (cfg.proposalOnly !== undefined) {
+    if (typeof cfg.proposalOnly === "boolean") proposalOnly = cfg.proposalOnly;
+    else proposalOnlyInvalid = "runnerOpts.evolution.proposalOnly must be a boolean";
+  } else if (proposalEnv !== "") {
+    if (proposalEnv === "1" || proposalEnv === "true") proposalOnly = true;
+    else if (proposalEnv !== "0" && proposalEnv !== "false") {
+      proposalOnlyInvalid = `${EVOLUTION_CONFIG_ENV.PROPOSAL_ONLY} must be 1/true/0/false`;
+    }
+  } else if (decl.proposalOnly === true) {
+    proposalOnly = true;
+  }
+
   const missing = [];
   if (!storeRoot) missing.push("storeRoot");
   if (!checkpointRoot) missing.push("checkpointRoot");
@@ -214,6 +244,8 @@ export function resolveEvolutionProductionConfig({ runnerOpts = {}, env = proces
     strategyBaselineValues,
     strategyBaselineValuesError: baselineCandidate.error ?? null,
     synthetic,
+    proposalOnly,
+    proposalOnlyInvalid,
     declaration: {
       provided: declaration.provided,
       path: declaration.path,
@@ -283,6 +315,26 @@ export function consumeEvolutionObservationForProduction({
       });
     }
     const fired = Array.isArray(observation?.fired) ? observation.fired : [];
+    // §G3 FAIL CLOSED: a governed setting that cannot be interpreted stops the
+    // consumer. It is never reinterpreted as "normal (mutating) mode". Checked
+    // before the trigger so a misconfiguration is VISIBLE, not hidden behind
+    // "no trigger" on a quiet day.
+    if (config.proposalOnlyInvalid) {
+      return disposition(config, "CONFIGURATION_INVALID", {
+        fired_count: fired.length,
+        reason: config.proposalOnlyInvalid,
+        proposal_only: config.proposalOnly === true,
+      });
+    }
+    // §G1 EVIDENCE FENCE: an observation whose evidence was refused (synthetic
+    // or non-durable) is NOT a trigger — no gate, no durable record, no cycle.
+    if (observation?.evidence_qualified === false) {
+      return disposition(config, "NO_QUALIFIED_TRIGGER", {
+        fired_count: 0,
+        reason: `evidence not qualified: ${observation.evidence_exclusion ?? "unqualified"}`,
+        evidence_qualified: false,
+      });
+    }
     if (fired.length === 0) {
       return disposition(config, "NO_QUALIFIED_TRIGGER", { fired_count: 0 });
     }
@@ -356,6 +408,7 @@ export function consumeEvolutionObservationForProduction({
       trigger_id: triggerEvent.trigger_id,
       policy_id: policy.policy_id,
       reviewer_configured: Boolean(config.reviewerIdentity),
+      proposal_only: config.proposalOnly === true,
       suppressed_count: suppressed.length,
       // §A/§G: the attribution observation was recorded by the every-run feed
       // (BEFORE the trigger was evaluated), independent of this cycle.
@@ -397,6 +450,9 @@ function summarizeCycle(result) {
     hold_code: result?.hold_code ?? null,
     stage: result?.stage ?? null,
     candidate_id: result?.candidate_id ?? null,
+    candidate_digest: result?.candidate_digest ?? null,
+    proposal_only: result?.proposal_only === true,
+    proposal: result?.proposal ?? null,
     branch: result?.branch ?? null,
     candidate_kind: result?.candidate_kind ?? null,
     strategy_activation: result?.strategy_activation ?? null,
@@ -514,6 +570,9 @@ function scheduleCycle({ config, key, triggerEvent, evidenceRoot, executionId, g
         reviewerIdentity: config.reviewerIdentity ?? null,
         reviewVerdict: config.reviewVerdict,
         canaryWindowMs: config.canaryWindowMs,
+        // §G3: the governed ceiling. Default false — the normal mode's
+        // semantics are unchanged when it is not explicitly enabled.
+        proposalOnly: config.proposalOnly === true,
         env: config.env ?? process.env,
       });
       const entry = { ...base, disposition: "CYCLE_COMPLETED", loop_verdict: result?.loop_verdict ?? null, cycle: summarizeCycle(result) };

@@ -171,6 +171,7 @@ export function buildEvolutionReport({ storeRoot, env = process.env } = {}) {
   const canary = listCanarySafe(root);
   report.candidates = candidates.map((c) => ({
     candidate_id: c.candidate_id,
+    candidate_kind: c.candidate_kind ?? "SOURCE",
     signal_class: c.signal_class,
     risk_class: c.risk_class,
     baseline_head: String(c.baseline_head ?? "").slice(0, 12),
@@ -182,6 +183,20 @@ export function buildEvolutionReport({ storeRoot, env = process.env } = {}) {
     mutation: {
       strategy: c.derivation_strategy ?? null,
       edits: (c.mutation_plan?.edits ?? []).map((e) => ({ path: e.path, kind: e.kind })),
+      // PROPOSAL-ONLY REPAIR (G2): a strategy candidate mutates no source; its
+      // "mutation" is the bounded runtime value below. Without this the
+      // proposal read as an empty edit list on the operator surface.
+      strategy_activation: c.mutation_plan?.strategy_activation
+        ? {
+          surface: c.mutation_plan.strategy_activation.surface,
+          dimension: c.mutation_plan.strategy_activation.dimension,
+          task_class: c.mutation_plan.strategy_activation.task_class,
+          from_value: c.mutation_plan.strategy_activation.from_value,
+          to_value: c.mutation_plan.strategy_activation.to_value,
+          policy_generation: c.mutation_plan.strategy_activation.policy_generation,
+        }
+        : null,
+      rationale: c.strategy_plan?.diagnosis?.chosen ?? c.expected_improvement?.cited_observation?.rationale ?? null,
       rollback: c.rollback_plan?.kind ?? null,
     },
     fitness: {
@@ -282,6 +297,12 @@ export function renderEvolutionReportText(report) {
       const fitness = c.fitness?.metric ? `fitness-metric=${c.fitness.metric}` : "fitness-metric=none";
       lines.push(`  ${c.candidate_id} ${c.signal_class} risk=${c.risk_class} baseline=${c.baseline_head} ${review} ${canary} ${promoted}`);
       lines.push(`    scope: ${c.affected_scope.join(",")} strategy=${c.derivation_strategy} ${mutation} ${fitness}`);
+      // §G2 proposal legibility: a persisted strategy proposal names the
+      // dimension, the bounded step and its rationale on the operator surface.
+      const act = c.mutation?.strategy_activation;
+      if (act) {
+        lines.push(`    proposal: ${act.dimension} ${act.from_value} -> ${act.to_value} (task class ${act.task_class ?? "none"})${c.mutation.rationale ? ` — ${c.mutation.rationale}` : ""}`);
+      }
     }
   }
   if (report.rollbacks.length > 0) {

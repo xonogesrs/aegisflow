@@ -248,6 +248,49 @@ export function syntheticEvidenceReason({ config = null, events = [] } = {}) {
   return null;
 }
 
+/** The identity every DURABLE journal row carries (RunEvidenceStore writes
+ *  both fields on append). */
+const DURABLE_EVENT_ID_RE = /^evt_\d+_[0-9a-f]{16}$/;
+
+/**
+ * §G1 EVIDENCE QUALIFICATION — THE gate in front of signal evaluation.
+ *
+ * The trigger is the entry of the evolution pipeline, so it must refuse
+ * evidence that is not PRODUCTION evidence BEFORE any signal is counted:
+ *
+ *   - a deployment that declares itself synthetic (`config.synthetic`);
+ *   - a durable record that declares `payload.synthetic === true`,
+ *     `payload.test_only === true`, or carries a `SYNTHETIC_EVIDENCE` row;
+ *   - a row that is not a verifiable journal row (no durable event id / no
+ *     sequence) — e.g. a hand-built event array handed to the seam.
+ *
+ * Detection is DECLARED, never guessed: a record that declares nothing is
+ * production evidence. The every-run feed and the trigger share this one
+ * rule, so they can never disagree about a run's provenance.
+ *
+ * Total: pure over (config, events); returns a reason instead of throwing.
+ *
+ * @returns {{ eligible: boolean, reason: string|null, synthetic: boolean, rows: number }}
+ */
+export function assessEvidenceProvenance({ config = null, events = [] } = {}) {
+  const rows = Array.isArray(events) ? events : [];
+  const synthetic = syntheticEvidenceReason({ config, events: rows });
+  if (synthetic) {
+    return { eligible: false, reason: `synthetic_evidence:${synthetic}`, synthetic: true, rows: rows.length };
+  }
+  if (rows.length === 0) return { eligible: false, reason: "no_evidence_rows", synthetic: false, rows: 0 };
+  for (const e of rows) {
+    if (!e || typeof e !== "object" || Array.isArray(e)) {
+      return { eligible: false, reason: "untrusted_evidence_row", synthetic: false, rows: rows.length };
+    }
+    if (typeof e.event_id !== "string" || !DURABLE_EVENT_ID_RE.test(e.event_id)
+      || !Number.isInteger(e.sequence) || e.sequence < 1) {
+      return { eligible: false, reason: "untrusted_evidence_row", synthetic: false, rows: rows.length };
+    }
+  }
+  return { eligible: true, reason: null, synthetic: false, rows: rows.length };
+}
+
 // ── §A/§B/§C/§D the every-run feed ────────────────────────────────────────
 
 function baseRecord(config, extra) {
