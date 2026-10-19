@@ -1,0 +1,2 @@
+      4 codebase_memory_search_graph
+     12 codebase_memory_trace_path

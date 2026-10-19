@@ -1,0 +1,3 @@
+### A1 fresh-session tool visibility (default extensions+mcp)
+Working...
+ekm_query, check_index_coverage, compare_graphs, delete_project, detect_changes, get_architecture, get_code_snippet, get_file_outline, get_graph_schema, index_repository, index_status, ingest_traces, list_projects, manage_adr, query_graph, search_code, search_graph, trace_path

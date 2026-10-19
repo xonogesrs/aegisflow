@@ -1,0 +1,10 @@
+cache_dir=/Volumes/NVM2T/cbm/cache
+89776	/Volumes/NVM2T/cbm/cache
+total 89760
+drwx------ 7 zhengfengqing staff      224 Oct 19 19:11 .
+drwx------ 3 zhengfengqing staff       96 Oct 19 19:07 ..
+-rw------- 1 zhengfengqing staff 49348608 Oct 19 19:08 Volumes-NVM2T-Development-repos-autoloop.db
+-rw------- 1 zhengfengqing staff    24576 Oct 19 19:08 _config.db
+-rw------- 1 zhengfengqing staff   102400 Oct 19 19:11 activity.db
+drwx------ 3 zhengfengqing staff       96 Oct 19 19:09 logs
+-rw------- 1 zhengfengqing staff 42401792 Oct 19 19:09 private-tmp-aegis-work.db

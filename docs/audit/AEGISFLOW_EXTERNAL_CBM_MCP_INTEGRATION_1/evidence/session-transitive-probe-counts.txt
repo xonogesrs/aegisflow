@@ -1,0 +1,5 @@
+     12 codebase_memory_index_status
+      4 codebase_memory_list_projects
+    136 codebase_memory_query_graph
+     12 codebase_memory_search_graph
+     12 codebase_memory_trace_path

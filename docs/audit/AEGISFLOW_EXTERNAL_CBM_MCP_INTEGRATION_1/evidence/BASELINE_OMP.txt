@@ -1,0 +1,5 @@
+ts=2026-10-19T11-03-45Z
+omp_path=\$HOME/.bun/bin/omp
+omp_version=omp/18.12.1
+omp_sha256=fa41b27d434380e99b713e4f9ced0f73eb1fc0c409fdf23a57c119971d24bac5
+omp_realpath=\$HOME/.local/bin/omp

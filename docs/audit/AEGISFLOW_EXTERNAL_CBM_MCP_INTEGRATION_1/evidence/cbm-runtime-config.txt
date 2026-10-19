@@ -1,0 +1,12 @@
+Configuration:
+  auto_index                = false     
+  auto_index_limit          = 50000     
+  auto_watch                = false     
+  doc_candidates            = auto      
+  watcher_enabled           = false     
+  watch_non_git             = false     
+  ui-lang                   = auto      
+  ui_enabled                = false     
+  ui_port                   = 9749      
+  index_max_files           = off       
+  index_max_source_mb       = off       

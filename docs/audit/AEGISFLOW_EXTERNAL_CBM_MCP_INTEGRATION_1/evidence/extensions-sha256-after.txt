@@ -1,0 +1,10 @@
+03c08f43b145602edfc47e427c4b4738cf3fa9d19bcc6ec204a61f30ff52b75e  \$HOME/.omp/agent/extensions/cbm-query.js
+11d8628ba5deb2671670956b3b4d04ea82228c004971904f7aa670fd96e6f8ef  \$HOME/.omp/agent/extensions/no-poll-waits.js
+49a8b7e673a36c95dc3b801cf43408231653e70ed1224e8e349feeb1397bb0ed  \$HOME/.omp/agent/extensions/orca-agent-status.ts
+5e18bf52a7ed8e04e9ba9f00b7c35f74d93e9dc981a81956e23fd5bfb1c5dc1a  \$HOME/.omp/agent/extensions/orca-prefill.ts
+16b0ff9134ec39527cc06f31664cf5e43170a2b6c3cb5a2a251a20f5a565329c  \$HOME/.omp/agent/extensions/orca-titlebar-spinner.ts
+7c2eae224fd0965cc58f4a1f36c00c865059f18e59a7c91c6e4490f9b98090b0  \$HOME/.omp/agent/extensions/lib/poll-wait-policy.js
+723c3932e7b6732595f779ec91c1cf77022c5b3231a2036e2fb8bf10d7697285  \$HOME/.omp/agent/extensions/test/poll-wait-policy.test.mjs
+ae16f1142914a9ecfecfa18006b5adef5e897c38f67994a9c16375a507e3135a  \$HOME/.omp/agent/extensions/test/terminal-fence-authority.acceptance.ts
+7fae4534919c1fb6ad024bced1b3656362a20f08eee9c18f58c060a523318244  \$HOME/.omp/agent/extensions/test/terminal-fence-ordering.acceptance.ts
+d36c62f8fa355e963d9d4b8bd14bcb1020e68f35ebd4fedaa65b416b2306c65e  \$HOME/.omp/agent/extensions/test/waiter-fence.acceptance.ts

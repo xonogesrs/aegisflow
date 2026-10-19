@@ -1,0 +1,5 @@
+### A2 isolated profile — bash + EKM still functional
+Working...
+TERMINAL_FENCE_OK
+
+EKM state: `AVAILABLE`
