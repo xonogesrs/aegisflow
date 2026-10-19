@@ -349,11 +349,38 @@ test("N2 a non-boolean synthetic is rejected in the environment (brand and legac
       `env=${bad} must be rejected`);
     assert.equal(cfg.synthetic, false);
   }
+  // A non-STRING env value is not "unset": the shared reader ignores it, and
+  // treating that silence as production evidence is the N2 defect.
+  for (const bad of [1, 0, null, {}, []]) {
+    const cfg = resolveEvolutionProductionConfig({ runnerOpts, env: { AEGISFLOW_EVOLUTION_SYNTHETIC: bad } });
+    assert.match(cfg.configurationInvalid ?? "", /AEGISFLOW_EVOLUTION_SYNTHETIC must be 1\/true\/0\/false \(got/,
+      `env=${JSON.stringify(bad)} must be rejected, not read as unset`);
+    assert.equal(cfg.synthetic, false);
+  }
   // the pre-rename alias is the SAME surface (one reader, no second convention)
   const legacy = resolveEvolutionProductionConfig({ runnerOpts, env: { AUTOLOOP_EVOLUTION_SYNTHETIC: "maybe" } });
   assert.match(legacy.configurationInvalid ?? "", /AUTOLOOP_EVOLUTION_SYNTHETIC/,
     "a malformed LEGACY value is rejected, and the message names the variable actually set");
   assert.equal(legacy.synthetic, false);
+  // ...including a non-string value under the legacy name
+  const legacyTyped = resolveEvolutionProductionConfig({ runnerOpts, env: { AUTOLOOP_EVOLUTION_SYNTHETIC: {} } });
+  assert.match(legacyTyped.configurationInvalid ?? "", /AUTOLOOP_EVOLUTION_SYNTHETIC/);
+  assert.equal(legacyTyped.synthetic, false);
+  // Precedence is the documented one: a usable BRAND value wins and the legacy
+  // name is never consulted (the two are never merged). So a malformed legacy
+  // value cannot break a deployment that sets the brand name, and a malformed
+  // brand value is still rejected when the legacy name is legal.
+  const brandWins = resolveEvolutionProductionConfig({
+    runnerOpts, env: { AEGISFLOW_EVOLUTION_SYNTHETIC: "0", AUTOLOOP_EVOLUTION_SYNTHETIC: 1 },
+  });
+  assert.equal(brandWins.configurationInvalid, null, "the unused legacy name is not consulted");
+  assert.equal(brandWins.synthetic, false);
+  const brandBad = resolveEvolutionProductionConfig({
+    runnerOpts, env: { AEGISFLOW_EVOLUTION_SYNTHETIC: 1, AUTOLOOP_EVOLUTION_SYNTHETIC: "0" },
+  });
+  assert.match(brandBad.configurationInvalid ?? "", /AEGISFLOW_EVOLUTION_SYNTHETIC/,
+    "a malformed brand value is not laundered by a legal legacy value");
+  assert.equal(brandBad.synthetic, false);
 
   for (const [value, expected] of [["1", true], ["true", true], ["0", false], ["false", false]]) {
     const cfg = resolveEvolutionProductionConfig({ runnerOpts, env: { AEGISFLOW_EVOLUTION_SYNTHETIC: value } });
@@ -616,7 +643,7 @@ test("N3 a forged signal citing NO journal rows is refused over a real journal (
   assert.equal(existsSync(join(store, "evolution-trigger-state.json")), false);
 });
 
-test("N3 a signal with no journal refs (pattern-derived) is not refused by the ref check", async () => {
+test("N3 a forged QUALIFIED_PATTERN_EVIDENCE signal is refused — the class cannot be re-established here", () => {
   const store = freshDir("n3e-store");
   const repo = makeFixtureRepo("n3e-repo");
   createEvolutionPolicy(store, policyInput());
@@ -626,10 +653,18 @@ test("N3 a signal with no journal refs (pattern-derived) is not refused by the r
   const executionId = `exec_${createHash("sha256").update("n3e").digest("hex").slice(0, 32)}`;
   writeJournal(evidenceRoot, executionId, repairs(3, "P0"));
 
-  // QUALIFIED_PATTERN_EVIDENCE cites pattern digests, not journal rows.
-  const observation = forgedObservation({ evidenceRefs: ["pattern-digest-abc"] });
-  observation.fired[0].signalClass = "QUALIFIED_PATTERN_EVIDENCE";
-  const out = consumeEvolutionObservationForProduction({ observation, config, evidenceRoot, executionId });
-  assert.equal(out.disposition, "CYCLE_STARTED", JSON.stringify(out));
-  await drainEvolutionCycles({ timeoutMs: 120000 });
+  // The reviewer's exact forgery: a real journal, an empty pattern list, no
+  // refs, and a caller-supplied signalClass that used to be exempt.
+  for (const evidenceRefs of [[], ["pattern-digest-abc"]]) {
+    const observation = forgedObservation({ evidenceRefs });
+    observation.fired[0].signalClass = "QUALIFIED_PATTERN_EVIDENCE";
+    observation.fired[0].minCount = 1;
+    observation.fired[0].observation = { patterns: [] };
+    const out = consumeEvolutionObservationForProduction({ observation, config, evidenceRoot, executionId });
+    assert.equal(out.disposition, "NO_QUALIFIED_TRIGGER", JSON.stringify(out));
+    assert.equal(out.evidence_reverified, true);
+    assert.match(out.reason, /QUALIFIED_PATTERN_EVIDENCE cannot be re-established/);
+  }
+  assert.equal(existsSync(join(store, "evolution-trigger-state.json")), false, "no durable trigger, no cooldown slot");
+  assert.equal(existsSync(candidateStorePath(store)), false, "no cycle work");
 });

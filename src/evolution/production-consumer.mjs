@@ -50,7 +50,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
 import { C2dHoldError, HOLD } from "../c2d/fs-atomic.mjs";
-import { readConfigEnv } from "../shared/autoloop-paths.mjs";
+import { readConfigEnv, legacyEnvName } from "../shared/autoloop-paths.mjs";
 import { acquireStructuredLock } from "../c2d/lock.mjs";
 import { collectFingerprint } from "../c2d/fingerprint.mjs";
 import { readEvolutionPolicy } from "./policy.mjs";
@@ -143,6 +143,38 @@ function envValue(env, key) {
   return resolved ? resolved.value.trim() : null;
 }
 
+/**
+ * Read a governed env entry WITHOUT type coercion (N2).
+ *
+ * `readConfigEnv` only reports STRING values, and treats a blank string as
+ * unset — correct for path/identity inputs, but it also makes a non-string
+ * value (`1`, `0`, `null`, `{}`, `[]`) indistinguishable from "not set". For a
+ * provenance declaration that difference is the whole contract: "not set" is
+ * production evidence, while an unusable value must be REJECTED. So the value
+ * is read here with its type intact, on BOTH the brand and the legacy name.
+ *
+ * Precedence matches `readConfigEnv`: the brand name wins when it carries a
+ * non-blank string, otherwise the legacy name is considered; but a PRESENT
+ * value of the wrong type on either name is reported, never skipped.
+ *
+ * @returns {{ name: string|null, value: unknown, present: boolean, typeInvalid: boolean }}
+ */
+function rawEnvEntry(env, key) {
+  const names = [key, legacyEnvName(key)];
+  let fallback = { name: null, value: undefined, present: false };
+  for (const name of names) {
+    if (!env || !Object.prototype.hasOwnProperty.call(env, name)) continue;
+    const value = env[name];
+    if (typeof value !== "string") {
+      return { name, value, present: true, typeInvalid: true };
+    }
+    if (value.trim().length === 0) continue;
+    if (name === key) return { name, value, present: true, typeInvalid: false };
+    if (!fallback.present) fallback = { name, value, present: true };
+  }
+  return { ...fallback, typeInvalid: false };
+}
+
 function cfgValue(cfg, env, key, envKey) {
   const v = cfg?.[key];
   if (typeof v === "string" && v.trim().length > 0) return v.trim();
@@ -213,15 +245,22 @@ export function resolveEvolutionProductionConfig({ runnerOpts = {}, env = proces
   // than 1/true/0/false used to fall through silently, which read a malformed
   // configuration as "production evidence" and let the cycle run on data the
   // operator had marked otherwise. Same fail-closed shape as §G3.
-  const syntheticEnvResolved = readConfigEnv(env, EVOLUTION_CONFIG_ENV.SYNTHETIC);
-  const syntheticEnv = String(syntheticEnvResolved?.value ?? "").trim().toLowerCase();
+  const syntheticEnvEntry = rawEnvEntry(env, EVOLUTION_CONFIG_ENV.SYNTHETIC);
+  const syntheticEnv = syntheticEnvEntry.typeInvalid
+    ? ""
+    : String(syntheticEnvEntry.value ?? "").trim().toLowerCase();
   let syntheticInvalid = null;
   if (cfg.synthetic !== undefined && typeof cfg.synthetic !== "boolean") {
     syntheticInvalid = "runnerOpts.evolution.synthetic must be a boolean";
+  } else if (syntheticEnvEntry.typeInvalid) {
+    // N2: a non-STRING env value is not "unset". `readConfigEnv` ignores it, so
+    // reading the entry with its type intact is what makes `1`, `0`, `null`,
+    // `{}` and `[]` a rejection instead of silent production evidence.
+    syntheticInvalid = `${syntheticEnvEntry.name ?? EVOLUTION_CONFIG_ENV.SYNTHETIC} must be 1/true/0/false (got ${typeof syntheticEnvEntry.value})`;
   } else if (syntheticEnv !== "" && syntheticEnv !== "1" && syntheticEnv !== "true" && syntheticEnv !== "0" && syntheticEnv !== "false") {
     // Name the variable that was ACTUALLY set (the brand or the legacy alias),
     // so the operator does not have to guess which one the deployment exports.
-    syntheticInvalid = `${syntheticEnvResolved?.name ?? EVOLUTION_CONFIG_ENV.SYNTHETIC} must be 1/true/0/false`;
+    syntheticInvalid = `${syntheticEnvEntry.name ?? EVOLUTION_CONFIG_ENV.SYNTHETIC} must be 1/true/0/false`;
   } else if (declaration.record && Object.prototype.hasOwnProperty.call(declaration.record, "synthetic")
     && typeof declaration.record.synthetic !== "boolean") {
     syntheticInvalid = "the deployment declaration's synthetic must be a boolean";
@@ -353,31 +392,41 @@ function revalidateEvidenceProvenance({ config = null, evidenceRoot = null, exec
 }
 
 /**
- * The evidence a fired signal cites must exist in the journal that was just
- * re-read. This is the second half of N3: provenance alone proves the journal
- * is production evidence, not that THIS signal came from it.
+ * The evidence a fired signal cites must be re-establishable from the journal
+ * that was just re-read. This is the second half of N3: provenance alone proves
+ * the journal is production evidence, not that THIS signal came from it.
  *
- * Journal-shaped references are `evt_<n>_<hex>`. The QUALIFIED_PATTERN_EVIDENCE
- * class cites pattern digests, which are not journal rows by construction, so
- * it is exempt from both halves. EVERY other class is derived from journal
- * rows, so it must cite at least one row that the journal actually holds: a
- * forged signal that lists refs does not merely have to avoid fiction, it has
- * to carry real evidence. (Before this, a forged signal with NO refs at all
- * passed the ref check and reached the durable write on a real journal.)
+ * Journal-shaped references are `evt_<n>_<hex>`. Every journal-derived class
+ * must cite at least one row the journal actually holds, so a forged signal can
+ * neither cite fiction nor cite nothing.
+ *
+ * `QUALIFIED_PATTERN_EVIDENCE` is the one class whose evidence is NOT a journal
+ * row: its references are pattern identities from the learning store. The
+ * consumer has no durable view of pattern qualification (the pattern store is
+ * not read on this path, and the signal's own `observation.patterns` comes from
+ * the same caller that supplied `evidence_qualified`). Selective trust is not
+ * verification: accepting the caller's `signalClass` label let a forged signal
+ * with an EMPTY pattern list and EMPTY references write a durable trigger and
+ * spend the signature's cooldown. The class is therefore REFUSED here until
+ * pattern qualification is durably readable from the consumer — fail closed on
+ * the class we cannot check rather than exempt it from the guard.
  *
  * @returns {string|null} a refusal reason, or null when the signal is consistent
  */
 function signalEvidenceRefusal(signal, events) {
-  if (signal?.signalClass === "QUALIFIED_PATTERN_EVIDENCE") return null;
+  const cls = String(signal?.signalClass ?? "?");
+  if (cls === "QUALIFIED_PATTERN_EVIDENCE") {
+    return `signal ${cls} cannot be re-established from the durable journal (pattern qualification is not durably readable here)`;
+  }
   const refs = Array.isArray(signal?.evidenceRefs) ? signal.evidenceRefs : [];
   const journalRefs = refs.filter((r) => typeof r === "string" && /^evt_\d+_[0-9a-f]{16}$/.test(r));
   if (journalRefs.length === 0) {
-    return `signal ${String(signal?.signalClass ?? "?")} cites no durable journal row`;
+    return `signal ${cls} cites no durable journal row`;
   }
   const known = new Set(events.map((e) => e?.event_id).filter((id) => typeof id === "string"));
   const unknown = journalRefs.filter((r) => !known.has(r));
   if (unknown.length > 0) {
-    return `signal ${String(signal?.signalClass ?? "?")} cites ${unknown.length} journal row(s) absent from the durable journal`;
+    return `signal ${cls} cites ${unknown.length} journal row(s) absent from the durable journal`;
   }
   return null;
 }

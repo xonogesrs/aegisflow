@@ -98,8 +98,11 @@ otherwise.
 
 - one fail-closed resolution for all three governed surfaces, in precedence
   order — `runnerOpts.evolution.synthetic`, `AEGISFLOW_EVOLUTION_SYNTHETIC`
-  (and its legacy alias, through the shared `readConfigEnv`), the deployment
-  declaration;
+  (and its legacy alias), the deployment declaration;
+- the env entry is read with its **type intact** (`rawEnvEntry`), because the
+  shared `readConfigEnv` only reports strings and treats everything else as
+  unset. A non-string value is therefore a rejection naming the variable, not
+  silent production evidence;
 - a type that is not `boolean` (object surface) or not one of
   `1/true/0/false` (env) or not `boolean` (declaration) produces
   `syntheticInvalid`, which folds into `configurationInvalid` ⇒
@@ -107,14 +110,17 @@ otherwise.
 - no implicit conversion anywhere: `"true"`, `"false"`, `1`, `0`, `null`, `{}`,
   `[]` are all rejected, never coerced;
 - legal booleans keep the previous semantics exactly (any surface saying `true`
-  marks the run synthetic; the provenance policy is unchanged).
+  marks the run synthetic; the provenance policy is unchanged);
+- declared precedence is untouched: a usable brand value wins and the legacy
+  name is not consulted, so an unused malformed legacy value cannot break a
+  deployment that sets the brand name.
 
 **Proof:**
 
 | Case | Asserts |
 |---|---|
 | `N2 a non-boolean synthetic is rejected on the runner object` | 7 bad shapes rejected; `synthetic` stays `false`; legal `true`/`false` unchanged |
-| `N2 a non-boolean synthetic is rejected in the environment (brand and legacy names)` | 4 bad strings rejected on the brand name; a malformed LEGACY value is rejected on the same surface; all four legal spellings resolved exactly |
+| `N2 a non-boolean synthetic is rejected in the environment (brand and legacy names)` | 4 bad strings rejected on the brand name; a malformed LEGACY value is rejected on the same surface; **non-string** values (`1`, `0`, `null`, `{}`, `[]`) rejected on both names rather than read as unset; documented precedence intact (a usable brand value wins, a malformed brand value is never laundered by a legal legacy one); all four legal spellings resolved exactly |
 | `N2 a non-boolean synthetic is rejected in the deployment declaration` | declaration rejection + legal boolean accepted |
 | `N2 an unusable synthetic starts ZERO cycles and performs ZERO mutation (end to end)` | real `runAdmittedGraph`: run still `PASS`, disposition `CONFIGURATION_INVALID`, `cycle_started:false`, zero outcomes, zero triggers, no trigger-state file, no candidate, repo byte-clean, HEAD unmoved |
 
@@ -137,11 +143,13 @@ loop's own fence ever ran.
   shared reader (`readObservationJournal`) and re-applies the ONE shared
   predicate (`assessEvidenceProvenance`) **before** the trigger gate, the
   durable trigger write, the cooldown and the scheduled cycle;
-- `signalEvidenceRefusal` additionally requires every fired signal (except
-  `QUALIFIED_PATTERN_EVIDENCE`, which cites pattern digests by construction) to
-  cite at least one journal-shaped reference (`evt_<n>_<hex>`) that the journal
-  actually holds. A forged signal therefore cannot pass by citing nothing, and
-  cannot pass by citing fiction;
+- `signalEvidenceRefusal` additionally requires every fired signal to cite at
+  least one journal-shaped reference (`evt_<n>_<hex>`) that the journal actually
+  holds. A forged signal therefore cannot pass by citing nothing, and cannot
+  pass by citing fiction. `QUALIFIED_PATTERN_EVIDENCE` — the one class whose
+  evidence is not a journal row — is **refused** by this guard rather than
+  exempted, because pattern qualification is not durably readable from the
+  consumer; see the review round below;
 - a refusal is total: `NO_QUALIFIED_TRIGGER` with `evidence_reverified: true`,
   zero trigger records, zero cooldown consumed, zero cycles;
 - a caller that supplies no journal identity cannot be verified and is refused —
@@ -152,8 +160,32 @@ loop's own fence ever ran.
 **Design note (deliberate, not an expansion).** The "cites nothing" half was
 added during this card's own verification: with only the "cites unknown rows"
 half, a forged signal that listed no refs still reached the durable write over a
-real journal. `QUALIFIED_PATTERN_EVIDENCE` is explicitly exempt because its refs
-are pattern digests, not journal rows; the exemption is asserted by a test.
+real journal.
+
+**Independent review round — two further defects, both fixed here.** The first
+submitted version exempted `QUALIFIED_PATTERN_EVIDENCE` from the ref check, on
+the grounds that its refs are pattern digests. The reviewer reproduced the
+consequence: a forged signal with `signalClass: "QUALIFIED_PATTERN_EVIDENCE"`,
+an EMPTY `observation.patterns`, and EMPTY refs over a real repair journal
+reached `CYCLE_STARTED` and wrote a durable trigger. The same review found N2
+still open for **non-string** env values: `readConfigEnv` silently ignores
+`1`, `0`, `null`, `{}`, `[]`, so those resolved to `configurationInvalid: null`
+and a cycle started.
+
+Both are fixed in the code, not argued away:
+
+- `QUALIFIED_PATTERN_EVIDENCE` is now **refused** at this guard. The consumer has
+  no durable view of pattern qualification on this path, and selective trust of a
+  caller-supplied class label is not verification. Fail closed on the class that
+  cannot be re-established; no production path supplies `qualifiedPatterns`
+  today, so this narrows an unreachable path rather than changing live behaviour.
+- the synthetic env entry is read with its **type intact** (`rawEnvEntry`, both
+  brand and legacy names) instead of through the string-only reader. A non-string
+  value is a rejection naming the variable, never "unset". Precedence is
+  unchanged: a usable brand value wins and the legacy name is not consulted.
+
+Both were reproduced failing against the first submitted commit (`09df20d`) and
+pass now.
 
 **Disclosed side effect.** The shared journal reader (`readObservationJournal`)
 initialises the evidence store's own execution directory (owner-only, empty) when
@@ -171,7 +203,7 @@ here rather than hidden.
 | `N3 a forged observation citing rows absent from a REAL journal writes NOTHING and spends no cooldown` | refused; then a REAL production run over the SAME store still reaches `CYCLE_STARTED` and records exactly one trigger — proving no cooldown was spent |
 | `N3 a forged signal citing NO journal rows is refused over a real journal` | refused with `cites no durable journal row` |
 | `N3 a real journal with matching evidence refs still fires (no over-fencing)` | `CYCLE_STARTED`, one durable trigger |
-| `N3 a signal with no journal refs (pattern-derived) is not refused by the ref check` | `QUALIFIED_PATTERN_EVIDENCE` still starts a cycle |
+| `N3 a forged QUALIFIED_PATTERN_EVIDENCE signal is refused — the class cannot be re-established here` | both the reviewer's empty-pattern/empty-ref forgery and a fabricated digest are refused; no trigger state, no candidate |
 
 ---
 

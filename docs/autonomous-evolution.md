@@ -309,9 +309,16 @@ never a bare `NO_TRIGGER`.
 `observation.evidence_qualified` is a field on an object the caller hands in, so
 a non-production caller could forge it. The consumer therefore re-reads the
 durable journal (same reader) and re-applies the same predicate **before** the
-trigger gate, and additionally requires every journal-shaped reference a fired
-signal cites (`evt_<n>_<hex>`) to exist in that journal. `QUALIFIED_PATTERN_EVIDENCE`
-cites pattern digests rather than journal rows and is unaffected.
+trigger gate, and additionally requires every fired signal to cite at least one
+journal-shaped reference (`evt_<n>_<hex>`) that the journal actually holds.
+
+`QUALIFIED_PATTERN_EVIDENCE` is the one class whose evidence is not a journal
+row, and the consumer has no durable view of pattern qualification on this path.
+Rather than exempt it (which accepted a forged signal with an empty pattern list
+and empty refs), the class is **refused here** — fail closed on the class that
+cannot be re-established until pattern qualification becomes durably readable
+from the consumer. No production path supplies `qualifiedPatterns` today, so
+this narrows an unreachable path rather than changing live behaviour.
 
 A refusal at this point is total — `NO_QUALIFIED_TRIGGER` with
 `evidence_reverified: true`, zero trigger records, zero cooldown consumed, zero
@@ -323,8 +330,12 @@ refused, never trusted by default.
 `synthetic` is a boolean or absent, on all three surfaces (runner object, env,
 declaration). Anything else — a string, a number, `null`, an object — is a
 governed-configuration failure (`CONFIGURATION_INVALID`, no cycle), never
-coerced to `false`. The env accepts `1`/`true`/`0`/`false` and the legacy
-`AUTOLOOP_EVOLUTION_SYNTHETIC` alias is the same surface.
+coerced to `false`. The env accepts the strings `1`/`true`/`0`/`false` and the
+legacy `AUTOLOOP_EVOLUTION_SYNTHETIC` alias is the same surface. A **non-string**
+env value (`1`, `0`, `null`, `{}`, `[]`) is rejected rather than read as unset:
+the shared config reader ignores non-strings, and treating that silence as
+production evidence is exactly the fail-open this closes. Precedence is
+unchanged — a usable brand value wins and the legacy name is not consulted.
 
 ## Honest limitations
 
