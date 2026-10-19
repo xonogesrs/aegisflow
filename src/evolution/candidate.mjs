@@ -52,6 +52,13 @@ export const EVOLUTION_CANDIDATE_HOLD = Object.freeze({
   // on purpose — it tells the operator the proposal exists and only the index
   // needs repair, so a retry is safe and nothing is claimed lost.
   INDEX_WRITE_FAILED: "HOLD / EVOLUTION_CANDIDATE_INDEX_WRITE_FAILED",
+  // LOW-RISK HARDENING 1 (N1): two DIFFERENT candidates claim one identity
+  // (same family + signature + baseline, or one artifact id with different
+  // content). An identity conflict is NOT an index I/O failure: the index was
+  // readable and writable, it simply refused to repoint an owner. Reporting it
+  // as INDEX_WRITE_FAILED sent the operator to inspect storage instead of the
+  // competing proposal.
+  CANDIDATE_CONFLICT: "HOLD / EVOLUTION_CANDIDATE_CONFLICT",
 });
 
 // Deterministic repair strategies the derivation can plan for a trigger
@@ -172,11 +179,13 @@ export function proposalContentDigest(candidate) {
  *     entries and neither can alias the other;
  *   - a family entry already owned by the SAME candidate is a no-op (retry);
  *   - an entry owned by a DIFFERENT candidate is a conflict and fails closed —
- *     the index never silently repoints an identity;
+ *     the index never silently repoints an identity. The conflict is reported
+ *     as CANDIDATE_CONFLICT (N1), never as a write failure: nothing was
+ *     unwritable.
  *   - an index WRITE failure surfaces as INDEX_WRITE_FAILED, never as
  *     PERSIST_FAILED: the caller still holds a durable artifact.
  *
- * @returns {{ indexed: boolean, status: "INDEXED"|"ALREADY_INDEXED", key: string, error: string|null, code: string|null }}
+ * @returns {{ indexed: boolean, status: "INDEXED"|"ALREADY_INDEXED"|"CONFLICT"|"WRITE_FAILED", key: string, error: string|null, code: string|null }}
  */
 export function indexDerivation(storeRoot, candidate) {
   const family = candidateFamily(candidate);
@@ -197,20 +206,22 @@ export function indexDerivation(storeRoot, candidate) {
       return {
         indexed: false, status: "CONFLICT", key,
         error: `${family} derivation ${key} points at unreadable artifact ${String(existing)}`,
-        code: EVOLUTION_CANDIDATE_HOLD.PERSIST_FAILED,
+        code: EVOLUTION_CANDIDATE_HOLD.CANDIDATE_CONFLICT,
+        conflict: { kind: "unreadable_owner", owner_id: String(existing), family, key },
       };
     }
     if (priorOwner && candidateFamily(priorOwner) === family) {
       return {
         indexed: false, status: "CONFLICT", key,
         error: `${family} derivation ${key} is already owned by ${String(existing)}`,
-        code: EVOLUTION_CANDIDATE_HOLD.PERSIST_FAILED,
+        code: EVOLUTION_CANDIDATE_HOLD.CANDIDATE_CONFLICT,
+        conflict: { kind: "different_candidate", owner_id: String(existing), family, key },
       };
     }
     // fall through: the entry belongs to another family (or its artifact is
     // gone), so this family takes its own key.
   }
-  if (existing === candidate.candidate_id) return { indexed: true, status: "ALREADY_INDEXED", key, error: null, code: null };
+  if (existing === candidate.candidate_id) return { indexed: true, status: "ALREADY_INDEXED", key, error: null, code: null, conflict: null };
   derivations[key] = candidate.candidate_id;
   try {
     writeDerivationIndex(storeRoot, { ...index, schema: EVOLUTION_CANDIDATE_SCHEMA, version: 1, derivations });
@@ -219,9 +230,38 @@ export function indexDerivation(storeRoot, candidate) {
       indexed: false, status: "WRITE_FAILED", key,
       error: String(e?.message ?? e).slice(0, 300),
       code: e instanceof C2dHoldError && typeof e.code === "string" ? e.code : EVOLUTION_CANDIDATE_HOLD.INDEX_WRITE_FAILED,
+      conflict: null,
     };
   }
-  return { indexed: true, status: "INDEXED", key, error: null, code: null };
+  return { indexed: true, status: "INDEXED", key, error: null, code: null, conflict: null };
+}
+
+/**
+ * Build the hold for a derivation index that refused the entry.
+ *
+ * Two DISTINCT facts (N1), never merged:
+ *   - CANDIDATE_CONFLICT — the index is healthy and refused to repoint an
+ *     identity it already owns. Nothing is unwritable; the operator must look
+ *     at the competing candidate, not at storage.
+ *   - INDEX_WRITE_FAILED — the index could not be written. The artifact is
+ *     durable and a retry repairs the index.
+ *
+ * Neither carries `artifact_durable:true` semantics accidentally: the conflict
+ * DOES carry it (the artifact landed) together with `conflict`, and the loop
+ * classifies by CODE before it reads `artifact_durable`.
+ */
+function derivationIndexHold(index, candidate, path) {
+  if (index.code === EVOLUTION_CANDIDATE_HOLD.CANDIDATE_CONFLICT) {
+    return new C2dHoldError(EVOLUTION_CANDIDATE_HOLD.CANDIDATE_CONFLICT,
+      `candidate ${candidate.candidate_id} conflicts with the derivation it would claim: ${index.error}`,
+      {
+        candidate_id: candidate.candidate_id, candidate_path: path, artifact_durable: true,
+        index_key: index.key, conflict: index.conflict ?? null,
+      });
+  }
+  return new C2dHoldError(index.code ?? EVOLUTION_CANDIDATE_HOLD.INDEX_WRITE_FAILED,
+    `candidate ${candidate.candidate_id} is durable but not indexed: ${index.error}`,
+    { candidate_id: candidate.candidate_id, candidate_path: path, artifact_durable: true, index_key: index.key });
 }
 
 /**
@@ -237,15 +277,17 @@ export function indexDerivation(storeRoot, candidate) {
  * Idempotency: a candidate identity is deterministic, so a repeat write is an
  * `EXISTING` no-op — the same event retried can never fan out into duplicate
  * proposals. An existing artifact with a DIFFERENT immutable content digest is
- * a conflict and fails closed (`PERSIST_FAILED`): identity must not silently
- * alias two different proposals.
+ * an identity conflict and fails closed as CANDIDATE_CONFLICT (N1): identity
+ * must not silently alias two different proposals, and the operator must not be
+ * told that a write failed when what happened is a COMPETING proposal.
  *
- * Failure is never silent AND never misclassified (TARGETED REMEDIATION 2/F4):
- * the artifact write, the read-back and the index write are three separate
- * facts. A failure before the artifact lands throws PERSIST_FAILED; a failure
- * AFTER it landed throws INDEX_WRITE_FAILED from `indexDerivation` and carries
- * `artifact_durable: true`, so the caller can say exactly what exists and a
- * retry is provably safe.
+ * Failure is never silent AND never misclassified (TARGETED REMEDIATION 2/F4,
+ * LOW-RISK HARDENING 1/N1): the artifact write, the read-back and the index
+ * write are separate facts. A failure before the artifact lands throws
+ * PERSIST_FAILED; an index that REFUSES an identity throws CANDIDATE_CONFLICT;
+ * an index that cannot be written throws INDEX_WRITE_FAILED. The two
+ * post-artifact holds both carry `artifact_durable: true`, so the caller can
+ * say exactly what exists and a retry is provably safe.
  *
  * @param {string} storeRoot — the evolution store root
  * @param {object} candidate — an `autoloop.evolution-candidate/v1` record
@@ -278,8 +320,12 @@ export function persistCandidate(storeRoot, candidate) {
     const existing = readCandidate(storeRoot, candidate.candidate_id);
     if (!existing) throw e;
     if (proposalContentDigest(existing) !== proposalContentDigest(candidate)) {
-      fail(EVOLUTION_CANDIDATE_HOLD.PERSIST_FAILED,
-        `candidate id ${candidate.candidate_id} already exists with different content (identity conflict)`);
+      fail(EVOLUTION_CANDIDATE_HOLD.CANDIDATE_CONFLICT,
+        `candidate id ${candidate.candidate_id} already exists with different content (identity conflict)`,
+        {
+          candidate_id: candidate.candidate_id, candidate_path: path, artifact_durable: true,
+          conflict: { kind: "different_content", owner_id: candidate.candidate_id, family: candidateFamily(existing), key: null },
+        });
     }
     status = "EXISTING";
   }
@@ -305,12 +351,7 @@ export function persistCandidate(storeRoot, candidate) {
   // dedup and the operator generation count see the proposal — without ever
   // rewriting another family's entry for the same signature@baseline.
   const index = indexDerivation(storeRoot, persisted);
-  if (!index.indexed) {
-    const err = new C2dHoldError(index.code ?? EVOLUTION_CANDIDATE_HOLD.INDEX_WRITE_FAILED,
-      `candidate ${persisted.candidate_id} is durable but not indexed: ${index.error}`,
-      { candidate_id: persisted.candidate_id, candidate_path: path, artifact_durable: true, index_key: index.key });
-    throw err;
-  }
+  if (!index.indexed) throw derivationIndexHold(index, persisted, path);
   return { status, candidate: persisted, path, candidate_kind: candidateFamily(persisted), index };
 }
 
@@ -510,11 +551,7 @@ export function deriveImprovementCandidate({ triggerEvent, baselineHead, baselin
     throw e;
   }
   const indexed = indexDerivation(storeRoot, candidate);
-  if (!indexed.indexed) {
-    throw new C2dHoldError(indexed.code ?? EVOLUTION_CANDIDATE_HOLD.INDEX_WRITE_FAILED,
-      `candidate ${candidateId} is durable but not indexed: ${indexed.error}`,
-      { candidate_id: candidateId, candidate_path: p, artifact_durable: true, index_key: indexed.key });
-  }
+  if (!indexed.indexed) throw derivationIndexHold(indexed, candidate, p);
   return { status: "CREATED", candidate };
 }
 

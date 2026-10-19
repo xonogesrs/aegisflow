@@ -267,7 +267,12 @@ The artifact write, its read-back and the index write are separate facts:
 |---|---|
 | the artifact did not land | `EVOLUTION_CANDIDATE_PERSIST_FAILED` → `HOLD / EVOLUTION_LOOP_CANDIDATE_NOT_PERSISTED` |
 | the artifact landed, the index did not | `EVOLUTION_CANDIDATE_INDEX_WRITE_FAILED` → `HOLD / EVOLUTION_LOOP_CANDIDATE_NOT_INDEXED`, `artifact_durable: true` |
-| two different artifacts claim one identity | `PERSIST_FAILED` (identity conflict) — the index never repoints an owner |
+| two different candidates claim one identity | `EVOLUTION_CANDIDATE_CONFLICT` → `HOLD / EVOLUTION_LOOP_CANDIDATE_CONFLICT`, `artifact_durable: true`, `conflict: { kind, owner_id, key }` — the index is healthy and refused to repoint an owner; first writer wins and nothing was unwritable |
+
+An identity conflict is **not** an I/O failure. Reporting it as
+`INDEX_WRITE_FAILED` sent the operator to inspect storage instead of the
+competing proposal, so the store classifies it by code before it reads
+`artifact_durable`.
 
 A retry after an index failure re-writes nothing (the artifact is authoritative)
 and indexes the existing derivation, so recovery needs no cleanup.
@@ -298,6 +303,28 @@ refuses exactly what production refuses; a caller that supplies an
 already-recorded trigger is re-checked as well. Refusals carry the provenance
 reason (`synthetic_evidence:…`, `untrusted_evidence_row`, `no_evidence_rows`),
 never a bare `NO_TRIGGER`.
+
+### The consumer re-establishes provenance itself
+
+`observation.evidence_qualified` is a field on an object the caller hands in, so
+a non-production caller could forge it. The consumer therefore re-reads the
+durable journal (same reader) and re-applies the same predicate **before** the
+trigger gate, and additionally requires every journal-shaped reference a fired
+signal cites (`evt_<n>_<hex>`) to exist in that journal. `QUALIFIED_PATTERN_EVIDENCE`
+cites pattern digests rather than journal rows and is unaffected.
+
+A refusal at this point is total — `NO_QUALIFIED_TRIGGER` with
+`evidence_reverified: true`, zero trigger records, zero cooldown consumed, zero
+cycles. A caller that supplies no journal identity cannot be verified and is
+refused, never trusted by default.
+
+### `synthetic` typing
+
+`synthetic` is a boolean or absent, on all three surfaces (runner object, env,
+declaration). Anything else — a string, a number, `null`, an object — is a
+governed-configuration failure (`CONFIGURATION_INVALID`, no cycle), never
+coerced to `false`. The env accepts `1`/`true`/`0`/`false` and the legacy
+`AUTOLOOP_EVOLUTION_SYNTHETIC` alias is the same surface.
 
 ## Honest limitations
 

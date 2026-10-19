@@ -772,7 +772,11 @@ test("F4 the index never repoints an identity it already owns (conflict fails cl
   const conflict = indexDerivation(store, second);
   assert.equal(conflict.indexed, false);
   assert.equal(conflict.status, "CONFLICT");
-  assert.equal(conflict.code, EVOLUTION_CANDIDATE_HOLD.PERSIST_FAILED);
+  // N1: an identity conflict is its own classification — the index was
+  // readable and writable, it simply refused to repoint an owner.
+  assert.equal(conflict.code, EVOLUTION_CANDIDATE_HOLD.CANDIDATE_CONFLICT);
+  assert.equal(conflict.conflict?.kind, "different_candidate");
+  assert.equal(conflict.conflict?.owner_id, first.candidate_id);
   // the original owner is untouched
   assert.deepEqual(indexKeys(store), [derivationKey("AGENT_STRATEGY", STRATEGY_SIGNATURE, baselineHead)]);
   const idx = JSON.parse(readFileSync(derivationIndexPath(store), "utf8"));

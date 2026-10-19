@@ -42,7 +42,7 @@
 import { C2dHoldError } from "../c2d/fs-atomic.mjs";
 import { digestOf } from "../canonical-digest.mjs";
 import { readEvolutionPolicy, authorizeUnderPolicy, EVOLUTION_POLICY_HOLD } from "./policy.mjs";
-import { deriveImprovementCandidate, readCandidate, persistCandidate, candidateFilePath, proposalContentDigest } from "./candidate.mjs";
+import { deriveImprovementCandidate, readCandidate, persistCandidate, candidateFilePath, proposalContentDigest, EVOLUTION_CANDIDATE_HOLD } from "./candidate.mjs";
 import { issueCandidateMutationAuthorization, runCandidateMutation } from "./mutation.mjs";
 import { evaluateFitness } from "./fitness.mjs";
 import {
@@ -93,6 +93,12 @@ export const EVOLUTION_LOOP_HOLD = Object.freeze({
   // derivation-index entry could not be written. Reported separately so the
   // operator never reads "no proposal exists" when one does.
   CANDIDATE_NOT_INDEXED: "HOLD / EVOLUTION_LOOP_CANDIDATE_NOT_INDEXED",
+  // LOW-RISK HARDENING 1 (N1): the store refused an entry because a DIFFERENT
+  // candidate already owns that identity (same family + signature + baseline,
+  // or one artifact id with different content). Reported separately from both
+  // persistence holds: the index is healthy, the competing proposal is the
+  // fact the operator must see.
+  CANDIDATE_CONFLICT: "HOLD / EVOLUTION_LOOP_CANDIDATE_CONFLICT",
   EVIDENCE_UNQUALIFIED: "HOLD / EVOLUTION_LOOP_EVIDENCE_UNQUALIFIED",
   PROPOSAL_ONLY_INVALID: "HOLD / EVOLUTION_LOOP_PROPOSAL_ONLY_INVALID",
   MUTATION_FAILED: "HOLD / EVOLUTION_LOOP_MUTATION_FAILED",
@@ -115,7 +121,7 @@ function normalizePlanInput(input) {
 }
 
 /**
- * Map a THROWN derivation error onto the loop's closed hold set.
+ * Map a THROWN candidate-store error onto the loop's closed hold set.
  *
  * TARGETED REMEDIATION 2 / F4: the candidate store distinguishes "the artifact
  * never landed" (PERSIST_FAILED) from "the artifact landed but the derivation
@@ -123,19 +129,39 @@ function normalizePlanInput(input) {
  * to let both escape as a rejected promise, which the consumer reported as a
  * generic CYCLE_FAILED — leaving the operator unable to tell whether a
  * proposal existed. Every persistence failure now returns a named HOLD.
+ *
+ * LOW-RISK HARDENING 1 / N1: an IDENTITY CONFLICT is a third fact. The store
+ * refused to record a candidate because a different one already owns that
+ * identity; the index was readable and writable, so reporting it as an index
+ * write failure points the operator at storage instead of at the competing
+ * proposal. It is classified by CODE first (the conflict also carries a durable
+ * artifact), then by `artifact_durable`.
  */
+function persistenceHold(error, { stage, candidatePath = null }) {
+  const code = String(error?.code ?? "");
+  const detail = `${code.trim()}${code ? ": " : ""}${String(error?.message ?? error).slice(0, 300)}`;
+  const noun = stage === "proposal" ? "proposal" : "candidate";
+  const extra = {
+    stage,
+    candidate_id: error?.details?.candidate_id ?? null,
+    artifact_durable: error?.details?.artifact_durable === true,
+    candidate_path: error?.details?.candidate_path ?? candidatePath,
+  };
+  if (code === EVOLUTION_CANDIDATE_HOLD.CANDIDATE_CONFLICT) {
+    return hold(EVOLUTION_LOOP_HOLD.CANDIDATE_CONFLICT,
+      `${noun} identity conflict (the store refused to repoint an owner): ${detail}`,
+      { ...extra, conflict: error?.details?.conflict ?? null });
+  }
+  if (extra.artifact_durable) {
+    return hold(EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_INDEXED,
+      `${noun} durable but not indexed: ${detail}`, extra);
+  }
+  return hold(EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_PERSISTED,
+    `${noun} not persisted: ${detail}`, extra);
+}
+
 function derivationFailureHold(error, p) {
-  const artifactDurable = error?.details?.artifact_durable === true;
-  const code = artifactDurable ? EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_INDEXED : EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_PERSISTED;
-  const detail = `${String(error?.code ?? "").trim()}${error?.code ? ": " : ""}${String(error?.message ?? error).slice(0, 300)}`;
-  return hold(code,
-    `${artifactDurable ? "candidate durable but not indexed" : "candidate not persisted"}: ${detail}`,
-    {
-      stage: "candidate",
-      candidate_id: error?.details?.candidate_id ?? null,
-      artifact_durable: artifactDurable,
-      candidate_path: error?.details?.candidate_path ?? null,
-    });
+  return persistenceHold(error, { stage: "candidate" });
 }
 
 /**
@@ -412,20 +438,16 @@ export async function runEvolutionCycle(p) {
         candidate_digest: candidate.candidate_digest,
       });
     } catch (e) {
-      // TARGETED REMEDIATION 2 / F4: distinguish the two persistence facts.
-      // `artifact_durable` is set by the store when the candidate FILE landed
-      // and only the derivation index failed — that is a repairable index, not
-      // a lost proposal, and saying "not persisted" there would be false.
-      const artifactDurable = e?.details?.artifact_durable === true;
-      const code = artifactDurable ? EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_INDEXED : EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_PERSISTED;
+      // TARGETED REMEDIATION 2 / F4 + LOW-RISK HARDENING 1 / N1: report the
+      // THREE distinct facts. `artifact_durable` means the candidate FILE
+      // landed and only the index failed (a repairable index, never "not
+      // persisted"); an identity conflict means a DIFFERENT proposal owns this
+      // identity (nothing was unwritable, so it is not an I/O failure).
       return {
-        ...hold(code,
-          `${artifactDurable ? "proposal durable but not indexed" : "proposal not persisted"}: ${String(e?.code ?? "").trim()}${e?.code ? ": " : ""}${String(e?.message ?? e).slice(0, 300)}`,
-          {
-            stage: "proposal", candidate_id: candidate.candidate_id,
-            artifact_durable: artifactDurable,
-            candidate_path: e?.details?.candidate_path ?? candidateFilePath(p.policyRoot, candidate.candidate_id),
-          }),
+        ...persistenceHold(e, {
+          stage: "proposal",
+          candidatePath: candidateFilePath(p.policyRoot, candidate.candidate_id),
+        }),
         plan, trace,
       };
     }
@@ -449,10 +471,20 @@ export async function runEvolutionCycle(p) {
     // at a later instant still verifies against the FIRST durable write).
     const persisted = readCandidate(p.policyRoot, candidate.candidate_id);
     if (!persisted || proposalContentDigest(persisted) !== proposalContentDigest(candidate)) {
+      // N1: an artifact that IS readable but carries a different immutable
+      // proposal is a conflict, not a persistence failure — the durable record
+      // exists and belongs to another identity.
+      const conflict = Boolean(persisted);
       return {
-        ...hold(EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_PERSISTED,
-          `proposal-only refused: ${candidate.candidate_id} is not durably readable`,
-          { stage: "proposal", candidate_id: candidate.candidate_id }),
+        ...hold(conflict ? EVOLUTION_LOOP_HOLD.CANDIDATE_CONFLICT : EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_PERSISTED,
+          conflict
+            ? `proposal-only refused: ${candidate.candidate_id} exists with different content (identity conflict)`
+            : `proposal-only refused: ${candidate.candidate_id} is not durably readable`,
+          {
+            stage: "proposal", candidate_id: candidate.candidate_id,
+            artifact_durable: conflict,
+            candidate_path: candidateFilePath(p.policyRoot, candidate.candidate_id),
+          }),
         plan, trace,
       };
     }

@@ -59,6 +59,7 @@ import {
   buildTriggerEvent, sha256Hex,
 } from "./trigger.mjs";
 import { evolutionSwitchState, readObservationJournal } from "./production-observer.mjs";
+import { assessEvidenceProvenance } from "./attribution-feed.mjs";
 import { reconcileEvolutionState } from "./recovery.mjs";
 import { deriveAttribution } from "./attribution.mjs";
 import { canonicalTaskClass } from "./attribution.mjs";
@@ -201,11 +202,30 @@ export function resolveEvolutionProductionConfig({ runnerOpts = {}, env = proces
       : { values: decl.strategyBaselineValues ?? null, error: null });
   const strategyBaselineValues = baselineCandidate.values ?? null;
 
-  const syntheticEnv = String(envValue(env, EVOLUTION_CONFIG_ENV.SYNTHETIC) ?? "").toLowerCase();
-  const syntheticInvalid = (declaration.record && Object.prototype.hasOwnProperty.call(declaration.record, "synthetic")
-    && typeof declaration.record.synthetic !== "boolean")
-    ? "the deployment declaration's synthetic must be a boolean"
-    : null;
+  // §G1 SYNTHETIC (declared provenance). Three governed surfaces can declare
+  // it: the caller's explicit object, the operator's environment, the
+  // deployment declaration. A legal boolean keeps the existing semantics —
+  // ANY surface that says `true` marks the run synthetic, and the provenance
+  // policy is unchanged.
+  //
+  // LOW-RISK HARDENING 1 / N2 — a value whose TYPE is unusable is REJECTED,
+  // never coerced to `false`. `cfg.synthetic === true` and an env string other
+  // than 1/true/0/false used to fall through silently, which read a malformed
+  // configuration as "production evidence" and let the cycle run on data the
+  // operator had marked otherwise. Same fail-closed shape as §G3.
+  const syntheticEnvResolved = readConfigEnv(env, EVOLUTION_CONFIG_ENV.SYNTHETIC);
+  const syntheticEnv = String(syntheticEnvResolved?.value ?? "").trim().toLowerCase();
+  let syntheticInvalid = null;
+  if (cfg.synthetic !== undefined && typeof cfg.synthetic !== "boolean") {
+    syntheticInvalid = "runnerOpts.evolution.synthetic must be a boolean";
+  } else if (syntheticEnv !== "" && syntheticEnv !== "1" && syntheticEnv !== "true" && syntheticEnv !== "0" && syntheticEnv !== "false") {
+    // Name the variable that was ACTUALLY set (the brand or the legacy alias),
+    // so the operator does not have to guess which one the deployment exports.
+    syntheticInvalid = `${syntheticEnvResolved?.name ?? EVOLUTION_CONFIG_ENV.SYNTHETIC} must be 1/true/0/false`;
+  } else if (declaration.record && Object.prototype.hasOwnProperty.call(declaration.record, "synthetic")
+    && typeof declaration.record.synthetic !== "boolean") {
+    syntheticInvalid = "the deployment declaration's synthetic must be a boolean";
+  }
   const synthetic = cfg.synthetic === true
     || decl.synthetic === true
     || declaration.record?.synthetic === true
@@ -301,6 +321,67 @@ export function resolveEvolutionProductionConfig({ runnerOpts = {}, env = proces
 
 // ── §A/§B/§D/§E the production consumption entry ───────────────────────────
 
+/**
+ * Re-establish evidence provenance from the DURABLE journal (N3).
+ *
+ * The consumer receives `observation.evidence_qualified` from its caller. That
+ * boolean is produced by the observer for the production path, but nothing
+ * structural prevents a non-production caller from passing a forged
+ * observation with a hand-built `fired` list. Trusting the field would let such
+ * a caller write a durable trigger record and consume the signature's cooldown
+ * before the loop's own fence ever ran.
+ *
+ * So the consumer re-reads the journal with the SAME reader (one journal
+ * contract) and re-applies the SAME predicate (one provenance rule) that the
+ * observer and the loop use. Refusal is total: no trigger, no cooldown, no
+ * cycle.
+ *
+ * Side effect, disclosed: the shared reader initialises the evidence store's
+ * own execution directory (owner-only, empty) when it is absent — the same
+ * thing the observer already does on the production path before this guard
+ * runs. It writes no journal row, no trigger record and no cooldown slot, and
+ * it is not a store the evolution subsystem owns.
+ *
+ * @returns {{ qualified: boolean, reason: string|null, events: object[] }}
+ */
+function revalidateEvidenceProvenance({ config = null, evidenceRoot = null, executionId = null } = {}) {
+  const journal = readObservationJournal({ evidenceRoot, executionId });
+  if (!journal.ok) return { qualified: false, reason: `no durable journal (${journal.reason})`, events: [] };
+  const provenance = assessEvidenceProvenance({ config, events: journal.events });
+  if (!provenance.eligible) return { qualified: false, reason: provenance.reason, events: journal.events };
+  return { qualified: true, reason: null, events: journal.events };
+}
+
+/**
+ * The evidence a fired signal cites must exist in the journal that was just
+ * re-read. This is the second half of N3: provenance alone proves the journal
+ * is production evidence, not that THIS signal came from it.
+ *
+ * Journal-shaped references are `evt_<n>_<hex>`. The QUALIFIED_PATTERN_EVIDENCE
+ * class cites pattern digests, which are not journal rows by construction, so
+ * it is exempt from both halves. EVERY other class is derived from journal
+ * rows, so it must cite at least one row that the journal actually holds: a
+ * forged signal that lists refs does not merely have to avoid fiction, it has
+ * to carry real evidence. (Before this, a forged signal with NO refs at all
+ * passed the ref check and reached the durable write on a real journal.)
+ *
+ * @returns {string|null} a refusal reason, or null when the signal is consistent
+ */
+function signalEvidenceRefusal(signal, events) {
+  if (signal?.signalClass === "QUALIFIED_PATTERN_EVIDENCE") return null;
+  const refs = Array.isArray(signal?.evidenceRefs) ? signal.evidenceRefs : [];
+  const journalRefs = refs.filter((r) => typeof r === "string" && /^evt_\d+_[0-9a-f]{16}$/.test(r));
+  if (journalRefs.length === 0) {
+    return `signal ${String(signal?.signalClass ?? "?")} cites no durable journal row`;
+  }
+  const known = new Set(events.map((e) => e?.event_id).filter((id) => typeof id === "string"));
+  const unknown = journalRefs.filter((r) => !known.has(r));
+  if (unknown.length > 0) {
+    return `signal ${String(signal?.signalClass ?? "?")} cites ${unknown.length} journal row(s) absent from the durable journal`;
+  }
+  return null;
+}
+
 function disposition(config, name, extra = {}) {
   return {
     schema: EVOLUTION_CONSUMER_SCHEMA,
@@ -387,6 +468,43 @@ export function consumeEvolutionObservationForProduction({
     }
     if (fired.length === 0) {
       return disposition(config, "NO_QUALIFIED_TRIGGER", { fired_count: 0 });
+    }
+
+    // §G1 / N3 — THE CONSUMER RE-VERIFIES PROVENANCE ITSELF.
+    //
+    // `observation.evidence_qualified` is a field on an object the caller
+    // hands in, so a non-production caller can forge it. The durable trigger
+    // write, the cooldown/consume slot and the scheduled cycle must never rest
+    // on a boolean the consumer did not establish: the journal is re-read here
+    // and the SAME provenance predicate the observer and the loop use is
+    // applied again. A refusal happens BEFORE the gate, so it spends zero
+    // cooldown, records zero triggers and schedules zero cycles.
+    //
+    // A caller that supplies no durable journal identity cannot be verified
+    // and is therefore refused — never trusted by default.
+    const provenance = revalidateEvidenceProvenance({ config, evidenceRoot, executionId });
+    if (!provenance.qualified) {
+      return disposition(config, "NO_QUALIFIED_TRIGGER", {
+        fired_count: 0,
+        reason: `evidence re-verification failed: ${provenance.reason}`,
+        evidence_qualified: false,
+        evidence_reverified: true,
+      });
+    }
+    // Every fired signal that cites journal rows must cite rows that are ACTUALLY
+    // in that journal. A forged observation can carry a plausible
+    // `evidence_qualified:true` over a REAL journal while listing references
+    // that do not exist; refusing here keeps the durable trigger record honest.
+    const inconsistent = fired
+      .map((signal) => ({ signal, reason: signalEvidenceRefusal(signal, provenance.events) }))
+      .find((x) => x.reason !== null);
+    if (inconsistent) {
+      return disposition(config, "NO_QUALIFIED_TRIGGER", {
+        fired_count: 0,
+        reason: `evidence re-verification failed: ${inconsistent.reason}`,
+        evidence_qualified: false,
+        evidence_reverified: true,
+      });
     }
 
     // The loop is OFF without a durable policy — fail closed before any write.

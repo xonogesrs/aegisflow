@@ -229,6 +229,8 @@ gate.
 | `AEGISFLOW_EVOLUTION_STRATEGY_DIMENSIONS` | Declared strategy dimensions a policy may propose changes to. |
 | `AEGISFLOW_EVOLUTION_STRATEGY_BASELINE_VALUES` | Baseline values used for fitness comparison. |
 | `AEGISFLOW_EVOLUTION_REVIEWER` | Reviewer identity used for evolution review. |
+| `AEGISFLOW_EVOLUTION_SYNTHETIC` | Declares the deployment's runs synthetic (`1`/`true`/`0`/`false`). Anything else is a configuration failure; it is never coerced to `false`. |
+| `AEGISFLOW_EVOLUTION_PROPOSAL_ONLY` | The default-OFF execution ceiling (`1`/`true`/`0`/`false`). Anything else is a configuration failure, never a silent downgrade to the mutating mode. |
 
 An evolution policy is issued, read and inspected with the operator CLIs:
 
