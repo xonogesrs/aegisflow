@@ -339,19 +339,27 @@ refactor.
 Pre-edit gate: §1 — the prior card's landing was complete, no WIP, no stash, no
 unpushed commit, and no other worktree mutation.
 
-Post-push verification (after the allowlist commit):
+Post-push verification (after the allowlist commits):
 
 | Check | Value |
 |---|---|
-| local `HEAD` | `09df20dc24f61ae66ac8a9e06ce91af498f16064` |
-| `origin/feat/omp-cbm-recovery` (post-fetch) | `09df20dc24f61ae66ac8a9e06ce91af498f16064` |
-| `git ls-remote origin refs/heads/feat/omp-cbm-recovery` | `09df20dc24f61ae66ac8a9e06ce91af498f16064` |
+| local `HEAD` | `773bb8ab7b293b1c8a45ea31ec26c829b6cb2b51` |
+| `origin/feat/omp-cbm-recovery` (post-fetch) | `773bb8ab7b293b1c8a45ea31ec26c829b6cb2b51` |
+| `git ls-remote origin refs/heads/feat/omp-cbm-recovery` | `773bb8ab7b293b1c8a45ea31ec26c829b6cb2b51` |
 | unpushed commits | `0` |
 | `git status --porcelain` | empty |
 | `git stash list` | empty |
-| commit `b32a8e2` | reachable, unamended, published — one commit added on top |
+| commit `b32a8e2` | reachable, unamended, published |
 
-The commit contains exactly 8 files:
+Three commits on top of the prior card's landing:
+
+```
+773bb8a fix(evolution): close the two defects the independent review reproduced
+668a74f docs(evolution): record hardening-1 post-push landing verification
+09df20d fix(evolution): harden candidate conflict, synthetic typing, evidence guard
+```
+
+The first commit contains exactly 8 files:
 
 ```
 docs/audit/AEGISFLOW_EVOLUTION_LOW_RISK_HARDENING_1/HARDENING_REPORT.md (new)
@@ -366,6 +374,10 @@ test/evolution/test-evolution-targeted-remediation-2.mjs
 
 No scratch file, probe or temporary worktree was committed; the pre-edit WIP
 patch preserved in `/private/tmp/aegis-wip-backup/` is outside the repository.
+
+The review-fix commit `773bb8a` touches a subset of the same files
+(`production-consumer.mjs`, the hardening test file, the two docs) and adds no
+new path.
 
 ## 9. Handoff to independent review
 
