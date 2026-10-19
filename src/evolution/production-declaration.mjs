@@ -37,10 +37,15 @@
 //   2. the individual `AUTOLOOP_EVOLUTION_*` environment variables
 //   3. this declaration record (the deployment default)
 //
-// Hard rules: bounded keys/values only; a malformed declaration is IGNORED
-// (fail-open — the deployment keeps its environment/object inputs) but the
-// error is surfaced on the resolved config and in the operator report, never
-// swallowed.
+// Hard rules: bounded keys/values only. A declaration that does not VALIDATE is
+// not usable as a whole — the resolver reports `CONFIGURATION_INVALID` and
+// starts no cycle, because a misnamed key is indistinguishable from an absent
+// one and the record's meaning is therefore unknown (TARGETED REMEDIATION 2/F2).
+//
+// ONE EXCEPTION, and it is deliberate: the `proposalOnly` CEILING is read from
+// the RAW record even when an UNRELATED key failed validation, so an operator's
+// declared ceiling can never be lost to a typo elsewhere in the same file. It is
+// never silently reinterpreted as OFF; a non-boolean value is an error.
 
 import { existsSync, readFileSync } from "node:fs";
 
@@ -130,7 +135,15 @@ export function validateEvolutionDeclaration(record) {
 }
 
 /**
- * Read the deployment's evolution declaration. TOTAL — never throws:
+ * Read the deployment's evolution declaration. TOTAL — never throws.
+ *
+ * `declaration` is the record ONLY when the whole record validated. The RAW
+ * parsed `record` is returned alongside it (and also when validation failed),
+ * because a GOVERNED CEILING carried by an otherwise-unusable declaration must
+ * not become invisible: `proposalOnly` is resolved from `record`, so an
+ * operator's `proposalOnly:true` cannot be lost to an unrelated typo in the
+ * same file (TARGETED REMEDIATION 2 / F2 — fail closed, never fail open).
+ *
  * absent path ⇒ `provided:false`; unreadable/malformed ⇒ `declaration:null`
  * with the errors recorded so the caller (and the operator report) can SEE
  * the misconfiguration instead of silently falling back.
@@ -144,19 +157,43 @@ export function readEvolutionProductionDeclaration({ path = null, env = process.
   const chosen = (typeof path === "string" && path.trim().length > 0)
     ? path.trim()
     : (configured ? configured.value.trim() : null);
-  if (!chosen) return { provided: false, path: null, source: null, declaration: null, errors: [] };
+  if (!chosen) return { provided: false, path: null, source: null, declaration: null, record: null, errors: [] };
   if (!existsSync(chosen)) {
-    return { provided: true, path: chosen, source: "file", declaration: null, errors: [`unreadable: no declaration at ${chosen}`] };
+    return { provided: true, path: chosen, source: "file", declaration: null, record: null, errors: [`unreadable: no declaration at ${chosen}`] };
   }
   let record;
   try {
     record = JSON.parse(readFileSync(chosen, "utf8"));
   } catch (e) {
-    return { provided: true, path: chosen, source: "file", declaration: null, errors: [`unparsable: ${String(e?.message ?? e).slice(0, 160)}`] };
+    return { provided: true, path: chosen, source: "file", declaration: null, record: null, errors: [`unparsable: ${String(e?.message ?? e).slice(0, 160)}`] };
   }
   const errors = validateEvolutionDeclaration(record);
-  if (errors.length > 0) return { provided: true, path: chosen, source: "file", declaration: null, errors };
-  return { provided: true, path: chosen, source: "file", declaration: record, errors: [] };
+  if (errors.length > 0) {
+    return {
+      provided: true, path: chosen, source: "file", declaration: null,
+      record: (record && typeof record === "object" && !Array.isArray(record)) ? record : null,
+      errors,
+    };
+  }
+  return { provided: true, path: chosen, source: "file", declaration: record, record, errors: [] };
+}
+
+/**
+ * The DECLARED proposal-only ceiling, read from the RAW record so it survives
+ * an unrelated validation failure elsewhere in the same file.
+ *
+ * @returns {{ present: boolean, value: boolean|null, error: string|null }}
+ *   `present:true, error:null` ⇒ a boolean was declared;
+ *   `present:true, error!=null` ⇒ declared with an unusable type (FAIL CLOSED);
+ *   `present:false` ⇒ the file declares no ceiling.
+ */
+export function readDeclaredProposalOnly(record) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) return { present: false, value: null, error: null };
+  if (!Object.prototype.hasOwnProperty.call(record, "proposalOnly")) return { present: false, value: null, error: null };
+  if (typeof record.proposalOnly !== "boolean") {
+    return { present: true, value: null, error: "the deployment declaration's proposalOnly must be a boolean" };
+  }
+  return { present: true, value: record.proposalOnly, error: null };
 }
 
 /** The bounded declaration defaults a resolver may fall back to (per key). */

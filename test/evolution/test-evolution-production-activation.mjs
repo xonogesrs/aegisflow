@@ -149,8 +149,18 @@ function writeJournal(root, executionId, events) {
   return store;
 }
 
+// Durable journal identity (stamped event id + monotonic sequence) is what
+// makes a row PRODUCTION evidence: the loop's §G1/F1/F5 fence refuses a
+// hand-built array exactly like the production observer does. RunEvidenceStore
+// stamps both on append, so the fixture must too.
+let heldSeq = 0;
+function durableRow(row) {
+  heldSeq += 1;
+  return { ...row, event_id: `evt_${heldSeq}_${"5".repeat(16)}`, sequence: heldSeq };
+}
+
 function heldEvents(n, reason = "HOLD / C3B_MUTATION_FAILED") {
-  return Array.from({ length: n }, (_, i) => ({
+  return Array.from({ length: n }, () => durableRow({
     event_type: "RUN_HELD", stage: "terminal", payload: { reason },
   }));
 }

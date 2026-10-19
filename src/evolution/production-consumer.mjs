@@ -64,7 +64,7 @@ import { deriveAttribution } from "./attribution.mjs";
 import { canonicalTaskClass } from "./attribution.mjs";
 import {
   EVOLUTION_DECLARATION_ENV, readEvolutionProductionDeclaration,
-  declarationInputs, parseStrategyBaselineValues,
+  declarationInputs, parseStrategyBaselineValues, readDeclaredProposalOnly,
 } from "./production-declaration.mjs";
 
 export const EVOLUTION_CONSUMER_SCHEMA = "autoloop.evolution-consumer/v1";
@@ -202,16 +202,36 @@ export function resolveEvolutionProductionConfig({ runnerOpts = {}, env = proces
   const strategyBaselineValues = baselineCandidate.values ?? null;
 
   const syntheticEnv = String(envValue(env, EVOLUTION_CONFIG_ENV.SYNTHETIC) ?? "").toLowerCase();
-  const synthetic = cfg.synthetic === true || decl.synthetic === true || syntheticEnv === "1" || syntheticEnv === "true";
+  const syntheticInvalid = (declaration.record && Object.prototype.hasOwnProperty.call(declaration.record, "synthetic")
+    && typeof declaration.record.synthetic !== "boolean")
+    ? "the deployment declaration's synthetic must be a boolean"
+    : null;
+  const synthetic = cfg.synthetic === true
+    || decl.synthetic === true
+    || declaration.record?.synthetic === true
+    || syntheticEnv === "1" || syntheticEnv === "true";
 
   // §G3 PROPOSAL-ONLY (default OFF). Three governed surfaces can set it,
   // highest precedence first: the caller's explicit object, the operator's
-  // environment variable, the deployment declaration. An explicit boolean
-  // STOPS the search, so a caller that says `false` cannot be overridden by a
-  // broader surface. Nothing in the evolution pipeline can raise it (not a
-  // plan, not a trigger event, not the agent). An uninterpretable value is NOT
-  // guessed: `proposalOnlyInvalid` carries it so the consumer refuses to start
-  // a cycle, and the resolved flag stays false.
+  // environment variable, the deployment declaration. At EVERY surface an
+  // explicit boolean STOPS the search, so a caller that says `false` cannot be
+  // overridden by a broader surface (and a declaration that says `false` is
+  // not overridden by an absent anything). Nothing in the evolution pipeline
+  // can raise it (not a plan, not a trigger event, not the agent).
+  //
+  // TARGETED REMEDIATION 2 / F2 — FAIL CLOSED, never fail open:
+  //   - the DECLARED ceiling is read from the RAW record, not from the
+  //     validated one. A declaration that fails validation for an UNRELATED
+  //     key (a typo, a bad baseline value) used to be discarded whole, which
+  //     silently dropped the operator's `proposalOnly:true` and let the loop
+  //     run in the MUTATING mode. An authority ceiling must never be lost to
+  //     an unrelated error in the same file.
+  //   - a value whose TYPE is unusable is never guessed: `proposalOnlyInvalid`
+  //     carries it and the consumer refuses to start a cycle.
+  //   - an unreadable/unparsable declaration file is surfaced as
+  //     `declarationInvalid` (the ceiling cannot be known) and, like the above,
+  //     starts no cycle.
+  const declaredCeiling = readDeclaredProposalOnly(declaration.record);
   const proposalEnv = String(envValue(env, EVOLUTION_CONFIG_ENV.PROPOSAL_ONLY) ?? "").toLowerCase();
   let proposalOnly = false;
   let proposalOnlyInvalid = null;
@@ -223,9 +243,21 @@ export function resolveEvolutionProductionConfig({ runnerOpts = {}, env = proces
     else if (proposalEnv !== "0" && proposalEnv !== "false") {
       proposalOnlyInvalid = `${EVOLUTION_CONFIG_ENV.PROPOSAL_ONLY} must be 1/true/0/false`;
     }
-  } else if (decl.proposalOnly === true) {
-    proposalOnly = true;
+  } else if (declaredCeiling.error) {
+    proposalOnlyInvalid = declaredCeiling.error;
+  } else if (declaredCeiling.present) {
+    proposalOnly = declaredCeiling.value === true;
   }
+
+  // A DECLARATION THAT DOES NOT VALIDATE IS A GOVERNED-CONFIGURATION FAILURE.
+  // Its ceiling may be unknowable (a misnamed key is indistinguishable from an
+  // absent one), so the deployment must not be read as "the ceiling is OFF".
+  // TARGETED REMEDIATION 2 / F2 — the earlier fail-open discarded the whole
+  // record and silently ran the MUTATING mode.
+  const declarationInvalid = declaration.provided && (declaration.record === null || declaration.errors.length > 0)
+    ? `the deployment declaration is not usable: ${declaration.errors.join(",") || "unreadable"}`
+    : null;
+  const configurationInvalid = proposalOnlyInvalid ?? declarationInvalid ?? syntheticInvalid ?? null;
 
   const missing = [];
   if (!storeRoot) missing.push("storeRoot");
@@ -246,11 +278,19 @@ export function resolveEvolutionProductionConfig({ runnerOpts = {}, env = proces
     synthetic,
     proposalOnly,
     proposalOnlyInvalid,
+    configurationInvalid,
+    declarationInvalid,
     declaration: {
       provided: declaration.provided,
       path: declaration.path,
       source: declaration.source,
       errors: declaration.errors,
+      // TARGETED REMEDIATION 2 / F2: whether the record VALIDATED as a whole
+      // and whether the raw file was readable at all. A reader must be able to
+      // tell "no declaration" from "a declaration that could not be used".
+      valid: declaration.provided ? declaration.declaration !== null : null,
+      readable: declaration.provided ? declaration.record !== null : null,
+      proposalOnly: declaredCeiling.present ? declaredCeiling.value : null,
     },
     reviewVerdict: typeof cfg.reviewVerdict === "string" && cfg.reviewVerdict.length > 0 ? cfg.reviewVerdict : "PASS",
     canaryWindowMs: Number.isFinite(cfg.canaryWindowMs) ? cfg.canaryWindowMs : (Number.isFinite(decl.canaryWindowMs) ? decl.canaryWindowMs : undefined),
@@ -301,6 +341,27 @@ export function consumeEvolutionObservationForProduction({
   admission = null, attribution = null, attributionFeed = null,
 } = {}) {
   try {
+    // §G3 FAIL CLOSED: a governed setting that cannot be interpreted stops the
+    // consumer. It is never reinterpreted as "normal (mutating) mode". Checked
+    // before BOTH the inert check and the trigger so a misconfiguration is
+    // VISIBLE, not hidden behind "not declared" or "no trigger" on a quiet day.
+    // TARGETED REMEDIATION 2 / F2: `configurationInvalid` folds in the
+    // declaration-level failures too (an unusable ceiling value, a declaration
+    // that does not validate, an unreadable declaration whose ceiling is
+    // therefore unknown, a non-boolean `synthetic`). Any of them ⇒ NO cycle.
+    //
+    // This ordering is the point: an invalid declaration also fails to supply
+    // storeRoot, so the old order reported a benign DISABLED — telling the
+    // operator "nothing is declared" when what actually happened is "your
+    // declaration is unusable, and the ceiling it carries is unknown".
+    if (config?.configurationInvalid ?? config?.proposalOnlyInvalid) {
+      return disposition(config, "CONFIGURATION_INVALID", {
+        fired_count: Array.isArray(observation?.fired) ? observation.fired.length : 0,
+        reason: config.configurationInvalid ?? config.proposalOnlyInvalid,
+        proposal_only: config.proposalOnly === true,
+        declaration: config.declaration ?? null,
+      });
+    }
     if (!config?.enabled) {
       return disposition(config, "DISABLED", { reason: `evolution execution inputs not declared: ${(config?.missing ?? ["config"]).join(",")}` });
     }
@@ -315,17 +376,6 @@ export function consumeEvolutionObservationForProduction({
       });
     }
     const fired = Array.isArray(observation?.fired) ? observation.fired : [];
-    // §G3 FAIL CLOSED: a governed setting that cannot be interpreted stops the
-    // consumer. It is never reinterpreted as "normal (mutating) mode". Checked
-    // before the trigger so a misconfiguration is VISIBLE, not hidden behind
-    // "no trigger" on a quiet day.
-    if (config.proposalOnlyInvalid) {
-      return disposition(config, "CONFIGURATION_INVALID", {
-        fired_count: fired.length,
-        reason: config.proposalOnlyInvalid,
-        proposal_only: config.proposalOnly === true,
-      });
-    }
     // §G1 EVIDENCE FENCE: an observation whose evidence was refused (synthetic
     // or non-durable) is NOT a trigger — no gate, no durable record, no cycle.
     if (observation?.evidence_qualified === false) {
@@ -573,6 +623,9 @@ function scheduleCycle({ config, key, triggerEvent, evidenceRoot, executionId, g
         // §G3: the governed ceiling. Default false — the normal mode's
         // semantics are unchanged when it is not explicitly enabled.
         proposalOnly: config.proposalOnly === true,
+        // §G1/F5: the DECLARED provenance travels with the cycle so the loop's
+        // own fence agrees with the observer/feed for THIS run.
+        synthetic: config.synthetic === true,
         env: config.env ?? process.env,
       });
       const entry = { ...base, disposition: "CYCLE_COMPLETED", loop_verdict: result?.loop_verdict ?? null, cycle: summarizeCycle(result) };

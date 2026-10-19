@@ -30,6 +30,10 @@
 //     NORMAL_OPERATION (evolution failure is never a run failure).
 //   - every stage is driven by durable evidence; a stage that cannot prove
 //     its inputs HOLDs the candidate, never guesses.
+//   - THE EVIDENCE FENCE (Stage 0b): unqualified evidence (synthetic, test-only,
+//     or lacking durable journal identity) is refused before trigger evaluation
+//     and before any durable trigger write, on BOTH entry modes — so it can
+//     neither fire nor consume a cooldown/window slot for its signature.
 //   - PROPOSAL-ONLY (default OFF, §G3): `proposalOnly:true` stops the cycle at
 //     the durable proposal and returns PROPOSAL_RECORDED — authorization,
 //     mutation, fitness, review, promotion and canary are never entered. The
@@ -75,7 +79,7 @@ import { produceImprovementPlan } from "./plan-producer.mjs";
 import { deriveStrategyCandidate, classifyStrategyRisk } from "./candidate-strategy.mjs";
 import { evaluateStrategyFitness } from "./fitness-strategy.mjs";
 import { readStrategyPolicy, activateStrategyValue } from "./strategy-store.mjs";
-import { syntheticEvidenceReason, assessEvidenceProvenance } from "./attribution-feed.mjs";
+import { assessEvidenceProvenance } from "./attribution-feed.mjs";
 
 export const EVOLUTION_LOOP_HOLD = Object.freeze({
   SUSPENDED: "HOLD / EVOLUTION_SUSPENDED",
@@ -85,6 +89,10 @@ export const EVOLUTION_LOOP_HOLD = Object.freeze({
   CANDIDATE_UNSUPPORTED: "HOLD / EVOLUTION_LOOP_CANDIDATE_UNSUPPORTED",
   CANDIDATE_INCONCLUSIVE: "HOLD / EVOLUTION_LOOP_CANDIDATE_INCONCLUSIVE",
   CANDIDATE_NOT_PERSISTED: "HOLD / EVOLUTION_LOOP_CANDIDATE_NOT_PERSISTED",
+  // TARGETED REMEDIATION 2 (F4): the candidate ARTIFACT is durable but its
+  // derivation-index entry could not be written. Reported separately so the
+  // operator never reads "no proposal exists" when one does.
+  CANDIDATE_NOT_INDEXED: "HOLD / EVOLUTION_LOOP_CANDIDATE_NOT_INDEXED",
   EVIDENCE_UNQUALIFIED: "HOLD / EVOLUTION_LOOP_EVIDENCE_UNQUALIFIED",
   PROPOSAL_ONLY_INVALID: "HOLD / EVOLUTION_LOOP_PROPOSAL_ONLY_INVALID",
   MUTATION_FAILED: "HOLD / EVOLUTION_LOOP_MUTATION_FAILED",
@@ -104,6 +112,30 @@ function normalizePlanInput(input) {
   }
   if (typeof input.status === "string") return input;
   return null;
+}
+
+/**
+ * Map a THROWN derivation error onto the loop's closed hold set.
+ *
+ * TARGETED REMEDIATION 2 / F4: the candidate store distinguishes "the artifact
+ * never landed" (PERSIST_FAILED) from "the artifact landed but the derivation
+ * index did not" (INDEX_WRITE_FAILED, `artifact_durable:true`). The loop used
+ * to let both escape as a rejected promise, which the consumer reported as a
+ * generic CYCLE_FAILED — leaving the operator unable to tell whether a
+ * proposal existed. Every persistence failure now returns a named HOLD.
+ */
+function derivationFailureHold(error, p) {
+  const artifactDurable = error?.details?.artifact_durable === true;
+  const code = artifactDurable ? EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_INDEXED : EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_PERSISTED;
+  const detail = `${String(error?.code ?? "").trim()}${error?.code ? ": " : ""}${String(error?.message ?? error).slice(0, 300)}`;
+  return hold(code,
+    `${artifactDurable ? "candidate durable but not indexed" : "candidate not persisted"}: ${detail}`,
+    {
+      stage: "candidate",
+      candidate_id: error?.details?.candidate_id ?? null,
+      artifact_durable: artifactDurable,
+      candidate_path: error?.details?.candidate_path ?? null,
+    });
 }
 
 /**
@@ -154,6 +186,11 @@ function normalizePlanInput(input) {
  *        fitness, never reviews, never promotes, never opens a canary, and
  *        never touches a branch or the production checkout. Default false, so
  *        the normal mode's semantics are unchanged.
+ * @param {boolean} [p.synthetic=false] — the DECLARED provenance of the run
+ *        (production-consumer.mjs resolves it from the deployment). When true
+ *        the evidence fence refuses the cycle exactly like a synthetic journal
+ *        row would: a deployment that declares itself synthetic can never
+ *        fire a production trigger, whatever array it hands in.
  */
 export async function runEvolutionCycle(p) {
   const startedAt = new Date().toISOString();
@@ -189,6 +226,34 @@ export async function runEvolutionCycle(p) {
   }
   step("policy", { policy_id: policy.policy_id });
 
+  // ── Stage 0b: THE EVIDENCE FENCE (§G1 / F1 / F5) ────────────────────────
+  // ONE rule for BOTH entry modes: `assessEvidenceProvenance` — the same
+  // predicate the production observer and the every-run feed apply. It runs
+  // BEFORE any trigger evaluation and BEFORE any durable trigger write, so an
+  // unqualified run can neither fire nor consume a cooldown/window slot for
+  // its signature. (Before this fence the self-deriving entry only refused
+  // evidence that DECLARED itself synthetic: a hand-built array with no
+  // durable journal identity sailed through, fired, and spent the signature's
+  // cooldown — blocking the next real trigger for that window.)
+  //
+  // Entry-mode coverage:
+  //   - self-deriving (no injected trigger): the journal is evaluated here.
+  //   - production consumer (injected, already-recorded trigger): the consumer
+  //     applied the same rule to the same journal before recording, and the
+  //     fence is re-applied here so direct callers cannot bypass it.
+  const provenance = assessEvidenceProvenance({
+    config: p.synthetic === true ? { synthetic: true } : null,
+    events: p.baselineEvents ?? [],
+  });
+  if (!provenance.eligible) {
+    return {
+      ...hold(EVOLUTION_LOOP_HOLD.EVIDENCE_UNQUALIFIED,
+        `unqualified evidence refused before trigger evaluation (${provenance.reason})`,
+        { stage: "evidence", evidence_exclusion: provenance.reason, evidence_rows: provenance.rows }),
+      trace,
+    };
+  }
+
   // ── Stage 1: trigger ─────────────────────────────────────────────────────
   // Two entry modes:
   //   (a) PRODUCTION CONSUMER (production-consumer.mjs): the trigger was
@@ -208,19 +273,6 @@ export async function runEvolutionCycle(p) {
     triggerEvent = p.triggerEvent;
     step("trigger", { trigger_id: triggerEvent.trigger_id, signal_class: triggerEvent.signal_class, source: "production-consumer" });
   } else {
-    // §G1 THE EVIDENCE FENCE (trigger entry): a self-deriving cycle evaluates
-    // the journal itself, so it must apply the same provenance rule the
-    // production observer applies. Synthetic / test-only declarations can
-    // NEVER fire a Production Evolution trigger.
-    const synthetic = syntheticEvidenceReason({ events: p.baselineEvents ?? [] });
-    if (synthetic) {
-      return {
-        ...hold(EVOLUTION_LOOP_HOLD.EVIDENCE_UNQUALIFIED,
-          `synthetic evidence refused before trigger evaluation (${synthetic})`,
-          { stage: "evidence" }),
-        trace,
-      };
-    }
     const observations = extractTriggerObservations({ events: p.baselineEvents ?? [] });
     const fired = evaluateSignals({
       observations,
@@ -242,24 +294,6 @@ export async function runEvolutionCycle(p) {
     state = recordTrigger(state, triggerEvent);
     writeTriggerState(p.policyRoot, state);
     step("trigger", { trigger_id: triggerEvent.trigger_id, signal_class: triggerEvent.signal_class, suppressed: gated.suppressed.length });
-  }
-
-  // ── Stage 0b: PROPOSAL-ONLY EVIDENCE FENCE (§G1/G3) ───────────────────
-  // The proposal-only mode is admitted ONLY on verifiable production
-  // evidence: a real durable journal (event id + sequence on every row),
-  // never a synthetic declaration and never a hand-built array. It runs
-  // BEFORE the trigger is evaluated and BEFORE any durable write, so an
-  // unqualified run leaves no trigger record and no proposal artifact — not a
-  // persisted proposal a later HOLD would have to disown.
-  if (p.proposalOnly === true) {
-    const provenance = assessEvidenceProvenance({ config: null, events: p.baselineEvents ?? [] });
-    if (!provenance.eligible) {
-      return {
-        ...hold(EVOLUTION_LOOP_HOLD.EVIDENCE_UNQUALIFIED,
-          `proposal-only refused: ${provenance.reason}`, { stage: "evidence" }),
-        trace,
-      };
-    }
   }
 
   // ── Stage 2: candidate derivation ────────────────────────────────────────
@@ -299,18 +333,23 @@ export async function runEvolutionCycle(p) {
     isStrategy = true;
   } else if (plan?.status === "PLAN") {
     // A SOURCE_REPAIR plan from the producer (evidence-bound patch).
-    const derived = deriveImprovementCandidate({
-      triggerEvent: {
-        ...triggerEvent,
-        observation: {
-          ...(triggerEvent.observation ?? {}),
-          patchPlan: plan.plan.patch_plan,
-          affectedScope: plan.plan.affected_scope,
+    let derived;
+    try {
+      derived = deriveImprovementCandidate({
+        triggerEvent: {
+          ...triggerEvent,
+          observation: {
+            ...(triggerEvent.observation ?? {}),
+            patchPlan: plan.plan.patch_plan,
+            affectedScope: plan.plan.affected_scope,
+          },
         },
-      },
-      baselineHead: p.baselineHead, baselineRevision: p.baselineRevision,
-      storeRoot: p.policyRoot, scopeHints: p.scopeHints ?? [], measurement: p.measurement ?? null,
-    });
+        baselineHead: p.baselineHead, baselineRevision: p.baselineRevision,
+        storeRoot: p.policyRoot, scopeHints: p.scopeHints ?? [], measurement: p.measurement ?? null,
+      });
+    } catch (e) {
+      return { ...derivationFailureHold(e, p), plan, trace };
+    }
     if (derived.status === "UNSUPPORTED") {
       return { ...hold(EVOLUTION_LOOP_HOLD.CANDIDATE_UNSUPPORTED, derived.reason, { stage: "candidate" }), plan, trace };
     }
@@ -323,10 +362,15 @@ export async function runEvolutionCycle(p) {
     // fabricated mutation (§B). The supplied-plan path (p.plan undefined) keeps
     // the pre-existing derivation as the fallback when no store/task class is
     // known to the producer.
-    const derived = deriveImprovementCandidate({
-      triggerEvent, baselineHead: p.baselineHead, baselineRevision: p.baselineRevision,
-      storeRoot: p.policyRoot, scopeHints: p.scopeHints ?? [], measurement: p.measurement ?? null,
-    });
+    let derived;
+    try {
+      derived = deriveImprovementCandidate({
+        triggerEvent, baselineHead: p.baselineHead, baselineRevision: p.baselineRevision,
+        storeRoot: p.policyRoot, scopeHints: p.scopeHints ?? [], measurement: p.measurement ?? null,
+      });
+    } catch (e) {
+      return { ...derivationFailureHold(e, p), plan, trace };
+    }
     if (derived.status === "UNSUPPORTED") {
       return {
         ...hold(plan?.status === "INCONCLUSIVE" ? EVOLUTION_LOOP_HOLD.CANDIDATE_INCONCLUSIVE : EVOLUTION_LOOP_HOLD.CANDIDATE_UNSUPPORTED,
@@ -368,10 +412,20 @@ export async function runEvolutionCycle(p) {
         candidate_digest: candidate.candidate_digest,
       });
     } catch (e) {
+      // TARGETED REMEDIATION 2 / F4: distinguish the two persistence facts.
+      // `artifact_durable` is set by the store when the candidate FILE landed
+      // and only the derivation index failed — that is a repairable index, not
+      // a lost proposal, and saying "not persisted" there would be false.
+      const artifactDurable = e?.details?.artifact_durable === true;
+      const code = artifactDurable ? EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_INDEXED : EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_PERSISTED;
       return {
-        ...hold(EVOLUTION_LOOP_HOLD.CANDIDATE_NOT_PERSISTED,
-          `proposal not persisted: ${String(e?.code ?? "").trim()}${e?.code ? ": " : ""}${String(e?.message ?? e).slice(0, 300)}`,
-          { stage: "proposal", candidate_id: candidate.candidate_id }),
+        ...hold(code,
+          `${artifactDurable ? "proposal durable but not indexed" : "proposal not persisted"}: ${String(e?.code ?? "").trim()}${e?.code ? ": " : ""}${String(e?.message ?? e).slice(0, 300)}`,
+          {
+            stage: "proposal", candidate_id: candidate.candidate_id,
+            artifact_durable: artifactDurable,
+            candidate_path: e?.details?.candidate_path ?? candidateFilePath(p.policyRoot, candidate.candidate_id),
+          }),
         plan, trace,
       };
     }

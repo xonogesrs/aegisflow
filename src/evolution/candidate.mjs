@@ -47,6 +47,11 @@ export const EVOLUTION_CANDIDATE_HOLD = Object.freeze({
   // PROPOSAL-ONLY REPAIR (G2): the durable write could not be proven. A
   // proposal that is not on disk is never reported as created.
   PERSIST_FAILED: "HOLD / EVOLUTION_CANDIDATE_PERSIST_FAILED",
+  // TARGETED REMEDIATION 2 (F4): the candidate ARTIFACT is durable but its
+  // derivation-index entry could not be written. Distinct from PERSIST_FAILED
+  // on purpose — it tells the operator the proposal exists and only the index
+  // needs repair, so a retry is safe and nothing is claimed lost.
+  INDEX_WRITE_FAILED: "HOLD / EVOLUTION_CANDIDATE_INDEX_WRITE_FAILED",
 });
 
 // Deterministic repair strategies the derivation can plan for a trigger
@@ -79,6 +84,31 @@ export function derivationIndexPath(policyRoot) {
   return join(policyRoot, "evolution-derivation-index.json");
 }
 
+/** The two candidate families the loop derives (never one index namespace). */
+export const CANDIDATE_FAMILIES = Object.freeze(["SOURCE", "AGENT_STRATEGY"]);
+
+/** The family of an existing artifact. Absent `candidate_kind` means SOURCE
+ *  (every candidate written before the strategy family existed). */
+export function candidateFamily(candidate) {
+  return candidate?.candidate_kind === "AGENT_STRATEGY" ? "AGENT_STRATEGY" : "SOURCE";
+}
+
+/**
+ * The derivation-index key for ONE candidate family.
+ *
+ * TARGETED REMEDIATION 2 / F3: the SOURCE family keeps the historical
+ * unqualified `<signature>@<head>` key (so existing stores keep working with no
+ * migration), and every OTHER family namespaces its key. Sharing one key meant
+ * a persisted strategy proposal became the "already derived" answer for a later
+ * SOURCE derivation of the same signature@baseline (and vice versa): the loop
+ * returned CANDIDATE_EXISTS for a candidate of the WRONG family and never
+ * derived the one it was asked for.
+ */
+export function derivationKey(family, signature, baselineHead) {
+  const base = `${signature}@${baselineHead}`;
+  return family === "SOURCE" ? base : `${family}:${base}`;
+}
+
 function readDerivationIndex(policyRoot) {
   const p = derivationIndexPath(policyRoot);
   if (!existsSync(p)) return { schema: EVOLUTION_CANDIDATE_SCHEMA, version: 1, derivations: {} };
@@ -91,14 +121,20 @@ function readDerivationIndex(policyRoot) {
 
 function writeDerivationIndex(policyRoot, index) {
   const p = derivationIndexPath(policyRoot);
-  mkdirSync(dirname(p), { recursive: true });
   const tmp = `${p}.tmp-${process.pid}`;
   try {
+    mkdirSync(dirname(p), { recursive: true });
     writeFileSync(tmp, JSON.stringify(index, null, 2) + "\n", "utf8");
     renameSync(tmp, p);
   } catch (e) {
     try { if (existsSync(tmp)) unlinkSync(tmp); } catch { /* best-effort */ }
-    throw e;
+    // TARGETED REMEDIATION 2 / F4: a failed INDEX write is its own controlled
+    // classification. The candidate artifact may already be durable — the
+    // caller must be able to say exactly that and retry the index, instead of
+    // reporting PERSIST_FAILED (which reads as "nothing was persisted").
+    throw new C2dHoldError(EVOLUTION_CANDIDATE_HOLD.INDEX_WRITE_FAILED,
+      `derivation index write failed: ${String(e?.code ?? "").trim()}${e?.code ? ": " : ""}${String(e?.message ?? e).slice(0, 200)}`,
+      { errno: e?.code ?? null, path: p });
   }
 }
 
@@ -127,6 +163,68 @@ export function proposalContentDigest(candidate) {
 }
 
 /**
+ * Record one derivation in the store's index under its OWN family key, and
+ * report whether the index accepted it.
+ *
+ * TARGETED REMEDIATION 2 (F3/F4):
+ *   - the key is FAMILY-QUALIFIED (`derivationKey`), so a strategy proposal and
+ *     a source candidate for the same signature@baseline are two independent
+ *     entries and neither can alias the other;
+ *   - a family entry already owned by the SAME candidate is a no-op (retry);
+ *   - an entry owned by a DIFFERENT candidate is a conflict and fails closed —
+ *     the index never silently repoints an identity;
+ *   - an index WRITE failure surfaces as INDEX_WRITE_FAILED, never as
+ *     PERSIST_FAILED: the caller still holds a durable artifact.
+ *
+ * @returns {{ indexed: boolean, status: "INDEXED"|"ALREADY_INDEXED", key: string, error: string|null, code: string|null }}
+ */
+export function indexDerivation(storeRoot, candidate) {
+  const family = candidateFamily(candidate);
+  const key = derivationKey(family, candidate.problem_signature, candidate.baseline_head);
+  const index = readDerivationIndex(storeRoot);
+  const derivations = (index.derivations && typeof index.derivations === "object") ? index.derivations : {};
+  const existing = derivations[key];
+  if (existing !== undefined && existing !== candidate.candidate_id) {
+    // A key is owned by its FAMILY, so an entry pointing at a candidate of a
+    // DIFFERENT family is not an owner — it is the residue of the shared-key
+    // build (before F3 namespaced the strategy family). The genuine owner
+    // reclaims it and the legacy artifact stays on disk, untouched.
+    const priorPath = candidateFilePath(storeRoot, String(existing));
+    const priorOwner = readCandidate(storeRoot, String(existing));
+    if (!priorOwner && existsSync(priorPath)) {
+      // The artifact exists but cannot be read: an integrity anomaly, not
+      // legacy residue. Never repoint an identity over an unreadable record.
+      return {
+        indexed: false, status: "CONFLICT", key,
+        error: `${family} derivation ${key} points at unreadable artifact ${String(existing)}`,
+        code: EVOLUTION_CANDIDATE_HOLD.PERSIST_FAILED,
+      };
+    }
+    if (priorOwner && candidateFamily(priorOwner) === family) {
+      return {
+        indexed: false, status: "CONFLICT", key,
+        error: `${family} derivation ${key} is already owned by ${String(existing)}`,
+        code: EVOLUTION_CANDIDATE_HOLD.PERSIST_FAILED,
+      };
+    }
+    // fall through: the entry belongs to another family (or its artifact is
+    // gone), so this family takes its own key.
+  }
+  if (existing === candidate.candidate_id) return { indexed: true, status: "ALREADY_INDEXED", key, error: null, code: null };
+  derivations[key] = candidate.candidate_id;
+  try {
+    writeDerivationIndex(storeRoot, { ...index, schema: EVOLUTION_CANDIDATE_SCHEMA, version: 1, derivations });
+  } catch (e) {
+    return {
+      indexed: false, status: "WRITE_FAILED", key,
+      error: String(e?.message ?? e).slice(0, 300),
+      code: e instanceof C2dHoldError && typeof e.code === "string" ? e.code : EVOLUTION_CANDIDATE_HOLD.INDEX_WRITE_FAILED,
+    };
+  }
+  return { indexed: true, status: "INDEXED", key, error: null, code: null };
+}
+
+/**
  * THE durable candidate write (PROPOSAL-ONLY REPAIR §G2).
  *
  * Writes one already-derived candidate into the EXISTING governed candidate
@@ -142,13 +240,17 @@ export function proposalContentDigest(candidate) {
  * a conflict and fails closed (`PERSIST_FAILED`): identity must not silently
  * alias two different proposals.
  *
- * Failure is never silent: the on-disk artifact is re-read and its digest
- * re-derived before the write is reported as `CREATED`. Anything else throws a
- * C2dHoldError so the caller cannot claim a proposal exists.
+ * Failure is never silent AND never misclassified (TARGETED REMEDIATION 2/F4):
+ * the artifact write, the read-back and the index write are three separate
+ * facts. A failure before the artifact lands throws PERSIST_FAILED; a failure
+ * AFTER it landed throws INDEX_WRITE_FAILED from `indexDerivation` and carries
+ * `artifact_durable: true`, so the caller can say exactly what exists and a
+ * retry is provably safe.
  *
  * @param {string} storeRoot — the evolution store root
  * @param {object} candidate — an `autoloop.evolution-candidate/v1` record
- * @returns {{ status: "CREATED"|"EXISTING", candidate: object, path: string }}
+ * @returns {{ status: "CREATED"|"EXISTING", candidate: object, path: string,
+ *             candidate_kind: string, index: object }}
  */
 export function persistCandidate(storeRoot, candidate) {
   if (!storeRoot || typeof storeRoot !== "string") {
@@ -199,17 +301,17 @@ export function persistCandidate(storeRoot, candidate) {
       `candidate ${candidate.candidate_id} does not re-derive its own stored digest`);
   }
 
-  // Index the derivation (signature@baseline → candidate id) so the existing
-  // same-baseline dedup and the operator generation count see the proposal.
-  // NEVER clobber another candidate family's entry for the same key: the
-  // source family owns its own dedup and must not be rewritten here.
-  const index = readDerivationIndex(storeRoot);
-  const key = `${persisted.problem_signature}@${persisted.baseline_head}`;
-  if (index.derivations[key] === undefined) {
-    index.derivations[key] = persisted.candidate_id;
-    writeDerivationIndex(storeRoot, index);
+  // Index the derivation under THIS candidate's family so the same-baseline
+  // dedup and the operator generation count see the proposal — without ever
+  // rewriting another family's entry for the same signature@baseline.
+  const index = indexDerivation(storeRoot, persisted);
+  if (!index.indexed) {
+    const err = new C2dHoldError(index.code ?? EVOLUTION_CANDIDATE_HOLD.INDEX_WRITE_FAILED,
+      `candidate ${persisted.candidate_id} is durable but not indexed: ${index.error}`,
+      { candidate_id: persisted.candidate_id, candidate_path: path, artifact_durable: true, index_key: index.key });
+    throw err;
   }
-  return { status, candidate: persisted, path };
+  return { status, candidate: persisted, path, candidate_kind: candidateFamily(persisted), index };
 }
 
 // ── Derivation ──────────────────────────────────────────────────────────────
@@ -332,12 +434,18 @@ export function deriveImprovementCandidate({ triggerEvent, baselineHead, baselin
   };
   const candidateId = `ecand_${digestOf(identityFacts).slice(0, 40)}`;
 
-  // Same-signature dedup at the SAME baseline: already derived → no-op.
+  // Same-signature dedup at the SAME baseline, WITHIN the SOURCE family: an
+  // already derived SOURCE candidate is a no-op. A legacy unqualified index
+  // entry that points at another family's artifact (written before the family
+  // namespace existed) is NOT a SOURCE derivation — treating it as one would
+  // hand the loop a strategy proposal and skip the source candidate entirely
+  // (TARGETED REMEDIATION 2 / F3).
   const index = readDerivationIndex(storeRoot);
-  const key = `${triggerEvent.signature}@${baselineHead}`;
-  if (index.derivations[key]) {
-    const existing = readCandidate(storeRoot, index.derivations[key]);
-    if (existing) return { status: "EXISTING", candidate: existing };
+  const key = derivationKey("SOURCE", triggerEvent.signature, baselineHead);
+  const indexedId = index.derivations?.[key];
+  if (indexedId) {
+    const existing = readCandidate(storeRoot, indexedId);
+    if (existing && candidateFamily(existing) === "SOURCE") return { status: "EXISTING", candidate: existing };
   }
 
   // Risk classification (Section C) — recorded on the candidate; the
@@ -389,7 +497,9 @@ export function deriveImprovementCandidate({ triggerEvent, baselineHead, baselin
   };
   candidate.candidate_digest = digestOf({ ...candidate, candidate_digest: undefined });
 
-  // Persist (exclusive-create) + record the derivation index.
+  // Persist (exclusive-create) + record the derivation index under the SOURCE
+  // key. The artifact is already durable here, so an index failure carries its
+  // own classification (F4) instead of the generic persist failure.
   mkdirSync(candidateStorePath(storeRoot), { recursive: true });
   const p = candidateFilePath(storeRoot, candidateId);
   try {
@@ -399,8 +509,12 @@ export function deriveImprovementCandidate({ triggerEvent, baselineHead, baselin
     if (existing) return { status: "EXISTING", candidate: existing };
     throw e;
   }
-  index.derivations[key] = candidateId;
-  writeDerivationIndex(storeRoot, index);
+  const indexed = indexDerivation(storeRoot, candidate);
+  if (!indexed.indexed) {
+    throw new C2dHoldError(indexed.code ?? EVOLUTION_CANDIDATE_HOLD.INDEX_WRITE_FAILED,
+      `candidate ${candidateId} is durable but not indexed: ${indexed.error}`,
+      { candidate_id: candidateId, candidate_path: p, artifact_durable: true, index_key: indexed.key });
+  }
   return { status: "CREATED", candidate };
 }
 
