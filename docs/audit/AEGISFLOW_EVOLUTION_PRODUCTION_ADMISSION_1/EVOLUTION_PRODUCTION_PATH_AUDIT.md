@@ -6,6 +6,12 @@
 **Date:** 2026-10-19
 **Mode:** READ-ONLY. No source, config, store, EKM, CBM or OMP file was modified.
 
+`src/evolution`, `src/admission` and `test/evolution` are **byte-identical** to
+the prior audit's baseline `1301bb1` (`git diff --stat 1301bb1 da3a251 -- src/evolution src/admission test/evolution`
+is empty). The prior audit's code-level findings therefore still apply; what
+this card adds is a reachability/authority judgement for admission, not a
+re-measurement of the same code drift.
+
 Every classification below is tied to a call site that exists at `da3a251`.
 A stage that exists in source but has no production caller is marked
 `IMPLEMENTED_NOT_REACHABLE`; a stage that runs in the production path but does
