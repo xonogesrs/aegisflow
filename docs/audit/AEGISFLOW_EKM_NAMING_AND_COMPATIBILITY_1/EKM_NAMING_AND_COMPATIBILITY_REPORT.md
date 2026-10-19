@@ -178,18 +178,18 @@ No unrelated large test matrix was run, per card §5.
 | Item | Value |
 |---|---|
 | Branch | `feat/omp-cbm-recovery` (continues the recovery line) |
-| Commit | `1ebb1211a33192257936331c74940a25c60cf379` — `feat(ekm): name the first-party memory tool ekm_query` |
+| Commit | `2e63e0d8442b6cb17f76e1f61ef63280cc85a5b5` — report addendum; implementation commit `1ebb1211a33192257936331c74940a25c60cf379` |
 | Parent | `1cf1e9fa284d2407c4edbe42f525fffe12a169c2` (`origin/main`) |
 | Remote | `git@github.com:xonogesrs/aegisflow.git` |
-| Remote HEAD after push+fetch | `1ebb1211a33192257936331c74940a25c60cf379` (equal to local) |
+| Remote HEAD after push+fetch | `2e63e0d8442b6cb17f76e1f61ef63280cc85a5b5` (equal to local) |
 | Staged files | exactly the 7 files listed in §1 |
-| Worktree `/private/tmp/aegis-work` | clean at `1ebb121` |
+| Worktree `/private/tmp/aegis-work` | clean at `2e63e0d` |
 | Worktree `/Volumes/NVM2T/Development/repos/autoloop` | clean, still at `8bb72a5` on the audit branch (untouched) |
 | Stash | 0 entries |
 
 ### 6.1 Post-landing verification
 
-- `git rev-parse HEAD` == `git rev-parse refs/remotes/origin/feat/omp-cbm-recovery` → `1ebb121`.
+- `git rev-parse HEAD` == `git rev-parse refs/remotes/origin/feat/omp-cbm-recovery` → `2e63e0d`.
 - `node --test test/omp-integration/` on the committed tree → **36/36 pass**.
 - `node scripts/omp-integration/scan-publication.mjs` → `PUBLICATION_SCAN=CLEAN`.
 - `~/.autoloop/memory/memory.db` → `0fa9dbb3…` and `journal.jsonl` → `c5093265…`,
