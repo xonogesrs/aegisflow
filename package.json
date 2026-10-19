@@ -59,7 +59,7 @@
     "omp:uninstall": "node scripts/install-omp-integration.mjs uninstall",
     "omp:scan": "node scripts/omp-integration/scan-publication.mjs",
     "omp:test": "node scripts/omp-integration/run-acceptance.mjs",
-    "omp:cbm-test": "node --test test/omp-integration/test-omp-cbm-query.mjs",
+    "omp:ekm-test": "node --test test/omp-integration/test-omp-cbm-query.mjs",
     "memory:lineage": "node scripts/autoloop-memory-lineage.mjs",
     "test:pi-rpc-adapter": "node --test test/test-pi-rpc-adapter.mjs test/test-pi-lifecycle-integration.mjs",
     "test:pi-rpc-smoke": "node test/pi-rpc-real-smoke.mjs",

@@ -245,7 +245,7 @@ edit `DDL_V1`, and do not hand-edit the `memory_migrations` row: both make the
 next store diverge the same way. Stores created during the window are accepted
 once and re-stamped to the canonical checksum.
 
-### `cbm_query` reports `UNAVAILABLE`
+### `ekm_query` (formerly `cbm_query`) reports `UNAVAILABLE`
 
 **Likely cause** — the extension could not locate an AegisFlow checkout (its own
 deployed copy lives under `~/.omp/agent/extensions/`, where "three directories

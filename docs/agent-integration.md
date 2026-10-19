@@ -152,22 +152,28 @@ Two extensions ship there:
 | Extension | Purpose |
 |---|---|
 | `no-poll-waits.js` | waiter lifecycle + terminal-fence authority (below) |
-| `cbm-query.js` | the `cbm_query` tool: the agent's own read-only access to the CBM store |
+| `cbm-query.js` | the `ekm_query` tool: the agent's own read-only access to Engineering Knowledge Memory |
 
-`cbm_query` exists because the memory engine was reachable only through
+`ekm_query` exists because the memory engine was reachable only through
 `scripts/autoloop-memory-query.mjs`, a harness CLI. A harness has an agent
 vocabulary; an interactive session does not, so memory was invisible there and an
-agent could not use knowledge the repository had already recorded. The tool
-imports the same `resolveRepositoryIdentity` / `LocalMemoryStore.query` surface
-the CLI uses — there is no second store and no second ranking path — and returns
-`kind: "MEMORY_CONTEXT_DATA"` with an explicit authority boundary. It is
+agent could not use knowledge the repository had already recorded. It answers
+questions about verified engineering knowledge, decisions, provenance and
+evidence — it is explicitly **not** a source-code symbol index or call graph.
+The tool imports the same `resolveRepositoryIdentity` / `LocalMemoryStore.query`
+surface the CLI uses — there is no second store and no second ranking path — and
+returns `kind: "MEMORY_CONTEXT_DATA"` with an explicit authority boundary. It is
 read-only, never mandatory, and reports `EMPTY_MEMORY` / `INVALID` /
 `UNAVAILABLE` rather than an empty success.
+
+The pre-EKM name `cbm_query` remains registered as a `defaultInactive`
+compatibility entry: same execution seam, same result, but not part of the
+agent's active tool set. `ekm_query` is the single memory tool an agent sees.
 
 The tool inherits the store's DECLARED lineage: when a machine has recorded that
 a deprecated repository identity belongs to this checkout (see
 [troubleshooting](troubleshooting.md#a-populated-store-returns-selectedrecords-0-excludedrepository--n)),
-`cbm_query` sees those records too and reports the lineage alongside the result.
+`ekm_query` sees those records too and reports the lineage alongside the result.
 An undeclared identity stays isolated exactly as before, and the tool never
 declares an alias itself — that requires evidence and is a deliberate operator
 action (`scripts/autoloop-memory-lineage.mjs`).

@@ -1,17 +1,20 @@
 // test/omp-integration/test-omp-cbm-query.mjs
 //
-// Contract test for the `cbm_query` extension tool
-// (AEGISFLOW_OMP_INTEGRATION_RECOVERY_1 §B).
+// Contract test for the `ekm_query` extension tool
+// (AEGISFLOW_OMP_INTEGRATION_RECOVERY_1 §B; renamed by
+// AEGISFLOW_EKM_NAMING_AND_COMPATIBILITY_1).
 //
-// The defect this pins: CBM was reachable ONLY through
+// The defect this pins: memory was reachable ONLY through
 // `scripts/autoloop-memory-query.mjs`, a harness CLI. An interactive OMP session
-// has no harness, so in a normal session the agent had no CBM tool at all and
+// has no harness, so in a normal session the agent had no memory tool at all and
 // could not consult memory it had recorded — measured by asking a live session
-// for a CBM tool: `NO_SUCH_TOOL`.
+// for one: `NO_SUCH_TOOL`.
 //
 // The test drives the tool the way OMP does (register → execute) against a
 // temporary store, so it covers the real path: identity from cwd, the store's
 // own retrieval engine, and the DATA-only boundary.
+//
+// The file name is historical (`cbm`); the tool it tests is `ekm_query`.
 
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
@@ -20,8 +23,9 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import openCbmQuery, {
+import openEkmQuery, {
 	CBM_TOOL,
+	EKM_TOOL,
 	loadMemoryModules,
 	queryCodebaseMemory,
 	resolveRepoRoot,
@@ -233,7 +237,7 @@ test("an explicit checkout is honored, so a deployed copy is not pinned to one p
 	assert.ok(result.retrieval.selectedRecords.length >= 1);
 });
 
-test("the tool registers one read-only tool and executes through the same seam", async () => {
+test("the extension registers ekm_query as the one active tool and executes through it", async () => {
 	const tools = new Map();
 	const pi = {
 		logger: { warn() {}, info() {}, debug() {} },
@@ -244,11 +248,18 @@ test("the tool registers one read-only tool and executes through the same seam",
 		},
 		registerTool: (def) => tools.set(def.name, def),
 	};
-	openCbmQuery(pi);
-	assert.deepEqual([...tools.keys()], [CBM_TOOL]);
-	const def = tools.get(CBM_TOOL);
+	openEkmQuery(pi);
+	assert.deepEqual([...tools.keys()], [EKM_TOOL, CBM_TOOL]);
+	const def = tools.get(EKM_TOOL);
 	assert.equal(def.approval, "read", "the memory tool must never be a write capability");
 	assert.match(def.description, /READ-ONLY/);
+	assert.match(def.description, /Engineering Knowledge Memory/);
+	assert.match(def.description, /Not a source-code symbol index or call graph/);
+	assert.equal(def.defaultInactive, undefined, "the EKM tool is the one the agent sees by default");
+
+	const legacy = tools.get(CBM_TOOL);
+	assert.equal(legacy.defaultInactive, true, "the legacy name must not be auto-exposed alongside ekm_query");
+	assert.equal(legacy.approval, "read");
 
 	const repo = makeRepo();
 	const stateRoot = tmpRoot("cbm-exec-");
@@ -256,7 +267,37 @@ test("the tool registers one read-only tool and executes through the same seam",
 	const ctx = { cwd: repo };
 	const out = await def.execute("call-1", { terms: "parseMemoryRecord" }, null, null, ctx);
 	assert.equal(out.details.state, "AVAILABLE");
+	assert.equal(out.details.op, EKM_TOOL);
 	const payload = JSON.parse(out.content[1].text);
 	assert.equal(payload.kind, "MEMORY_CONTEXT_DATA");
 	assert.ok(payload.retrieval.selectedRecords.length >= 1);
+});
+
+test("the legacy cbm_query name resolves to the same store and returns the same result", async () => {
+	const tools = new Map();
+	const pi = {
+		logger: { warn() {}, info() {}, debug() {} },
+		zod: {
+			object: (shape) => ({ shape }),
+			string: () => ({ type: "string", optional: () => ({ type: "string", optional: true }) }),
+			number: () => ({ type: "number", optional: () => ({ type: "number", optional: true }) }),
+		},
+		registerTool: (def) => tools.set(def.name, def),
+	};
+	openEkmQuery(pi);
+	const repo = makeRepo();
+	const stateRoot = tmpRoot("cbm-legacy-");
+	populate(stateRoot, repo);
+	const ctx = { cwd: repo };
+	const params = { terms: "parseMemoryRecord", maxRecords: 5 };
+
+	const current = await tools.get(EKM_TOOL).execute("c1", params, null, null, ctx);
+	const legacy = await tools.get(CBM_TOOL).execute("c2", params, null, null, ctx);
+	assert.equal(legacy.details.state, current.details.state);
+	assert.equal(legacy.details.op, CBM_TOOL, "the compatibility call is attributed to the name actually called");
+	assert.deepEqual(
+		JSON.parse(legacy.content[1].text),
+		JSON.parse(current.content[1].text),
+		"both names must read the same store through the same seam",
+	);
 });
