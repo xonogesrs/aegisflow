@@ -339,11 +339,12 @@ refactor.
 Pre-edit gate: §1 — the prior card's landing was complete, no WIP, no stash, no
 unpushed commit, and no other worktree mutation.
 
-Post-push verification (after the allowlist commits):
+Post-push verification, performed on the last **content** commit (a later
+report-only commit cannot name its own hash):
 
 | Check | Value |
 |---|---|
-| local `HEAD` | `773bb8ab7b293b1c8a45ea31ec26c829b6cb2b51` |
+| local `HEAD` at verification | `773bb8ab7b293b1c8a45ea31ec26c829b6cb2b51` |
 | `origin/feat/omp-cbm-recovery` (post-fetch) | `773bb8ab7b293b1c8a45ea31ec26c829b6cb2b51` |
 | `git ls-remote origin refs/heads/feat/omp-cbm-recovery` | `773bb8ab7b293b1c8a45ea31ec26c829b6cb2b51` |
 | unpushed commits | `0` |
@@ -351,15 +352,19 @@ Post-push verification (after the allowlist commits):
 | `git stash list` | empty |
 | commit `b32a8e2` | reachable, unamended, published |
 
-Three commits on top of the prior card's landing:
+The stack on top of the prior card's landing is:
 
 ```
 773bb8a fix(evolution): close the two defects the independent review reproduced
 668a74f docs(evolution): record hardening-1 post-push landing verification
 09df20d fix(evolution): harden candidate conflict, synthetic typing, evidence guard
+<this report-only commit>  docs(evolution): pin hardening-1 landing record
 ```
 
-The first commit contains exactly 8 files:
+Only `09df20d` and `773bb8a` change behaviour; both are test-verified as above.
+`668a74f` and the final commit are report-only and change no `.mjs` file.
+
+`09df20d` contains exactly 8 files:
 
 ```
 docs/audit/AEGISFLOW_EVOLUTION_LOW_RISK_HARDENING_1/HARDENING_REPORT.md (new)
@@ -381,7 +386,17 @@ new path.
 
 ## 9. Handoff to independent review
 
-Disposition of this card: **REMEDIATION READY FOR INDEPENDENT RERUN**, not PASS.
+Disposition of this card: **REMEDIATION READY FOR A SECOND INDEPENDENT RERUN**,
+not PASS.
+
+A first independent review of this card returned **FAIL** and reproduced two
+defects: the non-string synthetic env value (N2) and the forgeable
+`QUALIFIED_PATTERN_EVIDENCE` exemption (N3). Both are fixed in `773bb8a`, both
+were re-reproduced failing against `09df20d`, and both now pass. The reviewer's
+N1 verification itself passed and found no N1 regression. Its other observation
+— that the host-suite classification was author-reported — is addressed by
+§6.1, which lists the 14 failing names and their single error class; a rerun may
+confirm it independently.
 
 Suggested rerun focus, in order:
 
