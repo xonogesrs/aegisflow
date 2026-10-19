@@ -304,9 +304,36 @@ refactor.
 
 ## 8. Durable landing
 
-Pre-edit gate: §1. Post-push verification is recorded after the allowlist
-commit; the exact file list is this card's change surface (§7) plus this report
-and the new test file.
+Pre-edit gate: §1 — the prior card's landing was complete, no WIP, no stash, no
+unpushed commit, and no other worktree mutation.
+
+Post-push verification (after the allowlist commit):
+
+| Check | Value |
+|---|---|
+| local `HEAD` | `09df20dc24f61ae66ac8a9e06ce91af498f16064` |
+| `origin/feat/omp-cbm-recovery` (post-fetch) | `09df20dc24f61ae66ac8a9e06ce91af498f16064` |
+| `git ls-remote origin refs/heads/feat/omp-cbm-recovery` | `09df20dc24f61ae66ac8a9e06ce91af498f16064` |
+| unpushed commits | `0` |
+| `git status --porcelain` | empty |
+| `git stash list` | empty |
+| commit `b32a8e2` | reachable, unamended, published — one commit added on top |
+
+The commit contains exactly 8 files:
+
+```
+docs/audit/AEGISFLOW_EVOLUTION_LOW_RISK_HARDENING_1/HARDENING_REPORT.md (new)
+docs/autonomous-evolution.md
+docs/configuration.md
+src/evolution/candidate.mjs
+src/evolution/loop.mjs
+src/evolution/production-consumer.mjs
+test/evolution/test-evolution-low-risk-hardening-1.mjs (new)
+test/evolution/test-evolution-targeted-remediation-2.mjs
+```
+
+No scratch file, probe or temporary worktree was committed; the pre-edit WIP
+patch preserved in `/private/tmp/aegis-wip-backup/` is outside the repository.
 
 ## 9. Handoff to independent review
 
