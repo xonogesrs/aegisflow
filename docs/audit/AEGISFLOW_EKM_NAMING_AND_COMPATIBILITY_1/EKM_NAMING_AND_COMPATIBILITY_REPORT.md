@@ -178,14 +178,24 @@ No unrelated large test matrix was run, per card §5.
 | Item | Value |
 |---|---|
 | Branch | `feat/omp-cbm-recovery` (continues the recovery line) |
-| Commit | _recorded after commit — see §6.1_ |
-| Remote HEAD | _recorded after push — see §6.1_ |
+| Commit | `1ebb1211a33192257936331c74940a25c60cf379` — `feat(ekm): name the first-party memory tool ekm_query` |
+| Parent | `1cf1e9fa284d2407c4edbe42f525fffe12a169c2` (`origin/main`) |
+| Remote | `git@github.com:xonogesrs/aegisflow.git` |
+| Remote HEAD after push+fetch | `1ebb1211a33192257936331c74940a25c60cf379` (equal to local) |
 | Staged files | exactly the 7 files listed in §1 |
-| Worktrees after landing | both clean, 0 stash |
+| Worktree `/private/tmp/aegis-work` | clean at `1ebb121` |
+| Worktree `/Volumes/NVM2T/Development/repos/autoloop` | clean, still at `8bb72a5` on the audit branch (untouched) |
+| Stash | 0 entries |
 
-### 6.1 Post-commit verification
+### 6.1 Post-landing verification
 
-Filled in at landing time.
+- `git rev-parse HEAD` == `git rev-parse refs/remotes/origin/feat/omp-cbm-recovery` → `1ebb121`.
+- `node --test test/omp-integration/` on the committed tree → **36/36 pass**.
+- `node scripts/omp-integration/scan-publication.mjs` → `PUBLICATION_SCAN=CLEAN`.
+- `~/.autoloop/memory/memory.db` → `0fa9dbb3…` and `journal.jsonl` → `c5093265…`,
+  both unchanged from the pre-card baseline (the 8 records and the journal hash
+  chain were never written).
+- `~/.local/bin/omp` → `fa41b27d…` (unchanged).
 
 ---
 
