@@ -261,15 +261,35 @@ test/evolution/test-evolution-low-risk-hardening-1.mjs
 Only `production-consumer.mjs` and the test file change behaviour. No scratch
 file, probe or temporary worktree was committed.
 
-## 9. Handoff
+## 9. Independent review (recorded, not rewritten)
 
-Disposition of this card: **REPAIR READY FOR INDEPENDENT RE-REVIEW**, not PASS.
+A fresh session that did not write this repair ran its own harness against
+`6f08577` and against this repair, then ran both suites. Its disposition is
+**HOLD**. This section records that disposition; it does not convert it to PASS.
 
-The reviewer should reproduce the original N3 exploit at `6f08577` (it succeeds
-there) and against this repair (it does not), then confirm:
+| Item | Independent result |
+|---|---|
+| N3 closure | forged signature / count / patchPlan / all-three reach `CYCLE_STARTED` and write a trigger at `6f08577`; the same inputs are `NO_QUALIFIED_TRIGGER` with `evidence_reverified: true` and zero durable paths after the repair |
+| Journal-carried patch | preserved on the durable trigger; a caller that swaps only the patch text is refused after the repair and was accepted at `6f08577` |
+| `test/evolution` | 121 / 121 |
+| Host-only | 3216 tests, 3199 pass, **15 fail**, 2 skipped |
+| Production evolution | `enabled: false`, declaration absent |
+| Landing | local HEAD = origin = ls-remote = `d596edb`; worktree clean; stash empty |
 
-1. A–G above with the durable side effects, not only the verdict;
-2. that a genuine journal still fires (no over-fencing);
-3. that a refused forgery leaves no cooldown behind;
-4. `test/evolution` totals and the host-only failure set;
-5. production evolution remains inactive and no production data was written.
+The fifteenth host failure is `E2 X2 CROSSPROC` in
+`test/v2/test-e2-reboot-soak-crossproc.mjs` (`HOLD` where `PASS` was expected).
+It is not one of the 14 `@earendil-works/pi-ai` module failures. The same named
+case is the flake the prior card recorded at `b32a8e2` and did not reproduce on
+its own head. An isolated rerun of that file on this HEAD passed 3/3. That does
+not erase the suite result the reviewer observed, and it is not used here to
+upgrade the HOLD.
+
+The reviewer's other notes, left as stated: an empty `fired` list returns
+before re-derivation and writes nothing; a seven-day `observation.at` edit on
+otherwise genuine current evidence is not itself rejected (the derivation clock
+falls back to the consumer clock outside the 5-minute tolerance).
+
+**No Terminal PASS request is made.** The hardening branch stays open until a
+rerun of the host suite does not add a failure outside the recorded baseline
+set, or a reviewer explicitly accepts the known flake.
+
