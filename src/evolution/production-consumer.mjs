@@ -53,10 +53,14 @@ import { C2dHoldError, HOLD } from "../c2d/fs-atomic.mjs";
 import { readConfigEnv, legacyEnvName } from "../shared/autoloop-paths.mjs";
 import { acquireStructuredLock } from "../c2d/lock.mjs";
 import { collectFingerprint } from "../c2d/fingerprint.mjs";
+import { canonicalize } from "../canonical-digest.mjs";
 import { readEvolutionPolicy } from "./policy.mjs";
 import {
   readTriggerState, writeTriggerState, applyTriggerGates, recordTrigger,
   buildTriggerEvent, sha256Hex,
+  // N3 REPAIR: the consumer re-derives the eligible signals from the journal
+  // with the SAME two functions the observer used — never a second evaluator.
+  extractTriggerObservations, evaluateSignals,
 } from "./trigger.mjs";
 import { evolutionSwitchState, readObservationJournal } from "./production-observer.mjs";
 import { assessEvidenceProvenance } from "./attribution-feed.mjs";
@@ -392,43 +396,167 @@ function revalidateEvidenceProvenance({ config = null, evidenceRoot = null, exec
 }
 
 /**
- * The evidence a fired signal cites must be re-establishable from the journal
- * that was just re-read. This is the second half of N3: provenance alone proves
- * the journal is production evidence, not that THIS signal came from it.
+ * Signal classes the CONSUMER cannot re-derive from the journal on this path.
  *
- * Journal-shaped references are `evt_<n>_<hex>`. Every journal-derived class
- * must cite at least one row the journal actually holds, so a forged signal can
- * neither cite fiction nor cite nothing.
+ *   - `QUALIFIED_PATTERN_EVIDENCE` — its evidence is pattern qualification from
+ *     the learning store, which the consumer does not read.
+ *   - `LATENCY_REGRESSION` / `TOKEN_INEFFICIENCY` — both fire only against a
+ *     BASELINE the caller supplies (`latencyBaseline` / `tokenBaseline`). The
+ *     consumer has no durable view of a baseline, so a caller-supplied one
+ *     would be exactly the unverified input this guard exists to refuse.
  *
- * `QUALIFIED_PATTERN_EVIDENCE` is the one class whose evidence is NOT a journal
- * row: its references are pattern identities from the learning store. The
- * consumer has no durable view of pattern qualification (the pattern store is
- * not read on this path, and the signal's own `observation.patterns` comes from
- * the same caller that supplied `evidence_qualified`). Selective trust is not
- * verification: accepting the caller's `signalClass` label let a forged signal
- * with an EMPTY pattern list and EMPTY references write a durable trigger and
- * spend the signature's cooldown. The class is therefore REFUSED here until
- * pattern qualification is durably readable from the consumer — fail closed on
- * the class we cannot check rather than exempt it from the guard.
- *
- * @returns {string|null} a refusal reason, or null when the signal is consistent
+ * No production path supplies any of these inputs to the observer today, so
+ * these classes cannot legitimately appear in a production `fired` list;
+ * refusing them narrows nothing that is reachable and fails closed on the
+ * classes whose evidence is not durably re-establishable here.
  */
-function signalEvidenceRefusal(signal, events) {
-  const cls = String(signal?.signalClass ?? "?");
-  if (cls === "QUALIFIED_PATTERN_EVIDENCE") {
-    return `signal ${cls} cannot be re-established from the durable journal (pattern qualification is not durably readable here)`;
+const NON_REDERIVABLE_SIGNAL_CLASSES = Object.freeze({
+  QUALIFIED_PATTERN_EVIDENCE: "pattern qualification is not durably readable here",
+  LATENCY_REGRESSION: "its baseline is not durably readable here",
+  TOKEN_INEFFICIENCY: "its baseline is not durably readable here",
+});
+
+/** Canonical fingerprint of ONE signal record: every field a trigger event
+ *  carries, with the evidence refs order-normalised. Two signals with the same
+ *  fingerprint are the same claim about the same evidence. */
+function signalFingerprint(signal) {
+  return canonicalize({
+    signalClass: signal?.signalClass ?? null,
+    count: signal?.count ?? null,
+    minCount: signal?.minCount ?? null,
+    signature: signal?.signature ?? null,
+    evidenceRefs: [...(Array.isArray(signal?.evidenceRefs) ? signal.evidenceRefs : [])].sort(),
+    observation: signal?.observation ?? {},
+  });
+}
+
+/** The first field in which two signals disagree, for the refusal reason. */
+function signalFieldMismatch(claimed, derived) {
+  const a = claimed ?? {};
+  const b = derived ?? {};
+  if (a.signalClass !== b.signalClass) return "signalClass";
+  if (a.signature !== b.signature) return "signature";
+  if (a.count !== b.count) return "count";
+  if (a.minCount !== b.minCount) return "minCount";
+  const refsA = [...(Array.isArray(a.evidenceRefs) ? a.evidenceRefs : [])].sort();
+  const refsB = [...(Array.isArray(b.evidenceRefs) ? b.evidenceRefs : [])].sort();
+  if (refsA.join("\u0000") !== refsB.join("\u0000")) return "evidenceRefs";
+  // A patch is the one observation field that reaches a mutation plan, so it
+  // is named explicitly instead of being folded into a generic mismatch.
+  if (canonicalize(a.observation?.patchPlan ?? null) !== canonicalize(b.observation?.patchPlan ?? null)) return "patchPlan";
+  if (canonicalize(a.observation?.affectedScope ?? null) !== canonicalize(b.observation?.affectedScope ?? null)) return "affectedScope";
+  return "observation";
+}
+
+/**
+ * The tolerated distance between an observation's own `at` and the consumer's
+ * clock. Inside it the re-derivation uses the observation's timestamp (so the
+ * window matches the observer's byte for byte); outside it the consumer uses
+ * its own clock — a caller must not be able to select a stale or future
+ * evidence window by editing one field.
+ */
+const OBSERVATION_AT_TOLERANCE_MS = 5 * 60 * 1000;
+
+/** The re-derivation's clock for ONE observation. */
+function derivationClock(observation, now = Date.now()) {
+  const at = Date.parse(observation?.at ?? "");
+  if (!Number.isFinite(at)) return null;
+  return Math.abs(now - at) <= OBSERVATION_AT_TOLERANCE_MS ? at : null;
+}
+
+/**
+ * N3 — JOURNAL-DERIVED SIGNAL AUTHORITY.
+ *
+ * The consumer must never trust the caller's `fired` list, `signature`, `count`,
+ * `signalClass` or `patchPlan`. Citing a row that happens to exist in a real
+ * journal proves nothing: a forged signal can cite a genuine row while claiming
+ * a signature, count or patch that the row does not support, and thereby write
+ * a durable trigger, spend the signature's cooldown and seed a candidate with
+ * an unverified patch.
+ *
+ * So the eligible signals are RE-DERIVED here from the durable journal with the
+ * SAME two functions the observer used (`extractTriggerObservations` +
+ * `evaluateSignals`) and the SAME policy thresholds. The caller's claim is only
+ * accepted when it is canonically identical to a re-derived signal — including
+ * its `observation`, which is where a bounded patch travels. The DERIVED
+ * records (not the caller's objects) are what the gate, the durable trigger
+ * record and the downstream plan consume, so a patch can only reach a candidate
+ * when the journal itself carries it.
+ *
+ * The observation window is anchored to the observation's own `at` timestamp so
+ * the re-derivation sees exactly the window the observer saw. Without that, an
+ * event sitting on the cutoff could be counted by one call and dropped by the
+ * other, and a GENUINE signal would be refused — the guard must never fence
+ * real evidence.
+ *
+ * This is not a second evidence store and not a second evaluator: it is the
+ * existing derivation, run once more against the journal the consumer already
+ * re-read.
+ *
+ * @returns {{ ok: boolean, reason: string|null, signals: object[] }}
+ */
+function rederiveSignalsFromJournal({ events, thresholds = {}, now = null }) {
+  let derived;
+  try {
+    const observations = extractTriggerObservations({
+      events,
+      ...(Number.isFinite(now) ? { now } : {}),
+    });
+    derived = evaluateSignals({ observations, thresholds: thresholds ?? {} });
+  } catch (e) {
+    return { ok: false, reason: `signal re-derivation failed: ${String(e?.message ?? e).slice(0, 160)}`, signals: [] };
   }
-  const refs = Array.isArray(signal?.evidenceRefs) ? signal.evidenceRefs : [];
-  const journalRefs = refs.filter((r) => typeof r === "string" && /^evt_\d+_[0-9a-f]{16}$/.test(r));
-  if (journalRefs.length === 0) {
-    return `signal ${cls} cites no durable journal row`;
+  return { ok: true, reason: null, signals: Array.isArray(derived) ? derived : [] };
+}
+
+/**
+ * Compare the caller's fired list against the journal-derived one.
+ *
+ * The comparison is exact in BOTH directions: a claimed signal the journal does
+ * not derive is a forgery, and a derived signal the caller omitted would let the
+ * caller decide which qualifying evidence is allowed to act. Production always
+ * passes the observer's own list, so both directions hold by construction.
+ *
+ * @returns {{ ok: boolean, reason: string|null, signals: object[] }}
+ *   `signals` is the DERIVED list — the only list downstream may act on.
+ */
+function verifyFiredSignals({ fired, derived }) {
+  for (const signal of fired) {
+    const cls = String(signal?.signalClass ?? "?");
+    const why = NON_REDERIVABLE_SIGNAL_CLASSES[cls];
+    if (why) return { ok: false, reason: `signal ${cls} cannot be re-established from the durable journal (${why})`, signals: [] };
   }
-  const known = new Set(events.map((e) => e?.event_id).filter((id) => typeof id === "string"));
-  const unknown = journalRefs.filter((r) => !known.has(r));
-  if (unknown.length > 0) {
-    return `signal ${cls} cites ${unknown.length} journal row(s) absent from the durable journal`;
+  const byFingerprint = new Map(derived.map((s) => [signalFingerprint(s), s]));
+  const refsOf = (s) => [...(Array.isArray(s?.evidenceRefs) ? s.evidenceRefs : [])].sort().join("\u0000");
+  for (const claimed of fired) {
+    if (byFingerprint.has(signalFingerprint(claimed))) continue;
+    // Same class, same cited rows, different claim — the interesting forgery:
+    // it reuses real evidence while asserting a fact the evidence denies. The
+    // refusal names the exact field, so the operator can tell a forged
+    // signature/count/patch from an entirely invented signal.
+    const sameClass = derived.filter((s) => s.signalClass === claimed?.signalClass);
+    const candidate = sameClass.find((s) => refsOf(s) === refsOf(claimed)) ?? sameClass[0];
+    if (candidate) {
+      return {
+        ok: false,
+        reason: `signal ${String(claimed?.signalClass ?? "?")} does not match the journal-derived signal (${signalFieldMismatch(claimed, candidate)})`,
+        signals: [],
+      };
+    }
+    return {
+      ok: false,
+      reason: `signal ${String(claimed?.signalClass ?? "?")} was not derived from the durable journal`,
+      signals: [],
+    };
   }
-  return null;
+  if (derived.length !== fired.length) {
+    return {
+      ok: false,
+      reason: `the caller reported ${fired.length} signal(s) but the durable journal derives ${derived.length}`,
+      signals: [],
+    };
+  }
+  return { ok: true, reason: null, signals: derived };
 }
 
 function disposition(config, name, extra = {}) {
@@ -540,28 +668,47 @@ export function consumeEvolutionObservationForProduction({
         evidence_reverified: true,
       });
     }
-    // Every fired signal that cites journal rows must cite rows that are ACTUALLY
-    // in that journal. A forged observation can carry a plausible
-    // `evidence_qualified:true` over a REAL journal while listing references
-    // that do not exist; refusing here keeps the durable trigger record honest.
-    const inconsistent = fired
-      .map((signal) => ({ signal, reason: signalEvidenceRefusal(signal, provenance.events) }))
-      .find((x) => x.reason !== null);
-    if (inconsistent) {
+    // Every fired signal must be RE-DERIVABLE from that journal. Citing rows
+    // that happen to exist is not enough: a forged signal can cite a genuine
+    // row while claiming a signature, count or patch the row does not support.
+    // The eligible signals are therefore re-derived here with the SAME two
+    // functions the observer used, and only a claim canonically identical to a
+    // derived signal is accepted. Downstream acts on the DERIVED records, so a
+    // patch can reach a candidate only when the journal itself carries it.
+    const rederived = rederiveSignalsFromJournal({
+      events: provenance.events,
+      thresholds: config?.thresholds ?? {},
+      now: derivationClock(observation),
+    });
+    if (!rederived.ok) {
       return disposition(config, "NO_QUALIFIED_TRIGGER", {
         fired_count: 0,
-        reason: `evidence re-verification failed: ${inconsistent.reason}`,
+        reason: `evidence re-verification failed: ${rederived.reason}`,
         evidence_qualified: false,
         evidence_reverified: true,
       });
     }
+    const verified = verifyFiredSignals({ fired, derived: rederived.signals });
+    if (!verified.ok) {
+      return disposition(config, "NO_QUALIFIED_TRIGGER", {
+        fired_count: 0,
+        reason: `evidence re-verification failed: ${verified.reason}`,
+        evidence_qualified: false,
+        evidence_reverified: true,
+        signals_rederived: rederived.signals.length,
+      });
+    }
+    // N3: the caller's objects are DISCARDED from here on. Everything below
+    // (gate, durable trigger record, plan, candidate) consumes the journal's
+    // own derivation.
+    const signals = verified.signals;
 
     // The loop is OFF without a durable policy — fail closed before any write.
     let policy;
     try {
       policy = readEvolutionPolicy(config.storeRoot);
     } catch (e) {
-      return disposition(config, "POLICY_UNAVAILABLE", { fired_count: fired.length, reason: String(e?.message ?? e).slice(0, 200) });
+      return disposition(config, "POLICY_UNAVAILABLE", { fired_count: signals.length, reason: String(e?.message ?? e).slice(0, 200) });
     }
 
     // §B durable trigger state — THE existing machinery, persisted here (the
@@ -571,7 +718,7 @@ export function consumeEvolutionObservationForProduction({
     let state = readTriggerState(config.storeRoot);
     let chosen = null;
     const suppressed = [];
-    for (const signal of fired) {
+    for (const signal of signals) {
       const gated = applyTriggerGates({ fired: [signal], state });
       state = gated.state;
       if (gated.allowed.length > 0) { chosen = gated.allowed[0]; break; }
@@ -579,7 +726,7 @@ export function consumeEvolutionObservationForProduction({
     }
     if (!chosen) {
       return disposition(config, "GATED", {
-        fired_count: fired.length, suppressed_count: suppressed.length, suppressed,
+        fired_count: signals.length, suppressed_count: suppressed.length, suppressed,
       });
     }
     const triggerEvent = buildTriggerEvent({
@@ -598,7 +745,7 @@ export function consumeEvolutionObservationForProduction({
     const key = `${config.storeRoot}\u0000${triggerEvent.signature}`;
     if (ACTIVE.has(key)) {
       return disposition(config, "SINGLEFLIGHT", {
-        fired_count: fired.length, trigger_id: triggerEvent.trigger_id,
+        fired_count: signals.length, trigger_id: triggerEvent.trigger_id,
         signature: triggerEvent.signature, reason: "an identical evolution cycle is already active in this process",
       });
     }
@@ -612,14 +759,14 @@ export function consumeEvolutionObservationForProduction({
     } catch (e) {
       ACTIVE.delete(key);
       return disposition(config, "SCHEDULE_FAILED", {
-        fired_count: fired.length, trigger_id: triggerEvent.trigger_id,
+        fired_count: signals.length, trigger_id: triggerEvent.trigger_id,
         signature: triggerEvent.signature, signal_class: triggerEvent.signal_class,
         reason: `schedule failed: ${String(e?.message ?? e).slice(0, 200)}`,
       });
     }
     ACTIVE.set(key, scheduled);
     return disposition(config, "CYCLE_STARTED", {
-      fired_count: fired.length,
+      fired_count: signals.length,
       signal_class: triggerEvent.signal_class,
       signature: triggerEvent.signature,
       trigger_id: triggerEvent.trigger_id,

@@ -304,26 +304,42 @@ already-recorded trigger is re-checked as well. Refusals carry the provenance
 reason (`synthetic_evidence:…`, `untrusted_evidence_row`, `no_evidence_rows`),
 never a bare `NO_TRIGGER`.
 
-### The consumer re-establishes provenance itself
+### The consumer derives its signals from the journal
 
 `observation.evidence_qualified` is a field on an object the caller hands in, so
 a non-production caller could forge it. The consumer therefore re-reads the
 durable journal (same reader) and re-applies the same predicate **before** the
-trigger gate, and additionally requires every fired signal to cite at least one
-journal-shaped reference (`evt_<n>_<hex>`) that the journal actually holds.
+trigger gate.
 
-`QUALIFIED_PATTERN_EVIDENCE` is the one class whose evidence is not a journal
-row, and the consumer has no durable view of pattern qualification on this path.
-Rather than exempt it (which accepted a forged signal with an empty pattern list
-and empty refs), the class is **refused here** — fail closed on the class that
-cannot be re-established until pattern qualification becomes durably readable
-from the consumer. No production path supplies `qualifiedPatterns` today, so
-this narrows an unreachable path rather than changing live behaviour.
+Provenance alone is not enough. A signal can cite a journal row that genuinely
+exists while asserting a signature, count, class or patch the row does not
+support — and a `fired` list is exactly what decides the durable trigger, the
+cooldown key and the candidate's plan. The consumer therefore **re-derives** the
+eligible signals from that journal with the same two functions the observer used
+(`extractTriggerObservations` + `evaluateSignals`) and the same policy
+thresholds, and accepts a caller claim only when it is canonically identical to
+a derived one — `signalClass`, `signature`, `count`, `minCount`, `evidenceRefs`
+and `observation` (where a bounded patch travels). The comparison holds in both
+directions: a signal the journal does not derive is refused, and a caller that
+reports fewer signals than the journal derives is refused too, so the caller
+cannot pick which qualifying evidence acts.
+
+Everything downstream — the trigger gate, the durable trigger record, the plan
+and the candidate — consumes the **derived** records, never the caller's
+objects. A patch therefore reaches a candidate only when the journal itself
+carries it.
+
+Three classes cannot be re-derived from the journal on this path and are
+**refused** rather than exempted: `QUALIFIED_PATTERN_EVIDENCE` (pattern
+qualification lives in the learning store) and `LATENCY_REGRESSION` /
+`TOKEN_INEFFICIENCY` (both fire only against a caller-supplied baseline). No
+production path supplies those inputs to the observer today, so this narrows an
+unreachable path rather than changing live behaviour.
 
 A refusal at this point is total — `NO_QUALIFIED_TRIGGER` with
 `evidence_reverified: true`, zero trigger records, zero cooldown consumed, zero
-cycles. A caller that supplies no journal identity cannot be verified and is
-refused, never trusted by default.
+candidate artifacts, zero cycles. A caller that supplies no journal identity
+cannot be verified and is refused, never trusted by default.
 
 ### `synthetic` typing
 

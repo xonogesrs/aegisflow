@@ -42,6 +42,7 @@ import {
   consumeEvolutionObservationForProduction, drainEvolutionCycles, evolutionConsumerState,
   resolveEvolutionProductionConfig,
 } from "../../src/evolution/production-consumer.mjs";
+import { observeRunForEvolutionTriggers } from "../../src/evolution/production-observer.mjs";
 import {
   EVOLUTION_DECLARATION_ENV, EVOLUTION_DECLARATION_SCHEMA,
 } from "../../src/evolution/production-declaration.mjs";
@@ -498,173 +499,257 @@ test("N2 an unusable synthetic starts ZERO cycles and performs ZERO mutation (en
 // ══ N3 — CONSUMER EVIDENCE GUARD ═══════════════════════════════════════════
 //
 // The consumer used to trust `observation.evidence_qualified` — a field on an
-// object its caller hands in. A non-production caller could forge it and get a
-// durable trigger record + a spent cooldown before the loop's fence ever ran.
-
-function forgedObservation({ signature = SIGNATURE, evidenceRefs = [], evidenceQualified = true } = {}) {
-  return {
-    schema: "autoloop.evolution-observation/v1",
-    version: 1,
-    graph_run_id: "forged-run",
-    execution_id: null,
-    switch_state: { state: "ENABLED", reason: null },
-    observed: 3,
-    fired: [{
-      signalClass: "REPEATED_REPAIR_REQUIREMENT",
-      count: 3, minCount: 3,
-      signature,
-      evidenceRefs,
-      observation: {},
-    }],
-    baseline_events: 3,
-    evidence_qualified: evidenceQualified,
-    evidence_exclusion: null,
-    at: new Date().toISOString(),
-  };
-}
+// object its caller hands in. The first repair re-read the journal and required
+// each signal to cite a row the journal actually held, but that only proved the
+// ROW existed: a forged signal could cite a genuine row while claiming a
+// signature, count, class or patch the row does not support, and still write a
+// durable trigger, spend the signature's cooldown and seed a candidate with an
+// unverified patch.
+//
+// The consumer now RE-DERIVES the eligible signals from the durable journal
+// (`extractTriggerObservations` + `evaluateSignals`, the same two functions the
+// observer used) and accepts a caller claim only when it is canonically
+// identical to a derived one. Downstream acts on the DERIVED records.
+//
+// Every case below asserts DURABLE side effects, not just the verdict.
 
 function consumerConfig({ store, checkpointRoot, repoRoot }) {
   return resolveEvolutionProductionConfig({ runnerOpts: { evolution: { storeRoot: store, checkpointRoot, repoRoot } }, env: {} });
 }
 
-test("N3 a forged evidence_qualified with no durable journal writes NOTHING", () => {
-  const store = freshDir("n3a-store");
-  const repo = makeFixtureRepo("n3a-repo");
-  createEvolutionPolicy(store, policyInput());
-  const config = consumerConfig({ store, checkpointRoot: freshDir("n3a-cp"), repoRoot: repo });
+/** A real, qualified journal (3 repairs on one phase) plus the observation the
+ *  production observer derives from it. */
+function realJournalObservation({ label, payload = {} }) {
+  const evidenceRoot = freshDir(`${label}-ev`);
+  const executionId = `exec_${createHash("sha256").update(label).digest("hex").slice(0, 32)}`;
+  const journal = writeJournal(evidenceRoot, executionId, repairs(3, "P0", payload));
+  const rows = [];
+  const head = journal.verifyJournal();
+  for (let s = 1; s <= head.count; s++) rows.push(journal.readEvent(s).event);
+  const observation = observeRunForEvolutionTriggers({ evidenceRoot, executionId, graphRunId: label });
+  return { evidenceRoot, executionId, rows, observation };
+}
 
-  const out = consumeEvolutionObservationForProduction({
-    observation: forgedObservation({ evidenceRefs: ["evt_1_" + "a".repeat(16)] }),
-    config,
-    evidenceRoot: freshDir("n3a-ev"),
-    executionId: `exec_${createHash("sha256").update("n3a").digest("hex").slice(0, 32)}`,
-  });
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+/** Assert the N3 refusal left ZERO durable trace. */
+function assertNoDurableTrace(store, out, reason) {
   assert.equal(out.disposition, "NO_QUALIFIED_TRIGGER", JSON.stringify(out));
   assert.equal(out.cycle_started, false);
   assert.equal(out.evidence_qualified, false);
   assert.equal(out.evidence_reverified, true);
-  assert.match(out.reason, /evidence re-verification failed/);
-  assert.equal(existsSync(join(store, "evolution-trigger-state.json")), false, "zero durable trigger writes");
-  assert.equal(existsSync(candidateStorePath(store)), false, "zero cycle work");
-});
+  assert.match(out.reason, reason, JSON.stringify(out.reason));
+  assert.equal(existsSync(join(store, "evolution-trigger-state.json")), false, "0 durable trigger records / 0 cooldown consumption");
+  assert.equal(existsSync(candidateStorePath(store)), false, "0 candidate artifacts");
+  assert.equal(existsSync(join(store, "evolution-cycles")), false, "0 cycle locks (no production cycle activation)");
+}
 
-test("N3 a forged observation over synthetic journal evidence writes NOTHING", () => {
-  const store = freshDir("n3b-store");
-  const repo = makeFixtureRepo("n3b-repo");
+test("N3 the real journal derives the signal the consumer accepts (the baseline for A–D)", async () => {
+  const store = freshDir("n3-base-store");
+  const repo = makeFixtureRepo("n3-base-repo");
   createEvolutionPolicy(store, policyInput());
-  const config = consumerConfig({ store, checkpointRoot: freshDir("n3b-cp"), repoRoot: repo });
+  const config = consumerConfig({ store, checkpointRoot: freshDir("n3-base-cp"), repoRoot: repo });
+  const { evidenceRoot, executionId, observation } = realJournalObservation({ label: "n3-base" });
 
-  const evidenceRoot = freshDir("n3b-ev");
-  const executionId = `exec_${createHash("sha256").update("n3b").digest("hex").slice(0, 32)}`;
-  writeJournal(evidenceRoot, executionId, repairs(3, "PS", { synthetic: true, test_only: true }));
+  assert.equal(observation.evidence_qualified, true);
+  assert.equal(observation.fired.length, 1, JSON.stringify(observation.fired));
+  assert.equal(observation.fired[0].signalClass, "REPEATED_REPAIR_REQUIREMENT");
 
-  const out = consumeEvolutionObservationForProduction({
-    observation: forgedObservation({ evidenceRefs: ["evt_1_" + "a".repeat(16)] }),
-    config, evidenceRoot, executionId,
-  });
-  assert.equal(out.disposition, "NO_QUALIFIED_TRIGGER", JSON.stringify(out));
-  assert.equal(out.evidence_reverified, true);
-  assert.match(out.reason, /synthetic_evidence/);
-  assert.equal(existsSync(join(store, "evolution-trigger-state.json")), false);
-});
-
-test("N3 a forged observation citing rows absent from a REAL journal writes NOTHING and spends no cooldown", async () => {
-  const store = freshDir("n3c-store");
-  const repo = makeFixtureRepo("n3c-repo");
-  createEvolutionPolicy(store, policyInput());
-  const config = consumerConfig({ store, checkpointRoot: freshDir("n3c-cp"), repoRoot: repo });
-
-  // A REAL, qualified journal — but the forged signal cites rows it does not hold.
-  const evidenceRoot = freshDir("n3c-ev");
-  const executionId = `exec_${createHash("sha256").update("n3c").digest("hex").slice(0, 32)}`;
-  writeJournal(evidenceRoot, executionId, repairs(3, "P0"));
-
-  const forged = consumeEvolutionObservationForProduction({
-    observation: forgedObservation({ evidenceRefs: ["evt_9_" + "d".repeat(16)] }),
-    config, evidenceRoot, executionId,
-  });
-  assert.equal(forged.disposition, "NO_QUALIFIED_TRIGGER", JSON.stringify(forged));
-  assert.equal(forged.evidence_reverified, true);
-  assert.match(forged.reason, /absent from the durable journal/);
-  assert.equal(existsSync(join(store, "evolution-trigger-state.json")), false, "no trigger state, so no cooldown slot");
-
-  // The refused attempt consumed no cooldown: a REAL production run over the
-  // SAME store still fires.
-  const { result } = await productionRun({
-    store, checkpointRoot: freshDir("n3c-cp2"), repoRoot: repo,
-    terminalEvents: [...repairs(3, "PR"), { event_type: "RUN_PASSED", stage: "terminal", payload: {} }],
-    label: "n3c",
-  });
-  assert.equal(result.evolutionDisposition.disposition, "CYCLE_STARTED",
-    `real evidence was suppressed by the forged attempt: ${JSON.stringify(result.evolutionDisposition)}`);
-  assert.equal(readTriggerState(store).triggers.length, 1, "exactly the real trigger is recorded");
-});
-
-test("N3 a real journal with matching evidence refs still fires (no over-fencing)", async () => {
-  const store = freshDir("n3d-store");
-  const repo = makeFixtureRepo("n3d-repo");
-  createEvolutionPolicy(store, policyInput());
-  const config = consumerConfig({ store, checkpointRoot: freshDir("n3d-cp"), repoRoot: repo });
-
-  const evidenceRoot = freshDir("n3d-ev");
-  const executionId = `exec_${createHash("sha256").update("n3d").digest("hex").slice(0, 32)}`;
-  const journal = writeJournal(evidenceRoot, executionId, repairs(3, "P0"));
-  const rows = [];
-  const head = journal.verifyJournal();
-  for (let s = 1; s <= head.count; s++) rows.push(journal.readEvent(s).event);
-
-  const out = consumeEvolutionObservationForProduction({
-    observation: forgedObservation({ evidenceRefs: rows.map((e) => e.event_id) }),
-    config, evidenceRoot, executionId,
-  });
+  const out = consumeEvolutionObservationForProduction({ observation, config, evidenceRoot, executionId });
   assert.equal(out.disposition, "CYCLE_STARTED", JSON.stringify(out));
-  assert.equal(out.cycle_started, true);
-  assert.equal(readTriggerState(store).triggers.length, 1, "the verified signal recorded its trigger");
   await drainEvolutionCycles({ timeoutMs: 120000 });
 });
 
-test("N3 a forged signal citing NO journal rows is refused over a real journal (the ref check is not skippable)", () => {
-  const store = freshDir("n3f-store");
-  const repo = makeFixtureRepo("n3f-repo");
+// ── A: real row + forged SIGNATURE ─────────────────────────────────────────
+test("N3-A a real journal row with a FORGED signature is refused and writes nothing", () => {
+  const store = freshDir("n3A-store");
+  const repo = makeFixtureRepo("n3A-repo");
   createEvolutionPolicy(store, policyInput());
-  const config = consumerConfig({ store, checkpointRoot: freshDir("n3f-cp"), repoRoot: repo });
+  const config = consumerConfig({ store, checkpointRoot: freshDir("n3A-cp"), repoRoot: repo });
+  const { evidenceRoot, executionId, observation } = realJournalObservation({ label: "n3A" });
 
-  const evidenceRoot = freshDir("n3f-ev");
-  const executionId = `exec_${createHash("sha256").update("n3f").digest("hex").slice(0, 32)}`;
-  writeJournal(evidenceRoot, executionId, repairs(3, "P0"));
-
-  const out = consumeEvolutionObservationForProduction({
-    observation: forgedObservation({ evidenceRefs: [] }),
-    config, evidenceRoot, executionId,
-  });
-  assert.equal(out.disposition, "NO_QUALIFIED_TRIGGER", JSON.stringify(out));
-  assert.equal(out.evidence_reverified, true);
-  assert.match(out.reason, /cites no durable journal row/);
-  assert.equal(existsSync(join(store, "evolution-trigger-state.json")), false);
+  // The reviewer's exploit shape: the REAL rows, a REAL class, a REAL count —
+  // only the signature is invented (it becomes the cooldown key).
+  const forged = clone(observation);
+  forged.fired[0].signature = "sig-forged-by-caller";
+  const out = consumeEvolutionObservationForProduction({ observation: forged, config, evidenceRoot, executionId });
+  assertNoDurableTrace(store, out, /does not match the journal-derived signal \(signature\)/);
 });
 
-test("N3 a forged QUALIFIED_PATTERN_EVIDENCE signal is refused — the class cannot be re-established here", () => {
-  const store = freshDir("n3e-store");
-  const repo = makeFixtureRepo("n3e-repo");
+// ── B: real row + forged COUNT ─────────────────────────────────────────────
+test("N3-B a real journal row with a FORGED count is refused and writes nothing", () => {
+  const store = freshDir("n3B-store");
+  const repo = makeFixtureRepo("n3B-repo");
   createEvolutionPolicy(store, policyInput());
-  const config = consumerConfig({ store, checkpointRoot: freshDir("n3e-cp"), repoRoot: repo });
+  const config = consumerConfig({ store, checkpointRoot: freshDir("n3B-cp"), repoRoot: repo });
+  const { evidenceRoot, executionId, observation } = realJournalObservation({ label: "n3B" });
 
-  const evidenceRoot = freshDir("n3e-ev");
-  const executionId = `exec_${createHash("sha256").update("n3e").digest("hex").slice(0, 32)}`;
-  writeJournal(evidenceRoot, executionId, repairs(3, "P0"));
+  const forged = clone(observation);
+  forged.fired[0].count = 99;
+  const out = consumeEvolutionObservationForProduction({ observation: forged, config, evidenceRoot, executionId });
+  assertNoDurableTrace(store, out, /does not match the journal-derived signal \(count\)/);
+});
 
-  // The reviewer's exact forgery: a real journal, an empty pattern list, no
-  // refs, and a caller-supplied signalClass that used to be exempt.
-  for (const evidenceRefs of [[], ["pattern-digest-abc"]]) {
-    const observation = forgedObservation({ evidenceRefs });
-    observation.fired[0].signalClass = "QUALIFIED_PATTERN_EVIDENCE";
-    observation.fired[0].minCount = 1;
-    observation.fired[0].observation = { patterns: [] };
-    const out = consumeEvolutionObservationForProduction({ observation, config, evidenceRoot, executionId });
-    assert.equal(out.disposition, "NO_QUALIFIED_TRIGGER", JSON.stringify(out));
-    assert.equal(out.evidence_reverified, true);
-    assert.match(out.reason, /QUALIFIED_PATTERN_EVIDENCE cannot be re-established/);
+// ── C: real row + forged CLASS ─────────────────────────────────────────────
+test("N3-C a real journal row with a FORGED class is refused and writes nothing", () => {
+  const store = freshDir("n3C-store");
+  const repo = makeFixtureRepo("n3C-repo");
+  createEvolutionPolicy(store, policyInput());
+  const config = consumerConfig({ store, checkpointRoot: freshDir("n3C-cp"), repoRoot: repo });
+  const { evidenceRoot, executionId, observation } = realJournalObservation({ label: "n3C" });
+
+  // A derivable class the journal does NOT derive from this evidence (no HOLDs).
+  const forged = clone(observation);
+  forged.fired[0].signalClass = "RECURRING_HOLD_PATTERN";
+  const out = consumeEvolutionObservationForProduction({ observation: forged, config, evidenceRoot, executionId });
+  assertNoDurableTrace(store, out, /was not derived from the durable journal/);
+});
+
+// ── D: real row + forged PATCH ─────────────────────────────────────────────
+test("N3-D a forged patchPlan is never written into a durable candidate", async () => {
+  const store = freshDir("n3D-store");
+  const repo = makeFixtureRepo("n3D-repo");
+  createEvolutionPolicy(store, policyInput());
+  const config = consumerConfig({ store, checkpointRoot: freshDir("n3D-cp"), repoRoot: repo });
+  const FORGED_PATCH = "--- a/lib/retry.ts\n+++ b/lib/retry.ts\n@@\n-export const MAX_RETRIES = 3;\n+export const MAX_RETRIES = 99;\n";
+  const { evidenceRoot, executionId, observation } = realJournalObservation({ label: "n3D" });
+
+  // The journal carries NO patch, so no patch may travel to a candidate.
+  const forged = clone(observation);
+  forged.fired[0].observation = { patchPlan: { patch: FORGED_PATCH }, affectedScope: ["lib/retry.ts"] };
+  const out = consumeEvolutionObservationForProduction({ observation: forged, config, evidenceRoot, executionId });
+  assertNoDurableTrace(store, out, /does not match the journal-derived signal \(patchPlan\)/);
+
+  // Not even after a cycle: the store holds no candidate and no artifact cites
+  // the forged patch.
+  const candidates = existsSync(candidateStorePath(store))
+    ? readdirSync(candidateStorePath(store)).filter((f) => f.endsWith(".json"))
+    : [];
+  assert.deepEqual(candidates, [], "0 candidate artifacts");
+  for (const f of candidates) {
+    assert.equal(readFileSync(join(candidateStorePath(store), f), "utf8").includes("MAX_RETRIES = 99"), false);
   }
-  assert.equal(existsSync(join(store, "evolution-trigger-state.json")), false, "no durable trigger, no cooldown slot");
-  assert.equal(existsSync(candidateStorePath(store)), false, "no cycle work");
+  assert.equal(git(repo, ["status", "--porcelain"]), "", "the repo is untouched");
+});
+
+test("N3-D a patch the JOURNAL carries travels into the candidate (provenance, not refusal)", async () => {
+  const store = freshDir("n3D2-store");
+  const repo = makeFixtureRepo("n3D2-repo");
+  createEvolutionPolicy(store, policyInput());
+  const config = consumerConfig({ store, checkpointRoot: freshDir("n3D2-cp"), repoRoot: repo });
+  const JOURNAL_PATCH = "--- a/lib/retry.ts\n+++ b/lib/retry.ts\n@@\n-export const MAX_RETRIES = 3;\n+export const MAX_RETRIES = 5;\n";
+  const { evidenceRoot, executionId, observation } = realJournalObservation({
+    label: "n3D2",
+    payload: { patch_plan: { patch: JOURNAL_PATCH }, affected_scope: ["lib/retry.ts"] },
+  });
+
+  // The journal itself carries the patch, so the derived signal carries it too.
+  assert.equal(observation.fired[0].observation.patchPlan.patch, JOURNAL_PATCH);
+
+  const out = consumeEvolutionObservationForProduction({ observation, config, evidenceRoot, executionId });
+  assert.equal(out.disposition, "CYCLE_STARTED", JSON.stringify(out));
+  const state = readTriggerState(store);
+  assert.equal(state.triggers.length, 1);
+  assert.equal(state.triggers[0].observation.patchPlan.patch, JOURNAL_PATCH,
+    "the durable trigger carries the JOURNAL's patch");
+  await drainEvolutionCycles({ timeoutMs: 120000 });
+
+  // A caller that swaps the patch on an otherwise-correct signal is refused
+  // even though the same journal row is cited.
+  const store2 = freshDir("n3D3-store");
+  createEvolutionPolicy(store2, policyInput());
+  const config2 = consumerConfig({ store: store2, checkpointRoot: freshDir("n3D3-cp"), repoRoot: repo });
+  const swapped = clone(observation);
+  swapped.fired[0].observation.patchPlan.patch = JOURNAL_PATCH.replace("= 5;", "= 99;");
+  const refused = consumeEvolutionObservationForProduction({ observation: swapped, config: config2, evidenceRoot, executionId });
+  assertNoDurableTrace(store2, refused, /does not match the journal-derived signal \(patchPlan\)/);
+});
+
+// ── E: forge then real — the forgery must not spend the cooldown ───────────
+test("N3-E a refused forgery consumes NO cooldown: the real signal still fires afterwards", async () => {
+  const store = freshDir("n3E-store");
+  const repo = makeFixtureRepo("n3E-repo");
+  createEvolutionPolicy(store, policyInput());
+  const config = consumerConfig({ store, checkpointRoot: freshDir("n3E-cp"), repoRoot: repo });
+  const { evidenceRoot, executionId, observation } = realJournalObservation({ label: "n3E" });
+
+  // Forge the signature FIRST (the cooldown key the caller controls).
+  const forged = clone(observation);
+  forged.fired[0].signature = "sig-forged-first";
+  const refused = consumeEvolutionObservationForProduction({ observation: forged, config, evidenceRoot, executionId });
+  assertNoDurableTrace(store, refused, /does not match the journal-derived signal \(signature\)/);
+
+  // The real signal over the SAME store must still reach the gate un-suppressed.
+  const real = consumeEvolutionObservationForProduction({ observation, config, evidenceRoot, executionId });
+  assert.equal(real.disposition, "CYCLE_STARTED", `the forgery spent the cooldown: ${JSON.stringify(real)}`);
+  assert.equal(readTriggerState(store).triggers.length, 1, "exactly one durable trigger, from the real signal");
+  await drainEvolutionCycles({ timeoutMs: 120000 });
+});
+
+// ── F: real journal + correctly derived signal → normal trigger ────────────
+test("N3-F a real journal with the correctly derived signal fires normally (no over-fencing)", async () => {
+  const store = freshDir("n3F-store");
+  const repo = makeFixtureRepo("n3F-repo");
+  createEvolutionPolicy(store, policyInput());
+  const config = consumerConfig({ store, checkpointRoot: freshDir("n3F-cp"), repoRoot: repo });
+  const { evidenceRoot, executionId, rows, observation } = realJournalObservation({ label: "n3F" });
+
+  const out = consumeEvolutionObservationForProduction({ observation, config, evidenceRoot, executionId });
+  assert.equal(out.disposition, "CYCLE_STARTED", JSON.stringify(out));
+  assert.equal(out.cycle_started, true);
+
+  const state = readTriggerState(store);
+  assert.equal(state.triggers.length, 1, "the verified signal recorded its durable trigger");
+  assert.deepEqual(state.triggers[0].evidence_refs, rows.map((e) => e.event_id).sort(),
+    "the durable trigger cites the journal's own rows");
+  assert.equal(out.signal_class, "REPEATED_REPAIR_REQUIREMENT");
+  await drainEvolutionCycles({ timeoutMs: 120000 });
+});
+
+// ── G: the classes the consumer cannot re-derive stay refused ──────────────
+test("N3-G a caller-supplied class the journal cannot re-derive is refused (pattern / baseline classes)", () => {
+  const store = freshDir("n3G-store");
+  const repo = makeFixtureRepo("n3G-repo");
+  createEvolutionPolicy(store, policyInput());
+  const config = consumerConfig({ store, checkpointRoot: freshDir("n3G-cp"), repoRoot: repo });
+  const { evidenceRoot, executionId, observation } = realJournalObservation({ label: "n3G" });
+
+  for (const [signalClass, pattern] of [
+    ["QUALIFIED_PATTERN_EVIDENCE", /QUALIFIED_PATTERN_EVIDENCE cannot be re-established/],
+    ["LATENCY_REGRESSION", /LATENCY_REGRESSION cannot be re-established/],
+    ["TOKEN_INEFFICIENCY", /TOKEN_INEFFICIENCY cannot be re-established/],
+  ]) {
+    const forged = clone(observation);
+    forged.fired[0].signalClass = signalClass;
+    const out = consumeEvolutionObservationForProduction({ observation: forged, config, evidenceRoot, executionId });
+    assertNoDurableTrace(store, out, pattern);
+  }
+});
+
+// ── G2: a caller cannot OMIT a derived signal to pick the cooldown key ─────
+test("N3-G2 a caller that reports FEWER signals than the journal derives is refused", () => {
+  const store = freshDir("n3G2-store");
+  const repo = makeFixtureRepo("n3G2-repo");
+  createEvolutionPolicy(store, policyInput());
+  const config = consumerConfig({ store, checkpointRoot: freshDir("n3G2-cp"), repoRoot: repo });
+
+  // 5 repairs derive TWO classes (REPEATED_REPAIR_REQUIREMENT and the
+  // retry-volume class); claiming only one is a caller-side edit of what
+  // qualifies.
+  const evidenceRoot = freshDir("n3G2-ev");
+  const executionId = `exec_${createHash("sha256").update("n3G2").digest("hex").slice(0, 32)}`;
+  writeJournal(evidenceRoot, executionId, repairs(5, "P0"));
+  const observation = observeRunForEvolutionTriggers({ evidenceRoot, executionId, graphRunId: "n3G2" });
+  assert.deepEqual(
+    observation.fired.map((s) => s.signalClass).sort(),
+    ["ABNORMAL_RETRY_FREQUENCY", "REPEATED_REPAIR_REQUIREMENT"],
+    JSON.stringify(observation.fired),
+  );
+
+  const truncated = clone(observation);
+  truncated.fired = truncated.fired.slice(0, 1);
+  const out = consumeEvolutionObservationForProduction({ observation: truncated, config, evidenceRoot, executionId });
+  assertNoDurableTrace(store, out, /journal derives 2/);
 });

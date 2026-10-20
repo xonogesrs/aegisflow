@@ -139,6 +139,12 @@ loop's own fence ever ran.
 
 **Fix** (`src/evolution/production-consumer.mjs`):
 
+> **Superseded for N3.** This section records the state at `6f08577`. The
+> independent review returned **HOLD** on N3 because the guard below proved only
+> that a signal *cited* a journal row, not that the row *supported* the claim.
+> The binding repair and its proof are in
+> `N3_SIGNAL_JOURNAL_BINDING_REPAIR.md`; the HOLD above is not rewritten.
+
 - `revalidateEvidenceProvenance` re-reads the run's durable journal with the ONE
   shared reader (`readObservationJournal`) and re-applies the ONE shared
   predicate (`assessEvidenceProvenance`) **before** the trigger gate, the
