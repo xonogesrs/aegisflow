@@ -1469,7 +1469,16 @@ export default function (pi) {
 						// The fence advances the generation, so the generation that landed is
 						// the one before the current value — but only when this call fenced.
 						generation: landed ? state.generation - 1 : state.generation,
-						commitExecuted: landed,
+						// Reaching here means the primitive was ENTERED and produced no
+						// denial (a denial with no fence is handled above), so a commit
+						// really was attempted — it just did not complete. Reporting
+						// `commitExecuted:false` here would conflate "attempted and
+						// failed" with "never attempted", which is the distinction this
+						// field exists to make. Measured in independent review: a manager
+						// throwing inside `acknowledgeDeliveries`, with the failure log
+						// also throwing before `fenceCalls` incremented, reported
+						// `commitExecuted:false` after an observed attempt.
+						commitExecuted: true,
 						committed: landed,
 						denial: landed ? null : "HANDLER_EXCEPTION",
 						reason: landed

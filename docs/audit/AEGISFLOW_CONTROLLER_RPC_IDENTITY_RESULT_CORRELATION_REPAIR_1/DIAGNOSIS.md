@@ -248,6 +248,15 @@ manager's real delivered array. `R2_T4` asserts the agent's
 produced a logger that threw from inside the commit primitive, after the fence
 had applied. The frame then said `committed:false` — the same lie in the other
 direction — and, worse, the throw escaped the handler so *no* frame was emitted.
+`commitExecuted` tracks ENTRY into the primitive, not its success. Review
+measured a manager throwing inside `acknowledgeDeliveries` with the failure log
+also throwing before `fenceCalls` incremented: the frame said
+`commitExecuted:false` after a real attempt, collapsing "attempted and failed"
+into "never attempted". The catch now reports `commitExecuted:true` whenever the
+primitive was entered and produced no denial, with `committed` still from the
+fence delta (`R2_T3i`). A malformed-target refusal and an authority denial —
+which never reach the primitive — keep `commitExecuted:false`.
+
 `committed` is derived from a **delta** — `state.fenceCalls` sampled before the
 attempt and compared after — so it reports only what THIS call fenced, with
 `handlerException` recording the throw. The first attempt used
@@ -361,7 +370,7 @@ the path is dropped from `process.env` regardless, and no frame is emitted
 
 ## 6. Phase E — integration
 
-`integrations/omp/extensions/test/controller-contract.acceptance.ts`, 42 cases,
+`integrations/omp/extensions/test/controller-contract.acceptance.ts`, 44 cases,
 driven against the real extension module and a real `AsyncJobManager`:
 
 | Case | Fact |
@@ -394,6 +403,8 @@ driven against the real extension module and a real `AsyncJobManager`:
 | R2_T3e | a denial whose logging throws is still reported as that denial |
 | R2_T3f | a durable commit record is distinguished from a failed next-generation claim |
 | R2_T3g | an unreadable ledger refuses the write and never reports the commit as recorded |
+| R2_T3h | the frame distinguishes a durable commit from a failed next-generation claim |
+| R2_T3i | "attempted and failed" is distinguishable from "never attempted" |
 | R2_T4 | the agent tool surface cannot emit a result frame |
 | R5_T1–T8 | accept / wrong id / duplicate / out-of-order / missing / malformed / injection / concurrent |
 | R5_T8b | a cancelled request id cannot be reissued, so a delayed answer stays unsolicited |

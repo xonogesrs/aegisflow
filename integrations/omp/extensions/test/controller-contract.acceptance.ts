@@ -1257,6 +1257,51 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 		}
 	}
 
+	// ── R2_T3i — "attempted and failed" is not "never attempted" ───────────────
+	// Reproduced in independent review: a manager throwing inside
+	// `acknowledgeDeliveries`, with the failure log also throwing before
+	// `fenceCalls` incremented, reported `commitExecuted:false` after an observed
+	// attempt. The card requires those two to be distinguishable.
+	{
+		const sessionId = "r2-t3i";
+		process.env[AUTHORITY_ENV] = AUTHORITY;
+		const { host, release } = await hostWithGatedJob(sessionId);
+		try {
+			const state = snapshotFor(sessionId);
+			const realManager = host.session.asyncJobManager as Record<string, unknown>;
+			host.session.asyncJobManager = {
+				acknowledgeDeliveries() {
+					throw new Error("simulated manager failure");
+				},
+				getRunningJobs: () => [],
+				getDeliveryState: () => ({ queued: 0 }),
+				isDeliverySuppressed: () => false,
+			};
+			// Make the failure LOG throw too, so the throw escapes before the fence
+			// counter moves: the exact shape the reviewer measured.
+			const logger = host.pi.logger as { warn: (...args: unknown[]) => void };
+			const realWarn = logger.warn.bind(logger);
+			logger.warn = (message: unknown) => {
+				if (message === "no-poll-waits: delivery fence failed") throw new Error("logger failure");
+				realWarn(message);
+			};
+			drainFrames();
+			await commit(host, `PASS runtime=${state.runtimeInstanceId} generation=${state.generation} request=r2-t3i`);
+			host.session.asyncJobManager = realManager;
+			const [frame] = resultFrames();
+			check("R2_T3i", () => {
+				assert.ok(frame, "the command must still answer");
+				assert.equal(frame.result.commitExecuted, true, "a commit was attempted");
+				assert.equal(frame.result.committed, false, "but no fence completed");
+				assert.equal(frame.result.denial, "HANDLER_EXCEPTION");
+			});
+			results.R2_T3i = "ATTEMPT_DISTINGUISHED";
+		} finally {
+			delete process.env[AUTHORITY_ENV];
+			release();
+		}
+	}
+
 	// ── R2_T4 — the agent tool surface cannot emit a result frame ───────────────
 	{
 		const sessionId = "r2-t4";

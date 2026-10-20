@@ -57,7 +57,7 @@ committed. This card repairs those three, and nothing else.
 
 | Layer | Command | Result |
 |---|---|---|
-| Contract cases (fake host, real `AsyncJobManager`) | `node scripts/omp-integration/run-acceptance.mjs` | `CONTROLLER_CONTRACT_ACCEPTANCE=PASS cases=43` |
+| Contract cases (fake host, real `AsyncJobManager`) | `node scripts/omp-integration/run-acceptance.mjs` | `CONTROLLER_CONTRACT_ACCEPTANCE=PASS cases=44` |
 | Existing suites | same runner | `POLICY_TEST`, `WAITER_FENCE`, `TERMINAL_FENCE_AUTHORITY`, `TERMINAL_FENCE_ORDERING` all PASS |
 | Integration tests | `node --test test/omp-integration/*.mjs` | 43 tests, 43 pass |
 | Real transport (real `omp --mode rpc` child per case) | `node scripts/omp-rpc-controller-contract-suite.mjs` | `CONTROLLER_RPC_CONTRACT_SUITE=PASS facts=34` |
