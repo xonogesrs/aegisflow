@@ -13,7 +13,10 @@ stand exactly as written.
 ```
 TERMINAL_VERDICT      = PASS
 TERMINAL_COMMITTED    = false  (controller-side act; see §6)
-FINAL_HEAD            = 12298f5a8424ad5013dc091b680217dc9f9f0f6b
+REVIEWED_HEAD         = 12298f5a8424ad5013dc091b680217dc9f9f0f6b
+FINAL_HEAD            = the commit carrying this document (full hash in the
+                        controller report; a report cannot name its own hash)
+FIRST_LANDING         = e930422268f297b52742622f4f484d8700dd93a3
 REMOTE_VERIFIED       = true
 WORKTREE_CLEAN        = true
 HARDENING_BRANCH_CLOSED = false  (pending the committed fence)
@@ -182,3 +185,25 @@ Remaining controller step, and nothing else:
 ```
 /fence-generation PASS "N1-N3 PASS; N4 boundary recorded; 121/121; E2 X2 = pre-existing lock contention"
 ```
+
+---
+
+## 7. Durable landing of this record
+
+This file is report-only and changes no `.mjs` file. It landed in two
+report-only commits: the first pinned the verification at `e930422`; the second
+carries the wording you are reading, which is why no commit here names its own
+hash. Each was pushed before the next began, so each was verified against the
+remote at the time it was the head:
+
+| Check | Value |
+|---|---|
+| first closeout commit | `e930422268f297b52742622f4f484d8700dd93a3` |
+| first landing: `origin` = `ls-remote` = local HEAD | `e930422268f297b52742622f4f484d8700dd93a3` |
+| unpushed commits at each landing | `0` |
+| `git status --porcelain --untracked-files=all` | empty |
+| `git stash list` | empty |
+| reviewed head `12298f5` | reachable, unamended, published |
+
+Both commits contain exactly one file: this document. The final head hash is the
+one the controller's terminal report names.
