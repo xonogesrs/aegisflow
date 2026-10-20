@@ -62,7 +62,7 @@ All six commits below were re-verified as ancestors of the current head
 | N1 fix | `09df20d` | ancestor of HEAD |
 | review-reproduced defect fix | `773bb8a` | ancestor of HEAD |
 | N3 journal binding | `b02131d` | ancestor of HEAD |
-| recovery HOLD record | `4e41bb6412f2d795e0306318000428bce978369b` | HEAD |
+| recovery HOLD record | `4e41bb6412f2d795e0306318000428bce978369b` | ancestor of HEAD (was HEAD at the landing gate) |
 
 Engineering disposition carried forward, **not re-derived**:
 
@@ -80,10 +80,12 @@ RECOVERY_REVIEW               = PASS
 RECOVERY_DURABLE_LANDING      = PASS
 ```
 
-Delta from the engineering baseline `d217383` to the current head is
-**documentation only** — one commit (`4e41bb6`), two added files
-(`FINAL_DISPOSITION.md`, `INDEPENDENT_REVIEW.md`), zero `.mjs`/`.ts`/`.sh`/
-manifest changes. Nothing in this card reopens N1–N3.
+Delta from the engineering baseline `d217383` to the head at the landing gate
+(before this card's own commit) is **documentation only** — one commit
+(`4e41bb6`), two added files (`FINAL_DISPOSITION.md`, `INDEPENDENT_REVIEW.md`),
+zero `.mjs`/`.ts`/`.sh`/manifest changes. This card then adds one more
+documentation commit; it touches no source, test, integration or manifest path.
+Nothing in this card reopens N1–N3.
 
 ## 3. The question this card has to answer
 

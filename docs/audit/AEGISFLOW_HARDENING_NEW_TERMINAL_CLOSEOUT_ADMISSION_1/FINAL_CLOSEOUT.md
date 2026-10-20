@@ -85,9 +85,11 @@ no production mutation, and no branch-closure claim were made. The record states
   `09df20d`, `773bb8a`, `b02131d`) are ancestors of HEAD
   (`git merge-base --is-ancestor`, all YES), so the engineering PASS is cited from
   reachable, unamended history rather than re-derived.
-- **Delta is documentation only.** `d217383..HEAD` is one commit and two files
-  (`FINAL_DISPOSITION.md`, `INDEPENDENT_REVIEW.md`, both report-only). N1–N3 were
-  not reopened, and no suite was re-run because no behaviour changed.
+- **Delta is documentation only.** At the landing gate — before this card's own
+  commit — `d217383..HEAD` was one commit and two files
+  (`FINAL_DISPOSITION.md`, `INDEPENDENT_REVIEW.md`, both report-only). After this
+  card's commit it is two commits and seven files, all under `docs/audit/`.
+  N1–N3 were not reopened, and no suite was re-run because no behaviour changed.
 - **Authority mechanism re-verified from source**, not from prose: marker test at
   `no-poll-waits.js:312-315`, fail-closed denial at `:366-381`, command binding to
   the live session/current generation at `:807-824`, agent request returning
