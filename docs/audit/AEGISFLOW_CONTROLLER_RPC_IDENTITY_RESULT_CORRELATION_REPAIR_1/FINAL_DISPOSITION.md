@@ -71,7 +71,7 @@ that verify. `AEGIS_RPC_BIN` is honoured but not attested; see §6.5.
 ## 3. Independent review
 
 Two reviewer sessions ran against this tree. Between their rounds they
-reproduced fourteen distinct defects, every one of which was fixed and pinned by
+reproduced eighteen distinct defects, every one of which was fixed and pinned by
 a test that goes red when the fix is removed:
 
 ledger record validation · generation range exhaustion · unusable-state-dir
@@ -82,11 +82,14 @@ duplicate commit records for one generation · a post-fence throw reporting
 `committed:false` · a prior-fence inference reporting a denial as committed ·
 `ledgerRecorded:true` in EPHEMERAL mode · `ledgerRecorded:true` when the ledger
 was unreadable · `ledgerRecorded:false` when the commit record WAS durable but
-the next-generation claim failed · correlator request-id reuse after `cancel()` ·
-an undeletable key still signing.
+the next-generation claim failed · the same conflation at the FRAME level ·
+`commitExecuted:false` for an attempted-but-failed commit · correlator
+request-id reuse after `cancel()` · an undeletable key still signing.
 
-Final reviewer verdict on the current tree: **correct**, confidence 0.92, "no
-remaining actionable defect reproduced". Three guards were independently
+Final verdicts: one reviewer closed **correct** (confidence 0.92, "no remaining
+actionable defect reproduced"); the other closed `incorrect` on a single P2 —
+`commitExecuted` conflating a successful fence with an attempted commit — which
+was fixed after that verdict and is now pinned by `R2_T3i`. Three guards were independently
 mutation-checked by the reviewer (automatic ownership rejection, the per-attempt
 fence delta, the MAC comparison), each red when removed, green when restored.
 
