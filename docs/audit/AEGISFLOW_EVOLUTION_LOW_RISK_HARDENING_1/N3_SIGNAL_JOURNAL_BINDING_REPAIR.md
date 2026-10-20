@@ -230,7 +230,38 @@ documentation wording, synthetic precedence asymmetry) are **not** touched.
 
 ---
 
-## 8. Handoff
+## 8. Durable landing
+
+Pre-edit gate: §1 — the prior card's landing was complete, no WIP, no stash, no
+unpushed commit, and no other worktree mutation.
+
+Post-push verification, performed on the **content** commit (a later
+report-only commit cannot name its own hash):
+
+| Check | Value |
+|---|---|
+| local `HEAD` at verification | `b02131d454db4caa4326dea9bb209e8f79899517` |
+| `origin/feat/omp-cbm-recovery` (post-fetch) | `b02131d454db4caa4326dea9bb209e8f79899517` |
+| `git ls-remote origin refs/heads/feat/omp-cbm-recovery` | `b02131d454db4caa4326dea9bb209e8f79899517` |
+| unpushed commits | `0` |
+| `git status --porcelain` | empty |
+| `git stash list` | empty |
+| baseline `6f08577` | reachable, unamended, published |
+
+`b02131d` contains exactly 5 files:
+
+```
+docs/audit/AEGISFLOW_EVOLUTION_LOW_RISK_HARDENING_1/HARDENING_REPORT.md   (N3 marked superseded)
+docs/audit/AEGISFLOW_EVOLUTION_LOW_RISK_HARDENING_1/N3_SIGNAL_JOURNAL_BINDING_REPAIR.md (new)
+docs/autonomous-evolution.md
+src/evolution/production-consumer.mjs
+test/evolution/test-evolution-low-risk-hardening-1.mjs
+```
+
+Only `production-consumer.mjs` and the test file change behaviour. No scratch
+file, probe or temporary worktree was committed.
+
+## 9. Handoff
 
 Disposition of this card: **REPAIR READY FOR INDEPENDENT RE-REVIEW**, not PASS.
 
