@@ -1084,6 +1084,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	{
 		const sessionId = "r2-t3d";
 		process.env[AUTHORITY_ENV] = AUTHORITY;
+		const savedStateDir = process.env.OMP_TERMINAL_FENCE_STATE_DIR;
 		delete process.env.OMP_TERMINAL_FENCE_STATE_DIR;
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
@@ -1101,6 +1102,9 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			results.R2_T3d = "EPHEMERAL_NOT_RECORDED";
 		} finally {
 			delete process.env[AUTHORITY_ENV];
+			// Restore the provisioned state dir: deleting it here made every later
+			// case run EPHEMERAL, which is a test-isolation leak, not a scenario.
+			if (savedStateDir !== undefined) process.env.OMP_TERMINAL_FENCE_STATE_DIR = savedStateDir;
 			release();
 		}
 	}
@@ -1201,6 +1205,56 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			assert.equal(result.committedRecorded, false, "an unreadable ledger cannot claim the commit is recorded");
 		});
 		results.R2_T3g = "UNREADABLE_NOT_RECORDED";
+	}
+
+	// ── R2_T3h — the FRAME distinguishes a durable commit from a failed claim ──
+	// The library was covered by R2_T3f; the frame was not. Reproduced in review
+	// on an older snapshot: a peer pre-claims the next generation, so the commit
+	// append succeeds but the claim fails, and the frame must still report the
+	// commit as recorded — because it IS on disk.
+	{
+		const sessionId = "r2-t3h";
+		process.env[AUTHORITY_ENV] = AUTHORITY;
+		const { host, release } = await hostWithGatedJob(sessionId);
+		try {
+			const state = snapshotFor(sessionId);
+			// A peer claims the generation this commit will try to advance to.
+			appendFileSync(
+				state.ledgerPath,
+				`${JSON.stringify({
+					type: "allocate",
+					sessionId,
+					runtimeInstanceId: "peer-runtime",
+					generation: state.generation + 1,
+					allocationToken: "peer-token",
+				})}\n`,
+				"utf8",
+			);
+			drainFrames();
+			await commit(host, `PASS runtime=${state.runtimeInstanceId} generation=${state.generation} request=r2-t3h`);
+			const [frame] = resultFrames();
+			const ledgerText = readFileSync(state.ledgerPath, "utf8");
+			check("R2_T3h", () => {
+				assert.ok(frame, "the commit must still answer");
+				assert.equal(frame.result.committed, true, "the fence landed");
+				assert.equal(
+					ledgerText.includes(`"type":"commit","sessionId":"${sessionId}"`),
+					true,
+					"the fixture must have written the commit record",
+				);
+				assert.equal(
+					frame.result.ledgerRecorded,
+					true,
+					"the commit record is on disk, so the frame must say it was recorded",
+				);
+				assert.notEqual(frame.result.ledgerError, null, "the failed claim is still reported as an error");
+				assert.equal(snapshotFor(sessionId).identityState, "UNWRITABLE", "a failed claim stops further commits");
+			});
+			results.R2_T3h = "FRAME_REPORTS_DURABLE_COMMIT";
+		} finally {
+			delete process.env[AUTHORITY_ENV];
+			release();
+		}
 	}
 
 	// ── R2_T4 — the agent tool surface cannot emit a result frame ───────────────

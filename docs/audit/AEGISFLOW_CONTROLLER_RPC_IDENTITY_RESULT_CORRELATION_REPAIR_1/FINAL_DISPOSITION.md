@@ -57,7 +57,7 @@ committed. This card repairs those three, and nothing else.
 
 | Layer | Command | Result |
 |---|---|---|
-| Contract cases (fake host, real `AsyncJobManager`) | `node scripts/omp-integration/run-acceptance.mjs` | `CONTROLLER_CONTRACT_ACCEPTANCE=PASS cases=42` |
+| Contract cases (fake host, real `AsyncJobManager`) | `node scripts/omp-integration/run-acceptance.mjs` | `CONTROLLER_CONTRACT_ACCEPTANCE=PASS cases=43` |
 | Existing suites | same runner | `POLICY_TEST`, `WAITER_FENCE`, `TERMINAL_FENCE_AUTHORITY`, `TERMINAL_FENCE_ORDERING` all PASS |
 | Integration tests | `node --test test/omp-integration/*.mjs` | 43 tests, 43 pass |
 | Real transport (real `omp --mode rpc` child per case) | `node scripts/omp-rpc-controller-contract-suite.mjs` | `CONTROLLER_RPC_CONTRACT_SUITE=PASS facts=34` |
@@ -81,8 +81,9 @@ advancing the durable identity · malformed target tokens (`generation=1junk`,
 duplicate commit records for one generation · a post-fence throw reporting
 `committed:false` · a prior-fence inference reporting a denial as committed ·
 `ledgerRecorded:true` in EPHEMERAL mode · `ledgerRecorded:true` when the ledger
-was unreadable · correlator request-id reuse after `cancel()` · an undeletable
-key still signing.
+was unreadable · `ledgerRecorded:false` when the commit record WAS durable but
+the next-generation claim failed · correlator request-id reuse after `cancel()` ·
+an undeletable key still signing.
 
 Final reviewer verdict on the current tree: **correct**, confidence 0.92, "no
 remaining actionable defect reproduced". Three guards were independently
@@ -158,7 +159,10 @@ it did not touch the running installation.
 8. **A fence can land whose durable record failed.** The frame then reports
    `committed:true` with `ledgerRecorded:false` and `identityState:UNWRITABLE`,
    and the runtime stops committing. The local transition is real; the durable
-   statement is incomplete, and the frame says so.
+   statement is incomplete, and the frame says so. The converse is also reported:
+   when the commit record IS durable but the next-generation claim failed, the
+   frame says `ledgerRecorded:true` with a non-null `ledgerError` — the record
+   exists, the advance did not.
 
 ---
 
