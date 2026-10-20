@@ -26,10 +26,15 @@ processes, one session id `01a159e2-…`, both reporting "generation 1"; and
 
 ## 1. Landing gate (§3) — PASS
 
-`git status --porcelain=v1` empty · branch `feat/omp-cbm-recovery` ·
+Pre-card gate: `git status --porcelain=v1` empty · branch `feat/omp-cbm-recovery` ·
 `HEAD = @{upstream} = ls-remote origin = 68f1a097bcf8687dd36bf65bc122b70b2a8c80f9`
 (full SHAs compared) · unpushed commits `0` · stash `0`.
 No reset, clean, stash drop or forced overwrite was used.
+
+Post-landing gate: `HEAD = @{upstream} = ls-remote origin =
+c7af8cc21115523d43cd246337700faa1089b9ae`, worktree clean, and
+`~/.omp/agent/extensions/no-poll-waits.js` still hashes `11d8628b…f8ef` — the
+landing changed the repository, not the running installation.
 
 ---
 
