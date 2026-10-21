@@ -26,7 +26,7 @@ REGRESSION_READINESS          = PASS
 ROLLBACK_REHEARSAL            = PASS
 
 INDEPENDENT_REVIEW = HOLD   (8 findings: 3 HIGH, 5 MEDIUM — all resolved; see INDEPENDENT_REVIEW.md)
-DURABLE_LANDING    = PENDING (this file is committed and pushed after the review)
+DURABLE_LANDING    = PASS
 
 PRODUCTION_MUTATION   = NONE
 PRODUCTION_ENABLEMENT = false
@@ -69,9 +69,21 @@ git stash list                        (empty)
 ```
 
 `LOCAL = UPSTREAM = CANONICAL_REMOTE`, worktree clean, zero unpushed commits,
-zero stashes. Compared on the full SHA. Re-checked at the end of the card: HEAD
-and upstream are still `2fa42d6`, and the only working-tree entry is the untracked
-audit directory this card adds. No reset, clean, force-push or stash drop
+zero stashes. Compared on the full SHA.
+
+Re-checked at the end of the card, after this card's own landing:
+
+```
+HEAD              6a6db9ee4ec44c7e540484ff045e0cf4484c580c
+@{upstream}       6a6db9ee4ec44c7e540484ff045e0cf4484c580c
+ls-remote origin  6a6db9ee4ec44c7e540484ff045e0cf4484c580c  refs/heads/feat/omp-cbm-recovery
+worktree          clean
+unpushed commits  0
+stashes           0
+```
+
+The predecessor commit `2fa42d6` is HEAD's parent, so the R3 landing this card
+admitted against is intact and unamended. No reset, clean, force-push or stash drop
 was used at any point in this card.
 
 ## 2. Why `HOLD`
@@ -142,6 +154,20 @@ is a finding, not a production incident.
 `merge-gateway/deepseek/deepseek-v4.1-flash-1017` throughout, as declared by the
 session; no model substitution occurred mid-card, and the reviewer session is
 declared separately in `INDEPENDENT_REVIEW.md`.
+
+## 5a. Durable landing
+
+| Requirement | Result |
+|---|---|
+| `COMMIT = VERIFIED` | `6a6db9e` — 22 files, all under `docs/audit/…`, no `src/`, `integrations/`, `scripts/` or `test/` change |
+| `PUSH = CANONICAL_REMOTE` | `2fa42d6..6a6db9e feat/omp-cbm-recovery -> feat/omp-cbm-recovery` |
+| `FETCH_VERIFY = FULL_SHA_MATCH` | local = upstream = `ls-remote` = `6a6db9ee4ec44c7e540484ff045e0cf4484c580c` |
+| `WORKTREE = CLEAN` | empty `git status --porcelain=v1` |
+| production runtime/config unchanged | `no-poll-waits.js` `11d8628b…f8ef`, `config.yml` `108ca03c…8d66`, `mcp.json` `032839c1…67d4`, `omp` `f2a657b3…6ec5` — all identical to the baseline |
+
+The commit adds only documents, evidence and read-only probes. The probes are not
+in the installer's `KNOWN_FILES` (verified: 11 entries, none under `docs/`) and are
+imported by nothing.
 
 ## 6. What this card did not decide
 
