@@ -74,13 +74,18 @@ zero stashes. Compared on the full SHA.
 Re-checked at the end of the card, after this card's own landing:
 
 ```
-HEAD              6a6db9ee4ec44c7e540484ff045e0cf4484c580c
-@{upstream}       6a6db9ee4ec44c7e540484ff045e0cf4484c580c
-ls-remote origin  6a6db9ee4ec44c7e540484ff045e0cf4484c580c  refs/heads/feat/omp-cbm-recovery
+HEAD              == @{upstream} == ls-remote origin refs/heads/feat/omp-cbm-recovery
 worktree          clean
 unpushed commits  0
 stashes           0
 ```
+
+The landing commit is the one whose tree contains this file, so its SHA is not
+quoted here: writing it would change it. Verify with
+`git rev-parse HEAD '@{upstream}'` and
+`git ls-remote --heads origin feat/omp-cbm-recovery` — all three must be the same
+full SHA, and `git log --oneline -1` must show
+`docs(audit): record the verified landing for the admission card`.
 
 The predecessor commit `2fa42d6` is HEAD's parent, so the R3 landing this card
 admitted against is intact and unamended. No reset, clean, force-push or stash drop
@@ -159,9 +164,9 @@ declared separately in `INDEPENDENT_REVIEW.md`.
 
 | Requirement | Result |
 |---|---|
-| `COMMIT = VERIFIED` | `6a6db9e` — 22 files, all under `docs/audit/…`, no `src/`, `integrations/`, `scripts/` or `test/` change |
-| `PUSH = CANONICAL_REMOTE` | `2fa42d6..6a6db9e feat/omp-cbm-recovery -> feat/omp-cbm-recovery` |
-| `FETCH_VERIFY = FULL_SHA_MATCH` | local = upstream = `ls-remote` = `6a6db9ee4ec44c7e540484ff045e0cf4484c580c` |
+| `COMMIT = VERIFIED` | 22 files, all under `docs/audit/…`; `git show --name-only` contains no `src/`, `integrations/`, `scripts/` or `test/` path |
+| `PUSH = CANONICAL_REMOTE` | `2fa42d6..HEAD` on `feat/omp-cbm-recovery`, non-force |
+| `FETCH_VERIFY = FULL_SHA_MATCH` | `git rev-parse HEAD '@{upstream}'` and `git ls-remote --heads origin feat/omp-cbm-recovery` return the same full SHA (quoted in the transcript, not here — see the note above) |
 | `WORKTREE = CLEAN` | empty `git status --porcelain=v1` |
 | production runtime/config unchanged | `no-poll-waits.js` `11d8628b…f8ef`, `config.yml` `108ca03c…8d66`, `mcp.json` `032839c1…67d4`, `omp` `f2a657b3…6ec5` — all identical to the baseline |
 
