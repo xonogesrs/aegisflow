@@ -1,0 +1,4 @@
+rollback ok: true
+ledger survived byte-identical: true
+evidence survived byte-identical: true
+backup retained: true

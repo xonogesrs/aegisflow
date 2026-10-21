@@ -1,0 +1,6 @@
+Day-one inertness probe (R3 bytes deployed, NO authority marker)
+Command: node probe-inert.mjs  (isolated HOME, deployed R3 tree, signed key, no marker)
+i1 /fence-identity   verified: true  denial: CONTROLLER_AUTHORITY_ABSENT  committed: false
+c1 /fence-generation verified: true  denial: CONTROLLER_AUTHORITY_ABSENT  committed: false
+r1 /release-final    verified: true  denial: FINAL_DELIVERY_BARRIER_CLOSED  committed: false
+No ledger file was created.
