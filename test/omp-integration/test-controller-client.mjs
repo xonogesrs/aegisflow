@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { test } from "node:test";
 
+import { signLedgerRecord } from "../../integrations/omp/extensions/lib/ledger-auth.mjs";
 import {
 	COMMIT_STATE,
 	LAUNCH_DENIAL,
@@ -661,23 +662,32 @@ test("the ledger probe answers from the durable record, not from a frame", () =>
 	const dir = scratch("probe");
 	const stateDir = join(dir, "state");
 	mkdirSync(stateDir);
-	const runtime = { stateDir };
+	const key = "b".repeat(64);
+	const runtime = { stateDir, controllerRoot: dir, ledgerKey: key };
 	const sessionId = "probe-session";
 	const expectation = { sessionId, generation: 2 };
+	const ledger = join(stateDir, "ledger.jsonl");
 
 	assert.equal(probeLedgerForCommit(runtime, expectation), "NOT_COMMITTED", "an absent ledger proves nothing was committed");
 
-	writeFileSync(
-		join(stateDir, `${sessionId}.jsonl`),
-		`${JSON.stringify({ type: "allocate", sessionId, runtimeInstanceId: "r", generation: 1 })}\n`,
-	);
+	const allocate = generation =>
+		signLedgerRecord(key, { type: "allocate", sessionId, runtimeInstanceId: "r", generation, allocationToken: `t${generation}`, at: 1 });
+	const commit = generation =>
+		signLedgerRecord(key, {
+			type: "commit",
+			sessionId,
+			runtimeInstanceId: "r",
+			generation,
+			allocationToken: `t${generation}`,
+			status: "PASS",
+			requestId: "q",
+			at: 2,
+		});
+
+	writeFileSync(ledger, `${JSON.stringify(allocate(1))}\n`);
 	assert.equal(probeLedgerForCommit(runtime, expectation), "NOT_COMMITTED", "an allocation is not a commit");
 
-	writeFileSync(
-		join(stateDir, `${sessionId}.jsonl`),
-		`${JSON.stringify({ type: "allocate", sessionId, runtimeInstanceId: "r", generation: 2 })}\n` +
-			`${JSON.stringify({ type: "commit", sessionId, runtimeInstanceId: "r", generation: 2 })}\n`,
-	);
+	writeFileSync(ledger, `${JSON.stringify(allocate(2))}\n${JSON.stringify(commit(2))}\n`);
 	assert.equal(probeLedgerForCommit(runtime, expectation), "COMMITTED");
 
 	// A different generation is not this request's commit.
@@ -690,56 +700,94 @@ test("an unreadable ledger is UNKNOWN, never NOT_COMMITTED", () => {
 	mkdirSync(stateDir);
 	const sessionId = "probe-session";
 	// A DIRECTORY where the ledger file should be: readable as a path, not as a file.
-	mkdirSync(join(stateDir, `${sessionId}.jsonl`));
-	assert.equal(probeLedgerForCommit({ stateDir }, { sessionId, generation: 1 }), "UNKNOWN");
+	mkdirSync(join(stateDir, "ledger.jsonl"));
+	assert.equal(probeLedgerForCommit({ stateDir, controllerRoot: dir }, { sessionId, generation: 1 }), "UNKNOWN");
 });
 
-test("the probe validates records rather than matching type and generation", () => {
+test("the probe validates AUTHENTICATION, not shape (R4)", () => {
 	const dir = scratch("probe-strict");
 	const stateDir = join(dir, "state");
 	mkdirSync(stateDir);
+	const key = "c".repeat(64);
+	const runtime = { stateDir, controllerRoot: dir, ledgerKey: key };
 	const sessionId = "probe-session";
 	const runtimeInstanceId = "rt-1";
-	const ledger = join(stateDir, `${sessionId}.jsonl`);
-	const allocate = { type: "allocate", sessionId, runtimeInstanceId, generation: 1, allocationToken: "t" };
-	const commit = { type: "commit", sessionId, runtimeInstanceId, generation: 1, status: "PASS", requestId: "q" };
+	const ledger = join(stateDir, "ledger.jsonl");
+	const allocate = signLedgerRecord(key, { type: "allocate", sessionId, runtimeInstanceId, generation: 1, allocationToken: "t", at: 1 });
+	const commit = signLedgerRecord(key, {
+		type: "commit",
+		sessionId,
+		runtimeInstanceId,
+		generation: 1,
+		allocationToken: "t",
+		status: "PASS",
+		requestId: "q",
+		at: 2,
+	});
 
-	// A record without session/runtime identity is not evidence of anything.
-	writeFileSync(ledger, `${JSON.stringify({ type: "commit", generation: 1 })}\n`);
+	// AN UNSIGNED RECORD IS NOT EVIDENCE. This is the whole point of R4: a perfectly
+	// shaped, correctly attributed line that the controller did not sign cannot
+	// produce COMMITTED.
+	writeFileSync(ledger, `${JSON.stringify({ type: "commit", sessionId, runtimeInstanceId, generation: 1, status: "PASS" })}\n`);
 	assert.equal(
-		probeLedgerForCommit({ stateDir }, { sessionId, generation: 1 }),
+		probeLedgerForCommit(runtime, { sessionId, generation: 1 }),
 		"UNKNOWN",
-		"an unattributable record must not be read as a commit",
+		"an unsigned record must not be read as a commit",
 	);
 
-	// A well-formed ledger with an allocation and no commit is a real NOT_COMMITTED.
+	// A record signed with a DIFFERENT key is equally worthless.
+	writeFileSync(
+		ledger,
+		`${JSON.stringify(signLedgerRecord("d".repeat(64), { type: "commit", sessionId, runtimeInstanceId, generation: 1, status: "PASS", at: 2 }))}\n`,
+	);
+	assert.equal(probeLedgerForCommit(runtime, { sessionId, generation: 1 }), "UNKNOWN", "a wrong-key record must not be believed");
+
+	// A signed record whose FIELDS were edited after signing does not verify.
+	writeFileSync(ledger, `${JSON.stringify(allocate)}\n${JSON.stringify({ ...commit, status: "FAIL" })}\n`);
+	assert.equal(
+		probeLedgerForCommit(runtime, { sessionId, generation: 1, runtimeInstanceId }),
+		"NOT_COMMITTED",
+		"an edited record must not verify",
+	);
+
+	// A well-formed, AUTHENTICATED ledger with an allocation and no commit is a real
+	// NOT_COMMITTED.
 	writeFileSync(ledger, `${JSON.stringify(allocate)}\n`);
-	assert.equal(probeLedgerForCommit({ stateDir }, { sessionId, generation: 1 }), "NOT_COMMITTED");
+	assert.equal(probeLedgerForCommit(runtime, { sessionId, generation: 1 }), "NOT_COMMITTED");
 
 	// The commit is recognised, attributed to this session and runtime.
 	writeFileSync(ledger, `${JSON.stringify(allocate)}\n${JSON.stringify(commit)}\n`);
-	assert.equal(probeLedgerForCommit({ stateDir }, { sessionId, generation: 1, runtimeInstanceId }), "COMMITTED");
+	assert.equal(probeLedgerForCommit(runtime, { sessionId, generation: 1, runtimeInstanceId }), "COMMITTED");
 
 	// A commit recorded by a DIFFERENT runtime is not our commit.
 	assert.equal(
-		probeLedgerForCommit({ stateDir }, { sessionId, generation: 1, runtimeInstanceId: "someone-else" }),
+		probeLedgerForCommit(runtime, { sessionId, generation: 1, runtimeInstanceId: "someone-else" }),
 		"UNKNOWN",
 		"another runtime's commit must not be reported as ours",
 	);
 
 	// A torn FINAL line does not erase the commit before it.
 	writeFileSync(ledger, `${JSON.stringify(allocate)}\n${JSON.stringify(commit)}\n{"type":"comm`);
-	assert.equal(probeLedgerForCommit({ stateDir }, { sessionId, generation: 1, runtimeInstanceId }), "COMMITTED");
+	assert.equal(probeLedgerForCommit(runtime, { sessionId, generation: 1, runtimeInstanceId }), "COMMITTED");
 
-	// A malformed line anywhere else is corruption, and corruption is UNKNOWN.
+	// UNSIGNED JUNK IS IGNORED, NOT FATAL. Treating a junk line as corruption would
+	// hand the Agent a denial primitive: append one line, block every commit.
 	writeFileSync(ledger, `{not json\n${JSON.stringify(allocate)}\n`);
-	assert.equal(probeLedgerForCommit({ stateDir }, { sessionId, generation: 1 }), "UNKNOWN");
+	assert.equal(
+		probeLedgerForCommit(runtime, { sessionId, generation: 1 }),
+		"NOT_COMMITTED",
+		"an unsigned junk line must not become a denial primitive",
+	);
 
-	// A foreign session's record makes the file unreadable for this session.
-	writeFileSync(ledger, `${JSON.stringify({ ...allocate, sessionId: "other" })}\n`);
-	assert.equal(probeLedgerForCommit({ stateDir }, { sessionId, generation: 1 }), "UNKNOWN");
+	// A SIGNED record for a foreign session is legitimate (one file per root) and
+	// simply not this session's record.
+	writeFileSync(
+		ledger,
+		`${JSON.stringify(signLedgerRecord(key, { type: "allocate", sessionId: "other", runtimeInstanceId: "r", generation: 1, allocationToken: "t", at: 1 }))}\n`,
+	);
+	assert.equal(probeLedgerForCommit(runtime, { sessionId, generation: 1 }), "UNKNOWN");
 
 	// An empty ledger proves nothing either way.
 	writeFileSync(ledger, "");
-	assert.equal(probeLedgerForCommit({ stateDir }, { sessionId, generation: 1 }), "UNKNOWN");
+	assert.equal(probeLedgerForCommit(runtime, { sessionId, generation: 1 }), "UNKNOWN");
 });

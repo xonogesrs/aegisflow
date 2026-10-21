@@ -25,11 +25,21 @@
 import assert from "node:assert/strict";
 import { AsyncJobManager } from "@oh-my-pi/pi-coding-agent/async";
 import openPollWaits, {
-	AUTHORITY_ENV,
 	BARRIER_BLOCK_LIMIT,
 	TERMINAL_FENCE_ORDER,
+	clearControllerAuthorityForTest,
+	installControllerAuthorityForTest,
 	waiterStateSnapshot,
 } from "../no-poll-waits.js";
+
+/**
+ * The harness controller's ledger key (R4).
+ *
+ * Authority is a capability now, not an environment variable: an ordering run has
+ * to install one to commit, and drop it afterwards so the next iteration starts
+ * from no authority.
+ */
+const ORDERING_LEDGER_KEY = "1".repeat(64);
 
 const OWNER = "Main";
 const COMMIT_COMMAND = "fence-generation";
@@ -172,8 +182,10 @@ async function raceIteration(index, order) {
 		maxRunningJobs: DELAYED + 8,
 	});
 	const host = makeHost(sessionId, manager, counters);
-	const savedAuthority = process.env[AUTHORITY_ENV];
-	process.env[AUTHORITY_ENV] = "ordering-harness-controller";
+	// R4: the harness plays the controller, so it holds a capability for the
+	// duration of the iteration and drops it afterwards. An environment variable is
+	// no longer authority.
+	installControllerAuthorityForTest({ key: ORDERING_LEDGER_KEY });
 
 	try {
 		// ── (a) PRE-FINAL control: an ordinary active-task completion ──────────
@@ -339,8 +351,7 @@ async function raceIteration(index, order) {
 			releases: snapshot.barrier.released,
 		};
 	} finally {
-		if (savedAuthority === undefined) delete process.env[AUTHORITY_ENV];
-		else process.env[AUTHORITY_ENV] = savedAuthority;
+		clearControllerAuthorityForTest();
 	}
 }
 

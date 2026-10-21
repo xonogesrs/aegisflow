@@ -68,7 +68,16 @@ export const LEDGER_LOCK = Object.freeze({
 	RELEASE_NOT_OWNER: "LEDGER_LOCK_RELEASE_NOT_OWNER",
 });
 
-export function lockPathFor(ledgerPath) {
+export function lockPathFor(ledgerPath, lockDir = null) {
+	// R4: the lock normally lives beside the ledger. Under a governed launch the
+	// ledger directory is write-denied to everything except the inherited
+	// descriptor, and a lock is created by PATH — so the controller provisions a
+	// separate lock directory that IS writable. Same exclusivity, different
+	// location, and the ledger bytes themselves stay unreachable.
+	if (typeof lockDir === "string" && lockDir.length > 0) {
+		const name = ledgerPath.split("/").pop() ?? "ledger";
+		return `${lockDir}/${name}${LOCK_SUFFIX}`;
+	}
 	return `${ledgerPath}${LOCK_SUFFIX}`;
 }
 
@@ -286,6 +295,7 @@ export function withLedgerLock({
 	now = () => Date.now(),
 	host = thisHost(),
 	pid = process.pid,
+	lockDir = null,
 }) {
 	if (typeof ledgerPath !== "string" || ledgerPath.length === 0) {
 		return { ok: false, code: LEDGER_LOCK.CORRUPT, detail: "NO_LEDGER_PATH" };
@@ -293,7 +303,7 @@ export function withLedgerLock({
 	if (typeof fn !== "function") {
 		return { ok: false, code: LEDGER_LOCK.CORRUPT, detail: "NO_CRITICAL_SECTION" };
 	}
-	const lockPath = lockPathFor(ledgerPath);
+	const lockPath = lockPathFor(ledgerPath, lockDir);
 	const token = randomBytes(8).toString("hex");
 	const deadline = now() + Math.max(0, timeoutMs);
 
@@ -319,6 +329,32 @@ export function withLedgerLock({
 		const current = readLockRecord(lockPath);
 		if (!current.ok) {
 			if (current.code === "ABSENT") continue; // released between create and read
+			// A CORRUPT RECORD IS NOT A HOLDER.
+			//
+			// Measured by independent review: a record that does not parse made every
+			// later acquire fail closed with `LEDGER_LOCK_CORRUPT` — a denial primitive
+			// for anyone who can write the lock directory. The lock directory is the one
+			// writable place in a governed launch, so that was reachable.
+			//
+			// The exclusivity argument does not depend on trusting the record: a record
+			// that is not a valid record proves nothing about who holds the lock, and
+			// the create that follows is still one atomic `link(2)`. Reclaiming it is
+			// therefore the same operation as reclaiming a provably-dead holder, and it
+			// is safe for the same reason — the winner is decided by the atomic create,
+			// not by the record.
+			//
+			// A SYMLINK is different and is NOT reclaimed: a symlink is an attempt to
+			// redirect the lock, not a malformed one.
+			if (current.code === LEDGER_LOCK.CORRUPT || current.code === LEDGER_LOCK.UNREADABLE) {
+				if (now() >= deadline) return { ok: false, code: current.code, detail: current.detail };
+				try {
+					unlinkSync(lockPath);
+				} catch {
+					// Somebody else reclaimed or released it first; retry the create.
+				}
+				sleepSync(RETRY_BACKOFF_MS);
+				continue;
+			}
 			return { ok: false, code: current.code, detail: current.detail };
 		}
 		if (current.record.host !== host) {

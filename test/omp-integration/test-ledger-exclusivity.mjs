@@ -24,7 +24,7 @@
 
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
@@ -42,8 +42,24 @@ const execFileAsync = promisify(execFile);
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WORKER = join(REPO_ROOT, "scripts", "omp-controller-ledger-worker.mjs");
 
+/**
+ * A controller ROOT, not a bare directory (R4).
+ *
+ * Ledger writes require the controller's capability, and the capability's key
+ * lives in the root. Workers read `<stateDir>/../ledger.key`, which is exactly how
+ * a real controller provisions them, so the fixture has to look like a root.
+ */
 function scratch(prefix) {
-	return mkdtempSync(join(tmpdir(), `r3-${prefix}-`));
+	const dir = mkdtempSync(join(tmpdir(), `r3-${prefix}-`));
+	const stateDir = join(dir, "state");
+	mkdirSync(stateDir, { recursive: true });
+	writeFileSync(join(dir, "ledger.key"), `${"a".repeat(64)}\n`, { mode: 0o600 });
+	return stateDir;
+}
+
+/** The one ledger file a controller root holds (R4). */
+function ledgerFor(stateDir) {
+	return join(stateDir, "ledger.jsonl");
 }
 
 function readRecords(ledgerPath) {
@@ -110,7 +126,7 @@ test("concurrent allocation never hands the same generation to two processes", a
 			`a worker neither allocated nor reported why: ${JSON.stringify(entry)}`,
 		);
 	}
-	const records = readRecords(join(stateDir, `${sessionId}.jsonl`));
+	const records = readRecords(ledgerFor(stateDir));
 	const claims = new Map();
 	for (const record of records.filter(entry => entry.type === "allocate")) {
 		claims.set(record.generation, (claims.get(record.generation) ?? 0) + 1);
@@ -131,7 +147,7 @@ test("concurrent commit of one generation yields exactly one commit record", asy
 	const winners = observed.filter(entry => entry.error === null && entry.committedRecorded === true);
 	assert.equal(winners.length, 1, `expected exactly one successful commit, saw ${winners.length}: ${JSON.stringify(observed)}`);
 
-	const records = readRecords(join(stateDir, `${sessionId}.jsonl`));
+	const records = readRecords(ledgerFor(stateDir));
 	const commits = records.filter(entry => entry.type === "commit" && entry.generation === generation);
 	assert.equal(commits.length, 1, `the ledger holds ${commits.length} commit records for generation ${generation}`);
 	assert.equal(commits[0].runtimeInstanceId, winners[0].runtimeInstanceId, "the durable record must name the winner");
@@ -221,13 +237,37 @@ test("a lock from another host is never reclaimed, because its liveness cannot b
 	assert.equal(contended.code, LEDGER_LOCK.FOREIGN_HOST);
 });
 
-test("a corrupt lock record fails closed instead of being ignored", () => {
+test("a corrupt lock record is reclaimed, because it proves nothing about a holder", () => {
+	// R4 CHANGED THIS DELIBERATELY, AND THE CHANGE IS THE SECURITY FIX.
+	//
+	// The old contract was "a corrupt record fails closed". Under a governed launch
+	// the lock directory is the one place the Agent's bash can write, so "fail
+	// closed on a corrupt record" was a denial primitive: create
+	// `ledger.jsonl.lock` containing `{}` and every legitimate commit fails.
+	//
+	// Exclusivity never depended on trusting the record. The winner is decided by
+	// one atomic `link(2)`; a record that is not a valid record says nothing about
+	// who holds the lock, so reclaiming it is the same operation as reclaiming a
+	// provably-dead holder. What must NOT be reclaimed is a SYMLINK, which is an
+	// attempt to redirect the lock rather than a malformed one — asserted below.
 	const dir = scratch("lock-corrupt");
 	const ledgerPath = join(dir, "s.jsonl");
 	writeFileSync(lockPathFor(ledgerPath), "{not json\n", { mode: 0o600 });
-	const contended = withLedgerLock({ ledgerPath, fn: () => "must-not-run", timeoutMs: 100 });
-	assert.equal(contended.ok, false);
-	assert.equal(contended.code, LEDGER_LOCK.CORRUPT);
+	const acquired = withLedgerLock({ ledgerPath, fn: () => "ran", timeoutMs: 2000 });
+	assert.equal(acquired.ok, true, "a corrupt record must not deny the lock forever");
+	assert.equal(acquired.value, "ran");
+	assert.equal(existsSync(lockPathFor(ledgerPath)), false, "the lock must be released after the section");
+});
+
+test("a symlinked lock record is still refused, not reclaimed", () => {
+	const dir = scratch("lock-symlink");
+	const ledgerPath = join(dir, "s.jsonl");
+	const elsewhere = join(dir, "elsewhere");
+	writeFileSync(elsewhere, "{}", { mode: 0o600 });
+	symlinkSync(elsewhere, lockPathFor(ledgerPath));
+	const refused = withLedgerLock({ ledgerPath, fn: () => "must-not-run", timeoutMs: 100 });
+	assert.equal(refused.ok, false);
+	assert.equal(refused.code, LEDGER_LOCK.SYMLINK);
 });
 
 test("a lock record younger than the minimum stale age is not treated as abandoned", () => {

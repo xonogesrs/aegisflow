@@ -122,6 +122,14 @@ import {
 	recordCommitAndClaimNext,
 	verifyOwnership,
 } from "./lib/runtime-identity.mjs";
+import {
+	CAPABILITY_DENIAL,
+	capabilityPresent,
+	clearControllerCapability,
+	controllerCapability,
+	installControllerCapability,
+	installControllerCapabilityFromEnv,
+} from "./lib/controller-capability.mjs";
 
 /** Terminal dispositions a logical task generation can reach. */
 export const TERMINAL_STATUSES = Object.freeze(["PASS", "HOLD", "FAIL", "CANCELLED"]);
@@ -191,11 +199,24 @@ const RELEASE_COMMAND = "release-final";
  */
 const IDENTITY_COMMAND = "fence-identity";
 /**
- * Controller capability marker. The orchestrator that launches a governed
- * process sets this deliberately; without it no commit is possible, so an OMP
- * process nobody is governing cannot be closed out by a fence at all.
+ * The RETIRED controller capability marker (R4).
+ *
+ * This variable used to BE the authority: a governed launch set it on the child,
+ * the child's `bash` tool inherited it, and setting it again on a nested `omp`
+ * was enough to commit. The admission card measured both. It is now read for one
+ * purpose only — to RECOGNISE AND REFUSE an inherited marker — and it grants
+ * nothing. See `lib/controller-capability.mjs` for what authority is now.
  */
 export const AUTHORITY_ENV = "OMP_TERMINAL_FENCE_AUTHORITY";
+
+/**
+ * Install this process's controller capability at load (R4).
+ *
+ * The key arrives over a dedicated descriptor that the Agent's descendants do not
+ * inherit, and the descriptor is consumed immediately. A process without a key
+ * has no authority, whatever its environment says.
+ */
+const capabilityInstall = installControllerCapabilityFromEnv();
 
 /**
  * This process's runtime instance id (R1).
@@ -483,6 +504,10 @@ function advanceDurableGeneration(pi, state, committedGeneration, { status = "TE
 		generation: committedGeneration,
 		status,
 		requestId,
+		// R4: the commit is bound to the allocation that owned the generation, so a
+		// reader can tell "this runtime closed its own generation" from "this
+		// runtime wrote a commit record for a number it never owned".
+		allocationToken: state.allocationToken ?? null,
 	});
 	if (ledger.error) {
 		// The live generation is no longer uniquely named. Say so, and stop
@@ -526,10 +551,61 @@ function advanceDurableGeneration(pi, state, committedGeneration, { status = "TE
 	return { error: null, committedRecorded: ledger.committedRecorded === true };
 }
 
-/** True when the launching controller granted this process terminal-fence authority. */
-export function controllerAuthorityPresent(env = globalThis.process?.env) {
-	const value = env?.[AUTHORITY_ENV];
-	return typeof value === "string" && value.length > 0;
+/**
+ * True when THIS PROCESS holds controller commit authority (R4).
+ *
+ * The question is no longer "does an environment variable say so". A variable is
+ * something any process can print and any child can set; the capability is an
+ * installed key that arrived over a descriptor the Agent does not inherit. A
+ * nested `omp` launched from the Agent's `bash` therefore answers `false` no
+ * matter what it puts in its own environment.
+ *
+ * The `env` parameter is retained only so existing callers keep compiling. It is
+ * deliberately ignored: reading authority out of a caller-supplied object is the
+ * exact defect this replaces.
+ */
+export function controllerAuthorityPresent(_env = undefined) {
+	return capabilityPresent();
+}
+
+/** Diagnostic view of the installed capability. Never returns the key. */
+export function controllerCapabilityState() {
+	const capability = controllerCapability();
+	if (!capability) {
+		return {
+			present: false,
+			installDenial: capabilityInstall.ok ? CAPABILITY_DENIAL.ABSENT : capabilityInstall.denial,
+			installDetail: capabilityInstall.ok ? null : (capabilityInstall.detail ?? null),
+			hasLedgerFd: false,
+			hasLockDir: false,
+		};
+	}
+	return {
+		present: true,
+		installDenial: null,
+		installDetail: null,
+		hasLedgerFd: capability.ledgerFd !== null,
+		hasLockDir: capability.lockDir !== null,
+	};
+}
+
+/**
+ * Install a capability directly. TEST AND CONTROLLER-EMBEDDING SEAM ONLY.
+ *
+ * A governed runtime receives its capability from the launch environment. This
+ * exists for the acceptance harness, which must exercise the real commit path in
+ * a process it controls, and for a controller that embeds the extension. It is
+ * NOT reachable from the Agent: the Agent has no code execution inside the
+ * extension's module graph, and nothing exported here is registered as a tool or
+ * a command.
+ */
+export function installControllerAuthorityForTest({ key, ledgerFd = null, lockDir = null }) {
+	return installControllerCapability({ key, ledgerFd, lockDir });
+}
+
+/** Drop the capability. Tests only: a live governed runtime never gives it up. */
+export function clearControllerAuthorityForTest() {
+	clearControllerCapability();
 }
 
 /**
@@ -1476,6 +1552,12 @@ export default function (pi) {
 								identityState: state.identityState,
 								identityError: state.identityError ?? null,
 								generationDurable: state.generationDurable === true,
+								// R4: the allocation token is part of the identity, so a controller
+								// can bind to it and pin it on the commit. It names an allocation,
+								// not a secret: it is only useful together with the controller's
+								// key, and it is published only to a caller that already holds the
+								// capability (this command is refused without one).
+								allocationToken: state.allocationToken ?? null,
 								ledgerPath: state.ledgerPath,
 								fenceCalls: state.fenceCalls,
 								authority: TERMINAL_AUTHORITIES.CONTROLLER_COMMAND,
@@ -1579,6 +1661,19 @@ export default function (pi) {
 						// real outcome as a malformed frame.
 						jobIds: [],
 						suppressed: 0,
+						// R4: AN UNRECORDED COMMIT MUST SAY SO.
+						//
+						// Measured by independent review: when the durable advance threw
+						// (a deleted lock directory makes the lock create fail AFTER the
+						// fence has applied), this branch reported `committed:true` and
+						// OMITTED `ledgerRecorded` entirely. The client only downgrades an
+						// explicit `ledgerRecorded === false`, so a commit with no durable
+						// record was returned as `COMMITTED, durable:true`.
+						//
+						// `ledgerRecorded` is now always present and always honest: the
+						// ledger is the only thing that may claim durability.
+						ledgerRecorded: false,
+						ledgerError: `HANDLER_EXCEPTION: ${String(error && error.message ? error.message : error)}`,
 					};
 				}
 				// A logger that throws must not cost the controller its result. The

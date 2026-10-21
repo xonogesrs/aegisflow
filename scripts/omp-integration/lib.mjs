@@ -48,6 +48,12 @@ export const KNOWN_FILES = Object.freeze([
 	// extension is what takes the lock; the controller client only reads the ledger
 	// it protects, and the client is not deployed at all.
 	"lib/ledger-lock.mjs",
+	// R4: the capability and the record MAC. Both ship WITH the extension because
+	// the extension is what holds a capability and signs the records it writes; the
+	// controller reads the same modules from this repository, and is still not
+	// deployed as an extension.
+	"lib/ledger-auth.mjs",
+	"lib/controller-capability.mjs",
 	"test/poll-wait-policy.test.mjs",
 	"test/waiter-fence.acceptance.ts",
 	"test/terminal-fence-authority.acceptance.ts",

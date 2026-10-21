@@ -42,7 +42,22 @@ function hashIfPresent(path) {
 }
 
 /** Authority variables that must not be present anywhere in this process tree. */
-const AUTHORITY_VARS = ["OMP_TERMINAL_FENCE_AUTHORITY", "OMP_CONTROLLER_RESULT_KEY_FILE", "OMP_TERMINAL_FENCE_STATE_DIR"];
+/**
+ * Every variable that names or carries controller authority (R4).
+ *
+ * The list grew because authority moved: the descriptor numbers and the lock
+ * directory are part of the capability's provisioning now, and a test that
+ * leaked any of them into the operator's shell would be provisioning authority
+ * for whatever ran next.
+ */
+const AUTHORITY_VARS = [
+	"OMP_TERMINAL_FENCE_AUTHORITY",
+	"OMP_CONTROLLER_RESULT_KEY_FILE",
+	"OMP_TERMINAL_FENCE_STATE_DIR",
+	"OMP_CONTROLLER_LEDGER_KEY_FD",
+	"OMP_TERMINAL_FENCE_LEDGER_FD",
+	"OMP_TERMINAL_FENCE_LOCK_DIR",
+];
 
 test("the running installation is untouched by this card's test runs", async () => {
 	const before = {

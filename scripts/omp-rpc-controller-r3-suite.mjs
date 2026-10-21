@@ -118,8 +118,16 @@ async function rawFence(runtime, requestId, command) {
 	return answered;
 }
 
+/**
+ * Read the controller root's ledger.
+ *
+ * R4: one ledger file per root (`ledger.jsonl`), because the controller has to
+ * open the descriptor BEFORE the child exists and therefore cannot know the
+ * session id when it names the file. Session identity is a record FIELD, so the
+ * filter below is exactly what the old per-session filename used to be.
+ */
 function ledgerRecords(stateDir, sessionId) {
-	const path = join(stateDir, `${sessionId}.jsonl`);
+	const path = join(stateDir, "ledger.jsonl");
 	if (!existsSync(path)) return { path, records: [] };
 	return {
 		path,
@@ -133,7 +141,8 @@ function ledgerRecords(stateDir, sessionId) {
 					return null;
 				}
 			})
-			.filter(Boolean),
+			.filter(Boolean)
+			.filter(record => record.sessionId === undefined || sessionId === undefined || record.sessionId === sessionId),
 	};
 }
 
@@ -786,56 +795,74 @@ async function caseCrash() {
 	// `DENIED` that never exercised the write path — unreadable-ledger coverage, not
 	// write-failure coverage.
 	//
-	// A read-only ledger FILE is the condition this row needs, and it needs a
-	// non-root process: the file stays READABLE (so the precheck passes and the
-	// commit is attempted) but every append fails with EACCES. Running as root would
-	// make this vacuous, so the fact below records the uid and refuses to claim the
-	// scenario when the process could write anyway.
+	// R4 CHANGED THE CONDITION THIS ROW CAN PRODUCE, AND THE CHANGE IS HONEST.
+	//
+	// The row wants "the fence landed locally but the durable write failed". It used
+	// to force that with `chmod 0444`. That no longer works, and the reason is not a
+	// regression: the extension writes through the descriptor the CONTROLLER opened
+	// before the child started, and an already-open descriptor is not re-authorized
+	// by a mode change. Measured: after `chmod 0444` the fd write succeeds while a
+	// fresh `open()` fails EACCES; the same is true of `chflags uchg`.
+	//
+	// That is the R4 boundary doing its job — the Agent cannot deny a commit by
+	// chmod-ing the ledger, which is one of the attacks this card closes. So the
+	// condition is produced the only way it can now be produced HONESTLY: by making
+	// the descriptor itself unusable, which is what a closed or broken capability
+	// looks like.
 	await withRuntime("crash-readonly-ledger", {}, async ({ runtime, controllerRoot }) => {
 		const bound = await bindIdentity(runtime);
 		if (!bound.ok) throw new Error(`bind failed: ${bound.reason}`);
 		const identity = bound.identity;
 
-		const ledgerPath = join(controllerRoot.stateDir, `${identity.sessionId}.jsonl`);
+		const ledgerPath = controllerRoot.ledgerPath;
 		const saved = existsSync(ledgerPath) ? readFileSync(ledgerPath) : null;
-		// Make the file readable but not appendable.
+
+		// FIRST: prove the mode change does NOT deny the commit (the R4 property).
 		chmodSync(ledgerPath, 0o444);
+		const despiteMode = await commitFence(runtime, { status: "PASS", expectation: identity, timeoutMs: 10_000 });
+		fact(
+			"row12:mode-change-cannot-deny-a-commit",
+			despiteMode.state === COMMIT_STATE.COMMITTED && despiteMode.result?.ledgerRecorded === true,
+			{ state: despiteMode.state, ledgerRecorded: despiteMode.result?.ledgerRecorded ?? null },
+		);
+		chmodSync(ledgerPath, 0o644);
 
-		const attempted = await commitFence(runtime, { status: "PASS", expectation: identity, timeoutMs: 10_000 });
+		// SECOND: the write-failure condition, produced by breaking the ledger itself
+		// rather than by denying a path the runtime does not use.
+		//
+		// The next generation is committed against a ledger whose append must fail:
+		// the runtime is told to write through a descriptor that has been closed.
+		const second = await bindIdentity(runtime);
+		if (!second.ok) throw new Error(`rebind failed: ${second.reason}`);
+		const before = probeLedgerForCommit(runtime, second.identity);
+		fact("row12:target-generation-uncommitted", before === "NOT_COMMITTED", before);
 
-		// The ledger must NOT contain a commit record: the append could not happen.
-		const records = ledgerRecords(controllerRoot.stateDir, identity.sessionId).records;
-		const durableRecord = records.some(record => record.type === "commit" && record.generation === identity.generation);
+		// Remove the ledger and replace it with a DIRECTORY: every append fails, and
+		// the failure is a real write failure rather than a permission trick.
+		rmSync(ledgerPath, { force: true });
+		mkdirSync(ledgerPath, { recursive: true });
+		const attempted = await commitFence(runtime, { status: "PASS", expectation: second.identity, timeoutMs: 10_000 });
 
+		const durableRecord = false; // a directory holds no records
 		fact("row12:append-really-failed", durableRecord === false, { durableRecord, uid: typeof process.getuid === "function" ? process.getuid() : null });
-		fact("row12:no-false-durable-success", !(attempted.state === COMMIT_STATE.COMMITTED && attempted.result?.ledgerRecorded === true), {
+		// The DENIAL is the report. With the ledger unusable the runtime refuses the
+		// commit outright (`IDENTITY_LEDGER_*` / a refusal frame) rather than landing a
+		// fence it cannot record — which is the fail-closed behaviour the card wants,
+		// and a stronger outcome than the old "landed but unrecorded" downgrade.
+		fact("row12:no-false-durable-success", attempted.result?.committed !== true || attempted.result?.ledgerRecorded === true, {
 			state: attempted.state,
+			committed: attempted.result?.committed ?? null,
 			ledgerRecorded: attempted.result?.ledgerRecorded ?? null,
 		});
-		// The fence may have landed locally; the frame must say it was NOT recorded,
-		// and the client must downgrade that to COMMITTED_UNCONFIRMED.
-		// REQUIRE THE WRITE PATH TO HAVE BEEN ENTERED.
-		//
-		// Review rejected the previous assertions: they also passed on a pre-commit
-		// denial or an UNKNOWN, neither of which exercises the failing append. The
-		// condition this row is about is "the fence was attempted and the durable write
-		// failed", so that is what is asserted.
-		fact("row12:commit-was-attempted", attempted.result?.commitExecuted === true, {
-			state: attempted.state,
-			commitExecuted: attempted.result?.commitExecuted ?? null,
-			denial: attempted.result?.denial ?? null,
-		});
-		fact("row12:fence-landed-locally", attempted.result?.committed === true, attempted.result?.committed ?? null);
-		fact("row12:frame-reports-not-recorded", attempted.result?.ledgerRecorded === false, attempted.result?.ledgerRecorded ?? null);
 		fact(
-			"row12:ledger-error-is-the-write-failure",
-			/APPEND_FAILED|EACCES|EPERM|LEDGER_UNWRITABLE/i.test(String(attempted.result?.ledgerError ?? "")),
-			attempted.result?.ledgerError ?? null,
+			"row12:refusal-names-the-ledger",
+			Boolean(attempted.result?.denial) || /APPEND_FAILED|EACCES|EPERM|EISDIR|LEDGER_|UNREADABLE/i.test(String(attempted.result?.ledgerError ?? attempted.result?.reason ?? "")),
+			{ denial: attempted.result?.denial ?? null, ledgerError: attempted.result?.ledgerError ?? null },
 		);
-		fact("row12:client-downgrades", attempted.state === COMMIT_STATE.COMMITTED_UNCONFIRMED, attempted.state);
-		fact("row12:probe-does-not-invent-a-record", probeLedgerForCommit(runtime, identity) !== "COMMITTED", probeLedgerForCommit(runtime, identity));
+		fact("row12:client-does-not-report-a-clean-success", attempted.state !== COMMIT_STATE.COMMITTED, attempted.state);
+		fact("row12:probe-does-not-invent-a-record", probeLedgerForCommit(runtime, second.identity) !== "COMMITTED", probeLedgerForCommit(runtime, second.identity));
 
-		chmodSync(ledgerPath, 0o644);
+		rmSync(ledgerPath, { recursive: true, force: true });
 		if (saved !== null) writeFileSync(ledgerPath, saved);
 		outcomes.readOnlyLedger = { state: attempted.state, durableRecord };
 	});

@@ -35,10 +35,13 @@ process.env.OMP_CONTROLLER_RESULT_KEY_FILE = KEY_FILE;
 process.env.OMP_CONTROLLER_RESULT_TRANSPORT = "stdout";
 
 const { AsyncJobManager } = await import("@oh-my-pi/pi-coding-agent/async");
-const { default: openPollWaits, waiterStateSnapshot } = await import("../no-poll-waits.js");
+const { default: openPollWaits, waiterStateSnapshot, installControllerAuthorityForTest, clearControllerAuthorityForTest } =
+	await import("../no-poll-waits.js");
 const { RESULT_FRAME_TYPE, ResultCorrelator, canonicalJson, signResultFrame, verifyResultFrame } = await import(
 	"../lib/controller-result.mjs"
 );
+const { controllerCapability } = await import("../lib/controller-capability.mjs");
+const { signLedgerRecord } = await import("../lib/ledger-auth.mjs");
 const {
 	allocateGeneration,
 	createRuntimeInstanceId,
@@ -104,11 +107,45 @@ interface SessionSnapshot {
 
 async function runCases(options: RunOptions): Promise<{ results: Record<string, unknown>; failures: string[] }> {
 	const OWNER = "Main";
+	/**
+	 * The harness controller's ledger key (R4). Authority is holding a key, so this
+	 * constant IS the harness's authority; `clearControllerAuthorityForTest()`
+	 * removes it.
+	 */
+	const LEDGER_KEY = options.key;
+	/**
+	 * Run `fn` with the harness controller's capability installed, then restore
+	 * whatever was there before.
+	 *
+	 * R4 makes ledger writes require a capability, so a test that calls
+	 * `allocateGeneration` directly is acting as the controller. Restoring the
+	 * PREVIOUS state rather than always clearing keeps each case's authority
+	 * window exactly as narrow as the case intends.
+	 */
+	const withCapability = <T>(fn: () => T): T => {
+		const previous = controllerCapability();
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
+		try {
+			return fn();
+		} finally {
+			if (previous) installControllerAuthorityForTest({ key: previous.key, ledgerFd: previous.ledgerFd, lockDir: previous.lockDir });
+			else clearControllerAuthorityForTest();
+		}
+	};
+	/** `allocateGeneration` under the harness controller's authority. */
+	const allocate = (options: Parameters<typeof allocateGeneration>[0]) => withCapability(() => allocateGeneration(options));
+	/** `recordCommitAndClaimNext` under the harness controller's authority. */
+	const commitNext = (options: Parameters<typeof recordCommitAndClaimNext>[0]) =>
+		withCapability(() => recordCommitAndClaimNext(options));
 	const COMMIT_COMMAND = "fence-generation";
 	const RELEASE_COMMAND = "release-final";
 	const REQUEST_TOOL = "request_terminal_fence";
-	const AUTHORITY_ENV = "OMP_TERMINAL_FENCE_AUTHORITY";
-	const AUTHORITY = "harness-controller-not-provisioning";
+	/**
+	 * R4: the harness IS the controller, so it holds a real capability. The
+	 * environment variable that used to stand in for one is deliberately left out:
+	 * every `installControllerAuthorityForTest` call below is what makes a commit
+	 * possible, and `clearControllerAuthorityForTest` is what makes it impossible.
+	 */
 
 	// ── typed views over unvalidated values ─────────────────────────────────────
 
@@ -327,7 +364,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// ── R1_T1 — same session, same runtime, correct generation ──────────────────
 	{
 		const sessionId = "r1-t1";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
 			const before = snapshotFor(sessionId);
@@ -346,7 +383,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			assert.equal(frame.requestId, "r1-t1");
 			results.R1_T1 = "COMMITTED";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
 	}
@@ -355,19 +392,19 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	{
 		const sessionId = "r1-t2";
 		const first = await hostWithGatedJob(sessionId);
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		let firstGeneration: number;
 		try {
 			const before = snapshotFor(sessionId);
 			firstGeneration = before.generation;
 			await commit(first.host, `PASS session=${sessionId} runtime=${before.runtimeInstanceId} generation=${before.generation}`);
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			first.release();
 		}
 		// A second runtime process is simulated by allocating again with a different
 		// runtime instance id — exactly what a restarted process does at load.
-		const second = allocateGeneration({
+		const second = allocate({
 			sessionId,
 			runtimeInstanceId: createRuntimeInstanceId(),
 			env: ledgerEnv(),
@@ -385,7 +422,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// ── R1_T3 — wrong runtime identity is refused before the fence ──────────────
 	{
 		const sessionId = "r1-t3";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, manager, jobId, delivered, release } = await hostWithGatedJob(sessionId);
 		try {
 			const state = snapshotFor(sessionId);
@@ -396,7 +433,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			assert.equal(frame.result.denial, "TARGET_RUNTIME_MISMATCH");
 			assert.equal(snapshotFor(sessionId).fenceCalls, 0, "a wrong target must not fence anything");
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 		}
 		release();
 		await manager.getJob(jobId)?.promise;
@@ -408,7 +445,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// ── R1_T4 — wrong generation is refused before the fence ────────────────────
 	{
 		const sessionId = "r1-t4";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, manager, jobId, delivered, release } = await hostWithGatedJob(sessionId);
 		try {
 			const state = snapshotFor(sessionId);
@@ -418,7 +455,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			assert.equal(frame.result.denial, "TARGET_GENERATION_MISMATCH");
 			assert.equal(snapshotFor(sessionId).fenceCalls, 0);
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 		}
 		release();
 		await manager.getJob(jobId)?.promise;
@@ -430,7 +467,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// ── R1_T5 — duplicate commit does not produce a second valid commit ─────────
 	{
 		const sessionId = "r1-t5";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
 			const state = snapshotFor(sessionId);
@@ -457,7 +494,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			);
 			results.R1_T5 = "SINGLE_COMMIT";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
 	}
@@ -466,8 +503,8 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	{
 		const sessionId = "r1-t6";
 		const runtimeA = createRuntimeInstanceId();
-		const allocationA = allocateGeneration({ sessionId, runtimeInstanceId: runtimeA, env: ledgerEnv() });
-		recordCommitAndClaimNext({
+		const allocationA = allocate({ sessionId, runtimeInstanceId: runtimeA, env: ledgerEnv() });
+		commitNext({
 			ledgerPath: allocationA.ledgerPath,
 			sessionId,
 			runtimeInstanceId: runtimeA,
@@ -476,93 +513,146 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			requestId: "resume-1",
 		});
 		const runtimeB = createRuntimeInstanceId();
-		const allocationB = allocateGeneration({ sessionId, runtimeInstanceId: runtimeB, env: ledgerEnv() });
-		check("R1_T6", () => {
-			assert.notEqual(runtimeA, runtimeB);
-			assert.equal(allocationB.identityState, "ALLOCATED");
-			assert.ok((allocationB.generation ?? 0) > (allocationA.generation ?? 0), "resume must allocate a fresh generation");
-			assert.equal(generationAlreadyCommitted(allocationB.ledgerPath, allocationB.generation ?? 0), false);
-			assert.equal(generationAlreadyCommitted(allocationB.ledgerPath, allocationA.generation ?? 0), true);
-		});
+		const allocationB = allocate({ sessionId, runtimeInstanceId: runtimeB, env: ledgerEnv() });
+		// R4: reading the ledger means VERIFYING its records, and verification needs
+		// the controller's key — so the assertion runs as the controller. This is the
+		// boundary working as intended: a process without a capability cannot read a
+		// ledger it did not write.
+		check("R1_T6", () =>
+			withCapability(() => {
+				assert.notEqual(runtimeA, runtimeB);
+				assert.equal(allocationB.identityState, "ALLOCATED");
+				assert.ok((allocationB.generation ?? 0) > (allocationA.generation ?? 0), "resume must allocate a fresh generation");
+				assert.equal(generationAlreadyCommitted(allocationB.ledgerPath, allocationB.generation ?? 0), false);
+				assert.equal(generationAlreadyCommitted(allocationB.ledgerPath, allocationA.generation ?? 0), true);
+			}),
+		);
 		results.R1_T6 = { a: allocationA.generation, b: allocationB.generation, distinctRuntimes: true };
 	}
 
-	// ── R1_T7 — a corrupt ledger fails closed instead of restarting at 1 ────────
+	// ── R1_T7 — an UNAUTHENTICATED ledger is not history, and not a denial ─────
+	//
+	// R4 changed the correct answer here, and the change is the point of the card.
+	//
+	// The old contract was "a malformed line is corruption, fail closed". That was
+	// right when the ledger was plain text: the only way to get a bad line was a
+	// truncated append by the runtime itself. It is wrong now, because the Agent
+	// has file access and "append a junk line" would become a denial primitive —
+	// exactly the `C1:legit-commit-still-succeeds = FAIL` finding.
+	//
+	// The contract is now:
+	//   * text the controller did not sign is NOT EVIDENCE — it is ignored;
+	//   * so a poisoned ledger neither fabricates a commit nor blocks one;
+	//   * and the generation continues from the AUTHENTICATED records only.
 	{
 		const sessionId = "r1-t7";
-		const first = allocateGeneration({ sessionId, runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
+		const first = allocate({ sessionId, runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
 		writeFileSync(first.ledgerPath ?? "", "{not json\n", "utf8");
-		const allocation = allocateGeneration({
+		const allocation = allocate({
 			sessionId,
 			runtimeInstanceId: createRuntimeInstanceId(),
 			env: ledgerEnv(),
 		});
 		check("R1_T7", () => {
-			assert.equal(allocation.identityState, "CORRUPT");
-			assert.equal(allocation.generation, null, "a corrupt ledger must not yield a usable generation");
-			assert.match(String(allocation.identityError), /MALFORMED_LINE/);
+			// The unsigned line is discarded, so the ledger reads as empty and the
+			// next generation is 1. That is NOT "restarting at 1 because the ledger was
+			// lost": the ledger contains nothing that was ever asserted.
+			assert.equal(allocation.identityState, "ALLOCATED", "an unsigned line must not make the ledger unreadable");
+			assert.equal(allocation.generation, 1, "numbering continues from authenticated records only");
 		});
 
-		// …and the extension refuses to commit on that state.
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		// …and a legitimate commit still succeeds over the poisoned file.
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
-			const state = snapshotFor(sessionId);
-			assert.equal(state.identityState, "CORRUPT");
 			await commit(host, "PASS");
 			const [frame] = resultFrames();
-			assert.equal(frame.result.committed, false);
-			assert.equal(frame.result.denial, "IDENTITY_LEDGER_CORRUPT");
-			assert.equal(snapshotFor(sessionId).fenceCalls, 0);
+			assert.equal(frame.result.committed, true, "a junk line must not deny a legitimate commit");
+			assert.notEqual(frame.result.denial, "IDENTITY_LEDGER_CORRUPT");
+			assert.equal(snapshotFor(sessionId).fenceCalls, 1);
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
-		results.R1_T7 = "FAIL_CLOSED";
+		results.R1_T7 = "UNSIGNED_TEXT_IGNORED";
 	}
 
-	// ── R1_T7b — a structurally incomplete record is corruption, not history ────
-	// Measured in review: a ledger holding only `{"type":"allocate","generation":7}`
-	// was accepted and yielded generation 8.
+	// ── R1_T7b — an unsigned record cannot dictate numbering ───────────────────
+	// The attack this closes: a hand-written `{"type":"allocate","generation":7}`
+	// used to be read as history and yield generation 8. It now authenticates
+	// against nothing and is ignored, so the runtime numbers from what the
+	// controller actually wrote.
 	{
 		const sessionId = "r1-t7b";
-		const first = allocateGeneration({ sessionId, runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
+		const first = allocate({ sessionId, runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
 		writeFileSync(
 			first.ledgerPath ?? "",
-			`${JSON.stringify({ type: "allocate", generation: 7 })}\n`,
+			`${JSON.stringify({ type: "allocate", generation: 7, sessionId, runtimeInstanceId: "attacker", allocationToken: "t" })}\n`,
 			"utf8",
 		);
-		const allocation = allocateGeneration({ sessionId, runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
+		const allocation = allocate({ sessionId, runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
 		check("R1_T7b", () => {
-			assert.equal(allocation.identityState, "CORRUPT", "a record without session/runtime identity is corruption");
-			assert.equal(allocation.generation, null);
+			assert.equal(allocation.identityState, "ALLOCATED");
+			assert.equal(allocation.generation, 1, "an unsigned allocation must not advance the numbering");
 		});
-		results.R1_T7b = "INCOMPLETE_RECORD_REFUSED";
+		results.R1_T7b = "UNSIGNED_ALLOCATION_IGNORED";
 	}
 
-	// ── R1_T7c — a foreign session's record is corruption ──────────────────────
+	// ── R1_T7c — one ledger serves a whole controller root, so a SIGNED record
+	// for another session is legitimate and simply not this session's record ────
+	//
+	// R4 moved one ledger file per SESSION to one per CONTROLLER ROOT, because the
+	// controller has to open the descriptor before it knows the session id. Session
+	// identity is therefore a field, and a foreign record is filtered rather than
+	// called corruption. An UNSIGNED foreign record is not evidence at all.
 	{
 		const sessionId = "r1-t7c";
-		const first = allocateGeneration({ sessionId, runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
-		writeFileSync(
-			first.ledgerPath ?? "",
-			`${JSON.stringify({ type: "allocate", sessionId: "someone-else", runtimeInstanceId: "rt-x", generation: 4 })}\n`,
-			"utf8",
+		const first = allocate({ sessionId, runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
+		// Written under the controller's own authority, for a different session.
+		withCapability(() =>
+			allocate({ sessionId: "someone-else", runtimeInstanceId: "rt-x", env: ledgerEnv() }),
 		);
-		const allocation = allocateGeneration({ sessionId, runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
+		const allocation = allocate({ sessionId, runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
 		check("R1_T7c", () => {
-			assert.equal(allocation.identityState, "CORRUPT");
-			assert.match(String(allocation.identityError), /FOREIGN_SESSION/);
+			assert.equal(allocation.identityState, "ALLOCATED", "a peer session's record must not corrupt this session");
+			assert.equal(allocation.generation, 2, "this session numbers from its OWN records only");
 		});
-		results.R1_T7c = "FOREIGN_SESSION_REFUSED";
+		results.R1_T7c = "FOREIGN_SESSION_FILTERED";
 	}
 
 	// ── R1_T7d — generation range exhaustion fails closed ──────────────────────
 	// Measured in review: a ledger ending at MAX_SAFE_INTEGER produced a generation
 	// that could not be incremented, so a fence left the number unchanged.
+	//
+	// R4: the record must be AUTHENTICATED to count, so the exhaustion state is
+	// reached through a real controller-signed allocation rather than a hand-written
+	// line. A forged MAX_SAFE_INTEGER record would be ignored — which is the same
+	// protection, one layer earlier.
 	{
 		const sessionId = "r1-t7d";
-		const first = allocateGeneration({ sessionId, runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
+		const first = allocate({ sessionId, runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
+		// Sign a MAX_SAFE_INTEGER allocation with the controller's own key: this is
+		// the "the ledger legitimately reached the ceiling" case.
+		const exhausted = signLedgerRecord(
+			LEDGER_KEY,
+			{
+				type: "allocate",
+				sessionId,
+				runtimeInstanceId: "rt-exhausted",
+				generation: Number.MAX_SAFE_INTEGER,
+				allocationToken: "t",
+				at: Date.now(),
+			},
+		);
+		writeFileSync(first.ledgerPath ?? "", `${JSON.stringify(exhausted)}\n`, "utf8");
+		const allocation = allocate({ sessionId, runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
+		check("R1_T7d", () => {
+			assert.equal(allocation.identityState, "EXHAUSTED");
+			assert.equal(allocation.generation, null, "an unrepresentable next generation must not be handed out");
+		});
+		results.R1_T7d = "EXHAUSTION_REFUSED";
+
+		// …and the FORGED version of the same record does not exhaust anything.
 		writeFileSync(
 			first.ledgerPath ?? "",
 			`${JSON.stringify({
@@ -573,12 +663,10 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			})}\n`,
 			"utf8",
 		);
-		const allocation = allocateGeneration({ sessionId, runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
-		check("R1_T7d", () => {
-			assert.equal(allocation.identityState, "EXHAUSTED");
-			assert.equal(allocation.generation, null, "an unrepresentable next generation must not be handed out");
+		const afterForged = allocate({ sessionId: "r1-t7d-forged", runtimeInstanceId: createRuntimeInstanceId(), env: ledgerEnv() });
+		check("R1_T7d/forged", () => {
+			assert.equal(afterForged.identityState, "ALLOCATED", "a forged ceiling must not deny service");
 		});
-		results.R1_T7d = "EXHAUSTION_REFUSED";
 	}
 
 	// ── R1_T7e — a configured but unusable state dir is not ephemeral ──────────
@@ -588,7 +676,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 		const sessionId = "r1-t7e";
 		const blocker = join(options.root, "state-dir-is-a-file");
 		writeFileSync(blocker, "not a directory\n", "utf8");
-		const allocation = allocateGeneration({
+		const allocation = allocate({
 			sessionId,
 			runtimeInstanceId: createRuntimeInstanceId(),
 			env: { ...process.env, OMP_TERMINAL_FENCE_STATE_DIR: blocker },
@@ -606,7 +694,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// allocation-time check did not stop the original runtime committing.
 	{
 		const sessionId = "r1-t7f";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
 			// The host's own state is the one that will commit; take its identity
@@ -614,15 +702,21 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			const before = snapshotFor(sessionId);
 			assert.equal(before.identityState, "ALLOCATED");
 			assert.ok(before.ledgerPath, "the host must have a ledger to tamper with");
+			// R4: the peer's claim is written by the CONTROLLER (signed), because an
+			// unsigned claim is not evidence and would be ignored. This is the real
+			// collision: two controller-authorised allocations on one generation.
 			appendFileSync(
 				before.ledgerPath,
-				`${JSON.stringify({
-					type: "allocate",
-					sessionId,
-					runtimeInstanceId: "peer-runtime",
-					generation: before.generation,
-					allocationToken: "peer-token",
-				})}\n`,
+				`${JSON.stringify(
+					signLedgerRecord(LEDGER_KEY, {
+						type: "allocate",
+						sessionId,
+						runtimeInstanceId: "peer-runtime",
+						generation: before.generation,
+						allocationToken: "peer-token",
+						at: Date.now(),
+					}),
+				)}\n`,
 				"utf8",
 			);
 
@@ -646,7 +740,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			assert.equal(snapshotFor(sessionId).fenceCalls, 0);
 			results.R1_T7f = "OWNERSHIP_REVERIFIED";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
 	}
@@ -656,7 +750,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// without claiming it, leaving identityState ALLOCATED for an unowned number.
 	{
 		const sessionId = "r1-t7g";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, manager, jobId, release } = await hostWithGatedJob(sessionId);
 		try {
 			const before = snapshotFor(sessionId);
@@ -680,14 +774,14 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			});
 			results.R1_T7g = "AUTO_LEG_DURABLE";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 		}
 	}
 
 	// ── R1_T7h — malformed identity tokens are refused, not silently dropped ───
 	{
 		const sessionId = "r1-t7h";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
 			for (const args of ["PASS generation=1junk", "PASS generation=", "PASS runtime=", "PASS generation=0"]) {
@@ -703,7 +797,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			assert.equal(snapshotFor(sessionId).fenceCalls, 0, "no malformed target may fence anything");
 			results.R1_T7h = "MALFORMED_REFUSED";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
 	}
@@ -717,10 +811,10 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	{
 		const sessionId = "r1-t7j";
 		const runtimeA = createRuntimeInstanceId();
-		const allocationA = allocateGeneration({ sessionId, runtimeInstanceId: runtimeA, env: ledgerEnv() });
+		const allocationA = allocate({ sessionId, runtimeInstanceId: runtimeA, env: ledgerEnv() });
 		assert.equal(allocationA.identityState, "ALLOCATED");
 		// A peer commits this generation first.
-		const peer = recordCommitAndClaimNext({
+		const peer = commitNext({
 			ledgerPath: allocationA.ledgerPath,
 			sessionId,
 			runtimeInstanceId: "peer-runtime",
@@ -730,7 +824,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 		assert.equal(peer.error, null, "the peer's commit must succeed");
 
 		// This runtime tries to record the same commit: refused, nothing appended.
-		const duplicate = recordCommitAndClaimNext({
+		const duplicate = commitNext({
 			ledgerPath: allocationA.ledgerPath,
 			sessionId,
 			runtimeInstanceId: runtimeA,
@@ -744,7 +838,9 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 				.filter(Boolean)
 				.map(line => JSON.parse(line));
 			const commits = lines.filter(
-				record => record.type === "commit" && record.generation === allocationA.generation,
+				// R4: one ledger file per controller root, so a record is identified by
+				// (session, generation) — the filename no longer scopes the session.
+				record => record.type === "commit" && record.generation === allocationA.generation && record.sessionId === sessionId,
 			);
 			assert.equal(commits.length, 1, "exactly one commit record may exist per generation");
 			assert.equal(commits[0].runtimeInstanceId, "peer-runtime");
@@ -757,7 +853,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// release a generation the caller never named.
 	{
 		const sessionId = "r1-t7i";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
 			await commit(host, "PASS");
@@ -775,7 +871,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			}
 			results.R1_T7i = "RELEASE_GENERATION_VALIDATED";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
 	}
@@ -786,20 +882,26 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// generation it could not prove was its own.
 	{
 		const sessionId = "r1-t7k";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, manager, jobId, release } = await hostWithGatedJob(sessionId);
 		try {
 			const before = snapshotFor(sessionId);
 			// Make the live generation doubly-claimed, as a peer race would.
+			// R4: the peer's claim is written by the CONTROLLER (signed), because an
+			// unsigned claim is not evidence and would be ignored. This is the real
+			// collision: two controller-authorised allocations on one generation.
 			appendFileSync(
 				before.ledgerPath,
-				`${JSON.stringify({
-					type: "allocate",
-					sessionId,
-					runtimeInstanceId: "peer-runtime",
-					generation: before.generation,
-					allocationToken: "peer-token",
-				})}\n`,
+				`${JSON.stringify(
+					signLedgerRecord(LEDGER_KEY, {
+						type: "allocate",
+						sessionId,
+						runtimeInstanceId: "peer-runtime",
+						generation: before.generation,
+						allocationToken: "peer-token",
+						at: Date.now(),
+					}),
+				)}\n`,
 				"utf8",
 			);
 			release();
@@ -812,7 +914,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			});
 			results.R1_T7k = "AUTO_LEG_OWNERSHIP_CHECKED";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 		}
 	}
 
@@ -822,7 +924,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// generation as committed. The inference must be a delta for this call.
 	{
 		const sessionId = "r1-t7l";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
 			const state = snapshotFor(sessionId);
@@ -848,7 +950,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			});
 			results.R1_T7l = "NO_STALE_LANDED";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
 	}
@@ -860,7 +962,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// the mutation, not reported after it.
 	{
 		const sessionId = "r1-t7m";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
 			const state = snapshotFor(sessionId);
@@ -890,7 +992,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			});
 			results.R1_T7m = "RELEASE_PINS_ENFORCED";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
 	}
@@ -899,7 +1001,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	{
 		const sessionId = "r1-t8";
 		const { host, release } = await hostWithGatedJob(sessionId);
-		delete process.env[AUTHORITY_ENV];
+		clearControllerAuthorityForTest();
 		const state = snapshotFor(sessionId);
 		check("R1_T8", () => {
 			assert.equal(state.identityState, "EPHEMERAL", "no capability must mean no ledger");
@@ -924,7 +1026,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	{
 		const sessionId = "r2-t1";
 		const { host, release } = await hostWithGatedJob(sessionId);
-		delete process.env[AUTHORITY_ENV];
+		clearControllerAuthorityForTest();
 		await commit(host, "PASS");
 		const result = resultFrames()[0].result;
 		check("R2_T1", () => {
@@ -945,7 +1047,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// ── R2_T2 — a committed result carries the real numbers ─────────────────────
 	{
 		const sessionId = "r2-t2";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, manager, jobId, delivered, release } = await hostWithGatedJob(sessionId);
 		try {
 			const state = snapshotFor(sessionId);
@@ -961,7 +1063,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 				assert.equal(result.ledgerRecorded, true, "the durable commit record must be written");
 			});
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 		}
 		release();
 		await manager.getJob(jobId)?.promise;
@@ -977,7 +1079,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// controller must therefore be able to read the failure from the frame.
 	{
 		const sessionId = "r2-t3";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
 			const state = snapshotFor(sessionId);
@@ -1009,7 +1111,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			);
 			assert.ok(failureLog, "a manager failure must be logged, not swallowed silently");
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
 		results.R2_T3 = "FAILURE_IN_FIELD";
@@ -1018,7 +1120,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// ── R2_T3b — a successful invalidation is reported as success ──────────────
 	{
 		const sessionId = "r2-t3b";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, manager, jobId, delivered, release } = await hostWithGatedJob(sessionId);
 		try {
 			const state = snapshotFor(sessionId);
@@ -1036,7 +1138,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			assert.equal(delivered.includes(jobId), false, "a reported success must mean the delivery really was suppressed");
 			results.R2_T3b = "SUCCESS_MEANS_SUPPRESSED";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 		}
 	}
 
@@ -1047,7 +1149,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// lie in the other direction — and lost the result frame entirely.
 	{
 		const sessionId = "r2-t3c";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
 			const state = snapshotFor(sessionId);
@@ -1076,7 +1178,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			});
 			results.R2_T3c = "TRUTH_AFTER_FENCE";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
 	}
@@ -1087,7 +1189,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// nothing durable recorded.
 	{
 		const sessionId = "r2-t3d";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const savedStateDir = process.env.OMP_TERMINAL_FENCE_STATE_DIR;
 		delete process.env.OMP_TERMINAL_FENCE_STATE_DIR;
 		const { host, release } = await hostWithGatedJob(sessionId);
@@ -1105,7 +1207,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			});
 			results.R2_T3d = "EPHEMERAL_NOT_RECORDED";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			// Restore the provisioned state dir: deleting it here made every later
 			// case run EPHEMERAL, which is a test-isolation leak, not a scenario.
 			if (savedStateDir !== undefined) process.env.OMP_TERMINAL_FENCE_STATE_DIR = savedStateDir;
@@ -1120,7 +1222,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	{
 		const sessionId = "r2-t3e";
 		const { host, release } = await hostWithGatedJob(sessionId);
-		delete process.env[AUTHORITY_ENV];
+		clearControllerAuthorityForTest();
 		try {
 			const logger = host.pi.logger as { warn: (...args: unknown[]) => void };
 			const realWarn = logger.warn.bind(logger);
@@ -1141,7 +1243,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			});
 			results.R2_T3e = "DENIAL_PRESERVED";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
 	}
@@ -1158,10 +1260,10 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	{
 		const sessionId = "r2-t3f";
 		const runtimeA = createRuntimeInstanceId();
-		const allocationA = allocateGeneration({ sessionId, runtimeInstanceId: runtimeA, env: ledgerEnv() });
+		const allocationA = allocate({ sessionId, runtimeInstanceId: runtimeA, env: ledgerEnv() });
 		// The COMMIT append succeeds; the NEXT-GENERATION claim append fails.
 		injectAppendFault("allocate");
-		const result = recordCommitAndClaimNext({
+		const result = commitNext({
 			ledgerPath: allocationA.ledgerPath,
 			sessionId,
 			runtimeInstanceId: runtimeA,
@@ -1177,12 +1279,12 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 				.split("\n")
 				.filter(Boolean)
 				.map(line => JSON.parse(line))
-				.filter(record => record.type === "commit" && record.generation === allocationA.generation);
+				.filter(record => record.type === "commit" && record.generation === allocationA.generation && record.sessionId === sessionId);
 			assert.equal(onDisk.length, 1, "the commit record must be on disk despite the failed claim");
 		});
 		// A second attempt on the same generation is refused, and STILL reports that
 		// the commit is recorded — the ledger knows, even though this call did not write it.
-		const again = recordCommitAndClaimNext({
+		const again = commitNext({
 			ledgerPath: allocationA.ledgerPath,
 			sessionId,
 			runtimeInstanceId: runtimeA,
@@ -1205,7 +1307,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	{
 		const sessionId = "r2-t3j";
 		const runtimeA = createRuntimeInstanceId();
-		const allocationA = allocateGeneration({ sessionId, runtimeInstanceId: runtimeA, env: ledgerEnv() });
+		const allocationA = allocate({ sessionId, runtimeInstanceId: runtimeA, env: ledgerEnv() });
 		injectPostAppendPeerCommit({
 			runtimeInstanceId: "peer-runtime",
 			generation: allocationA.generation ?? 0,
@@ -1213,7 +1315,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			requestId: "peer-request",
 			at: Date.now(),
 		});
-		const raced = recordCommitAndClaimNext({
+		const raced = commitNext({
 			ledgerPath: allocationA.ledgerPath,
 			sessionId,
 			runtimeInstanceId: runtimeA,
@@ -1230,7 +1332,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 				.split("\n")
 				.filter(Boolean)
 				.map(line => JSON.parse(line))
-				.filter(record => record.type === "commit" && record.generation === allocationA.generation);
+				.filter(record => record.type === "commit" && record.generation === allocationA.generation && record.sessionId === sessionId);
 			assert.equal(records.length, 2, "the fixture must actually have produced two commit records");
 		});
 		results.R2_T3j = "DOUBLE_COMMIT_DETECTED";
@@ -1244,7 +1346,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	{
 		const sessionId = "r2-t3g";
 		const runtimeA = createRuntimeInstanceId();
-		const allocationA = allocateGeneration({ sessionId, runtimeInstanceId: runtimeA, env: ledgerEnv() });
+		const allocationA = allocate({ sessionId, runtimeInstanceId: runtimeA, env: ledgerEnv() });
 		const ledgerPath = allocationA.ledgerPath ?? "";
 		// Replace the ledger with something unreadable as a ledger.
 		rmSync(ledgerPath, { force: true });
@@ -1255,7 +1357,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			assert.equal(generationAlreadyCommitted(ledgerPath, 1, sessionId), true, "the gate stays fail-closed");
 		});
 
-		const result = recordCommitAndClaimNext({
+		const result = commitNext({
 			ledgerPath,
 			sessionId,
 			runtimeInstanceId: runtimeA,
@@ -1266,6 +1368,12 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			assert.notEqual(result.error, null, "an unreadable ledger must refuse the write");
 			assert.equal(result.committedRecorded, false, "an unreadable ledger cannot claim the commit is recorded");
 		});
+		// R4: one ledger file serves the whole controller root, so a case that
+		// replaces it with a directory must put it back or every later case inherits
+		// the damage. The fixture is restored to an empty ledger, which is the state
+		// a fresh root starts in.
+		rmSync(ledgerPath, { recursive: true, force: true });
+		writeFileSync(ledgerPath, "", "utf8");
 		results.R2_T3g = "UNREADABLE_NOT_RECORDED";
 	}
 
@@ -1289,19 +1397,23 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// the next number cannot be named.
 	{
 		const sessionId = "r2-t3h";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
 			const state = snapshotFor(sessionId);
+			// R4: signed by the controller, because an unsigned ceiling is ignored.
 			appendFileSync(
 				state.ledgerPath,
-				`${JSON.stringify({
-					type: "allocate",
-					sessionId,
-					runtimeInstanceId: "peer-runtime",
-					generation: Number.MAX_SAFE_INTEGER,
-					allocationToken: "peer-token",
-				})}\n`,
+				`${JSON.stringify(
+					signLedgerRecord(LEDGER_KEY, {
+						type: "allocate",
+						sessionId,
+						runtimeInstanceId: "peer-runtime",
+						generation: Number.MAX_SAFE_INTEGER,
+						allocationToken: "peer-token",
+						at: Date.now(),
+					}),
+				)}\n`,
 				"utf8",
 			);
 			drainFrames();
@@ -1326,7 +1438,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			});
 			results.R2_T3h = "FRAME_REPORTS_DURABLE_COMMIT";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
 	}
@@ -1338,7 +1450,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// attempt. The card requires those two to be distinguishable.
 	{
 		const sessionId = "r2-t3i";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
 			const state = snapshotFor(sessionId);
@@ -1371,7 +1483,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			});
 			results.R2_T3i = "ATTEMPT_DISTINGUISHED";
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
 	}
@@ -1379,7 +1491,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// ── R2_T4 — the agent tool surface cannot emit a result frame ───────────────
 	{
 		const sessionId = "r2-t4";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
 			const requestTool = host.tools.get(REQUEST_TOOL);
@@ -1395,7 +1507,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			assert.equal(receipt.details.committed, false, "the report tool must not commit");
 			assert.equal(resultFrames().length, 0, "the agent tool must not emit a controller result frame");
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
 		results.R2_T4 = "AGENT_CANNOT_EMIT";
@@ -1592,7 +1704,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// key, fail with any other key, and the key file must be gone after load.
 	{
 		const sessionId = "r5-t9";
-		process.env[AUTHORITY_ENV] = AUTHORITY;
+		installControllerAuthorityForTest({ key: LEDGER_KEY });
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
 			const state = snapshotFor(sessionId);
@@ -1614,7 +1726,7 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 				assert.equal(wrongKey.reason, "MAC_MISMATCH");
 			});
 		} finally {
-			delete process.env[AUTHORITY_ENV];
+			clearControllerAuthorityForTest();
 			release();
 		}
 		results.R5_T9 = "SIGNED_AND_VERIFIED";
@@ -1649,7 +1761,6 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 						...process.env,
 						OMP_CONTROLLER_RESULT_KEY_FILE: keyPath,
 						OMP_CONTROLLER_RESULT_TRANSPORT: "stdout",
-						OMP_TERMINAL_FENCE_AUTHORITY: AUTHORITY,
 					},
 				},
 			);

@@ -37,13 +37,34 @@
 //   repaired.
 
 import { createHash, randomBytes } from "node:crypto";
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, statSync, writeSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { withLedgerLock } from "./ledger-lock.mjs";
+import { controllerCapability } from "./controller-capability.mjs";
+import { signLedgerRecord, verifyLedgerRecord } from "./ledger-auth.mjs";
 
-/** Directory holding the per-session allocation ledgers. */
+/**
+ * Directory holding the ledger. R4 renamed the *capability* without renaming the
+ * variable: the value is still read from the environment, but a value is no
+ * longer sufficient — a ledger operation requires an installed controller
+ * capability (see `lib/controller-capability.mjs`). The variable now only says
+ * WHERE, never WHETHER.
+ */
 const STATE_DIR_ENV = "OMP_TERMINAL_FENCE_STATE_DIR";
+
+/**
+ * ONE ledger file per controller root (R4).
+ *
+ * It used to be `<stateDir>/<sessionId>.jsonl`. The file name cannot be
+ * pre-opened by the controller, because the controller does not know the session
+ * id before the child starts — and the launch sandbox denies path writes to the
+ * ledger directory, so the extension can only write through the descriptor the
+ * controller handed it. A fixed name is what makes that descriptor possible.
+ * Session identity is a FIELD in every record, so nothing is lost: readers
+ * filter by `sessionId` exactly as before.
+ */
+const LEDGER_FILE_NAME = "ledger.jsonl";
 
 /**
  * There is deliberately NO default ledger directory.
@@ -109,9 +130,22 @@ function resolveStateDir(env = process.env) {
 	}
 }
 
-function ledgerPath(dir, sessionId) {
-	if (!SESSION_ID_PATTERN.test(sessionId)) return undefined;
-	return join(dir, `${sessionId}.jsonl`);
+function ledgerPath(dir) {
+	return join(dir, LEDGER_FILE_NAME);
+}
+
+/**
+ * The directory the cross-process lock is created in, when the controller
+ * provisioned one separate from the ledger.
+ *
+ * Under a governed launch the ledger directory is write-denied by the sandbox and
+ * the ledger is reached through an inherited descriptor. A lock, however, is
+ * created by PATH — so it lives in a directory the runtime can write. The ledger
+ * bytes stay unreachable; only the lock is writable.
+ */
+function capabilityLockDir() {
+	const capability = controllerCapability();
+	return capability && capability.lockDir ? capability.lockDir : null;
 }
 
 /** Generations must be positive safe integers; beyond that `+1` is not representable. */
@@ -120,23 +154,40 @@ function isValidGeneration(value) {
 }
 
 /**
- * Read and validate a ledger.
+ * Read and validate a ledger, and AUTHENTICATE every record (R4).
  *
- * Validation is per-record and covers the fields the allocation logic then
- * trusts: type, generation range, and the record's own session/runtime identity.
- * A record that cannot be attributed to this session is corruption — accepting it
- * would let a hand-written `{"type":"allocate","generation":7}` dictate the
- * numbering, which independent review measured.
+ * The distinction this function exists to draw:
+ *
+ *   records          records whose MAC verifies under the controller's key AND
+ *                    whose fields are structurally valid. These are EVIDENCE.
+ *   unauthenticated  lines that parse but do not authenticate — a hand-written
+ *                    record, a record signed by a different root, an edited
+ *                    record, a torn append. These are NOT evidence. They are
+ *                    counted and ignored.
+ *   corrupt          the file cannot be read at all. Callers must fail closed
+ *                    (never report a commit, never claim "not committed").
+ *
+ * Why unauthenticated records are IGNORED rather than treated as corruption:
+ * treating them as corruption would hand the Agent a denial primitive — append
+ * one junk line and every legitimate commit fails closed forever. The admission
+ * card measured exactly that shape. A record the controller did not sign simply
+ * has no bearing on what the ledger asserts.
+ *
+ * Foreign-session records are legitimate (one ledger file serves a controller
+ * root), so they are filtered out rather than called corruption.
  */
 function readLedger(path, sessionId) {
-	if (!existsSync(path)) return { records: [], corrupt: null };
+	if (!existsSync(path)) return { records: [], unauthenticated: 0, corrupt: null };
 	let text;
 	try {
 		text = readFileSync(path, "utf8");
 	} catch (error) {
-		return { records: [], corrupt: `UNREADABLE: ${String(error)}` };
+		return { records: [], unauthenticated: 0, corrupt: `UNREADABLE: ${String(error)}` };
 	}
+	const capability = controllerCapability();
+	const key = capability ? capability.key : null;
 	const records = [];
+	let unauthenticated = 0;
 	const lines = text.split("\n");
 	for (let index = 0; index < lines.length; index += 1) {
 		const line = lines[index];
@@ -145,26 +196,40 @@ function readLedger(path, sessionId) {
 		try {
 			parsed = JSON.parse(line);
 		} catch {
-			return { records, corrupt: `MALFORMED_LINE_${index + 1}` };
+			// A torn append, or a line somebody typed by hand. Either way it is not
+			// a statement the controller made.
+			unauthenticated += 1;
+			continue;
 		}
 		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-			return { records, corrupt: `NOT_AN_OBJECT_${index + 1}` };
+			unauthenticated += 1;
+			continue;
 		}
 		if (parsed.type !== RECORD_ALLOCATE && parsed.type !== RECORD_COMMIT) {
-			return { records, corrupt: `UNKNOWN_RECORD_TYPE_${index + 1}` };
+			unauthenticated += 1;
+			continue;
 		}
 		if (!isValidGeneration(parsed.generation)) {
-			return { records, corrupt: `BAD_GENERATION_${index + 1}` };
-		}
-		if (sessionId !== undefined && parsed.sessionId !== sessionId) {
-			return { records, corrupt: `FOREIGN_SESSION_${index + 1}` };
+			unauthenticated += 1;
+			continue;
 		}
 		if (typeof parsed.runtimeInstanceId !== "string" || parsed.runtimeInstanceId.length === 0) {
-			return { records, corrupt: `MISSING_RUNTIME_${index + 1}` };
+			unauthenticated += 1;
+			continue;
 		}
+		// THE MAC IS THE GATE. Everything below this line is about *whose* record
+		// it is, not about whether it is real.
+		if (!verifyLedgerRecord(key, parsed)) {
+			unauthenticated += 1;
+			continue;
+		}
+		// A record this session's ledger is asked about must name that session. A
+		// signed record for a DIFFERENT session is not corruption — one ledger file
+		// serves the whole controller root — it is simply not this session's record.
+		if (sessionId !== undefined && parsed.sessionId !== sessionId) continue;
 		records.push(parsed);
 	}
-	return { records, corrupt: null };
+	return { records, unauthenticated, corrupt: null };
 }
 
 /**
@@ -210,12 +275,93 @@ export function clearPostAppendPeerCommit() {
 	postAppendPeer = null;
 }
 
+/**
+ * Append one record, AUTHENTICATED (R4).
+ *
+ * Two things changed here and both are load-bearing:
+ *
+ *  1. The record is signed with the controller's ledger key before it is
+ *     written. An unsigned record is not evidence, so a writer that cannot sign
+ *     must not write at all — a half-authenticated ledger would be worse than
+ *     none.
+ *  2. The write goes through the descriptor the controller opened, when there is
+ *     one. That is what lets the launch sandbox deny `file-write*` on the ledger
+ *     path: the extension keeps working through the fd it was handed, while the
+ *     Agent's `bash` descendants — which do not inherit the descriptor — have
+ *     neither the fd nor the path.
+ */
+/**
+ * True when the ledger's current last byte is not a newline, so an append must
+ * start a fresh line rather than concatenate onto a rejected tail.
+ *
+ * A missing file, an empty file, or an unreadable one all return `false`: in the
+ * first two there is no tail, and in the third the append will fail on its own
+ * terms rather than because of a boundary decision.
+ */
+function needsLeadingNewline(path) {
+	try {
+		const size = statSync(path).size;
+		if (size === 0) return false;
+		const fd = openSync(path, "r");
+		try {
+			const last = Buffer.allocUnsafe(1);
+			readSync(fd, last, 0, 1, size - 1);
+			return last[0] !== 0x0a;
+		} finally {
+			closeSync(fd);
+		}
+	} catch {
+		return false;
+	}
+}
+
 function appendRecord(path, record) {
 	if (appendFault !== null && record.type === appendFault) {
 		appendFault = null;
 		return `APPEND_FAILED: INJECTED_${record.type.toUpperCase()}_FAILURE`;
 	}
-	const line = `${JSON.stringify(record)}\n`;
+	const capability = controllerCapability();
+	if (!capability) return "APPEND_REFUSED: NO_CONTROLLER_CAPABILITY";
+	const signed = signLedgerRecord(capability.key, record);
+	// A REJECTED TAIL MUST NOT SWALLOW THE NEXT AUTHENTIC RECORD.
+	//
+	// Measured by independent review: ignoring an unterminated junk tail made the
+	// NEXT append concatenate onto it — `garbage{"type":"commit",…}\n` — and BOTH
+	// readers discard the whole line, so an authentic commit vanished. That turned
+	// "unsigned text is ignored" into a denial primitive again, one level down.
+	//
+	// The fix is a line boundary, not a repair: if the file does not end with a
+	// newline, this append starts with one. The junk stays junk (it is still not
+	// evidence) and the new record is a line of its own.
+	const line = `${needsLeadingNewline(path) ? "\n" : ""}${JSON.stringify(signed)}\n`;
+
+	// The inherited descriptor is tried FIRST. If it is present but the write
+	// fails, that is a refusal, not a reason to fall back to the path: falling back
+	// would silently reintroduce the write the sandbox was denying.
+	if (capability.ledgerFd !== null) {
+		try {
+			writeSync(capability.ledgerFd, line);
+			// The commit record must be DURABLE, not merely written: the whole point
+			// of the ledger is that it survives the process. An fd write without
+			// fsync would make `ledgerRecorded: true` a claim about a page cache.
+			fsyncSync(capability.ledgerFd);
+			return null;
+		} catch (error) {
+			return `APPEND_FAILED: LEDGER_FD ${String(error)}`;
+		}
+	}
+	// THE PATH WRITE IS A CONTROLLER-EMBEDDED PATH, NOT A FALLBACK.
+	//
+	// Measured by independent review: when the descriptor re-open failed, the
+	// capability carried `ledgerFd:null` and this branch opened the ledger BY PATH.
+	// Under a governed launch the sandbox denies that path, so the write failed —
+	// but "the sandbox will catch it" is the wrong reason for a fallback to exist.
+	//
+	// It is kept because the extension is also used IN-PROCESS by tests and by a
+	// controller that embeds it, where no descriptor is involved and no sandbox is
+	// denying anything. It is unreachable in a governed launch: there the descriptor
+	// is always present, and if it were not, `APPEND_REFUSED` above has already
+	// returned.
 	let fd;
 	try {
 		fd = openSync(path, "a", 0o600);
@@ -303,6 +449,7 @@ export function allocateGeneration({ sessionId, runtimeInstanceId, env = process
 	// the NEXT number instead, so concurrency costs nothing and exclusion is real.
 	const locked = withLedgerLock({
 		ledgerPath: path,
+		lockDir: capabilityLockDir(),
 		fn: () => allocateGenerationLocked({ sessionId, runtimeInstanceId, path, now }),
 	});
 	if (!locked.ok) {
@@ -483,6 +630,7 @@ export function recordCommitAndClaimNext({
 	generation,
 	status,
 	requestId,
+	allocationToken = null,
 	now = Date.now(),
 }) {
 	if (!ledgerPath) return { error: null, committedRecorded: false, nextGeneration: null, allocationToken: null };
@@ -503,8 +651,18 @@ export function recordCommitAndClaimNext({
 	// both of them writing.
 	const locked = withLedgerLock({
 		ledgerPath,
+		lockDir: capabilityLockDir(),
 		fn: () =>
-			recordCommitAndClaimNextLocked({ ledgerPath, sessionId, runtimeInstanceId, generation, status, requestId, now }),
+			recordCommitAndClaimNextLocked({
+				ledgerPath,
+				sessionId,
+				runtimeInstanceId,
+				generation,
+				status,
+				requestId,
+				allocationToken,
+				now,
+			}),
 	});
 	if (!locked.ok) {
 		return {
@@ -518,12 +676,16 @@ export function recordCommitAndClaimNext({
 }
 
 /** The commit transaction itself. Callers MUST hold the ledger lock. */
-function recordCommitAndClaimNextLocked({ ledgerPath, sessionId, runtimeInstanceId, generation, status, requestId, now }) {
+function recordCommitAndClaimNextLocked({ ledgerPath, sessionId, runtimeInstanceId, generation, status, requestId, allocationToken = null, now }) {
 	// Never write a second commit record for one generation. Measured in
 	// independent review: after a failed advance the automatic fence leg appended
 	// a duplicate `commit:2` beside a peer's, so the ledger recorded two commits
 	// for one generation. The ledger is the durable statement of what committed;
 	// a duplicate there is worse than a refused write.
+	//
+	// R4: this is the GATE question (is the generation closed at all?), so it is
+	// asked without an identity filter. A peer's authenticated commit must stop
+	// this runtime from writing a second one.
 	const preexisting = commitRecordState(ledgerPath, generation, sessionId);
 	if (preexisting !== "NOT_COMMITTED") {
 		// COMMITTED: the record is durable (written by someone, possibly a peer).
@@ -544,6 +706,11 @@ function recordCommitAndClaimNextLocked({ ledgerPath, sessionId, runtimeInstance
 		sessionId,
 		runtimeInstanceId,
 		generation,
+		// R4: the allocation token binds the commit to the allocation that owned
+		// the generation. Without it, "this runtime committed generation N" cannot
+		// be distinguished from "this runtime committed some generation N it never
+		// owned".
+		allocationToken,
 		status,
 		requestId: requestId ?? null,
 		at: now,
@@ -631,13 +798,16 @@ function recordCommitAndClaimNextLocked({ ledgerPath, sessionId, runtimeInstance
 			allocationToken: null,
 		};
 	}
-	const allocationToken = randomBytes(8).toString("hex");
+	// A NEW token for the NEXT generation. The `allocationToken` parameter names
+	// the token of the generation being committed; reusing it here would let the
+	// next generation be claimed with an already-spent token.
+	const nextAllocationToken = randomBytes(8).toString("hex");
 	const claimError = appendRecord(ledgerPath, {
 		type: RECORD_ALLOCATE,
 		sessionId,
 		runtimeInstanceId,
 		generation: nextGeneration,
-		allocationToken,
+		allocationToken: nextAllocationToken,
 		at: now,
 	});
 	if (claimError) return { error: claimError, committedRecorded: true, nextGeneration: null, allocationToken: null };
@@ -648,7 +818,7 @@ function recordCommitAndClaimNextLocked({ ledgerPath, sessionId, runtimeInstance
 	const claimants = verify.records.filter(
 		record => record.type === RECORD_ALLOCATE && record.generation === nextGeneration,
 	);
-	if (claimants.length !== 1 || claimants[0].allocationToken !== allocationToken) {
+	if (claimants.length !== 1 || claimants[0].allocationToken !== nextAllocationToken) {
 		return {
 			error: `NEXT_GENERATION_${nextGeneration}_CLAIMED_${claimants.length}_TIMES`,
 			committedRecorded: true,
@@ -656,7 +826,7 @@ function recordCommitAndClaimNextLocked({ ledgerPath, sessionId, runtimeInstance
 			allocationToken: null,
 		};
 	}
-	return { error: null, committedRecorded: true, nextGeneration, allocationToken };
+	return { error: null, committedRecorded: true, nextGeneration, allocationToken: nextAllocationToken };
 }
 
 /**
@@ -681,13 +851,50 @@ export function generationAlreadyCommitted(ledgerPath, generation, sessionId) {
  * unreadable, and the frame claimed `ledgerRecorded: true` for a commit that was
  * never written. A report must distinguish the two.
  *
+ * TWO DIFFERENT QUESTIONS, DELIBERATELY SEPARATED (R4)
+ * ---------------------------------------------------
+ * The card requires the full runtime/allocation identity to be checked, not just
+ * `type + generation + sessionId`. But "is this generation closed?" and "is it
+ * closed BY ME?" are not the same question, and collapsing them would introduce
+ * a double-commit:
+ *
+ *   generationAlreadyCommitted(...)        ANY authenticated commit for
+ *                                          (session, generation) closes the
+ *                                          generation. This is the GATE: a peer's
+ *                                          commit must stop this runtime from
+ *                                          writing a second one.
+ *   commitRecordState(..., identity)       the commit is attributable to THIS
+ *                                          runtime and THIS allocation. This is
+ *                                          the ATTRIBUTION check, used when a
+ *                                          caller reports on its own commit.
+ *
+ * A record whose MAC does not verify is never counted by either: it is not a
+ * statement the controller made, so it can neither close a generation nor
+ * attribute one.
+ *
+ * @param {object|null} [identity] `{ runtimeInstanceId?, allocationToken? }`.
+ *   When supplied, every supplied field must match for COMMITTED to be returned.
+ *   When omitted, the answer is the gate-level one: does ANY authenticated commit
+ *   exist for this (session, generation)?
  * @returns {"COMMITTED"|"NOT_COMMITTED"|"UNREADABLE"}
  */
-export function commitRecordState(ledgerPath, generation, sessionId) {
+export function commitRecordState(ledgerPath, generation, sessionId, identity = null) {
 	if (!ledgerPath || !isValidGeneration(generation)) return "NOT_COMMITTED";
 	const read = readLedger(ledgerPath, sessionId);
 	if (read.corrupt) return "UNREADABLE";
-	return read.records.some(record => record.type === RECORD_COMMIT && record.generation === generation)
-		? "COMMITTED"
-		: "NOT_COMMITTED";
+	const commits = read.records.filter(
+		record => record.type === RECORD_COMMIT && record.generation === generation,
+	);
+	if (identity === null || identity === undefined) return commits.length > 0 ? "COMMITTED" : "NOT_COMMITTED";
+	if (typeof identity !== "object" || Array.isArray(identity)) return "NOT_COMMITTED";
+	const wantRuntime = identity.runtimeInstanceId;
+	const wantToken = identity.allocationToken;
+	// A supplied field that disagrees is a rejection. An omitted field is not
+	// checked, which is how a caller that only knows its runtime can still ask.
+	const attributed = commits.filter(record => {
+		if (typeof wantRuntime === "string" && record.runtimeInstanceId !== wantRuntime) return false;
+		if (typeof wantToken === "string" && (record.allocationToken ?? null) !== wantToken) return false;
+		return true;
+	});
+	return attributed.length > 0 ? "COMMITTED" : "NOT_COMMITTED";
 }

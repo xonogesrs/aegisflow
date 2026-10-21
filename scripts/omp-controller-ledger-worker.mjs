@@ -15,12 +15,34 @@
 // reach the ledger at the same instant instead of drifting apart during startup.
 // Without it the test would measure process startup jitter, not contention.
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const [mode, stateDir, sessionId, runtimeInstanceId, extra] = process.argv.slice(2);
 
 const moduleRoot = new URL("../integrations/omp/extensions/lib/", import.meta.url);
 const { allocateGeneration, recordCommitAndClaimNext } = await import(new URL("runtime-identity.mjs", moduleRoot).href);
+const { installControllerCapability } = await import(new URL("controller-capability.mjs", moduleRoot).href);
+
+/**
+ * R4: this worker is acting as the CONTROLLER (it is the party that writes the
+ * ledger), so it installs the controller's capability before touching it.
+ *
+ * The key comes from the controller root, exactly as the real client obtains it.
+ * A worker without one would be refused — which is the boundary working, and is
+ * asserted separately by the no-capability cases.
+ *
+ * The ledger path is one file per root (`ledger.jsonl`), not per session, because
+ * the controller must open it before the session id exists.
+ */
+const ledgerKeyPath = join(stateDir, "..", "ledger.key");
+let capability = { ok: false, denial: "CAPABILITY_ABSENT" };
+try {
+	const key = readFileSync(ledgerKeyPath, "utf8").trim();
+	capability = installControllerCapability({ key });
+} catch (error) {
+	capability = { ok: false, denial: "CAPABILITY_KEY_UNREADABLE", detail: String(error && error.message ? error.message : error) };
+}
 
 // The barrier: wait for a file the parent creates after all workers are alive.
 const barrier = mode === "allocate" && extra && extra !== "-" ? extra : mode === "commit" && process.argv[7] ? process.argv[7] : null;
@@ -32,6 +54,7 @@ if (barrier) {
 }
 
 const env = { OMP_TERMINAL_FENCE_STATE_DIR: stateDir };
+const ledgerPath = join(stateDir, "ledger.jsonl");
 let output;
 if (mode === "allocate") {
 	const allocation = allocateGeneration({ sessionId, runtimeInstanceId, env });
@@ -44,11 +67,12 @@ if (mode === "allocate") {
 		generation: allocation.generation,
 		allocationToken: allocation.allocationToken,
 		ledgerPath: allocation.ledgerPath,
+		capability: capability.ok ? "installed" : capability.denial,
 	};
 } else if (mode === "commit") {
 	const generation = Number(extra);
 	const result = recordCommitAndClaimNext({
-		ledgerPath: `${stateDir}/${sessionId}.jsonl`,
+		ledgerPath,
 		sessionId,
 		runtimeInstanceId,
 		generation,

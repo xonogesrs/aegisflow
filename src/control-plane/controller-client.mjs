@@ -62,10 +62,23 @@ import {
 	RESULT_KEY_ENV,
 	RESULT_CHANNEL,
 } from "../../integrations/omp/extensions/lib/controller-result.mjs";
+import {
+	LEDGER_FD_ENV,
+	LEDGER_KEY_FD_ENV,
+	LEDGER_KEY_PATTERN,
+	LOCK_DIR_ENV,
+	verifyLedgerRecord,
+} from "../../integrations/omp/extensions/lib/ledger-auth.mjs";
 
 /** Environment variable naming the RPC binary a caller wants used. */
 export const RPC_BIN_ENV = "AEGIS_RPC_BIN";
-/** The extension's capability marker. Set on the child, never read from ours. */
+/**
+ * The RETIRED capability marker (R4).
+ *
+ * Kept as an exported name because the launch still REFUSES to proceed when this
+ * process or a supplied child environment carries it — an inherited marker means
+ * somebody is trying to make authority transitive. It grants nothing.
+ */
 export const AUTHORITY_ENV = "OMP_TERMINAL_FENCE_AUTHORITY";
 /** Directory holding the durable identity ledger. */
 export const STATE_DIR_ENV = "OMP_TERMINAL_FENCE_STATE_DIR";
@@ -73,6 +86,10 @@ export const STATE_DIR_ENV = "OMP_TERMINAL_FENCE_STATE_DIR";
 export const TRANSPORT_ENV = "OMP_CONTROLLER_RESULT_TRANSPORT";
 /** Optional: the extension module the child must load, instead of discovery. */
 export const EXTENSION_ENV = "AEGIS_CONTROLLER_EXTENSION";
+/** stdio slot carrying the append-only ledger descriptor. */
+const LEDGER_FD = 3;
+/** stdio slot carrying the ledger authentication key. */
+const LEDGER_KEY_FD = 4;
 
 /**
  * The commit state machine (C5).
@@ -114,6 +131,8 @@ export const LAUNCH_DENIAL = Object.freeze({
 	AUTHORITY_INHERITED: "AUTHORITY_INHERITED",
 	KEY_PROVISION_FAILED: "KEY_PROVISION_FAILED",
 	STATE_DIR_UNUSABLE: "STATE_DIR_UNUSABLE",
+	/** The launch could not be isolated, so it was not launched. */
+	SANDBOX_UNAVAILABLE: "SANDBOX_UNAVAILABLE",
 });
 
 /**
@@ -283,6 +302,15 @@ export function attestExtension(extensionPath, expectedSha256, { requireSiblings
 
 /** Seconds a spawned child may take to print `ready`. */
 const READY_TIMEOUT_MS = 30_000;
+/**
+ * How long the sandbox wrapper may take to exec into the attested binary.
+ *
+ * `sandbox-exec` applies the profile and then execs in place, so the child's
+ * executable is briefly the wrapper rather than the runtime. This bound is the
+ * window in which that transition is expected; past it, the process is not the
+ * one that was attested.
+ */
+const CHILD_EXEC_TIMEOUT_MS = 5_000;
 
 function sha256File(path) {
 	const hash = createHash("sha256");
@@ -415,6 +443,84 @@ function sleep(ms) {
 }
 
 /**
+ * How a launch enforces write isolation on the trusted code (R4-C).
+ *
+ * The requirement is not "detect tampering on the next start" — the admission
+ * card measured that the Agent can edit the deployed extension and that the hash
+ * check then converts the attack into a denial of service. The requirement is
+ * that the write does not happen.
+ *
+ * The mechanism is the OS's own sandbox, applied to the WHOLE process tree of the
+ * governed runtime: the child, its `bash` tool, and anything either of them
+ * spawns. It denies `file-write*` on the extension tree, on the controller's
+ * ledger key and on the ledger path, and denies `file-read*` on the key. Because
+ * a nested `sandbox-exec` inside a sandbox is refused by the OS (measured:
+ * `sandbox_apply: Operation not permitted`), a descendant cannot widen it.
+ *
+ * This is NOT a substitute for file permissions. It is the smallest real
+ * boundary available without changing the account model, and the deployment plan
+ * names the account separation as the durable answer. What it buys is that the
+ * running system does not depend on a future check for its integrity.
+ *
+ * @returns {{ok: true, command: string, args: string[], profile: string}
+ *          | {ok: false, reason: string}}
+ */
+export function buildLaunchSandbox({ denyWrite = [], denyRead = [], allowWrite = [] } = {}) {
+	// Only darwin ships a usable `sandbox-exec`. On any other platform this
+	// returns `ok: false` and the caller launches WITHOUT the sandbox — reported
+	// honestly in the launch result, never silently claimed.
+	if (process.platform !== "darwin") return { ok: false, reason: "SANDBOX_UNAVAILABLE_ON_PLATFORM" };
+	const sandboxExec = "/usr/bin/sandbox-exec";
+	try {
+		if (!statSync(sandboxExec).isFile()) return { ok: false, reason: "SANDBOX_EXEC_MISSING" };
+	} catch {
+		return { ok: false, reason: "SANDBOX_EXEC_MISSING" };
+	}
+	// Seatbelt profiles are s-expressions; a path containing a quote or backslash
+	// would change the meaning of the profile, so such a path is refused rather
+	// than escaped and hoped for.
+	//
+	// RESOLVE EVERY PATH FIRST. Seatbelt matches the KERNEL's view, which is the
+	// resolved path, and on macOS `/var` is a symlink to `/private/var`. A deny rule
+	// written for `/var/folders/...` — which is what `os.tmpdir()` returns — matches
+	// NOTHING, and the sandbox silently allows the write. Measured: the same profile
+	// with `/var/...` allowed the write, and with `/private/var/...` denied it.
+	const quote = value => {
+		let text = String(value);
+		try {
+			text = realpathSync(text);
+		} catch {
+			// A path that does not exist yet cannot be resolved; its parent is what the
+			// kernel will match, so resolve the deepest existing ancestor and re-join.
+			const parts = text.split("/").filter(Boolean);
+			let base = "/";
+			let index = 0;
+			for (; index < parts.length; index += 1) {
+				const candidate = `${base}${base === "/" ? "" : "/"}${parts[index]}`;
+				try {
+					base = realpathSync(candidate);
+				} catch {
+					break;
+				}
+			}
+			text = [base, ...parts.slice(index)].join("/").replace(/\/+/g, "/");
+		}
+		if (text.includes('"') || text.includes("\\")) throw new Error(`path is not sandbox-quotable: ${text}`);
+		return text;
+	};
+	const lines = ["(version 1)", "(allow default)"];
+	// ORDER IS LOAD-BEARING: Seatbelt is last-match-wins. The broad denies come
+	// first, then the narrow allows that carve out what the runtime legitimately
+	// needs. Measured on this host: the carve-out does not re-open a denied
+	// sibling, and a descendant is denied exactly like its parent.
+	for (const path of denyWrite) lines.push(`(deny file-write* (subpath "${quote(path)}"))`);
+	for (const path of denyRead) lines.push(`(deny file-read* (subpath "${quote(path)}"))`);
+	for (const path of allowWrite) lines.push(`(allow file-write* (subpath "${quote(path)}"))`);
+	const profile = `${lines.join("\n")}\n`;
+	return { ok: true, command: sandboxExec, args: ["-p", profile], profile };
+}
+
+/**
  * A controller-owned launch directory: the signing key, the identity ledger and
  * the child's HOME all live under one directory this controller created with
  * mode 0700.
@@ -430,10 +536,34 @@ export function prepareControllerRoot({ root, home = null } = {}) {
 	mkdirSync(childHome, { recursive: true, mode: 0o700 });
 	const stateDir = join(dir, "state");
 	mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-	// NO key is created here. A key file is single-use: the extension reads it and
-	// unlinks it at module load, so one root cannot serve two launches. Each launch
-	// mints its own (see `launchGovernedRuntime`).
-	return { dir, childHome, stateDir };
+	// R4: the lock lives OUTSIDE the ledger directory, because the launch sandbox
+	// denies path writes to the ledger directory and a lock is created by path.
+	const lockDir = join(dir, "locks");
+	mkdirSync(lockDir, { recursive: true, mode: 0o700 });
+	// The ledger FILE itself is created here, empty, so the controller can open it
+	// and hand the descriptor to the child. The child never opens this path.
+	const ledgerPath = join(stateDir, "ledger.jsonl");
+	if (!existsSync(ledgerPath)) {
+		try {
+			writeFileSync(ledgerPath, "", { mode: 0o600 });
+		} catch {
+			// A root whose ledger cannot be created is reported by the launch, which
+			// is where the operator can act on it.
+		}
+	}
+	// The ledger AUTHENTICATION key is minted ONCE per root, not per launch: it
+	// authenticates records, and records must stay verifiable across restarts of
+	// the governed runtime. (The RESULT key is still per launch and single-use —
+	// different key, different lifetime, different purpose.)
+	const ledgerKeyPath = join(dir, "ledger.key");
+	if (!existsSync(ledgerKeyPath)) {
+		try {
+			writeFileSync(ledgerKeyPath, `${randomBytes(32).toString("hex")}\n`, { mode: 0o600 });
+		} catch {
+			// Same: the launch reports what it cannot provision.
+		}
+	}
+	return { dir, childHome, stateDir, lockDir, ledgerPath, ledgerKeyPath };
 }
 
 /**
@@ -521,6 +651,7 @@ export async function launchGovernedRuntime({
 		return { ok: false, denial: LAUNCH_DENIAL.AUTHORITY_NOT_DELEGATED, detail: "no controller root", transitions };
 	}
 
+
 	// C1: the loaded module set is part of the TCB. An explicit extension must be
 	// hash-attested, and its dependency tree must be PINNED — not merely observed.
 	//
@@ -558,7 +689,7 @@ export async function launchGovernedRuntime({
 		}
 	}
 
-	const { childHome, stateDir, dir } = controllerRoot;
+	const { childHome, stateDir, dir, lockDir = join(dir, "locks"), ledgerPath = join(stateDir, "ledger.jsonl"), ledgerKeyPath = join(dir, "ledger.key") } = controllerRoot;
 	if (!existsSync(stateDir) || !statSync(stateDir).isDirectory()) {
 		return { ok: false, denial: LAUNCH_DENIAL.STATE_DIR_UNUSABLE, detail: stateDir, transitions };
 	}
@@ -579,6 +710,55 @@ export async function launchGovernedRuntime({
 			ok: false,
 			denial: LAUNCH_DENIAL.KEY_PROVISION_FAILED,
 			detail: String(error && error.message ? error.message : error),
+			transitions,
+		};
+	}
+
+	// R4-B: THE LEDGER KEY AND THE LEDGER DESCRIPTOR.
+	//
+	// The key is read from the controller root and handed over on a dedicated
+	// descriptor; it never enters the environment, argv or the session file. The
+	// ledger is opened here, once, and the child receives the descriptor — so the
+	// launch sandbox can deny the ledger PATH to every process in the tree,
+	// including the governed child's own `bash`.
+	// A DESCRIPTOR IS ONLY HANDED OVER WHEN SOMETHING WILL REVOKE IT.
+	//
+	// Measured by independent review: the descriptors were passed unconditionally,
+	// but `extensionPath` is optional. A launch with no extension — or with only an
+	// additional extension such as `cbm-query.js` — never runs
+	// `installControllerCapabilityFromEnv()`, so NOTHING closes or re-opens the
+	// inherited descriptors close-on-exec. The Agent's bash would then hold a
+	// writable ledger handle and a readable key.
+	//
+	// `no-poll-waits.js` is the module that revokes them. Without it there is no
+	// commit path at all, so there is nothing to authorize and no descriptor to
+	// leak: the launch proceeds with no capability, and `capabilityProvisioned`
+	// reports that plainly rather than implying authority that was never given.
+	const consumesCapability = extension !== null;
+	let ledgerKey;
+	let ledgerFd = null;
+	let ledgerKeyFd = null;
+	try {
+		ledgerKey = readFileSync(ledgerKeyPath, "utf8").trim();
+		if (!LEDGER_KEY_PATTERN.test(ledgerKey)) throw new Error("ledger key is malformed");
+		if (consumesCapability) {
+			ledgerFd = openSync(ledgerPath, "a", 0o600);
+			ledgerKeyFd = openSync(ledgerKeyPath, "r");
+		}
+	} catch (error) {
+		for (const fd of [ledgerFd, ledgerKeyFd]) {
+			if (fd !== null) {
+				try {
+					closeSync(fd);
+				} catch {
+					// Nothing to release.
+				}
+			}
+		}
+		return {
+			ok: false,
+			denial: LAUNCH_DENIAL.KEY_PROVISION_FAILED,
+			detail: `ledger capability: ${String(error && error.message ? error.message : error)}`,
 			transitions,
 		};
 	}
@@ -661,24 +841,49 @@ export async function launchGovernedRuntime({
 	if (extension) childArgs.push("-e", extension.path);
 	for (const extra of additional) childArgs.push("-e", extra.path);
 
+	// R4-A: THE MARKER IS NOT SET AT ALL.
+	//
+	// It used to be. The child's `bash` tool inherited it, so the Agent could read
+	// it, print it, and set it again on a nested `omp` — measured in the admission
+	// card. Authority is now an inherited DESCRIPTOR plus a key, neither of which
+	// survives into a grandchild (`stdio` slots are cleared by `exec`, and the
+	// extension re-opens its ledger fd with `O_CLOEXEC`).
 	const childEnv = {
 		PATH: env.PATH ?? process.env.PATH,
 		HOME: childHome,
 		TMPDIR: env.TMPDIR ?? process.env.TMPDIR,
 		LANG: env.LANG ?? "en_US.UTF-8",
 		TERM: "dumb",
-		// The three provisions that make this child governed. They are set HERE,
-		// from this controller's own decisions — never inherited from our caller's
-		// environment, which is what keeps a governed launch from being a way to
-		// smuggle an unrelated marker into a child.
-		[AUTHORITY_ENV]: "controller-client",
+		// The provisions that make this child governed. They are set HERE, from this
+		// controller's own decisions — never inherited from our caller's environment,
+		// which is what keeps a governed launch from being a way to smuggle an
+		// unrelated marker into a child.
 		[RESULT_KEY_ENV]: keyFile,
 		[STATE_DIR_ENV]: stateDir,
 		[TRANSPORT_ENV]: "stdout",
+		// R4: the capability, when a loaded module will consume it. Descriptor numbers
+		// are not secret — what they refer to is, and only this child is given them.
+		...(consumesCapability
+			? {
+					[LEDGER_FD_ENV]: String(LEDGER_FD),
+					[LEDGER_KEY_FD_ENV]: String(LEDGER_KEY_FD),
+					[LOCK_DIR_ENV]: lockDir,
+				}
+			: {}),
 	};
 	for (const [k, v] of Object.entries(env)) {
 		if (v === undefined) continue;
-		if (k === AUTHORITY_ENV || k === RESULT_KEY_ENV || k === STATE_DIR_ENV || k === TRANSPORT_ENV) continue;
+		if (
+			k === AUTHORITY_ENV ||
+			k === RESULT_KEY_ENV ||
+			k === STATE_DIR_ENV ||
+			k === TRANSPORT_ENV ||
+			k === LEDGER_FD_ENV ||
+			k === LEDGER_KEY_FD_ENV ||
+			k === LOCK_DIR_ENV
+		) {
+			continue;
+		}
 		childEnv[k] = v;
 	}
 
@@ -694,11 +899,117 @@ export async function launchGovernedRuntime({
 		};
 	}
 
-	const child = spawn(attestation.path, childArgs, {
+	// R4-C: THE TRUSTED CODE IS WRITE-PROTECTED FOR THE WHOLE PROCESS TREE.
+	//
+	// The launch is wrapped in an OS sandbox that denies `file-write*` on the
+	// deployed extension tree, on the controller's own ledger key, and on the
+	// ledger path — for the child AND every process it spawns. That is what turns
+	// "the next launch would notice the tampering" into "the tampering cannot
+	// happen". The hash attestation above stays as a second line of defence.
+	//
+	// Measured on this host: a descendant of a sandboxed process is denied a write
+	// to a denied subpath (`Operation not permitted`), the same descendant is NOT
+	// able to widen the profile by nesting another `sandbox-exec`
+	// (`sandbox_apply: Operation not permitted`), and a write to an allowed subpath
+	// still succeeds.
+	let sandbox;
+	try {
+		sandbox = buildLaunchSandbox({
+			denyWrite: [
+				// The trusted code that was ATTESTED — for the whole tree.
+				...(extension ? [extension.path, join(dirname(extension.path), "lib")] : []),
+				...additional.flatMap(entry => [entry.path, join(dirname(entry.path), "lib")]),
+				// AND THE DEPLOYED DISCOVERY TREE.
+				//
+				// Measured while building this: the attestation names the file the
+				// controller LOADED, which is usually the repository copy — while the
+				// governed child also discovers whatever sits in its own
+				// `~/.omp/agent/extensions`. Denying only the attested path left the
+				// discovered tree writable, and the Agent edited it successfully.
+				//
+				// The extension surface of a governed child is `--no-extensions` plus the
+				// attested `-e` paths, so the discovery directory contributes no module
+				// to the TCB; but a write there is still a write to a trusted location, and
+				// it is denied.
+				join(childHome, ".omp", "agent", "extensions"),
+				join(childHome, ".omp", "agent", "extensions", "lib"),
+				// The durable state. The runtime writes it through the descriptor the
+				// controller opened; the PATH is denied to everything, which is what
+				// stops the Agent from appending a record of its own.
+				stateDir,
+				ledgerPath,
+				// THE LEDGER KEY IS WRITE-PROTECTED TOO, NOT JUST READ-PROTECTED.
+				//
+				// Measured by independent review and confirmed here: denying only
+				// `file-read*` left the key OVERWRITABLE. An Agent that cannot read the
+				// key can still replace it with a key it knows, and every later launch
+				// would then trust records signed with the attacker's key — or be denied
+				// outright by a malformed one. Confidentiality is not integrity.
+				ledgerKeyPath,
+				// THE ATTESTED EXECUTABLE AND ITS REPLACEMENT NAMESPACE.
+				//
+				// The OS refuses to write an executing image, but it does NOT refuse to
+				// plant a file beside it and rename over it. The hash attestation is a
+				// launch-time check, so it cannot see a replacement made later in the
+				// run. Denying the directory as well as the file closes the rename.
+				attestation.path,
+				dirname(attestation.path),
+			],
+			denyRead: [ledgerKeyPath],
+			// The lock is created by path, so its directory must stay writable.
+			allowWrite: [lockDir],
+		});
+	} catch (error) {
+		// FAIL CLOSED. A sandbox that cannot be constructed is not a sandbox.
+		//
+		// Measured by independent review: a controller root whose path contains a
+		// quote or backslash made `buildLaunchSandbox` throw, the catch turned that
+		// into `ok:false`, and the launch then proceeded WITHOUT the sandbox while
+		// still handing over both authority descriptors. Reporting
+		// `sandbox.active:false` afterwards is not a boundary — on the supported
+		// deployment platform, no sandbox means no governed launch.
+		return {
+			ok: false,
+			denial: LAUNCH_DENIAL.SANDBOX_UNAVAILABLE,
+			detail: String(error && error.message ? error.message : error),
+			transitions,
+		};
+	}
+	// Same rule for the honest "this platform has no sandbox" answer: a governed
+	// launch that cannot be isolated is refused rather than downgraded silently.
+	if (!sandbox.ok) {
+		return {
+			ok: false,
+			denial: LAUNCH_DENIAL.SANDBOX_UNAVAILABLE,
+			detail: sandbox.reason ?? "no sandbox mechanism",
+			transitions,
+		};
+	}
+	const spawnCommand = sandbox.command;
+	const spawnArgs = [...sandbox.args, attestation.path, ...childArgs];
+
+	const child = spawn(spawnCommand, spawnArgs, {
 		cwd,
 		env: childEnv,
-		stdio: ["pipe", "pipe", "pipe"],
+		stdio: consumesCapability ? ["pipe", "pipe", "pipe", ledgerFd, ledgerKeyFd] : ["pipe", "pipe", "pipe"],
 	});
+
+	// THE PARENT'S COPIES ARE CLOSED IMMEDIATELY.
+	//
+	// `spawn` dups these into the child's slots; the originals are this process's
+	// and serve no further purpose. Leaving them open would (a) leak two descriptors
+	// per launch, and (b) — worse — leave the controller holding a writable handle
+	// to a ledger it is not supposed to be writing, and an OPEN handle to the key
+	// for the whole lifetime of the runtime. The child has its own copies; these
+	// must go.
+	for (const fd of [ledgerFd, ledgerKeyFd]) {
+		if (fd === null) continue;
+		try {
+			closeSync(fd);
+		} catch {
+			// Already closed by a failed spawn path; nothing to release.
+		}
+	}
 
 	const correlator = new ResultCorrelator(key);
 	const frames = [];
@@ -739,15 +1050,42 @@ export async function launchGovernedRuntime({
 	});
 
 	// Post-spawn identity: the child's own executable must be the attested file.
+	//
+	// With the launch sandbox in play the process starts as `sandbox-exec` and
+	// EXECs into the attested binary in place, keeping its pid. A single immediate
+	// read therefore races that exec. The check is a bounded poll that accepts
+	// exactly two observations — the attested path, or the sandbox wrapper while it
+	// is still about to exec — and treats any THIRD value as a substitution. It
+	// never accepts "I could not tell": running out of time is `UNREADABLE`.
 	const childPid = child.pid ?? null;
 	let executablePath = null;
 	let executableMismatch = null;
 	if (childPid !== null) {
-		executablePath = childExecutablePath(childPid);
-		if (executablePath === null) {
-			executableMismatch = "UNREADABLE";
-		} else if (executablePath !== attestation.path) {
-			executableMismatch = executablePath;
+		const deadline = nowMs() + CHILD_EXEC_TIMEOUT_MS;
+		const expectedWrapper = sandbox.ok ? realpathSync(sandbox.command) : null;
+		for (;;) {
+			const observed = childExecutablePath(childPid);
+			if (observed === null) {
+				executablePath = null;
+			} else if (observed === attestation.path) {
+				executablePath = observed;
+				break;
+			} else if (expectedWrapper !== null && observed === expectedWrapper) {
+				// Mid-exec. Not yet evidence either way.
+				executablePath = observed;
+			} else {
+				executableMismatch = observed;
+				break;
+			}
+			if (nowMs() >= deadline) {
+				if (executablePath === null) executableMismatch = "UNREADABLE";
+				break;
+			}
+			await sleep(10);
+		}
+		if (executableMismatch === null && executablePath !== attestation.path) {
+			// Still the wrapper after the deadline: the exec never happened.
+			executableMismatch = executablePath ?? "UNREADABLE";
 		}
 	}
 	if (executableMismatch !== null) {
@@ -866,8 +1204,17 @@ export async function launchGovernedRuntime({
 		executablePath,
 		childHome,
 		stateDir,
+		lockDir,
+		ledgerPath,
+		ledgerKeyPath,
+		/** The key that authenticates this root's ledger records. */
+		ledgerKey,
 		controllerRoot: dir,
 		keyFile,
+		/** R4-C: whether the launch is write-isolated, and by what. */
+		sandbox: { active: true, mechanism: "seatbelt", profile: sandbox.profile },
+		/** R4-A: whether this launch was given commit authority at all. */
+		capabilityProvisioned: consumesCapability,
 		/** Set by `bindIdentity`: the identity this client proved by launching. */
 		boundIdentity: null,
 		ready,
@@ -905,6 +1252,11 @@ export async function bindIdentity(runtime, expectation = {}, { requestId = null
 		generation: result.generation,
 		identityState: result.identityState,
 		generationDurable: result.generationDurable === true,
+		// R4: the allocation token is part of the identity a commit is bound to.
+		// Independent review caught that `bindIdentity` dropped it, so no normal
+		// caller could ever pin the allocation and the "full identity" claim was
+		// only true for hand-built expectations.
+		allocationToken: typeof result.allocationToken === "string" ? result.allocationToken : null,
 	};
 	const mismatch = compareIdentity(identity, expectation);
 	if (mismatch) return { ok: false, reason: "BINDING_MISMATCH", denial: mismatch, detail: identity };
@@ -1198,7 +1550,13 @@ export function probeLedgerForCommit(runtime, expectation = {}) {
 	if (typeof stateDir !== "string" || typeof sessionId !== "string" || !Number.isSafeInteger(generation)) {
 		return "UNKNOWN";
 	}
-	const path = join(stateDir, `${sessionId}.jsonl`);
+	// R4: ONE ledger file per controller root, named explicitly. The old
+	// `<stateDir>/<sessionId>.jsonl` name cannot be pre-opened by the controller,
+	// and the controller is now the only party allowed to write the ledger path.
+	const path =
+		typeof runtime?.ledgerPath === "string" && runtime.ledgerPath.length > 0
+			? runtime.ledgerPath
+			: join(stateDir, "ledger.jsonl");
 	if (!existsSync(path)) return "NOT_COMMITTED";
 	let text;
 	try {
@@ -1206,24 +1564,49 @@ export function probeLedgerForCommit(runtime, expectation = {}) {
 	} catch {
 		return "UNKNOWN";
 	}
-	// A RECORD MUST BE STRUCTURALLY VALID AND ATTRIBUTABLE TO COUNT.
+	// THE MAC IS THE GATE (R4).
 	//
-	// Independent review held C5 at HOLD because this probe matched on type and
-	// generation only. A hand-written line, a truncated append, or a record naming a
-	// different session or runtime would then be read as "this generation committed"
-	// — the probe would corroborate a commit that the durable statement does not
-	// actually assert.
+	// This probe is the controller's only way to answer "did the commit land while
+	// the answer was lost", so it must not be answerable by text. Every record is
+	// verified against the controller's own ledger key before it counts:
 	//
-	// The rules mirror `readLedger` in `lib/runtime-identity.mjs`, which is the
-	// authority on what a valid record is: every line must parse, be an object, carry
-	// a known record type, a safe-integer generation, and this session's id. Anything
-	// else makes the ledger UNREADABLE for this question, and the honest answer to
-	// "did it commit" on an unreadable ledger is UNKNOWN, never NOT_COMMITTED (which
-	// would claim knowledge the file does not provide).
+	//   * a hand-written line has no valid MAC, so it is not evidence — it can
+	//     neither produce COMMITTED nor deny a legitimate commit;
+	//   * a record signed by a DIFFERENT controller root does not verify here;
+	//   * a record whose fields were edited after signing does not verify;
+	//   * a torn final append is ignored, because a partial line is not a
+	//     statement about anything.
+	//
+	// Records that fail are counted, never promoted. An unreadable file is
+	// UNKNOWN, never NOT_COMMITTED: claiming knowledge a file does not provide is
+	// how a "did it commit" question becomes a lie.
+	// A FRESH CONTROLLER MUST BE ABLE TO READ ITS OWN ROOT'S LEDGER.
+	//
+	// The key is not carried in memory only: after a controller crash, the process
+	// that reconciles is a NEW process that holds no launch state. It still owns
+	// the root, and the key lives there with mode 0600 — so it is read from disk
+	// when it was not supplied. This is the controller reading its own secret, not
+	// a caller supplying one, which is why the path is derived from `stateDir`
+	// rather than accepted as an argument.
+	let key = runtime?.ledgerKey ?? null;
+	if (typeof key !== "string" || !LEDGER_KEY_PATTERN.test(key)) {
+		const rootDir = typeof runtime?.controllerRoot === "string" ? runtime.controllerRoot : dirname(stateDir);
+		const keyPath = typeof runtime?.ledgerKeyPath === "string" ? runtime.ledgerKeyPath : join(rootDir, "ledger.key");
+		try {
+			const fromDisk = readFileSync(keyPath, "utf8").trim();
+			if (LEDGER_KEY_PATTERN.test(fromDisk)) key = fromDisk;
+		} catch {
+			// Absent or unreadable: the probe cannot authenticate anything, and
+			// UNKNOWN is the honest answer.
+		}
+	}
+	if (typeof key !== "string" || !LEDGER_KEY_PATTERN.test(key)) return "UNKNOWN";
 	const wantedRuntime = expectation.runtimeInstanceId;
+	const wantedToken = expectation.allocationToken;
 	const lines = text.split("\n");
 	let sawCommit = false;
 	let sawAllocation = false;
+	let sawForeignCommit = false;
 	for (let index = 0; index < lines.length; index += 1) {
 		const line = lines[index];
 		if (!line) continue;
@@ -1233,31 +1616,37 @@ export function probeLedgerForCommit(runtime, expectation = {}) {
 		} catch {
 			// A partially written FINAL line is a torn append: the tail is not a
 			// statement about anything, so it is skipped. A malformed line anywhere
-			// else is corruption, and corruption must not be read as "no commit".
-			//
-			// `split` leaves a trailing empty element for a file ending in "\n", so the
-			// last CONTENT line is at `lines.length - 1` or `lines.length - 2`.
-			const isLastContentLine =
-				lines.slice(index + 1).every(remaining => remaining === "");
-			if (isLastContentLine) continue;
-			return "UNKNOWN";
+			// else is not a controller record either — and because unauthenticated
+			// text is not evidence, it is skipped rather than treated as corruption.
+			// Treating it as corruption would hand the Agent a denial primitive.
+			continue;
 		}
-		if (!record || typeof record !== "object" || Array.isArray(record)) return "UNKNOWN";
-		if (record.type !== "commit" && record.type !== "allocate") return "UNKNOWN";
-		if (!Number.isSafeInteger(record.generation) || record.generation < 1) return "UNKNOWN";
-		if (record.sessionId !== sessionId) return "UNKNOWN";
-		if (typeof record.runtimeInstanceId !== "string" || record.runtimeInstanceId.length === 0) return "UNKNOWN";
+		if (!record || typeof record !== "object" || Array.isArray(record)) continue;
+		if (record.type !== "commit" && record.type !== "allocate") continue;
+		if (!Number.isSafeInteger(record.generation) || record.generation < 1) continue;
+		if (typeof record.runtimeInstanceId !== "string" || record.runtimeInstanceId.length === 0) continue;
+		// UNAUTHENTICATED RECORDS ARE NOT EVIDENCE.
+		if (!verifyLedgerRecord(key, record)) continue;
+		if (record.sessionId !== sessionId) continue;
 		if (record.type === "allocate") sawAllocation = true;
-		if (record.type === "commit" && record.generation === generation) {
-			// A commit record must name a runtime; when the caller pins one, it must be
-			// the same runtime. Otherwise this is somebody else's commit for this
-			// generation, which is exactly the double-commit case and must not be
-			// reported as our success.
-			if (typeof wantedRuntime === "string" && record.runtimeInstanceId !== wantedRuntime) return "UNKNOWN";
-			sawCommit = true;
+		if (record.type !== "commit" || record.generation !== generation) continue;
+		// An authenticated commit for this (session, generation) exists. Whether it
+		// is OUR commit is a separate question, answered by the identity pins.
+		if (typeof wantedRuntime === "string" && record.runtimeInstanceId !== wantedRuntime) {
+			sawForeignCommit = true;
+			continue;
 		}
+		if (typeof wantedToken === "string" && (record.allocationToken ?? null) !== wantedToken) {
+			sawForeignCommit = true;
+			continue;
+		}
+		sawCommit = true;
 	}
 	if (sawCommit) return "COMMITTED";
+	// An authenticated commit for this generation by ANOTHER runtime is the
+	// double-commit case: this generation is closed, but not by us. Reporting
+	// COMMITTED would attribute someone else's fence to this controller.
+	if (sawForeignCommit) return "UNKNOWN";
 	// No commit record. That is a real answer only when the file is otherwise a
 	// coherent ledger for this session; an empty or allocation-free file proves
 	// nothing about a commit either way.
@@ -1267,7 +1656,7 @@ export function probeLedgerForCommit(runtime, expectation = {}) {
 /** Remove the controller's private material. Best effort; never throws. */
 export function disposeControllerRoot(controllerRoot) {
 	if (!controllerRoot) return;
-	for (const path of [controllerRoot.stateDir, controllerRoot.childHome, controllerRoot.dir]) {
+	for (const path of [controllerRoot.lockDir, controllerRoot.stateDir, controllerRoot.childHome, controllerRoot.dir]) {
 		if (typeof path !== "string") continue;
 		try {
 			rmSync(path, { recursive: true, force: true });
