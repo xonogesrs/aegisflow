@@ -40,6 +40,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, statSync, writeSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
+import { withLedgerLock } from "./ledger-lock.mjs";
 
 /** Directory holding the per-session allocation ledgers. */
 const STATE_DIR_ENV = "OMP_TERMINAL_FENCE_STATE_DIR";
@@ -166,7 +167,54 @@ function readLedger(path, sessionId) {
 	return { records, corrupt: null };
 }
 
+/**
+ * Test-only fault injection for the ledger append.
+ *
+ * `R2_T3f`'s comment described an injected claim-write failure, but its body only
+ * performed a normal commit — independent review caught the overstatement. A
+ * comment is not a test, so the seam it needed exists now: a test can make the
+ * NEXT append of a given record type fail, which is how "the commit record is
+ * durable but the next-generation claim was not" is actually exercised.
+ *
+ * This is not a production switch: the hook is unset unless a test sets it, it
+ * holds one one-shot value, and it clears itself when it fires.
+ */
+let appendFault = null;
+
+/** Make the next append of `type` fail. Returns nothing; one-shot. */
+export function injectAppendFault(type) {
+	appendFault = type;
+}
+
+/** Clear any injected fault. */
+export function clearAppendFault() {
+	appendFault = null;
+}
+
+/**
+ * Test-only: simulate a peer committing the SAME generation in the window between
+ * this runtime's precheck and its own append.
+ *
+ * That window is what the lock exists to close, so in correct operation it cannot
+ * be opened — which would leave the post-append uniqueness check untestable and
+ * therefore unproven. This hook opens it deliberately, once, so the guard can be
+ * shown to fire. It writes nothing itself; the caller supplies the record.
+ */
+let postAppendPeer = null;
+
+export function injectPostAppendPeerCommit(record) {
+	postAppendPeer = record;
+}
+
+export function clearPostAppendPeerCommit() {
+	postAppendPeer = null;
+}
+
 function appendRecord(path, record) {
+	if (appendFault !== null && record.type === appendFault) {
+		appendFault = null;
+		return `APPEND_FAILED: INJECTED_${record.type.toUpperCase()}_FAILURE`;
+	}
 	const line = `${JSON.stringify(record)}\n`;
 	let fd;
 	try {
@@ -247,9 +295,34 @@ export function allocateGeneration({ sessionId, runtimeInstanceId, env = process
 		return { ...base, generation: null, identityState: "UNWRITABLE", identityError: "SESSION_ID_NOT_LEDGER_SAFE" };
 	}
 
+	// The read-decide-append-verify sequence below is ONE transaction. Without the
+	// lock two processes could both read `max = N` and both append `N+1`; the
+	// post-append re-read would then report COLLISION to both of them, which is a
+	// denial rather than a double commit — but it also means neither can proceed.
+	// The lock makes the second process observe the first's allocation and take
+	// the NEXT number instead, so concurrency costs nothing and exclusion is real.
+	const locked = withLedgerLock({
+		ledgerPath: path,
+		fn: () => allocateGenerationLocked({ sessionId, runtimeInstanceId, path, now }),
+	});
+	if (!locked.ok) {
+		// Fail closed: an unacquirable lock is not permission to allocate anyway.
+		return {
+			...base,
+			generation: null,
+			identityState: "UNWRITABLE",
+			identityError: `LOCK_${locked.code}${locked.detail ? `: ${locked.detail}` : ""}`,
+			ledgerPath: path,
+		};
+	}
+	return { ...base, ...locked.value };
+}
+
+/** The allocation transaction itself. Callers MUST hold the ledger lock. */
+function allocateGenerationLocked({ sessionId, runtimeInstanceId, path, now }) {
 	const read = readLedger(path, sessionId);
 	if (read.corrupt) {
-		return { ...base, generation: null, identityState: "CORRUPT", identityError: read.corrupt, ledgerPath: path };
+		return { generation: null, identityState: "CORRUPT", identityError: read.corrupt, ledgerPath: path };
 	}
 
 	const previousGeneration = read.records.reduce(
@@ -258,7 +331,6 @@ export function allocateGeneration({ sessionId, runtimeInstanceId, env = process
 	);
 	if (!Number.isSafeInteger(previousGeneration + 1)) {
 		return {
-			...base,
 			generation: null,
 			identityState: "EXHAUSTED",
 			identityError: `GENERATION_RANGE_EXHAUSTED_AT_${previousGeneration}`,
@@ -280,7 +352,6 @@ export function allocateGeneration({ sessionId, runtimeInstanceId, env = process
 	});
 	if (appendError) {
 		return {
-			...base,
 			generation: null,
 			identityState: "UNWRITABLE",
 			identityError: appendError,
@@ -290,18 +361,18 @@ export function allocateGeneration({ sessionId, runtimeInstanceId, env = process
 	}
 
 	// Re-read under the same rules: exactly one allocate record may claim this
-	// generation AND carry this token. Anything else — a peer that raced us, a
-	// hand-edited ledger, a truncated append — is not ours to use.
+	// generation AND carry this token. Anything else — a hand-edited ledger, a
+	// truncated append — is not ours to use. Under the lock a peer cannot have
+	// raced us, so a second claimant is evidence of corruption, not of timing.
 	const verify = readLedger(path, sessionId);
 	if (verify.corrupt) {
-		return { ...base, generation: null, identityState: "CORRUPT", identityError: verify.corrupt, ledgerPath: path };
+		return { generation: null, identityState: "CORRUPT", identityError: verify.corrupt, ledgerPath: path };
 	}
 	const claimants = verify.records.filter(
 		record => record.type === RECORD_ALLOCATE && record.generation === generation,
 	);
 	if (claimants.length !== 1 || claimants[0].allocationToken !== allocationToken) {
 		return {
-			...base,
 			generation: null,
 			identityState: "COLLISION",
 			identityError: `GENERATION_${generation}_CLAIMED_${claimants.length}_TIMES`,
@@ -423,6 +494,31 @@ export function recordCommitAndClaimNext({
 			allocationToken: null,
 		};
 	}
+	// The duplicate check, the commit append, the next-generation claim and its
+	// verification are ONE transaction. Residual risk §6.6 of the predecessor card
+	// named the gap exactly: "a peer can append between this runtime's write and
+	// its re-read… detection, not mutual exclusion". Under the lock the check and
+	// the write cannot be separated by a peer, so a second process reaching this
+	// point observes the first process's commit record and is refused, rather than
+	// both of them writing.
+	const locked = withLedgerLock({
+		ledgerPath,
+		fn: () =>
+			recordCommitAndClaimNextLocked({ ledgerPath, sessionId, runtimeInstanceId, generation, status, requestId, now }),
+	});
+	if (!locked.ok) {
+		return {
+			error: `LOCK_${locked.code}${locked.detail ? `: ${locked.detail}` : ""}`,
+			committedRecorded: false,
+			nextGeneration: null,
+			allocationToken: null,
+		};
+	}
+	return locked.value;
+}
+
+/** The commit transaction itself. Callers MUST hold the ledger lock. */
+function recordCommitAndClaimNextLocked({ ledgerPath, sessionId, runtimeInstanceId, generation, status, requestId, now }) {
 	// Never write a second commit record for one generation. Measured in
 	// independent review: after a failed advance the automatic fence leg appended
 	// a duplicate `commit:2` beside a peer's, so the ledger recorded two commits
@@ -443,7 +539,7 @@ export function recordCommitAndClaimNext({
 			allocationToken: null,
 		};
 	}
-	const commitError = appendRecord(ledgerPath, {
+	const commitPayload = {
 		type: RECORD_COMMIT,
 		sessionId,
 		runtimeInstanceId,
@@ -451,8 +547,54 @@ export function recordCommitAndClaimNext({
 		status,
 		requestId: requestId ?? null,
 		at: now,
-	});
+	};
+	const commitError = appendRecord(ledgerPath, commitPayload);
 	if (commitError) return { error: commitError, committedRecorded: false, nextGeneration: null, allocationToken: null };
+
+	// UNIQUENESS IS VERIFIED, NOT ASSUMED.
+	//
+	// The lock is supposed to make the precheck and this append one transaction. If
+	// it ever fails to — a reclaim race, a filesystem that ignores the link, a
+	// hand-edited ledger — two processes could both pass the precheck and both
+	// append a commit for one generation. The card's requirement is not "the lock is
+	// correct", it is "no double valid commit", so the outcome is checked rather
+	// than trusted: after appending, this runtime re-reads the ledger and counts the
+	// commit records for its generation. Exactly one, and it must be this process's
+	// own record (matched on runtime instance and request id).
+	//
+	// When the count is not one, this runtime reports the commit as NOT recorded and
+	// says why. It does not attempt to repair the ledger: two records for one
+	// generation is a corrupted durable statement, and the correct response to
+	// corruption is to refuse to add meaning to it.
+	if (postAppendPeer !== null) {
+		const peer = postAppendPeer;
+		postAppendPeer = null;
+		appendRecord(ledgerPath, { ...peer, type: RECORD_COMMIT, sessionId });
+	}
+	const afterAppend = readLedger(ledgerPath, sessionId);
+	if (afterAppend.corrupt) {
+		return {
+			error: `VERIFY_${afterAppend.corrupt}`,
+			committedRecorded: true,
+			nextGeneration: null,
+			allocationToken: null,
+		};
+	}
+	const commitRecords = afterAppend.records.filter(
+		record => record.type === RECORD_COMMIT && record.generation === generation,
+	);
+	const mine = commitRecords.filter(
+		record => record.runtimeInstanceId === runtimeInstanceId && (record.requestId ?? null) === (requestId ?? null),
+	);
+	if (commitRecords.length !== 1 || mine.length !== 1) {
+		return {
+			error: `COMMIT_RECORD_NOT_UNIQUE_${commitRecords.length}_FOR_GENERATION_${generation}`,
+			committedRecorded: false,
+			nextGeneration: null,
+			allocationToken: null,
+		};
+	}
+
 	// From here the COMMIT RECORD IS DURABLE. The claim that follows can still
 	// fail, and the two facts are different: the ledger knows this generation
 	// committed, but this runtime cannot name the next one. Measured in
@@ -460,7 +602,35 @@ export function recordCommitAndClaimNext({
 	// reported `ledgerRecorded:false` while `commit:g1` was on disk, so the
 	// documented meaning of that field was wrong. `committedRecorded` carries the
 	// distinction; `error` keeps reporting the failure.
-	const nextGeneration = generation + 1;
+	//
+	// THE NEXT NUMBER IS NOT NECESSARILY `generation + 1`.
+	//
+	// A peer process on the same session may already own the number immediately
+	// after this one. Claiming `generation + 1` blindly then puts TWO allocate
+	// records on that number, and `verifyOwnership` refuses it for BOTH parties —
+	// the peer is locked out of the generation it was already running, and cannot
+	// commit at all. Measured in the R3 two-runtime transport case: process A
+	// committed generation 1, claimed 2, and process B's live generation 2 became
+	// unownable (`GENERATION_OWNERSHIP_LOST`).
+	//
+	// The claim therefore takes the next number this runtime may legitimately own:
+	// the ledger's highest generation plus one, skipping past any number a peer has
+	// already allocated. That is the same rule `allocateGeneration` uses, applied
+	// inside the same transaction, so the two cannot disagree.
+	const observed = readLedger(ledgerPath, sessionId);
+	if (observed.corrupt) {
+		return { error: `VERIFY_${observed.corrupt}`, committedRecorded: true, nextGeneration: null, allocationToken: null };
+	}
+	const highest = observed.records.reduce((max, record) => (record.generation > max ? record.generation : max), 0);
+	const nextGeneration = Math.max(highest, generation) + 1;
+	if (!Number.isSafeInteger(nextGeneration)) {
+		return {
+			error: `GENERATION_RANGE_EXHAUSTED_AT_${highest}`,
+			committedRecorded: true,
+			nextGeneration: null,
+			allocationToken: null,
+		};
+	}
 	const allocationToken = randomBytes(8).toString("hex");
 	const claimError = appendRecord(ledgerPath, {
 		type: RECORD_ALLOCATE,

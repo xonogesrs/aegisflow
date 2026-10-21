@@ -44,6 +44,10 @@ export const KNOWN_FILES = Object.freeze([
 	"lib/poll-wait-policy.js",
 	"lib/controller-result.mjs",
 	"lib/runtime-identity.mjs",
+	// R3: the cross-process ledger lock. It ships WITH the extension because the
+	// extension is what takes the lock; the controller client only reads the ledger
+	// it protects, and the client is not deployed at all.
+	"lib/ledger-lock.mjs",
 	"test/poll-wait-policy.test.mjs",
 	"test/waiter-fence.acceptance.ts",
 	"test/terminal-fence-authority.acceptance.ts",

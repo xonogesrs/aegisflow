@@ -177,6 +177,20 @@ const COMMIT_COMMAND = "fence-generation";
 /** Host-only controller command that releases the final report through the barrier. */
 const RELEASE_COMMAND = "release-final";
 /**
+ * Host-only READ-ONLY identity command (R3).
+ *
+ * A controller must know `(sessionId, runtimeInstanceId, generation)` BEFORE it
+ * commits, because the commit is only meaningful if it names the runtime the
+ * controller means. The predecessor contract had no way to ask: the only frame
+ * that carried identity was the commit result itself, so a client had to commit
+ * blindly and learn the identity from the answer. That is one commit too many.
+ *
+ * This command mutates NOTHING — it does not fence, does not advance, does not
+ * touch the ledger — and answers on the same signed channel with the same
+ * identity fields, so a controller can bind first and commit second.
+ */
+const IDENTITY_COMMAND = "fence-identity";
+/**
  * Controller capability marker. The orchestrator that launches a governed
  * process sets this deliberately; without it no commit is possible, so an OMP
  * process nobody is governing cannot be closed out by a fence at all.
@@ -488,6 +502,26 @@ function advanceDurableGeneration(pi, state, committedGeneration, { status = "TE
 	if (ledger.allocationToken) {
 		state.allocationToken = ledger.allocationToken;
 		state.generationDurable = true;
+	}
+	// THE LEDGER DECIDES THE LIVE NUMBER.
+	//
+	// `fenceGeneration()` advanced `state.generation` to `committedGeneration + 1`
+	// before this ran. When a peer process on the same session already owns that
+	// number, the ledger gives this runtime the next free one instead — and the
+	// live state must follow it, or this runtime would keep running as a generation
+	// it does not own and every later commit would be refused
+	// (`GENERATION_OWNERSHIP_LOST`). Rebinding is safe here: the fence that just
+	// committed invalidated the old generation's jobs, so the new generation owns
+	// nothing yet.
+	if (Number.isSafeInteger(ledger.nextGeneration) && state.generation !== ledger.nextGeneration) {
+		pi.logger?.warn?.("no-poll-waits: live generation renumbered from the ledger", {
+			sessionId: state.sessionId,
+			runtimeInstanceId: state.runtimeInstanceId,
+			committedGeneration,
+			previousLiveGeneration: state.generation,
+			liveGeneration: ledger.nextGeneration,
+		});
+		state.generation = ledger.nextGeneration;
 	}
 	return { error: null, committedRecorded: ledger.committedRecorded === true };
 }
@@ -1405,6 +1439,61 @@ export default function (pi) {
 	// (commands are resolved from submitted prompt text before any agent turn), so
 	// this is authority the Agent cannot forge by producing text or tool payloads.
 	// The capability marker makes it fail closed for an unmanaged process.
+	//
+	// R3 adds the read-only identity leg FIRST, so a controller can bind to a
+	// target before committing instead of committing to discover it. It is a
+	// separate command rather than a mode of this one because the two differ in
+	// the only way that matters: this one mutates a generation, that one cannot.
+	pi.registerCommand(IDENTITY_COMMAND, {
+		description:
+			`Report this runtime's fence identity without committing anything (controller/orchestrator ` +
+			`authority only). Usage: /${IDENTITY_COMMAND} [request=<id>]`,
+		handler: async (args, ctx) => {
+			const { targets, invalid } = splitTargets(args);
+			const sessionId = ctx?.sessionManager?.getSessionId?.() ?? "unknown";
+			const state = stateFor(sessionId);
+			// The identity report is authority-bearing in one direction only: it
+			// discloses which generation a controller may then commit. Without the
+			// marker it is refused, so an ungoverned process cannot be interrogated
+			// for a target by a party that could not commit anyway.
+			const result =
+				invalid.length > 0
+					? {
+							...resultBase(state, { op: "identity" }),
+							denial: "MALFORMED_IDENTITY_TARGET",
+							reason: `malformed identity target(s): ${invalid.join(", ")}`,
+						}
+					: !controllerAuthorityPresent()
+						? {
+								...resultBase(state, { op: "identity" }),
+								denial: "CONTROLLER_AUTHORITY_ABSENT",
+								reason: `identity disclosure requires controller authority (${AUTHORITY_ENV})`,
+							}
+						: {
+								...resultBase(state, { op: "identity" }),
+								// Nothing was attempted: the base already sets these false, and
+								// restating them here would make the frame look like a commit.
+								identityState: state.identityState,
+								identityError: state.identityError ?? null,
+								generationDurable: state.generationDurable === true,
+								ledgerPath: state.ledgerPath,
+								fenceCalls: state.fenceCalls,
+								authority: TERMINAL_AUTHORITIES.CONTROLLER_COMMAND,
+							};
+			const published = publishControllerResult(result, targets.requestId ?? null);
+			pi.logger?.warn?.("no-poll-waits: fence identity report", {
+				sessionId,
+				runtimeInstanceId: state.runtimeInstanceId,
+				generation: state.generation,
+				requestId: targets.requestId ?? null,
+				denial: result.denial ?? null,
+				resultFrameEmitted: published.emitted,
+				resultFrameSigned: published.signed,
+				resultFrameReason: published.reason,
+			});
+		},
+	});
+
 	pi.registerCommand(COMMIT_COMMAND, {
 		description:
 			`Commit the run generation's terminal fence (controller/orchestrator authority only). ` +

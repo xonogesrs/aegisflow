@@ -46,6 +46,10 @@ const {
 	recordCommitAndClaimNext,
 	verifyOwnership,
 	commitRecordState,
+	injectAppendFault,
+	clearAppendFault,
+	injectPostAppendPeerCommit,
+	clearPostAppendPeerCommit,
 } = await import("../lib/runtime-identity.mjs");
 
 interface RunOptions {
@@ -1145,10 +1149,18 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// ── R2_T3f — a durable commit record survives a failed next-generation claim
 	// Measured in independent review with an injected write failure on the claim
 	// append: `commit:g1` was on disk while the frame said `ledgerRecorded:false`.
+	//
+	// CORRECTED IN R3. The comment above described an injected claim-write failure,
+	// but the body only performed a NORMAL commit and then a duplicate refusal —
+	// independent review caught that the label `PARTIAL_FAILURE_DISTINGUISHED`
+	// overstated what was measured. The injection the comment promised now exists
+	// (`injectAppendFault`), so this case finally exercises the condition it names.
 	{
 		const sessionId = "r2-t3f";
 		const runtimeA = createRuntimeInstanceId();
 		const allocationA = allocateGeneration({ sessionId, runtimeInstanceId: runtimeA, env: ledgerEnv() });
+		// The COMMIT append succeeds; the NEXT-GENERATION claim append fails.
+		injectAppendFault("allocate");
 		const result = recordCommitAndClaimNext({
 			ledgerPath: allocationA.ledgerPath,
 			sessionId,
@@ -1157,8 +1169,16 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 			status: "PASS",
 		});
 		check("R2_T3f", () => {
-			assert.equal(result.error, null);
-			assert.equal(result.committedRecorded, true, "the commit record is durable");
+			assert.match(String(result.error), /APPEND_FAILED: INJECTED_ALLOCATE_FAILURE/, "the claim write must have failed");
+			assert.equal(result.committedRecorded, true, "the COMMIT record is durable even though the claim is not");
+			assert.equal(result.nextGeneration, null, "no next generation may be named when its claim did not land");
+			// The durable half is real: the commit record is on disk.
+			const onDisk = readFileSync(allocationA.ledgerPath ?? "", "utf8")
+				.split("\n")
+				.filter(Boolean)
+				.map(line => JSON.parse(line))
+				.filter(record => record.type === "commit" && record.generation === allocationA.generation);
+			assert.equal(onDisk.length, 1, "the commit record must be on disk despite the failed claim");
 		});
 		// A second attempt on the same generation is refused, and STILL reports that
 		// the commit is recorded — the ledger knows, even though this call did not write it.
@@ -1171,7 +1191,49 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 		});
 		assert.match(String(again.error), /ALREADY_COMMITTED/);
 		assert.equal(again.committedRecorded, true, "a duplicate refusal must not claim the commit is unrecorded");
+		clearAppendFault();
 		results.R2_T3f = "PARTIAL_FAILURE_DISTINGUISHED";
+	}
+
+	// ── R2_T3j — a double commit is detected, not assumed impossible (C6) ──────
+	// The lock is supposed to make the precheck and the append one transaction, so
+	// in correct operation two processes cannot both write a commit for one
+	// generation. That makes the guard against it untestable by ordinary means — and
+	// an untestable guard is an unproven one. The seam below opens the exact window
+	// the lock closes: a peer's commit lands between this runtime's precheck and its
+	// own append.
+	{
+		const sessionId = "r2-t3j";
+		const runtimeA = createRuntimeInstanceId();
+		const allocationA = allocateGeneration({ sessionId, runtimeInstanceId: runtimeA, env: ledgerEnv() });
+		injectPostAppendPeerCommit({
+			runtimeInstanceId: "peer-runtime",
+			generation: allocationA.generation ?? 0,
+			status: "PASS",
+			requestId: "peer-request",
+			at: Date.now(),
+		});
+		const raced = recordCommitAndClaimNext({
+			ledgerPath: allocationA.ledgerPath,
+			sessionId,
+			runtimeInstanceId: runtimeA,
+			generation: allocationA.generation ?? 0,
+			status: "PASS",
+			requestId: "mine",
+		});
+		clearPostAppendPeerCommit();
+		check("R2_T3j", () => {
+			assert.match(String(raced.error), /COMMIT_RECORD_NOT_UNIQUE_2_FOR_GENERATION_/, "the duplicate must be detected");
+			assert.equal(raced.committedRecorded, false, "a runtime must not claim a durable commit when two records exist");
+			assert.equal(raced.nextGeneration, null, "no generation may be claimed on a corrupted durable statement");
+			const records = readFileSync(allocationA.ledgerPath ?? "", "utf8")
+				.split("\n")
+				.filter(Boolean)
+				.map(line => JSON.parse(line))
+				.filter(record => record.type === "commit" && record.generation === allocationA.generation);
+			assert.equal(records.length, 2, "the fixture must actually have produced two commit records");
+		});
+		results.R2_T3j = "DOUBLE_COMMIT_DETECTED";
 	}
 
 	// ── R2_T3g — an unreadable ledger is not "the commit is recorded" ──────────
@@ -1212,20 +1274,32 @@ async function runCases(options: RunOptions): Promise<{ results: Record<string, 
 	// on an older snapshot: a peer pre-claims the next generation, so the commit
 	// append succeeds but the claim fails, and the frame must still report the
 	// commit as recorded — because it IS on disk.
+	//
+	// FIXTURE UPDATED IN R3. This case used to force the failure by pre-claiming
+	// `generation + 1`. That is no longer a failure, and must not be: the claim now
+	// takes the ledger's highest generation plus one, precisely so that a peer
+	// running the number immediately after this one is not locked out of it.
+	// Measured in R3's two-runtime transport case: claiming `generation + 1` blindly
+	// put two allocate records on the peer's live generation, and the peer's every
+	// later commit was refused with `GENERATION_OWNERSHIP_LOST`.
+	//
+	// The distinction this case exists to pin — durable commit, failed advance — is
+	// unchanged, so it is now produced by a failure that is real: the ledger's
+	// highest generation sits at the representable limit, so the commit lands and
+	// the next number cannot be named.
 	{
 		const sessionId = "r2-t3h";
 		process.env[AUTHORITY_ENV] = AUTHORITY;
 		const { host, release } = await hostWithGatedJob(sessionId);
 		try {
 			const state = snapshotFor(sessionId);
-			// A peer claims the generation this commit will try to advance to.
 			appendFileSync(
 				state.ledgerPath,
 				`${JSON.stringify({
 					type: "allocate",
 					sessionId,
 					runtimeInstanceId: "peer-runtime",
-					generation: state.generation + 1,
+					generation: Number.MAX_SAFE_INTEGER,
 					allocationToken: "peer-token",
 				})}\n`,
 				"utf8",
