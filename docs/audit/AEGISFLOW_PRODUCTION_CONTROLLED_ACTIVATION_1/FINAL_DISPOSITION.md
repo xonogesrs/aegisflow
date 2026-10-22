@@ -28,7 +28,7 @@ PRODUCTION_ENABLEMENT = true
 PRODUCTION_STATUS = ACTIVE
 
 DURABLE_LANDING = PASS
-LANDED_HEAD = reported in the handoff (a commit cannot contain its own SHA)
+LANDED_HEAD = f5872afb85300514293eed1b8f51c1736461065f
 
 GDR_1_APPROVED = false
 ORIGINAL_GENERATION_COMMITTED = false
@@ -62,6 +62,17 @@ Exactly one write: the extension directory, via `scripts/install-omp-integration
 | CBM binary, cache, `mcp.json` server definition | no |
 | Production EKM store | no (read-only; hashes unchanged) |
 | Sessions | no (no process signalled; 0 malformed lines in the 40 newest files) |
+
+## Landing
+
+| Check | Observed |
+| --- | --- |
+| commit | `f5872afb85300514293eed1b8f51c1736461065f` (docs-only; `git diff 283b7e1..HEAD -- integrations src scripts test` empty) |
+| local HEAD | `f5872af…` |
+| upstream | `f5872af…` |
+| canonical remote (`git ls-remote origin feat/omp-cbm-recovery`) | `f5872af…` |
+| unpushed commits / worktree / stash | `0` / clean / empty |
+| deployed tree after landing | `check --strict-bytes` 15/15 MATCH |
 
 ## Honest limits
 
