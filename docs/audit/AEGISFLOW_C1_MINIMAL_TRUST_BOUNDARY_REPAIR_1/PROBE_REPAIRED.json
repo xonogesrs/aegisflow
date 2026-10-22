@@ -1,0 +1,16 @@
+{
+  "toolRegistered": true,
+  "sessionDir": "<tmp>/aegis-c1-boundary/tool-boundary/session",
+  "stateRoot": "<tmp>/aegis-c1-boundary/tool-boundary/memory-state",
+  "toolPayloadText": "1 engineering-knowledge record(s).",
+  "toolState": "AVAILABLE",
+  "toolIsolation": {
+    "mode": "child-process",
+    "active": true
+  },
+  "toolReason": null,
+  "retrievedCount": 1,
+  "plantedEvaluatedByToolPath": false,
+  "controlLoaded": true,
+  "controlEvaluated": true
+}

@@ -75,7 +75,7 @@ Deployed behaviour, all of it exercised by the harnesses in
 | Post-terminal stale-delivery suppression | Fencing a generation acknowledges every bound job's pending delivery, closing both the queued path and the already-enqueued path |
 | Terminal fence authority separation | The commit primitive is reachable only from the host prompt-command channel, gated by the controller capability |
 | Agent self-fence denial | No tool in the agent's vocabulary can commit a fence; the legacy name is refused at the hook, fail closed |
-| Trusted controller commit path | `/fence-generation <PASS\|HOLD\|FAIL\|CANCELLED> [reason]` on the host channel, with `OMP_TERMINAL_FENCE_AUTHORITY` set |
+| Trusted controller commit path | `/fence-generation <PASS\|HOLD\|FAIL\|CANCELLED> [reason]` on the host channel, from a launch given the capability |
 | Active / new-generation delivery preservation | Fencing invalidates *only* the fenced generation; the session advances and the next task's deliveries are untouched |
 | Read-only engineering-knowledge access | `ekm_query` — one tool over the EKM store, same engine as the harness CLI, DATA-only, fail-closed |
 
@@ -148,7 +148,7 @@ governed Agent                  trusted controller / orchestrator
 request_terminal_fence(…)  ──▶  /fence-generation <STATUS> [reason]
   records a REQUEST               commits the fence
   always reports committed:false  invalidates the generation's pending deliveries
-  suppresses nothing              requires OMP_TERMINAL_FENCE_AUTHORITY
+  suppresses nothing              requires a capability the launcher gave it
 ```
 
 - **An agent MAY request.** `request_terminal_fence` records the disposition the
@@ -161,18 +161,23 @@ request_terminal_fence(…)  ──▶  /fence-generation <STATUS> [reason]
 - **Only the trusted controller commits.** `fenceGeneration()` is reachable from
   the host prompt-command channel — which the governed model cannot dispatch into
   its own session, because commands are resolved from submitted prompt text
-  before any agent turn runs — and only while the process carries the
-  capability marker.
-- **Absent capability ⇒ DENIED, fail closed.** Without
-  `OMP_TERMINAL_FENCE_AUTHORITY` the command reports
+  before any agent turn runs — and only while the process holds the
+  capability (an inherited ledger descriptor plus the key that authenticates
+  records written through it).
+- **Absent capability ⇒ DENIED, fail closed.** Without the capability the
+  command reports
   `Terminal fence DENIED (CONTROLLER_AUTHORITY_ABSENT)` and the generation stays
   active: pending deliveries keep being delivered. An OMP process nobody is
   governing therefore cannot be fenced at all, which is the safe direction.
 
-`OMP_TERMINAL_FENCE_AUTHORITY` is **not** a capability an agent can obtain. It is
-an environment marker that the orchestrator which launched the governed process
-sets deliberately. It is not derived from anything the model produces, it is not
-readable as a tool, and no prompt text or tool payload grants it. Treat any
+Authority is **not a variable**, and `OMP_TERMINAL_FENCE_AUTHORITY` no longer
+grants anything: it was an environment marker, the governed child's `bash`
+inherited it, and the Agent could therefore set it again on a nested `omp`. That
+was measured and closed by R4. Authority is now a capability: an open descriptor
+to the ledger and the key that authenticates records written through it, both
+close-on-exec and both `file-read*`/`file-write*`-denied by the launch sandbox
+for the whole process tree. It is not derived from anything the model produces,
+not readable as a tool, and no prompt text or tool payload grants it. Treat any
 suggestion that an agent "has" this authority as a defect report, not a feature.
 
 There is also an automatic leg: a genuinely terminal `agent_end` (settled with no
@@ -183,12 +188,15 @@ terminality, never an agent declaration.
 ### Controller contract
 
 ```sh
-OMP_TERMINAL_FENCE_AUTHORITY=1 omp --mode rpc …   # launch the governed process
+# The governed launch is made by src/control-plane/controller-client.mjs, which
+# attests the binary and the extension tree, wraps the child in the launch
+# sandbox, and hands over the ledger descriptor and key.
+node -e '…launchGovernedRuntime({…})…'
 # then, on the host channel (RPC prompt frame or an interactive prompt line):
 /fence-generation PASS card accepted
 ```
 
-An orchestrator that never issues the command does not need the marker: the
+An orchestrator that never issues the command needs no capability at all: the
 `agent_end` leg and the wait policy work without it.
 
 ### Terminal-transition ordering (the final-delivery barrier)
@@ -394,7 +402,7 @@ own behaviour. If you never install the OMP integration:
 
 The one thing AegisFlow provides *for* the integration is the controller side:
 whatever launches a governed OMP process (the pilot, or your own orchestrator)
-decides whether to set `OMP_TERMINAL_FENCE_AUTHORITY` and when to commit a fence.
+decides whether to grant the capability and when to commit a fence.
 
 ---
 

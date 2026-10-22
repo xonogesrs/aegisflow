@@ -1,0 +1,73 @@
+{
+  "card": "AEGISFLOW_C1_MINIMAL_TRUST_BOUNDARY_REPAIR_1",
+  "rpcBinary": "<omp-on-PATH>",
+  "facts": [
+    {
+      "name": "launch:governed",
+      "ok": true,
+      "detail": {
+        "sandbox": true,
+        "capabilityProvisioned": true
+      }
+    },
+    {
+      "name": "premise:identity-bound",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "premise:governed-process-holds-capability",
+      "ok": true,
+      "detail": {
+        "state": "COMMITTED",
+        "ledgerRecorded": true
+      }
+    },
+    {
+      "name": "T01:tool-path-did-not-evaluate-planted-module",
+      "ok": true,
+      "detail": false
+    },
+    {
+      "name": "T01:tool-answered-from-a-child-process",
+      "ok": true,
+      "detail": {
+        "mode": "child-process",
+        "active": true
+      }
+    },
+    {
+      "name": "T01:capability-still-usable-after-the-tool-call",
+      "ok": true,
+      "detail": "COMMITTED"
+    },
+    {
+      "name": "T01:tool-answered-from-the-controlled-store",
+      "ok": true,
+      "detail": {
+        "state": "AVAILABLE",
+        "retrievedCount": 1,
+        "reason": null
+      }
+    },
+    {
+      "name": "control:planted-module-executes-when-loaded-directly",
+      "ok": true,
+      "detail": {
+        "controlLoaded": true,
+        "controlError": null
+      }
+    },
+    {
+      "name": "control:pre-repair-tool-path-DOES-evaluate-planted-module",
+      "ok": true,
+      "detail": {
+        "plantedEvaluatedByToolPath": true,
+        "toolState": "UNAVAILABLE",
+        "toolReason": "repository identity could not be resolved: planted"
+      }
+    }
+  ],
+  "failed": [],
+  "ok": true
+}

@@ -41,6 +41,12 @@ export const SOURCE_ROOT = join(INTEGRATION_ROOT, "extensions");
 export const KNOWN_FILES = Object.freeze([
 	"no-poll-waits.js",
 	"cbm-query.js",
+	// C1: the EKM read path, and the child process that runs it. `cbm-query.js`
+	// holds the tool surface; the store logic moved into the `.mjs` core so it can
+	// be imported by a process that is NOT the OMP runtime. Deploying only
+	// `cbm-query.js` would leave the tool unable to answer.
+	"lib/memory-query-core.mjs",
+	"lib/memory-query-child.mjs",
 	"lib/poll-wait-policy.js",
 	"lib/controller-result.mjs",
 	"lib/runtime-identity.mjs",

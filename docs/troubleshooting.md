@@ -249,7 +249,13 @@ once and re-stamped to the canonical checksum.
 
 **Likely cause** — the extension could not locate an AegisFlow checkout (its own
 deployed copy lives under `~/.omp/agent/extensions/`, where "three directories
-up" is not a checkout).
+up" is not a checkout), or no plain `node` runtime was found for the child process
+that answers the query.
+
+Note that the session cwd is deliberately **not** a resolution source: it is a
+directory the agent controls, and resolving a trusted module from it was the C1
+defect. A session that used to work only because it happened to be inside a
+checkout now needs the variable below.
 
 **Safe action** — point it at one:
 
