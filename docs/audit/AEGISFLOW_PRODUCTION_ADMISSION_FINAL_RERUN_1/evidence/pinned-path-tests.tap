@@ -1,0 +1,180 @@
+TAP version 13
+# Subtest: C1_T02: the trusted checkout is never resolved from the session cwd
+ok 1 - C1_T02: the trusted checkout is never resolved from the session cwd
+  ---
+  duration_ms: 1.343959
+  type: 'test'
+  ...
+# Subtest: C1_T02 (negative control): in the deployed shape, the walk-up DOES select the planted tree
+ok 2 - C1_T02 (negative control): in the deployed shape, the walk-up DOES select the planted tree
+  ---
+  duration_ms: 3.419375
+  type: 'test'
+  ...
+# Subtest: C1_T01: the tool path does not evaluate agent-written code in the capability process
+ok 3 - C1_T01: the tool path does not evaluate agent-written code in the capability process
+  ---
+  duration_ms: 129.420958
+  type: 'test'
+  ...
+# Subtest: C1_T01 (negative control): loading a session-derived checkout DOES run it beside the capability
+ok 4 - C1_T01 (negative control): loading a session-derived checkout DOES run it beside the capability
+  ---
+  duration_ms: 1.707583
+  type: 'test'
+  ...
+# Subtest: C1_T03/T04: the child runner refuses to run with controller authority in its environment
+ok 5 - C1_T03/T04: the child runner refuses to run with controller authority in its environment
+  ---
+  duration_ms: 111.690292
+  type: 'test'
+  ...
+# Subtest: C1_T04: the tool's child does not inherit the parent's authority variables
+ok 6 - C1_T04: the tool's child does not inherit the parent's authority variables
+  ---
+  duration_ms: 127.986083
+  type: 'test'
+  ...
+# Subtest: C1_T04: the child receives store configuration and no authority variable
+ok 7 - C1_T04: the child receives store configuration and no authority variable
+  ---
+  duration_ms: 101.092292
+  type: 'test'
+  ...
+# Subtest: C1_T10: no checkout answers UNAVAILABLE with a located reason, never a crash
+ok 8 - C1_T10: no checkout answers UNAVAILABLE with a located reason, never a crash
+  ---
+  duration_ms: 0.399791
+  type: 'test'
+  ...
+# Subtest: C1_T10: an absent child runtime fails closed rather than falling back in-process
+ok 9 - C1_T10: an absent child runtime fails closed rather than falling back in-process
+  ---
+  duration_ms: 0.303709
+  type: 'test'
+  ...
+# Subtest: C1: the extension entry performs no dynamic import at all
+ok 10 - C1: the extension entry performs no dynamic import at all
+  ---
+  duration_ms: 0.326125
+  type: 'test'
+  ...
+# (node:30524) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: an empty store is EMPTY_MEMORY, a valid answer rather than an error
+ok 11 - an empty store is EMPTY_MEMORY, a valid answer rather than an error
+  ---
+  duration_ms: 101.86375
+  type: 'test'
+  ...
+# Subtest: a populated store answers a terms query from the session cwd identity
+ok 12 - a populated store answers a terms query from the session cwd identity
+  ---
+  duration_ms: 125.107083
+  type: 'test'
+  ...
+# Subtest: another repository's records are never returned (hard isolation)
+ok 13 - another repository's records are never returned (hard isolation)
+  ---
+  duration_ms: 154.759625
+  type: 'test'
+  ...
+# Subtest: a stale index is reported as stale, not silently as current
+ok 14 - a stale index is reported as stale, not silently as current
+  ---
+  duration_ms: 142.555458
+  type: 'test'
+  ...
+# Subtest: a stale index can still answer a historical question when asked
+ok 15 - a stale index can still answer a historical question when asked
+  ---
+  duration_ms: 159.208375
+  type: 'test'
+  ...
+# Subtest: a declared lineage is honored and reported; an undeclared identity stays isolated
+ok 16 - a declared lineage is honored and reported; an undeclared identity stays isolated
+  ---
+  duration_ms: 134.273333
+  type: 'test'
+  ...
+# Subtest: a corrupt store fails closed as INVALID instead of pretending to be empty
+ok 17 - a corrupt store fails closed as INVALID instead of pretending to be empty
+  ---
+  duration_ms: 102.702042
+  type: 'test'
+  ...
+# Subtest: a machine with no checkout answers UNAVAILABLE with the reason, never a crash
+ok 18 - a machine with no checkout answers UNAVAILABLE with the reason, never a crash
+  ---
+  duration_ms: 25.740375
+  type: 'test'
+  ...
+# Subtest: an explicit checkout is honored, so a deployed copy is not pinned to one path
+ok 19 - an explicit checkout is honored, so a deployed copy is not pinned to one path
+  ---
+  duration_ms: 99.963917
+  type: 'test'
+  ...
+# Subtest: the extension registers ekm_query as the one active tool and executes through it
+ok 20 - the extension registers ekm_query as the one active tool and executes through it
+  ---
+  duration_ms: 169.688792
+  type: 'test'
+  ...
+# Subtest: the legacy cbm_query name resolves to the same store and returns the same result
+ok 21 - the legacy cbm_query name resolves to the same store and returns the same result
+  ---
+  duration_ms: 268.204917
+  type: 'test'
+  ...
+# Subtest: rollback restores the target byte-for-byte, including files with no backup
+ok 22 - rollback restores the target byte-for-byte, including files with no backup
+  ---
+  duration_ms: 106.95225
+  type: 'test'
+  ...
+# Subtest: rollback removes the directories the install created and leaves others
+ok 23 - rollback removes the directories the install created and leaves others
+  ---
+  duration_ms: 68.209042
+  type: 'test'
+  ...
+# Subtest: rollback refuses when the installed file was edited after the install
+ok 24 - rollback refuses when the installed file was edited after the install
+  ---
+  duration_ms: 137.504709
+  type: 'test'
+  ...
+# Subtest: rollback prunes only the directories the install recorded creating
+ok 25 - rollback prunes only the directories the install recorded creating
+  ---
+  duration_ms: 65.470291
+  type: 'test'
+  ...
+# Subtest: rollback refuses a record whose target no longer matches, and changes nothing
+ok 26 - rollback refuses a record whose target no longer matches, and changes nothing
+  ---
+  duration_ms: 67.550875
+  type: 'test'
+  ...
+# Subtest: rollback refuses a record naming a file outside the deployment set
+ok 27 - rollback refuses a record naming a file outside the deployment set
+  ---
+  duration_ms: 29.701125
+  type: 'test'
+  ...
+# Subtest: a dry run reports the plan and changes nothing
+ok 28 - a dry run reports the plan and changes nothing
+  ---
+  duration_ms: 65.504375
+  type: 'test'
+  ...
+1..28
+# tests 28
+# suites 0
+# pass 28
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1573.218875
