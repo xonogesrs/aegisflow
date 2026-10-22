@@ -1,0 +1,160 @@
+{
+  "card": "AEGISFLOW_PRODUCTION_CONTROLLED_ACTIVATION_1",
+  "observedAt": "2026-10-22T11:43:08.573Z",
+  "deployedExtensionDir": "/Users/zhengfengqing/.omp/agent/extensions",
+  "pinnedPath": "/usr/local/bin:/usr/bin:/bin",
+  "nodeSha256": "450f27e22fc8babf6eb2e19d77474d99b12f3c12515900c0266a0ca7ea526fbf",
+  "productionMutation": "NONE",
+  "isolatedRootRemoved": true,
+  "observations": {
+    "ATTEST_DEPLOYED_TREE": {
+      "pass": true,
+      "detail": {
+        "primarySha": "14ceb06ccfde59c0889c9e14078874ed4faf8ccd5988849821b655ce485b3596",
+        "extraSha": "1de77827da2b8f10fb0a8b46050331e8a498537252ac8f607e33c7678ddf7b18",
+        "siblingDigests": {
+          "lib/controller-capability.mjs": "0e39e9edb6b84129012ba52f22e2a49c3cf5caf4c14e34c9a4e98eb3a02c8534",
+          "lib/controller-result.mjs": "365df82cbe7e8a6ca2c0fe8bbc733cdb314a1c4fa03165d7abc356f37897d21c",
+          "lib/ledger-auth.mjs": "e8e0afb9e135d9a41eda64697ca96afd7d326d4b8db8fd247452c2644b2e7cea",
+          "lib/ledger-lock.mjs": "72d1c2d544a79daaae9caec092372825a5eff1b8611a3cff7e16199d2b5c3d2d",
+          "lib/memory-query-child.mjs": "9d570ab6eefb3852ba37b4935dca5b0ff3b0cb530ca20785749f98b7f744f6b6",
+          "lib/memory-query-core.mjs": "7b5515d9071e7685e8292f8a2d0e27ad728e8427d24b1cb0dc0e2b55d6eb5b4a",
+          "lib/poll-wait-policy.js": "7c2eae224fd0965cc58f4a1f36c00c865059f18e59a7c91c6e4490f9b98090b0",
+          "lib/runtime-identity.mjs": "d680f3b480763f5e8a0d90721ad99f0a4b309f3fd04d76478a040f48d93ad1cd"
+        },
+        "siblingCount": 8,
+        "treeVerified": true,
+        "entryRealpath": "/Users/zhengfengqing/.omp/agent/extensions/no-poll-waits.js"
+      }
+    },
+    "GOVERNED_LAUNCH": {
+      "pass": true,
+      "detail": {
+        "ok": true,
+        "denial": null,
+        "sandbox": true,
+        "sandboxMechanism": "seatbelt",
+        "sandboxProfileSha256": "babf5c381dc44104399856cf6e9e144057e63e583eb94ccf8086435eeb85e9e2",
+        "sandboxDenyWriteRules": 11,
+        "sandboxDenyReadRules": 1,
+        "sandboxAllowWriteRules": 1,
+        "capability": true,
+        "ledgerFdSlot": 3,
+        "ledgerKeyFdSlot": 4,
+        "childExecutable": "/Users/zhengfengqing/.local/bin/omp",
+        "attestedBinary": "/Users/zhengfengqing/.local/bin/omp"
+      }
+    },
+    "P04_FIXED_NODE": {
+      "pass": true,
+      "detail": {
+        "text": "/usr/local/bin/node\nv22.22.2\n450f27e22fc8babf6eb2e19d77474d99b12f3c12515900c0266a0ca7ea526fbf  /usr/local/bin/node\n/usr/local/bin/node\n"
+      }
+    },
+    "P05_AUTHORITY_ISOLATION": {
+      "pass": true,
+      "detail": {
+        "markerAbsent": true,
+        "ledgerFdClosed": true,
+        "keyFdClosed": true,
+        "resultKeyUnreadable": true,
+        "ledgerWriteDenied": true,
+        "extensionWriteDenied": true,
+        "ledgerKeyNotReadable": true,
+        "probeCompleted": true,
+        "nestedDenialTokenPresent": true,
+        "nestedCommitDenied": true,
+        "nestedDenialLine": "{\"type\":\"extension_ui_request\",\"id\":\"15b02857a456f56d\",\"method\":\"notify\",\"message\":\"Terminal fence DENIED (CONTROLLER_AUTHORITY_ABSENT): terminal fence requires controller authority (OMP_TERMINAL_FENCE_AUTHORITY). Run generation 1 remains ACTIVE; pending deliveries continue to be delivered.\",\"notifyType\":\"warning\"}",
+        "nestedCommitRecords": 0,
+        "nestedOutputTail": "maxFrameBytes\":1048576,\"maxReassembledFrameBytes\":67108864}\n{\"type\":\"extension_ui_request\",\"id\":\"15b028578e56f56c\",\"method\":\"setWidget\",\"widgetKey\":\"autoresearch\"}\n{\"type\":\"available_commands_update\",\"commands\":[{\"name\":\"security\",\"description\":\"Plan, run, inspect, import, and compare OMP-native security scans\",\"input\":{\"hint\":\"<plan|scan|status|cancel|scans|show|import|export|validate|compare|disposition>\"},\"subcommands\":[{\"name\":\"plan\",\"description\":\"Create an immutable security scan plan\"},{\"name\":\"scan\",\"description\":\"Start a planned or newly planned native scan\"},{\"name\":\"status\",\"description\":\"Show native scan operation status\"},{\"name\":\"cancel\",\"description\":\"Cancel a running native scan\"},{\"name\":\"scans\",\"description\":\"List stored project security scans\"},{\"name\":\"show\",\"description\":\"Render a scan or security:// resource\"},{\"name\":\"import\",\"description\":\"Import SARIF or a Codex Security bundle\"},{\"name\":\"ex…\n{\"type\":\"extension_ui_request\",\"id\":\"15b02857a456f56d\",\"method\":\"notify\",\"message\":\"Terminal fence DENIED (CONTROLLER_AUTHORITY_ABSENT): terminal fence requires controller authority (OMP_TERMINAL_FENCE_AUTHORITY). Run generation 1 remains ACTIVE; pending deliveries continue to be delivered.\",\"notifyType\":\"warning\"}\n{\"id\":\"n1\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true}\n{\"type\":\"extension_ui_request\",\"id\":\"15b02857a456f56e\",\"method\":\"setWidget\",\"widgetKey\":\"autoresearch\"}\n\n\n[Some lines truncated to 768 bytes. Use artifact://2:raw:3-3 to read line 3 whole]"
+      }
+    },
+    "P06_CONTROLLER_COMMIT": {
+      "pass": true,
+      "detail": {
+        "state": "COMMITTED",
+        "ledgerRecorded": true,
+        "matchingRecords": 1,
+        "requestId": "commit-1136e0773170",
+        "controllerResultFrame": {
+          "op": "commit",
+          "sessionId": "01a1636c-08d0-7539-bccd-e48716deebd7",
+          "runtimeInstanceId": "87a5f94d-74579-1792669386114-40d1121fa4ac",
+          "generation": 1,
+          "identityState": "ALLOCATED",
+          "identityError": null,
+          "commandAccepted": true,
+          "commandDispatched": true,
+          "handlerExecuted": true,
+          "commitExecuted": true,
+          "committed": true,
+          "denial": null,
+          "reason": null,
+          "status": "PASS",
+          "authority": "controller-command",
+          "targetVerified": true,
+          "jobIds": [],
+          "suppressed": 0,
+          "deliveryFenceSucceeded": true,
+          "deliveryFenceError": null,
+          "fenceAt": 1792669388506,
+          "invalidatedAt": 1792669388506,
+          "terminalStateAt": 1792669388506,
+          "gateOpenedAt": 1792669388506,
+          "finalDeliveryAllowed": true,
+          "FENCE_BEFORE_FINAL": true,
+          "ledgerRecorded": true,
+          "ledgerError": null
+        },
+        "boundIdentity": {
+          "sessionId": "01a1636c-08d0-7539-bccd-e48716deebd7",
+          "runtimeInstanceId": "87a5f94d-74579-1792669386114-40d1121fa4ac",
+          "generation": 1,
+          "identityState": "ALLOCATED",
+          "generationDurable": true,
+          "allocationToken": "e382dcb2a99028f5"
+        }
+      }
+    },
+    "witnessBundle": {
+      "dir": "/Volumes/NVM2T/Development/backups/aegisflow-production-activation-witness-2026-10-22",
+      "ledgerSha256": "6d8d9483834257406c1474cfeb3006316002f049afe612681a7b1a334da5d495",
+      "ledgerKeySha256": "1f5b6314dc405ba9751291ea68f77b86589e6e5dd78c3515f16bc241827272a6"
+    },
+    "P07_LEDGER_WITNESS": {
+      "pass": true,
+      "detail": {
+        "witness": "COMMITTED",
+        "macPresent": true,
+        "macVerifiedWithDeployedVerifier": true,
+        "sessionMatch": true,
+        "runtimeMatch": true,
+        "generationMatch": true,
+        "exactlyOne": true,
+        "ledgerRecord": {
+          "type": "commit",
+          "sessionId": "01a1636c-08d0-7539-bccd-e48716deebd7",
+          "runtimeInstanceId": "87a5f94d-74579-1792669386114-40d1121fa4ac",
+          "generation": 1,
+          "allocationToken": "e382dcb2a99028f5",
+          "status": "PASS",
+          "requestId": "commit-1136e0773170",
+          "at": 1792669388506,
+          "v": 1,
+          "mac": "99f4b4b729fc9bcaf141292fde44884fef73a0eaabd570c82d6db3ad2a612a05"
+        },
+        "ledgerKeySha256": "1f5b6314dc405ba9751291ea68f77b86589e6e5dd78c3515f16bc241827272a6",
+        "ledgerRecordCount": 3,
+        "ledgerRecordTypes": [
+          "allocate",
+          "commit",
+          "allocate"
+        ]
+      }
+    },
+    "context": {
+      "sessionDir": "/var/folders/xz/z021trgs0n16709lm9s9pcc40000gn/T/aegis-activation-smoke-ZcMU2V/sessions",
+      "ledgerPath": "/var/folders/xz/z021trgs0n16709lm9s9pcc40000gn/T/aegis-activation-smoke-ZcMU2V/controller/state/ledger.jsonl"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "card": "AEGISFLOW_PRODUCTION_CONTROLLED_ACTIVATION_1",
+  "probe": "controller-state-absence",
+  "observedAt": "2026-10-22T11:41:52Z",
+  "method": "os.walk(followlinks=false) over /Users/zhengfengqing/.omp then /Users/zhengfengqing, matching basenames ledger.jsonl, ledger.key, controller-root.json, controller.json, and 'state'/'locks' only when the path contains 'controller' or 'aegis'",
+  "rootsScanned": [
+    "/Users/zhengfengqing/.omp",
+    "/Users/zhengfengqing"
+  ],
+  "directoriesVisited": 58236,
+  "matches": [],
+  "prunedSubtrees": 149,
+  "prunedNames": [
+    "node_modules",
+    ".git",
+    "Library",
+    "Caches",
+    ".Trash",
+    "Volumes"
+  ],
+  "claim": "No controller root, ledger or ledger key exists in the scanned HOME tree. The claim is bounded: pruned subtrees and symlink targets were not traversed.",
+  "outOfScopeFinding": {
+    "path": "/private/tmp/fd2/ledger.jsonl",
+    "mtime": "2026-10-21T21:29:45+08:00",
+    "content": "{\"via\":\"child-fd3\"}",
+    "disposition": "pre-existing R4 scratch probe, outside HOME, not created or touched by this card"
+  },
+  "timestampNote": "observedAt is the wall-clock time this file was written, re-stamped after review flagged an earlier value (11:52Z) that was ahead of real time. No measurement changed."
+}

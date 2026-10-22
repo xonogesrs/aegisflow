@@ -1,0 +1,52 @@
+{
+  "card": "AEGISFLOW_PRODUCTION_CONTROLLED_ACTIVATION_1",
+  "probe": "forgery-denial",
+  "observedAt": "2026-10-22T11:35:20.499Z",
+  "productionMutation": "NONE",
+  "isolatedRootRemoved": true,
+  "observations": {
+    "NOT_COMMITTED_BEFORE": {
+      "pass": true,
+      "detail": {
+        "witness": "NOT_COMMITTED"
+      }
+    },
+    "UNSIGNED_RECORD_NOT_BELIEVED": {
+      "pass": true,
+      "detail": {
+        "witness": "NOT_COMMITTED"
+      }
+    },
+    "WRONG_KEY_RECORD_NOT_BELIEVED": {
+      "pass": true,
+      "detail": {
+        "witness": "NOT_COMMITTED"
+      }
+    },
+    "DEPLOYED_AUTH_REJECTS_FORGERY": {
+      "pass": true,
+      "detail": {
+        "verifications": [
+          "REJECTED",
+          "REJECTED"
+        ]
+      }
+    },
+    "LEGITIMATE_COMMIT_UNAFFECTED": {
+      "pass": true,
+      "detail": {
+        "state": "COMMITTED",
+        "ledgerRecorded": true
+      }
+    },
+    "EXACTLY_ONE_AUTHENTIC_COMMIT": {
+      "pass": true,
+      "detail": {
+        "authenticRecords": 1,
+        "hexShapedRecords": 2,
+        "totalMatching": 3,
+        "witness": "COMMITTED"
+      }
+    }
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "ok": true,
+  "target": "/Users/zhengfengqing/.omp/agent/extensions",
+  "dryRun": true,
+  "steps": [
+    {
+      "file": "no-poll-waits.js",
+      "action": "restore",
+      "from": "/Users/zhengfengqing/.omp/agent/omp-integration-backups/2026-10-22T11-08-09-953Z/no-poll-waits.js"
+    },
+    {
+      "file": "cbm-query.js",
+      "action": "restore",
+      "from": "/Users/zhengfengqing/.omp/agent/omp-integration-backups/2026-10-22T11-08-09-953Z/cbm-query.js"
+    },
+    {
+      "file": "lib/memory-query-core.mjs",
+      "action": "delete"
+    },
+    {
+      "file": "lib/memory-query-child.mjs",
+      "action": "delete"
+    },
+    {
+      "file": "lib/poll-wait-policy.js",
+      "action": "leave"
+    },
+    {
+      "file": "lib/controller-result.mjs",
+      "action": "delete"
+    },
+    {
+      "file": "lib/runtime-identity.mjs",
+      "action": "delete"
+    },
+    {
+      "file": "lib/ledger-lock.mjs",
+      "action": "delete"
+    },
+    {
+      "file": "lib/ledger-auth.mjs",
+      "action": "delete"
+    },
+    {
+      "file": "lib/controller-capability.mjs",
+      "action": "delete"
+    },
+    {
+      "file": "test/poll-wait-policy.test.mjs",
+      "action": "leave"
+    },
+    {
+      "file": "test/waiter-fence.acceptance.ts",
+      "action": "restore",
+      "from": "/Users/zhengfengqing/.omp/agent/omp-integration-backups/2026-10-22T11-08-09-953Z/test/waiter-fence.acceptance.ts"
+    },
+    {
+      "file": "test/terminal-fence-authority.acceptance.ts",
+      "action": "restore",
+      "from": "/Users/zhengfengqing/.omp/agent/omp-integration-backups/2026-10-22T11-08-09-953Z/test/terminal-fence-authority.acceptance.ts"
+    },
+    {
+      "file": "test/terminal-fence-ordering.acceptance.ts",
+      "action": "restore",
+      "from": "/Users/zhengfengqing/.omp/agent/omp-integration-backups/2026-10-22T11-08-09-953Z/test/terminal-fence-ordering.acceptance.ts"
+    },
+    {
+      "file": "test/controller-contract.acceptance.ts",
+      "action": "delete"
+    }
+  ],
+  "prunedDirectories": []
+}

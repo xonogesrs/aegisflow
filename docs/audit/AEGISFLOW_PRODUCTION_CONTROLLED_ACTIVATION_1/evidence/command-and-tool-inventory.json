@@ -1,0 +1,12 @@
+{
+  "commandCount": 54,
+  "fenceCommands": [
+    "fence-generation",
+    "fence-identity",
+    "release-final"
+  ],
+  "hasEkmQuery": false,
+  "hasCbmQuery": false,
+  "memoryTools": [],
+  "stderrTail": ""
+}
