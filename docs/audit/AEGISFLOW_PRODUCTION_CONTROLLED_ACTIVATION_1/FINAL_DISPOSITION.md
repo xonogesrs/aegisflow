@@ -28,7 +28,8 @@ PRODUCTION_ENABLEMENT = true
 PRODUCTION_STATUS = ACTIVE
 
 DURABLE_LANDING = PASS
-LANDED_HEAD = f5872afb85300514293eed1b8f51c1736461065f
+LANDED_HEAD = f5872afb85300514293eed1b8f51c1736461065f (the card commit)
+BRANCH_HEAD_AFTER_SHA_RECORD = reported in the handoff
 
 GDR_1_APPROVED = false
 ORIGINAL_GENERATION_COMMITTED = false
@@ -67,12 +68,12 @@ Exactly one write: the extension directory, via `scripts/install-omp-integration
 
 | Check | Observed |
 | --- | --- |
-| commit | `f5872afb85300514293eed1b8f51c1736461065f` (docs-only; `git diff 283b7e1..HEAD -- integrations src scripts test` empty) |
-| local HEAD | `f5872af…` |
-| upstream | `f5872af…` |
-| canonical remote (`git ls-remote origin feat/omp-cbm-recovery`) | `f5872af…` |
+| card commit | `f5872afb85300514293eed1b8f51c1736461065f` (docs-only; `git diff 283b7e1..HEAD -- integrations src scripts test` empty) |
+| local = upstream = canonical remote, at the card commit | `f5872af…` for all three, verified by `git rev-parse HEAD`, `git rev-parse @{u}` and `git ls-remote --heads origin feat/omp-cbm-recovery` |
 | unpushed commits / worktree / stash | `0` / clean / empty |
 | deployed tree after landing | `check --strict-bytes` 15/15 MATCH |
+
+A commit cannot contain its own SHA, so the value above was recorded in a follow-up documentation commit. That follow-up moves branch HEAD forward by one docs-only commit; the handoff reports the resulting HEAD, and the same three-way equality was re-verified there. No code, config or deployed byte is affected by either commit.
 
 ## Honest limits
 
