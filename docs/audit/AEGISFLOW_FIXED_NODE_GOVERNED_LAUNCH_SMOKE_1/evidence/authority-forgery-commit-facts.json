@@ -1,0 +1,101 @@
+{
+  "facts": [
+    {
+      "id": "R4_A02:agent-stdin-is-not-the-command-channel",
+      "ok": true,
+      "detail": "STDIN_NOT_A_TTY\n/fence-generation PASS request=agent\nATTEMPTED\n\n"
+    },
+    {
+      "id": "R4_A02:agent-attempt-produced-no-frame",
+      "ok": true,
+      "detail": "STDIN_NOT_A_TTY\n/fence-generation PASS request=agent\nATTEMPTED\n\n"
+    },
+    {
+      "id": "R4_A02:no-commit-record-from-agent",
+      "ok": true,
+      "detail": 0
+    },
+    {
+      "id": "R4_A02:controller-still-commits",
+      "ok": true,
+      "detail": "COMMITTED"
+    },
+    {
+      "id": "R4_A05:ledger-path-write-denied-to-agent",
+      "ok": true,
+      "detail": "APPEND_DENIED"
+    },
+    {
+      "id": "R4_A05:forged-record-not-counted-as-commit",
+      "ok": true,
+      "detail": {
+        "probe": "NOT_COMMITTED",
+        "forgedPresent": false
+      }
+    },
+    {
+      "id": "R4_A05:forged-record-is-unsigned",
+      "ok": true,
+      "detail": {
+        "records": 1,
+        "authenticated": 1
+      }
+    },
+    {
+      "id": "R4_A06:not-committed-before",
+      "ok": true,
+      "detail": "NOT_COMMITTED"
+    },
+    {
+      "id": "R4_A06:forged-record-not-believed",
+      "ok": true,
+      "detail": "NOT_COMMITTED"
+    },
+    {
+      "id": "R4_A06:wrong-key-record-not-believed",
+      "ok": true,
+      "detail": "NOT_COMMITTED"
+    },
+    {
+      "id": "R4_A07:legit-commit-still-succeeds",
+      "ok": true,
+      "detail": {
+        "state": "COMMITTED",
+        "denial": null
+      }
+    },
+    {
+      "id": "R4_A07:forgery-did-not-deny",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "id": "R4_A10:committed",
+      "ok": true,
+      "detail": "COMMITTED"
+    },
+    {
+      "id": "R4_A10:durable",
+      "ok": true,
+      "detail": true
+    },
+    {
+      "id": "R4_A10:exactly-one-durable-record",
+      "ok": true,
+      "detail": 1
+    },
+    {
+      "id": "R4_A10:record-is-authenticated",
+      "ok": true,
+      "detail": "signed"
+    },
+    {
+      "id": "R4_A10:sandbox-was-active",
+      "ok": true,
+      "detail": {
+        "active": true,
+        "mechanism": "seatbelt"
+      }
+    }
+  ]
+}

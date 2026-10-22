@@ -1,0 +1,40 @@
+{
+  "facts": [
+    {
+      "id": "R4_A01:marker-absent-in-agent-bash",
+      "ok": true,
+      "detail": "ABSENT OMP_TERMINAL_FENCE_AUTHORITY"
+    },
+    {
+      "id": "R4_A01:ledger-fd-not-inherited-by-agent-bash",
+      "ok": true,
+      "detail": "FD_CLOSED 3"
+    },
+    {
+      "id": "R4_A01:key-fd-not-inherited-by-agent-bash",
+      "ok": true,
+      "detail": "FD_CLOSED 4"
+    },
+    {
+      "id": "R4_A01:result-key-file-not-readable",
+      "ok": true,
+      "detail": "RESULT_KEY_UNREADABLE"
+    },
+    {
+      "id": "R4_A01:ledger-path-not-writable",
+      "ok": true,
+      "detail": "LEDGER_WRITE_DENIED"
+    },
+    {
+      "id": "R4_A01:extension-not-writable",
+      "ok": true,
+      "detail": "EXT_WRITE_DENIED"
+    },
+    {
+      "id": "R4_A01:probe-completed",
+      "ok": true,
+      "detail": "ABSENT OMP_TERMINAL_FENCE_AUTHORITY\nPRESENT OMP_TERMINAL_FENCE_LEDGER_FD=3\nPRESENT OMP_CONTROLLER_LEDGER_KEY_FD=4\nFD_CLOSED 3\nFD_CLOSED 4\nRESULT_KEY_UNREADABLE\n"
+    }
+  ],
+  "results": {}
+}

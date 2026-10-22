@@ -1,0 +1,11 @@
+**PASS — 本卡技术证据可进入 Durable Landing；不代表已落地，也不授权生产启用。** 未发现阻断项。
+
+- **Node / PATH**：清单记录 `/usr/local/bin/node` 为非软链、`root:wheel 0755`，父目录同样不可由 Agent 写入。会话内 Bash 实际输出路径、`v22.22.2` 和预期 SHA-256；探针明确传入 `PATH=/usr/local/bin:/usr/bin:/bin`，与控制器的子进程环境构造一致。
+- **真实 governed launch / S01–S06**：探针调用真实 `launchGovernedRuntime`，要求 sandbox、capability、identity bind 成功；JSON 支持正常提示、真实 Bash、外部 CBM 索引/搜索和隔离 EKM 查询。假 provider 仅提供确定性模型响应，不替代控制器或工具。
+- **S07–S08**：三份 authority JSON 覆盖 R4 子集 **A01–A07、A10**：密钥/描述符隔离、写入拒绝、命令通道及 nested OMP 无提交、unsigned/wrong-key 伪造不被认可、合法提交仍成功。未将其算作完整 R4 重跑。
+- **S09**：不是凭终端字符串判定。探针同时要求控制器 `COMMITTED`、`probeLedgerForCommit(...) === "COMMITTED"`、唯一匹配提交，以及结果和账本的 session/runtime/generation 均匹配。`controller-client.mjs:1546–1653` 确实先验证 MAC，再匹配身份；提交路径另校验目标身份和请求状态。
+- **S10 / 生产不变性**：JSON 记录子进程退出、隔离根、CBM runtime、authority、ledger 均已清除；清理文档列出生产七项哈希及 Node 哈希保持不变，明确未安装、未启用生产版本。
+
+**证据边界／非阻断缺口**：四份 JSON 是提炼事实，不是完整 RPC 转录；未保留实际身份值及可重新验 MAC 的账本。Node 权限来源、R4 固定 PATH、额外 scratch 清理和生产哈希比对主要依赖执行者文档记录，本次未独立测量。生产扩展仍是旧部署副本；隔离 fixture 与假 provider 不证明真实模型或生产数据路径。
+
+仅用只读工具审阅；未执行测试、重做 R1–R5 或修改文件。前序 landing 按提供的执行者确认采用；**本卡 Durable Landing 尚未进行**。
