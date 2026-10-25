@@ -232,10 +232,19 @@ export function assertProductionAdmission(admission) {
 export async function runAdmittedGraph({ admission, graph = null, runner = null, budget = null, ...runnerOpts }) {
   let adm = admission;
   if (admission && typeof admission === "object" && !Array.isArray(admission)) {
+    // Fail closed: an admission that cannot be snapshotted（Proxy, function-valued
+    // fields, …）must never fall back to the live caller-owned object.
     try {
       adm = deepFreeze(structuredClone(admission));
-    } catch {
-      adm = admission;
+    } catch (e) {
+      return {
+        final: "HOLD",
+        holdCode: PRODUCTION_GATE_HOLDS.ADMISSION_INVALID,
+        reason: `ADMISSION_INVALID: admission cannot be snapshotted (${String(e?.message ?? e).slice(0, 80)})`,
+        nodeResults: [],
+        transitions: [],
+        closeout: { applied: false },
+      };
     }
   }
   const gate = assertProductionAdmission(adm);

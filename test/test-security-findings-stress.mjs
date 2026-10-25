@@ -287,6 +287,30 @@ test("STRESS-SEC02: Admission record is deep-frozen; async mutation or drift can
     }
   }
 
+  // Proxy get-trap TOCTOU: structuredClone throws on a Proxy; the gate must fail
+  // closed instead of falling back to the live object (previously leaked at K=8).
+  for (let K = 0; K <= 20; K++) {
+    const target = {};
+    for (const k of Object.keys(frozen)) target[k] = frozen[k];
+    let reads = 0;
+    const proxied = new Proxy(target, {
+      get(t, p, r) {
+        if (p === "memory_policy") {
+          reads++;
+          return { retrieval_allowed: reads > K, query_allowed: false, writeback_allowed: false };
+        }
+        return Reflect.get(t, p, r);
+      },
+    });
+    runnerInvoked = false;
+    receivedMemory = null;
+    const resProxy = await runAdmittedGraph({ admission: proxied, runner: spyRunner });
+    assert.equal(runnerInvoked, false, `runner must not run for non-snapshottable admission (K=${K})`);
+    assert.equal(receivedMemory, null);
+    assert.equal(resProxy.final, "HOLD");
+    assert.equal(resProxy.holdCode, PRODUCTION_GATE_HOLDS.ADMISSION_INVALID);
+  }
+
   // Tampered admission: attempt to bypass with modified admission_id or memory_policy
   const tampered = { ...frozen, memory_policy: { ...frozen.memory_policy, retrieval_allowed: true } };
   runnerInvoked = false;

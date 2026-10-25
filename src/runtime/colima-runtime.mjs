@@ -25,7 +25,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { accessSync, constants, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, parse, posix, relative, resolve, sep } from "node:path";
 import { createHash } from "node:crypto";
 import {
   COLIMA_BIN_ENV,
@@ -659,15 +659,18 @@ export function assertMountAllowlist({ roMounts = [], rwMounts = [], repoPaths =
     throw new ColimaRuntimeError(`scratchRoot ${scratchRoot} contains symbolic links`);
   }
   const validateTarget = (target, label) => {
-    if (target !== undefined && target !== null) {
-      if (typeof target !== "string" || !isAbsolute(target)) {
-        throw new ColimaRuntimeError(`${label} mount target must be an absolute path: ${target}`);
-      }
-      if (/[:,\n\r]/.test(target)) {
-        throw new ColimaRuntimeError(`${label} mount target contains invalid characters: ${target}`);
-      }
-      const forbiddenTargets = new Set(["/proc", "/sys", "/dev"]);
-      if (forbiddenTargets.has(target)) {
+    if (typeof target !== "string" || !isAbsolute(target)) {
+      throw new ColimaRuntimeError(`${label} mount target must be an absolute path: ${target}`);
+    }
+    if (/[:,\n\r\0]/.test(target)) {
+      throw new ColimaRuntimeError(`${label} mount target contains invalid characters: ${target}`);
+    }
+    // docker normalizes the guest path, so compare the normalized form
+    // (`/proc/`, `//proc`, `/a/../proc` all resolve to `/proc`).
+    const normalized = posix.normalize(target).replace(/\/+$/, "") || "/";
+    const forbiddenTargets = ["/", "/proc", "/sys", "/dev"];
+    for (const f of forbiddenTargets) {
+      if (normalized === f || (f !== "/" && normalized.startsWith(`${f}/`))) {
         throw new ColimaRuntimeError(`${label} mount target forbidden: ${target}`);
       }
     }
@@ -783,7 +786,7 @@ export function runTask({
   extraArgs = [],
   env = {},
 }) {
-  if (!image || typeof image !== "string" || image.startsWith("-")) {
+  if (!image || typeof image !== "string" || image.startsWith("-") || /[\s\0]/.test(image)) {
     throw new ColimaRuntimeError(`Forbidden docker image: '${image}'`);
   }
 
