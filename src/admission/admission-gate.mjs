@@ -26,7 +26,7 @@
 // *Admitted wrappers below）; the low-level runner `admission` parameter stays
 // a compatibility surface only.
 
-import { validateAdmission, assertAdmissionFrozen, deriveAdmissionId } from "./admission-record.mjs";
+import { validateAdmission, assertAdmissionFrozen, deriveAdmissionId, deepFreeze } from "./admission-record.mjs";
 import { isRetrievalAuthorized } from "./policy-projection.mjs";
 import { createBudgetEnforcement } from "../budget/enforcement.mjs";
 import { attachBudgetResult } from "../budget/graph-wiring.mjs";
@@ -98,6 +98,10 @@ export const AUTHORITY_SEAM_RUNNER_KEYS = Object.freeze([
   // input. Canonical internal injection happens below for graph="durable"
   // and graph="subagent".
   "rolloverRequestExecutor",
+  // CBM-2/CBM-4: memory provider and writeback store are derived INSIDE this gate
+  // from the frozen admission — caller overrides via runnerOpts are blocked fail-closed.
+  "memory",
+  "writeback",
 ]);
 // WP2: THE canonical internal rollover executor derivation lives in
 // src/rollover/production-wiring.mjs (SINGLE definition — the successor
@@ -226,6 +230,9 @@ export function assertProductionAdmission(admission) {
  *   BEFORE the runner is invoked（nodeResults: [] — no execution started）.
  */
 export async function runAdmittedGraph({ admission, graph = null, runner = null, budget = null, ...runnerOpts }) {
+  if (admission && typeof admission === "object") {
+    deepFreeze(admission);
+  }
   const gate = assertProductionAdmission(admission);
   if (!gate.ok) {
     return {
@@ -364,27 +371,41 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
     canonicalRolloverExecutor = await deriveCanonicalRolloverExecutor({ admission });
   }
 
+  // Re-validate immediately before memory resolution / runner dispatch
+  const renewedGate = assertProductionAdmission(admission);
+  if (!renewedGate.ok) {
+    return {
+      final: "HOLD",
+      holdCode: renewedGate.holdCode,
+      reason: renewedGate.reason,
+      nodeResults: [],
+      transitions: [],
+      closeout: { applied: false },
+    };
+  }
+
   // ── CBM-2/CBM-4: memory retrieval provider & writeback store injection ──
-  // If authorized by the frozen admission and not explicitly supplied:
+  // If authorized by the frozen admission:
   //   - retrieval: createGraphMemoryProvider provides governed read access.
   //   - writeback: LocalMemoryStore provides governed post-final record storage.
-  let resolvedMemory = runnerOpts.memory;
-  if (!resolvedMemory && isRetrievalAuthorized(admission)) {
+  // Memory & writeback are authority seams; callers cannot inject substitutes via runnerOpts.
+  let resolvedMemory = null;
+  if (isRetrievalAuthorized(admission)) {
     const { createGraphMemoryProvider } = await import("../memory/graph-context.mjs");
     resolvedMemory = {
       provider: createGraphMemoryProvider({
-        stateRoot: runnerOpts.stateRoot ?? null,
-        log: runnerOpts.log ?? { info() {}, warn() {}, error() {} },
+        stateRoot: null,
+        log: { info() {}, warn() {}, error() {} },
       }),
     };
   }
-  let resolvedWriteback = runnerOpts.writeback;
-  if (!resolvedWriteback && admission?.memory_policy?.writeback_allowed === true) {
+  let resolvedWriteback = null;
+  if (admission?.memory_policy?.writeback_allowed === true) {
     const { LocalMemoryStore } = await import("../memory/local-store.mjs");
     resolvedWriteback = {
       store: new LocalMemoryStore({
-        stateRoot: runnerOpts.stateRoot ?? null,
-        log: runnerOpts.log ?? { info() {}, warn() {}, error() {} },
+        stateRoot: null,
+        log: { info() {}, warn() {}, error() {} },
       }),
     };
   }

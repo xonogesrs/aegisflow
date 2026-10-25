@@ -44,6 +44,14 @@ export function validateDecomposition({ parentCard, requirementManifest, decompo
 
   // 2. NOT_BENEFICIAL / BLOCKED — with manifest check for BLOCKED
   if (verdict === "DECOMPOSITION_NOT_BENEFICIAL") {
+    const isHighRisk = parentCard && (parentCard.risk_level === "HIGH" || parentCard.risk === "HIGH" || parentCard.risk_level === "CRITICAL");
+    const multiRequirements = Array.isArray(requirementManifest) && requirementManifest.length > 1;
+    if (isHighRisk || multiRequirements) {
+      errors.push({
+        rule: "NOT_BENEFICIAL_DISALLOWED",
+        message: `DECOMPOSITION_NOT_BENEFICIAL is disallowed for ${isHighRisk ? "high-risk" : "multi-requirement"} parents; must decompose or emit DECOMPOSITION_BLOCKED`,
+      });
+    }
     return finish(errors);
   }
 
@@ -109,6 +117,26 @@ export function validateDecomposition({ parentCard, requirementManifest, decompo
 
   const cycle = detectCycle(Array.from(roleIds), decomposition.edges);
   if (cycle) errors.push({ rule: "CYCLE_DETECTED", message: `Cycle: ${cycle.join(" → ")}` });
+
+  // Audit → Impl contract binding: require consumes_digest on any IMPLEMENTATION/REPAIR card whose edge comes from READ_ONLY_AUDIT
+  const auditRoles = new Set(
+    decomposition.child_cards
+      .filter((c) => c.card_type === "READ_ONLY_AUDIT")
+      .map((c) => c.role_id)
+  );
+  for (const e of decomposition.edges) {
+    if (auditRoles.has(e.from)) {
+      const child = decomposition.child_cards.find((c) => c.role_id === e.to);
+      if (child && MUTATION_TYPES.has(child.card_type)) {
+        if (child.consumes_digest !== true) {
+          errors.push({
+            rule: "MISSING_CONTRACT_DIGEST",
+            message: `${child.role_id} (${child.card_type}) depends on audit role ${e.from} but missing required consumes_digest === true on implementation card`,
+          });
+        }
+      }
+    }
+  }
 
   // ---- F6: commit/push banned in ALL child cards ----
   for (const c of decomposition.child_cards) {

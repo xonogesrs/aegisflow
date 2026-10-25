@@ -27,6 +27,7 @@
     {
       "card_id": "E7_fix",
       "role_id": "fix",
+      "consumes_digest": true,
       "goal": "Apply targeted fix to src/utils/helper.js based on audit findings",
       "card_type": "IMPLEMENTATION",
       "authority_required": {

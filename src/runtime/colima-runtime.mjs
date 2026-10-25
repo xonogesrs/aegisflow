@@ -23,9 +23,9 @@
 // (PASS/REPAIR/HOLD, evidence trustworthiness) belongs to the caller.
 
 import { spawn, spawnSync } from "node:child_process";
-import { accessSync, constants, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { accessSync, constants, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { createHash } from "node:crypto";
 import {
   COLIMA_BIN_ENV,
@@ -575,23 +575,127 @@ export function deleteInstance(profile) {
 // Mount allowlist
 // ---------------------------------------------------------------------------
 
+export function hasSymlinkComponent(path) {
+  if (typeof path !== "string" || path.length === 0) return false;
+  const abs = resolve(path);
+  let current = parse(abs).root;
+  const parts = relative(current, abs).split(sep).filter(Boolean);
+  for (const part of parts) {
+    current = join(current, part);
+    try {
+      const st = lstatSync(current);
+      if (st.isSymbolicLink()) {
+        const target = realpathSync(current);
+        const trustedMacAlias = process.platform === "darwin"
+          && ((current === "/var" && target === "/private/var")
+              || (current === "/tmp" && target === "/private/tmp")
+              || (current === "/etc" && target === "/private/etc"));
+        if (!trustedMacAlias) return true;
+      }
+    } catch (e) {
+      if (e?.code === "ENOENT") break;
+      return true; // fail closed
+    }
+  }
+  return false;
+}
+
 /**
  * Assert every mount source is inside the allowlist:
  *   - read-only mounts: source must equal one of repoPaths
  *   - read-write mounts: source must be inside scratchRoot
  * Anything else -> ColimaRuntimeError (fail closed).
  */
+function contained(root, source) {
+  if (typeof root !== "string" || typeof source !== "string") return false;
+  const normalized = source.replace(/\\/g, "/");
+  const segments = normalized.split("/");
+  if (segments.includes("..")) return false;
+
+  if (hasSymlinkComponent(source)) return false;
+  if (hasSymlinkComponent(root)) return false;
+
+  try {
+    const rootReal = realpathSync(root);
+    try {
+      if (lstatSync(source).isSymbolicLink()) return false;
+    } catch {}
+
+    let sourceReal;
+    if (existsSync(source)) {
+      sourceReal = realpathSync(source);
+    } else {
+      let curr = resolve(source);
+      const unverified = [];
+      while (!existsSync(curr)) {
+        const parent = dirname(curr);
+        if (parent === curr) break;
+        unverified.unshift(basename(curr));
+        curr = parent;
+      }
+      try {
+        if (lstatSync(curr).isSymbolicLink()) return false;
+      } catch {}
+      if (hasSymlinkComponent(curr)) return false;
+      const realBase = realpathSync(curr);
+      sourceReal = resolve(realBase, ...unverified);
+    }
+    const rel = relative(rootReal, sourceReal);
+    return rel === "" || (rel !== ".." && !rel.startsWith(".." + sep) && !rel.startsWith("/"));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Mount allowlist gate.
+ *   - read-only mounts: source must equal one of repoPaths (canonical realpath)
+ *   - read-write mounts: source must be contained inside scratchRoot (canonical realpath, no symlinks, no ..)
+ * Anything else -> ColimaRuntimeError (fail closed).
+ */
 export function assertMountAllowlist({ roMounts = [], rwMounts = [], repoPaths = [], scratchRoot }) {
   if (!scratchRoot) throw new ColimaRuntimeError("scratchRoot required");
+  if (hasSymlinkComponent(scratchRoot)) {
+    throw new ColimaRuntimeError(`scratchRoot ${scratchRoot} contains symbolic links`);
+  }
   for (const m of roMounts) {
-    if (!repoPaths.includes(m.source)) {
+    if (!m?.source || typeof m.source !== "string") {
+      throw new ColimaRuntimeError("read-only mount source must be a string");
+    }
+    const normalized = m.source.replace(/\\/g, "/").split("/");
+    if (normalized.includes("..")) {
+      throw new ColimaRuntimeError(`read-only mount ${m.source} contains traversal segments`);
+    }
+    if (hasSymlinkComponent(m.source)) {
+      throw new ColimaRuntimeError(`read-only mount ${m.source} contains symbolic links`);
+    }
+    let matched = false;
+    try {
+      if (lstatSync(m.source).isSymbolicLink()) {
+        throw new ColimaRuntimeError(`read-only mount ${m.source} is a symbolic link`);
+      }
+      const realSource = realpathSync(m.source);
+      for (const rp of repoPaths) {
+        if (rp) {
+          try {
+            if (realpathSync(rp) === realSource) {
+              matched = true;
+              break;
+            }
+          } catch {}
+        }
+      }
+    } catch (e) {
+      if (e instanceof ColimaRuntimeError) throw e;
+      throw new ColimaRuntimeError(`read-only mount ${m.source} resolution failed: ${e.message}`);
+    }
+    if (!matched) {
       throw new ColimaRuntimeError(`read-only mount ${m.source} not in repo allowlist ${JSON.stringify(repoPaths)}`);
     }
   }
   for (const m of rwMounts) {
-    const inside = m.source === scratchRoot || m.source.startsWith(`${scratchRoot}/`);
-    if (!inside) {
-      throw new ColimaRuntimeError(`read-write mount ${m.source} outside scratchRoot ${scratchRoot}`);
+    if (!m?.source || typeof m.source !== "string" || !contained(scratchRoot, m.source)) {
+      throw new ColimaRuntimeError(`read-write mount ${m?.source} outside scratchRoot ${scratchRoot}`);
     }
   }
 }
@@ -603,6 +707,11 @@ export function assertMountAllowlist({ roMounts = [], rwMounts = [], repoPaths =
 export function dockerBaseArgs(profile) {
   return ["--host", instanceSocket(profile)];
 }
+
+export const ALLOWED_EXTRA_DOCKER_ARGS = Object.freeze([
+  "--read-only",
+  "--init",
+]);
 
 export const FORBIDDEN_EXTRA_DOCKER_ARGS = Object.freeze([
   "--privileged",
@@ -642,15 +751,29 @@ export function runTask({
   extraArgs = [],
   env = {},
 }) {
-  if (scratchRoot) {
-    assertMountAllowlist({ roMounts, rwMounts, repoPaths: repoPaths ?? [], scratchRoot });
+  // Always enforce mount validation when mounts are requested
+  if (scratchRoot || roMounts.length > 0 || rwMounts.length > 0) {
+    if (!scratchRoot && rwMounts.length > 0) {
+      throw new ColimaRuntimeError("scratchRoot required when rwMounts are present");
+    }
+    assertMountAllowlist({
+      roMounts,
+      rwMounts,
+      repoPaths: repoPaths ?? [],
+      scratchRoot: scratchRoot ?? (rwMounts.length === 0 ? (roMounts[0]?.source ?? "/") : ""),
+    });
   }
+
+  // Network mode must be strictly pinned to "none"
+  if (network !== "none") {
+    throw new ColimaRuntimeError(`Forbidden docker network mode: '${network}' (must be 'none')`);
+  }
+
+  // Strict allowlist on extraArgs: default empty; reject any un-whitelisted flag
   for (const arg of extraArgs) {
-    const lower = String(arg).toLowerCase();
-    for (const forbidden of FORBIDDEN_EXTRA_DOCKER_ARGS) {
-      if (lower === forbidden || lower.startsWith(`${forbidden}=`)) {
-        throw new ColimaRuntimeError(`Forbidden docker argument in extraArgs: ${arg}`);
-      }
+    const token = String(arg).trim();
+    if (!ALLOWED_EXTRA_DOCKER_ARGS.includes(token)) {
+      throw new ColimaRuntimeError(`Forbidden docker argument in extraArgs: ${arg}`);
     }
   }
   return new Promise((resolve) => {

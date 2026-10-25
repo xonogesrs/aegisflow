@@ -26,6 +26,7 @@ function d(overrides = {}) {
         authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: false },
         verification: { required_commands: [], forbidden_commands: [] }, risk_level: "LOW", allowed_paths: ["src/core/"] },
       { card_id: "c2", role_id: "impl", goal: "Impl", card_type: "IMPLEMENTATION",
+        consumes_digest: true,
         authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: true },
         verification: { required_commands: [], forbidden_commands: [] }, risk_level: "MEDIUM", allowed_paths: ["src/core/"] },
       { card_id: "c3", role_id: "test", goal: "Test", card_type: "RUNTIME_VALIDATION",
@@ -48,7 +49,12 @@ function d(overrides = {}) {
 describe("valid", () => {
   it("NOT_BENEFICIAL", () => {
     const v = { verdict: "DECOMPOSITION_NOT_BENEFICIAL", reason: "small", decomposition_evidence: ["e"] };
-    assert.equal(validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v }).valid, true);
+    // Allowed for single-requirement non-high-risk parent
+    assert.equal(validateDecomposition({ parentCard, requirementManifest: [manifest[0]], decomposition: v }).valid, true);
+    // Blocked for multi-requirement parents
+    assert.equal(validateDecomposition({ parentCard, requirementManifest: manifest, decomposition: v }).valid, false);
+    // Blocked for HIGH risk parent
+    assert.equal(validateDecomposition({ parentCard: { ...parentCard, risk_level: "HIGH" }, requirementManifest: [manifest[0]], decomposition: v }).valid, false);
   });
   it("BLOCKED", () => {
     const v = { verdict: "DECOMPOSITION_BLOCKED",

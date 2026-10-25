@@ -490,6 +490,8 @@ export function createSubagentWriterExecutorAdapter({ profile, repoPath, scratch
       command: isRepair && repairTaskType ? buildRepairAgentCommand(repairTaskType) : buildWriterAgentCommand(taskType),
       roMounts,
       rwMounts,
+      repoPaths: [repoPath],
+      scratchRoot,
       network: "none",
       cpus: runtime.limits?.cpus,
       memoryMiB: runtime.limits?.memoryMiB,

@@ -49,7 +49,7 @@ Use when the parent task can be decomposed into 1-7 child cards:
 
 ## DECOMPOSITION PRINCIPLES: GRANULARITY OVER ARBITRARY SLICING
 
-1. **Avoid Over-Decomposition**: Do NOT chop a task into tiny pieces merely to make them small. If a task is a single bug fix, a coherent feature within tightly coupled files, or primarily confined to 1-2 source files, slicing it into multiple child cards creates severe context window bloat (each child card redundantly re-reads repo context and history). Use `DECOMPOSITION_NOT_BENEFICIAL`.
+1. **Avoid Over-Decomposition**: Do NOT chop a task into tiny pieces merely to make them small. If a low-risk single-requirement task is a simple bug fix or confined to 1-2 files, slicing it creates redundant context bloat; use `DECOMPOSITION_NOT_BENEFICIAL`. However, if parent risk is HIGH, touches governance/admission boundaries, or has multiple requirements, `DECOMPOSITION_NOT_BENEFICIAL` is strictly forbidden — decompose into orthogonal roles (`READ_ONLY_AUDIT` → `IMPLEMENTATION` with `consumes_digest: true` → `RUNTIME_VALIDATION`) or emit `DECOMPOSITION_BLOCKED`.
 2. **Decompose by Functional Responsibility, Never Arbitrary Code Slices**:
    - Good decomposition (Orthogonal roles):
      - Role 1 (`READ_ONLY_AUDIT`): Explores code and produces a concise patch specification/contract.

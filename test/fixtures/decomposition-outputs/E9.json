@@ -27,6 +27,7 @@
     {
       "card_id": "E9_impl",
       "role_id": "impl",
+      "consumes_digest": true,
       "goal": "Implement the feature based on foundation audit findings",
       "card_type": "IMPLEMENTATION",
       "authority_required": {

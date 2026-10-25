@@ -219,10 +219,7 @@ function eligibilityDecision(record, query, { explicitlySelected = false, explic
   // whose scope.tree differs from the query tree is STALE for THIS context —
   // excluded under the default policy; explicitly included (flagged by its
   // stored validity) only under INCLUDE_STALE / ALL.
-  // Architectural, pattern, and global decision records are semantic knowledge
-  // and are not invalidated solely by tree drift.
-  const isSemanticKnowledge = ["DECISION", "PATTERN"].includes(record.record_type) || scope.global === true;
-  if (!isSemanticKnowledge && query.context.tree && typeof scope.tree === "string" && scope.tree !== query.context.tree) {
+  if (query.context.tree && typeof scope.tree === "string" && scope.tree !== query.context.tree) {
     if (!["INCLUDE_STALE", "ALL"].includes(query.validityPolicy)) {
       return { eligible: false, conflicted: false, reasons: ["validity:tree_changed_stale"], validityStatus };
     }
@@ -411,7 +408,7 @@ export function retrieveMemory({ db, query }) {
   args.push(...valid);
   // tree-baseline staleness（CURRENT policy only — stale trees excluded）
   if (query.context.tree && query.validityPolicy === "CURRENT") {
-    where.push("(scope_tree = ? OR scope_tree IS NULL OR record_type IN ('DECISION', 'PATTERN') OR scope_global = 1)");
+    where.push("(scope_tree = ? OR scope_tree IS NULL)");
     args.push(query.context.tree);
   }
   // graphRun / task binding
@@ -461,7 +458,7 @@ export function retrieveMemory({ db, query }) {
   })();
   const fragValid = { sql: `validity_status IN (${valid.map(() => "?").join(",")})`, args: [...valid] };
   const fragTree = query.context.tree && query.validityPolicy === "CURRENT"
-    ? { sql: "(scope_tree = ? OR scope_tree IS NULL OR record_type IN ('DECISION', 'PATTERN') OR scope_global = 1)", args: [query.context.tree] }
+    ? { sql: "(scope_tree = ? OR scope_tree IS NULL)", args: [query.context.tree] }
     : null;
   const countFragments = (...frags) => {
     const flat = frags.filter(Boolean);

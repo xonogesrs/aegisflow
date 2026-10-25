@@ -20,6 +20,7 @@ import { sha256Text } from "../evidence/run-evidence-store.mjs";
 import { validateAgainstSchema } from "./lifecycle-authorization.mjs";
 import {
   writeExclusiveCreate,
+  assertNotSymlink,
 } from "../c2d/fs-atomic.mjs";
 import {
   REVIEW_FINDINGS_SCHEMA,
@@ -31,6 +32,7 @@ import {
   findingsPath,
   verdictPath,
   reviewJobPath,
+  readArtifactNoFollow,
 } from "./review-job.mjs";
 
 export function serializeArtifact(obj) {
@@ -53,7 +55,7 @@ export function writeImmutableExclusive(path, bytes) {
     if (!existed) throw e;
     let existing;
     try {
-      existing = readFileSync(path, "utf8");
+      existing = readArtifactNoFollow(path);
     } catch {
       throw e;
     }
@@ -70,6 +72,10 @@ function isTerminalHeld(state) {
 
 /** Build the findings object from reviewer content + job bindings. */
 export function buildFindingsObject({ job, reviewerIdentity, findings, summary, createdAt }) {
+  const effectiveCreatedAt = createdAt ?? job?.artifactCreatedAt;
+  if (!effectiveCreatedAt) {
+    throw new Error("REVIEW_JOB_ARTIFACT_TIMESTAMP_MISSING: artifactCreatedAt required in job");
+  }
   return {
     schemaVersion: REVIEW_FINDINGS_SCHEMA_ID,
     jobId: job.jobId,
@@ -80,7 +86,7 @@ export function buildFindingsObject({ job, reviewerIdentity, findings, summary, 
     reviewerIdentity,
     findings: Array.isArray(findings) ? findings : [],
     summary: summary ?? "",
-    createdAt: createdAt ?? job.updatedAt ?? job.createdAt ?? new Date().toISOString(),
+    createdAt: effectiveCreatedAt,
   };
 }
 
@@ -98,7 +104,7 @@ export function buildVerdictObject({ job, reviewerIdentity, findingsDigest, verd
     verdict,
     summary: summary ?? "",
     recommendedNextAction: recommendedNextAction ?? "",
-    createdAt: createdAt ?? job.updatedAt ?? job.createdAt ?? new Date().toISOString(),
+    createdAt: createdAt ?? job?.artifactCreatedAt,
   };
 }
 
@@ -114,28 +120,10 @@ export function persistFindings({ cardId, reviewerIdentity, findings = [], summa
   if (isTerminalHeld(job.state)) {
     return { ok: false, code: "REVIEW_JOB_STALE_OR_HELD", state: job.state, job, path: current.path };
   }
-  if (job.state === "FINDINGS_CAPTURED" || job.state === "VERDICT_PRODUCED" || job.state === "PERSISTED" || job.state === "STAGED") {
-    // resume: findings already persisted; verify identity and return idempotent.
-    if (!job.findingsDigest) {
-      return { ok: false, code: "REVIEW_JOB_FINDINGS_DIGEST_UNBOUND", job, path: current.path };
-    }
-    return { ok: true, idempotent: true, findingsDigest: job.findingsDigest, job, path: current.path };
-  }
-  if (job.state !== "RUNNING") {
-    return { ok: false, code: "REVIEW_JOB_STATE_MISMATCH", expected: "RUNNING", actual: job.state, job, path: current.path };
-  }
 
-  const target = findingsPath(cardId, job.generation, opts);
-  let effectiveCreatedAt = createdAt ?? opts.createdAt ?? job.updatedAt ?? job.createdAt;
-  if (!effectiveCreatedAt && existsSync(target)) {
-    try {
-      const existing = JSON.parse(readFileSync(target, "utf8"));
-      if (typeof existing?.createdAt === "string") {
-        effectiveCreatedAt = existing.createdAt;
-      }
-    } catch {
-      // ignore parse failure
-    }
+  const effectiveCreatedAt = createdAt ?? job.artifactCreatedAt;
+  if (!effectiveCreatedAt) {
+    return { ok: false, code: "REVIEW_JOB_ARTIFACT_TIMESTAMP_MISSING", job, path: current.path };
   }
 
   const obj = buildFindingsObject({ job, reviewerIdentity, findings, summary, createdAt: effectiveCreatedAt });
@@ -145,6 +133,31 @@ export function persistFindings({ cardId, reviewerIdentity, findings = [], summa
   }
   const serialized = serializeArtifact(obj);
   const digest = sha256Text(serialized);
+  const target = findingsPath(cardId, job.generation, opts);
+
+  if (job.state === "FINDINGS_CAPTURED" || job.state === "VERDICT_PRODUCED" || job.state === "PERSISTED" || job.state === "STAGED") {
+    // Replay / resume: findings already persisted; verify that supplied payload matches the stored artifact bytes.
+    if (!job.findingsDigest) {
+      return { ok: false, code: "REVIEW_JOB_FINDINGS_DIGEST_UNBOUND", job, path: current.path };
+    }
+    let existing;
+    try {
+      existing = readArtifactNoFollow(target);
+    } catch {
+      return { ok: false, code: "REVIEW_ARTIFACT_MISSING", path: target, job };
+    }
+    if (existing !== serialized || digest !== job.findingsDigest) {
+      return { ok: false, code: "REVIEW_ARTIFACT_CONFLICTING_REPLAY", path: target, job, findingsDigest: job.findingsDigest };
+    }
+    return { ok: true, idempotent: true, findingsDigest: job.findingsDigest, job, path: current.path };
+  }
+  if (job.state !== "RUNNING") {
+    return { ok: false, code: "REVIEW_JOB_STATE_MISMATCH", expected: "RUNNING", actual: job.state, job, path: current.path };
+  }
+
+  if (existsSync(target)) {
+    assertNotSymlink(target);
+  }
 
   const wrote = writeImmutableExclusive(target, serialized);
   if (!wrote.ok) return { ...wrote, job, path: current.path };
@@ -170,9 +183,29 @@ export function persistVerdict({ cardId, reviewerIdentity, verdict, summary = ""
   if (isTerminalHeld(job.state)) {
     return { ok: false, code: "REVIEW_JOB_STALE_OR_HELD", state: job.state, job, path: current.path };
   }
+
+  const effectiveCreatedAt = createdAt ?? job.artifactCreatedAt;
+  const target = verdictPath(cardId, job.generation, opts);
+
   if (job.state === "VERDICT_PRODUCED" || job.state === "PERSISTED" || job.state === "STAGED") {
     if (!job.verdictDigest) {
       return { ok: false, code: "REVIEW_JOB_VERDICT_DIGEST_UNBOUND", job, path: current.path };
+    }
+    const obj = buildVerdictObject({ job, reviewerIdentity, findingsDigest: job.findingsDigest, verdict, summary, recommendedNextAction, createdAt: effectiveCreatedAt });
+    const errors = validateAgainstSchema(REVIEW_VERDICT_SCHEMA, obj, "review-verdict");
+    if (errors.length > 0) {
+      return { ok: false, code: "REVIEW_VERDICT_SCHEMA_INVALID", errors, job, path: current.path };
+    }
+    const serialized = serializeArtifact(obj);
+    const digest = sha256Text(serialized);
+    let existing;
+    try {
+      existing = readArtifactNoFollow(target);
+    } catch {
+      return { ok: false, code: "REVIEW_ARTIFACT_MISSING", path: target, job };
+    }
+    if (existing !== serialized || digest !== job.verdictDigest) {
+      return { ok: false, code: "REVIEW_ARTIFACT_CONFLICTING_REPLAY", path: target, job, verdictDigest: job.verdictDigest };
     }
     return { ok: true, idempotent: true, verdictDigest: job.verdictDigest, job, path: current.path };
   }
@@ -187,7 +220,7 @@ export function persistVerdict({ cardId, reviewerIdentity, verdict, summary = ""
   const fpath = findingsPath(cardId, job.generation, opts);
   let fbytes;
   try {
-    fbytes = readFileSync(fpath, "utf8");
+    fbytes = readArtifactNoFollow(fpath);
   } catch {
     return { ok: false, code: "REVIEW_FINDINGS_ARTIFACT_MISSING", job, path: current.path };
   }
@@ -196,17 +229,8 @@ export function persistVerdict({ cardId, reviewerIdentity, verdict, summary = ""
     return { ok: false, code: "REVIEW_FINDINGS_DIGEST_MISMATCH", bound: job.findingsDigest, recomputed: recomputedFindingsDigest, job, path: current.path };
   }
 
-  const target = verdictPath(cardId, job.generation, opts);
-  let effectiveCreatedAt = createdAt ?? opts.createdAt ?? job.updatedAt ?? job.createdAt;
-  if (!effectiveCreatedAt && existsSync(target)) {
-    try {
-      const existing = JSON.parse(readFileSync(target, "utf8"));
-      if (typeof existing?.createdAt === "string") {
-        effectiveCreatedAt = existing.createdAt;
-      }
-    } catch {
-      // ignore parse failure
-    }
+  if (!effectiveCreatedAt) {
+    return { ok: false, code: "REVIEW_JOB_ARTIFACT_TIMESTAMP_MISSING", job, path: current.path };
   }
 
   const obj = buildVerdictObject({ job, reviewerIdentity, findingsDigest: job.findingsDigest, verdict, summary, recommendedNextAction, createdAt: effectiveCreatedAt });
@@ -216,6 +240,10 @@ export function persistVerdict({ cardId, reviewerIdentity, verdict, summary = ""
   }
   const serialized = serializeArtifact(obj);
   const digest = sha256Text(serialized);
+
+  if (existsSync(target)) {
+    assertNotSymlink(target);
+  }
 
   const wrote = writeImmutableExclusive(target, serialized);
   if (!wrote.ok) return { ...wrote, job, path: current.path };
@@ -248,8 +276,12 @@ export function finalizePersisted({ cardId }, opts = {}) {
   // Re-read both artifacts and recompute digests from persisted bytes.
   let fbytes, vbytes;
   try {
-    fbytes = readFileSync(findingsPath(cardId, job.generation, opts), "utf8");
-    vbytes = readFileSync(verdictPath(cardId, job.generation, opts), "utf8");
+    const fp = findingsPath(cardId, job.generation, opts);
+    const vp = verdictPath(cardId, job.generation, opts);
+    assertNotSymlink(fp);
+    assertNotSymlink(vp);
+    fbytes = readFileSync(fp, "utf8");
+    vbytes = readFileSync(vp, "utf8");
   } catch {
     return { ok: false, code: "REVIEW_ARTIFACT_MISSING", job, path: current.path };
   }
@@ -291,8 +323,12 @@ export function stageArtifacts({ cardId, git, repoRoot }, opts = {}) {
   }
   let fbytes, vbytes;
   try {
-    fbytes = readFileSync(findingsPath(cardId, job.generation, opts), "utf8");
-    vbytes = readFileSync(verdictPath(cardId, job.generation, opts), "utf8");
+    const fp = findingsPath(cardId, job.generation, opts);
+    const vp = verdictPath(cardId, job.generation, opts);
+    assertNotSymlink(fp);
+    assertNotSymlink(vp);
+    fbytes = readFileSync(fp, "utf8");
+    vbytes = readFileSync(vp, "utf8");
   } catch {
     return { ok: false, code: "REVIEW_ARTIFACT_MISSING", job, path: current.path };
   }

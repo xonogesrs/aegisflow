@@ -35,9 +35,9 @@
 // handed, so it is safe to import from the Colima profile lock (which must not
 // depend on colima-runtime.mjs) and from tests.
 
-import { existsSync, readdirSync, rmSync, statSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, rmSync, statSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 /** Prefix of the pre-rename configuration variables. */
 export const LEGACY_ENV_PREFIX = "AUTOLOOP_";
@@ -426,10 +426,42 @@ function defaultExists(p) {
   return existsSync(p);
 }
 
+function newestMtime(abs, depth = 0, seenInodes = new Set()) {
+  try {
+    const st = lstatSync(abs);
+    if (st.isSymbolicLink()) return null; // do not follow symlinks, do not delete target
+    if (depth > 64) {
+      return Date.now(); // recursion limit reached: retain tree
+    }
+    const inodeKey = `${st.dev}:${st.ino}`;
+    if (seenInodes.has(inodeKey)) {
+      return Date.now(); // cycle detected: retain tree
+    }
+    seenInodes.add(inodeKey);
+
+    let max = st.mtimeMs;
+    if (st.isDirectory()) {
+      for (const name of readdirSync(abs)) {
+        if (name.endsWith(".lock") || name.startsWith(".lock") || name === "LOCK") {
+          return Date.now(); // active lock file: retain
+        }
+        const child = newestMtime(join(abs, name), depth + 1, seenInodes);
+        if (child === null) return null;
+        if (child > max) max = child;
+      }
+    }
+    return max;
+  } catch {
+    return Date.now(); // error scanning: retain tree
+  }
+}
+
 /**
  * TTL cleaner for the scratch workspace. Purges files/subdirectories inside
  * scratchRoot older than maxAgeMs (default 24h) to prevent unbounded accumulation
- * of fixture/probe artifacts. Fails open (catches per-entry errors, does not throw).
+ * of fixture/probe artifacts. Safely traverses directory trees via newestMtime
+ * (preserving directories with fresh children or active locks) and verifies
+ * realpath containment to prevent escaping scratchRoot.
  */
 export function purgeScratchTtl({
   scratchRoot = null,
@@ -438,18 +470,64 @@ export function purgeScratchTtl({
   home = homedir(),
 } = {}) {
   const root = scratchRoot ?? resolveScratchRoot({ env, home });
+  try {
+    if (lstatSync(root).isSymbolicLink()) {
+      // Refuse symlinked scratch root
+      return { purged: 0, retained: 0, errors: 1 };
+    }
+  } catch {
+    return { purged: 0, retained: 0, errors: 0 };
+  }
   if (!existsSync(root)) return { purged: 0, retained: 0, errors: 0 };
+  let rootReal;
+  try {
+    rootReal = realpathSync(root);
+  } catch {
+    return { purged: 0, retained: 0, errors: 1 };
+  }
+  try {
+    if (lstatSync(rootReal).isSymbolicLink()) {
+      return { purged: 0, retained: 0, errors: 1 };
+    }
+  } catch {
+    return { purged: 0, retained: 0, errors: 1 };
+  }
   const now = Date.now();
   let purged = 0;
   let retained = 0;
   let errors = 0;
   try {
-    const entries = readdirSync(root);
+    const entries = readdirSync(rootReal);
     for (const name of entries) {
-      const fullPath = join(root, name);
+      const fullPath = join(rootReal, name);
       try {
-        const s = statSync(fullPath);
-        if (now - s.mtimeMs > maxAgeMs) {
+        const lst = lstatSync(fullPath);
+        if (lst.isSymbolicLink()) {
+          retained++;
+          continue;
+        }
+
+        let entryReal;
+        try {
+          entryReal = realpathSync(fullPath);
+        } catch {
+          retained++;
+          continue;
+        }
+
+        const rel = relative(rootReal, entryReal);
+        if (rel === ".." || rel.startsWith(".." + sep) || rel.startsWith("/")) {
+          retained++;
+          continue;
+        }
+
+        const mtime = newestMtime(fullPath);
+        if (mtime === null) {
+          retained++;
+          continue;
+        }
+
+        if (now - mtime > maxAgeMs) {
           rmSync(fullPath, { recursive: true, force: true });
           purged++;
         } else {

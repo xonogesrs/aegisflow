@@ -202,49 +202,54 @@ test("runTask rejects forbidden extraArgs (--privileged, --cap-add, --volume, et
 
 test("assertMountAllowlist accepts only repo ro + scratch rw", () => {
   const repo = fileURLToPath(new URL("..", import.meta.url)).replace(/[\/]$/, "");
-  const scratch = `${homedir()}/autoloop-runtime`;
-  // allowed
-  assert.doesNotThrow(() =>
-    assertMountAllowlist({
-      roMounts: [{ source: repo, target: "/src" }],
-      rwMounts: [{ source: `${scratch}/w1`, target: "/work" }, { source: scratch, target: "/scratch" }],
-      repoPaths: [repo],
-      scratchRoot: scratch,
-    }),
-  );
-  // ro mount outside repo allowlist -> fail closed
-  assert.throws(
-    () =>
+  const scratch = mkdtempSync(join(tmpdir(), "autoloop-runtime-test-"));
+  mkdirSync(join(scratch, "w1"), { recursive: true });
+  try {
+    // allowed
+    assert.doesNotThrow(() =>
       assertMountAllowlist({
-        roMounts: [{ source: "/etc/hosts", target: "/x" }],
-        rwMounts: [],
+        roMounts: [{ source: repo, target: "/src" }],
+        rwMounts: [{ source: `${scratch}/w1`, target: "/work" }, { source: scratch, target: "/scratch" }],
         repoPaths: [repo],
         scratchRoot: scratch,
       }),
-    ColimaRuntimeError,
-  );
-  // rw mount outside scratchRoot -> fail closed
-  assert.throws(
-    () =>
-      assertMountAllowlist({
-        roMounts: [],
-        rwMounts: [{ source: "/tmp/elsewhere", target: "/x" }],
-        repoPaths: [repo],
-        scratchRoot: scratch,
-      }),
-    ColimaRuntimeError,
-  );
-  // whole-$HOME is NOT auto-allowed as rw
-  assert.throws(
-    () =>
-      assertMountAllowlist({
-        roMounts: [],
-        rwMounts: [{ source: homedir(), target: "/home" }],
-        repoPaths: [repo],
-        scratchRoot: scratch,
-      }),
-    ColimaRuntimeError,
-  );
+    );
+    // ro mount outside repo allowlist -> fail closed
+    assert.throws(
+      () =>
+        assertMountAllowlist({
+          roMounts: [{ source: "/etc/hosts", target: "/x" }],
+          rwMounts: [],
+          repoPaths: [repo],
+          scratchRoot: scratch,
+        }),
+      ColimaRuntimeError,
+    );
+    // rw mount outside scratchRoot -> fail closed
+    assert.throws(
+      () =>
+        assertMountAllowlist({
+          roMounts: [],
+          rwMounts: [{ source: "/tmp/elsewhere", target: "/x" }],
+          repoPaths: [repo],
+          scratchRoot: scratch,
+        }),
+      ColimaRuntimeError,
+    );
+    // whole-$HOME is NOT auto-allowed as rw
+    assert.throws(
+      () =>
+        assertMountAllowlist({
+          roMounts: [],
+          rwMounts: [{ source: homedir(), target: "/home" }],
+          repoPaths: [repo],
+          scratchRoot: scratch,
+        }),
+      ColimaRuntimeError,
+    );
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });
 
 test("adapter result shape satisfies the executor contract", () => {
@@ -285,7 +290,7 @@ import {
   listInstances,
   planInstanceAction,
 } from "../src/runtime/colima-runtime.mjs";
-import { mkdtempSync, symlinkSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, symlinkSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { C2dHoldError } from "../src/c2d/fs-atomic.mjs";
@@ -659,7 +664,7 @@ import {
   COLIMA_PROFILE_LOCK_ALLOWED,
   colimaProfileLockDefaultRoot,
 } from "../src/runtime/colima-profile-lock.mjs";
-import { mkdirSync, readFileSync as readLockFileSync, rmSync as rmLockDirSync } from "node:fs";
+import { readFileSync as readLockFileSync, rmSync as rmLockDirSync } from "node:fs";
 
 function lockTestRoot(t) {
   const dir = mkdtempSync(join(tmpdir(), "profile-lock-"));

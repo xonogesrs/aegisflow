@@ -109,17 +109,6 @@ export function deriveStrategyCandidate({ plan, triggerEvent, baselineHead, base
     fail(STRATEGY_CANDIDATE_HOLD.PLAN_INVALID, "baseline HEAD invalid");
   }
 
-  // Idempotency: dedup via derivation index if storeRoot is supplied
-  let key = null;
-  let index = null;
-  if (storeRoot && triggerEvent?.signature) {
-    key = `${triggerEvent.signature}@${baselineHead}`;
-    index = readDerivationIndex(storeRoot);
-    if (index.derivations[key]) {
-      const existing = readCandidate(storeRoot, index.derivations[key]);
-      if (existing) return { status: "EXISTING", candidate: existing };
-    }
-  }
   const sp = plan.strategy_plan ?? {};
   const dimension = sp.dimension;
   if (!STRATEGY_DIMENSIONS.includes(dimension)) {
@@ -151,6 +140,23 @@ export function deriveStrategyCandidate({ plan, triggerEvent, baselineHead, base
     policy_generation: strategyPolicy?.generation ?? null,
   };
   const candidateId = `ecand_${digestOf(identityFacts).slice(0, 40)}`;
+
+  // Idempotency: dedup via derivation index if storeRoot is supplied
+  let key = null;
+  let index = null;
+  if (storeRoot && triggerEvent?.signature) {
+    key = `${triggerEvent.signature}@${baselineHead}`;
+    index = readDerivationIndex(storeRoot);
+    if (index.derivations[key]) {
+      const existing = readCandidate(storeRoot, index.derivations[key]);
+      if (existing) {
+        if (existing.candidate_id === candidateId) {
+          return { status: "EXISTING", candidate: existing };
+        }
+        fail(STRATEGY_CANDIDATE_HOLD.PLAN_REFUSED, `candidate for ${key} already exists with differing candidate_id: ${existing.candidate_id} != ${candidateId}`);
+      }
+    }
+  }
 
   const candidate = {
     schema: "autoloop.evolution-candidate/v1",

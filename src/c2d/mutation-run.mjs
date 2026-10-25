@@ -456,8 +456,8 @@ export async function runMutation({
         const postValidation = captureScopeSnapshot(worktree.worktreePath);
         // Zero-tolerance gate: validation (and any background process) must not
         // change anything at all — no allowlist applies here, unlike the
-        // post-mutation gate above.
-        const postValidationGate = enforceScopeGate(worktree.worktreePath, postMutation, postValidation, [], []);
+        // post-mutation gate above. Explicitly reject ephemeral writes during validation.
+        const postValidationGate = enforceScopeGate(worktree.worktreePath, postMutation, postValidation, [], [], { allowEphemeral: false });
         gates.push({ gate: "post_validation", ok: postValidationGate.ok, violations: postValidationGate.violations });
 
         if (!postValidationGate.ok) {

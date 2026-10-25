@@ -39,6 +39,7 @@ function validDecomposed() {
         authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: false },
         verification: { required_commands: [], forbidden_commands: [] }, risk_level: "LOW", allowed_paths: ["src/core/"] },
       { card_id: "c2", role_id: "impl", goal: "Impl", card_type: "IMPLEMENTATION",
+        consumes_digest: true,
         authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: true },
         verification: { required_commands: [], forbidden_commands: [] }, risk_level: "MEDIUM", allowed_paths: ["src/core/"] },
       { card_id: "c3", role_id: "test", goal: "Test", card_type: "RUNTIME_VALIDATION",
@@ -60,7 +61,7 @@ function validDecomposed() {
 describe("A — valid", () => {
   it("1 NOT_BENEFICIAL", async () => {
     const p = makeProvider({ verdict: "DECOMPOSITION_NOT_BENEFICIAL", reason: "small", decomposition_evidence: ["e"] });
-    const r = await decomposeTask({ parentCard, requirementManifest: manifest, provider: p });
+    const r = await decomposeTask({ parentCard, requirementManifest: [manifest[0]], provider: p });
     assert.equal(r.status, "VALID"); assert.equal(p.callCount(), 1);
   });
   it("2 DECOMPOSED", async () => {
@@ -342,6 +343,7 @@ describe("R2 — canonical conformance repair", () => {
           authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: false },
           verification: { required_commands: [], forbidden_commands: [] }, risk_level: "LOW", allowed_paths: ["src/auth/"] },
         { card_id: "c2", role_id: "impl", goal: "Extract shared logic into reusable functions", card_type: "IMPLEMENTATION",
+          consumes_digest: true,
           authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: true },
           verification: { required_commands: [], forbidden_commands: [] }, risk_level: "MEDIUM", allowed_paths: ["src/auth/"] },
         { card_id: "c3", role_id: "test", goal: "Add and run unit tests for extracted logic", card_type: "RUNTIME_VALIDATION",
@@ -458,6 +460,7 @@ describe("R2 — canonical conformance repair", () => {
           authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: false },
           verification: { required_commands: [], forbidden_commands: [] }, risk_level: "LOW", allowed_paths: ["src/adapter/"] },
         { card_id: "c2", role_id: "impl", goal: "Implement adapter", card_type: "IMPLEMENTATION",
+          consumes_digest: true,
           authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: true },
           verification: { required_commands: [], forbidden_commands: [] }, risk_level: "MEDIUM", allowed_paths: ["src/adapter/"] },
         { card_id: "c3", role_id: "test", goal: "Write and run scripted tests", card_type: "RUNTIME_VALIDATION",
@@ -508,6 +511,7 @@ describe("R2 — canonical conformance repair", () => {
           authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: false },
           verification: { required_commands: [], forbidden_commands: [] }, risk_level: "LOW", allowed_paths: ["src/"] },
         { card_id: "c2", role_id: "impl", goal: "Implement feature", card_type: "IMPLEMENTATION",
+          consumes_digest: true,
           authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: true },
           verification: { required_commands: [], forbidden_commands: [] }, risk_level: "MEDIUM", allowed_paths: ["src/"] },
         { card_id: "c3", role_id: "test", goal: "Test feature", card_type: "RUNTIME_VALIDATION",
@@ -560,6 +564,7 @@ describe("R2 — canonical conformance repair", () => {
           authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: false },
           verification: { required_commands: [], forbidden_commands: [] }, risk_level: "LOW", allowed_paths: ["src/utils/helper.js"] },
         { card_id: "c2", role_id: "fix", goal: "Fix", card_type: "IMPLEMENTATION",
+          consumes_digest: true,
           authority_required: { commit_allowed: false, push_allowed: false, mutation_allowed: true },
           verification: { required_commands: [], forbidden_commands: [] }, risk_level: "MEDIUM", allowed_paths: ["src/utils/helper.js"] },
         { card_id: "c3", role_id: "test", goal: "Verify", card_type: "IMPLEMENTATION",

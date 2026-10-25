@@ -238,6 +238,9 @@ export async function runEvolutionCycle(p) {
       return { ...hold(EVOLUTION_LOOP_HOLD.CANDIDATE_UNSUPPORTED, String(e?.message ?? e).slice(0, 300), { stage: "candidate" }), plan, trace };
     }
     candidate = derived.candidate;
+    if (derived.status === "EXISTING") {
+      return { loop_verdict: "CANDIDATE_EXISTS", candidate_id: candidate.candidate_id, reason: "already derived for this signature@baseline", plan, trace };
+    }
     isStrategy = true;
   } else if (plan?.status === "PLAN") {
     // A SOURCE_REPAIR plan from the producer (evidence-bound patch).

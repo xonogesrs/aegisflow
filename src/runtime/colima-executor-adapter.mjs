@@ -14,6 +14,7 @@
 // also records its own result on taskCard.runtime.lastExecutorResult so the
 // deterministic pipeline reviewer can judge stdout markers.
 
+import { mkdirSync } from "node:fs";
 import { assertAdapterRequest } from "../adapter/contract.mjs";
 import { runTask, assertMountAllowlist } from "./colima-runtime.mjs";
 
@@ -46,7 +47,7 @@ export function createColimaExecutorAdapter({ profile, repoPath, scratchRoot, re
     const runtime = request.taskCard?.runtime ?? {};
     const mode = runtime.mode ?? "readonly";
     const command = runtime.command ?? "echo 'no command provided'";
-    const network = runtime.network ?? "none";
+    const network = "none";
     const limits = runtime.limits ?? {};
 
     let roMounts;
@@ -66,17 +67,25 @@ export function createColimaExecutorAdapter({ profile, repoPath, scratchRoot, re
       rwMounts = [{ source: runtime.worktreePath, target: "/work" }];
     } else {
       roMounts = [{ source: repoPath, target: "/src" }];
+      const scratchDir = runtime.scratchPath ?? `${scratchRoot}/${request.executionId}/scratch`;
       rwMounts = [{
-        source: runtime.scratchPath ?? `${scratchRoot}/${request.executionId}/scratch`,
+        source: scratchDir,
         target: "/scratch",
       }];
       // graph wiring: optional extra read-write mounts（e.g. a shared results
       // dir for JOIN/verifier nodes）— still constrained to scratchRoot by the
       // allowlist gate below.
       for (const m of runtime.extraRwMounts ?? []) rwMounts.push(m);
+      // Fail closed on any mount outside the allowlist BEFORE creating directories on disk.
+      assertMountAllowlist({ roMounts, rwMounts, repoPaths: [repoPath], scratchRoot });
+      try {
+        mkdirSync(scratchDir, { recursive: true });
+      } catch {}
     }
-    // Fail closed on any mount outside the allowlist before a container starts.
-    assertMountAllowlist({ roMounts, rwMounts, repoPaths: [repoPath], scratchRoot });
+    if (mode === "writer") {
+      // Fail closed on any mount outside the allowlist before a container starts.
+      assertMountAllowlist({ roMounts, rwMounts, repoPaths: [repoPath], scratchRoot });
+    }
 
     const result = await runTask({
       profile,
@@ -85,7 +94,9 @@ export function createColimaExecutorAdapter({ profile, repoPath, scratchRoot, re
       command,
       roMounts,
       rwMounts,
-      network,
+      repoPaths: [repoPath],
+      scratchRoot,
+      network: "none",
       cpus: limits.cpus,
       memoryMiB: limits.memoryMiB,
       pidsLimit: limits.pidsLimit,

@@ -27,6 +27,7 @@
     {
       "card_id": "E10_impl",
       "role_id": "impl",
+      "consumes_digest": true,
       "goal": "Implement the feature based on audit results",
       "card_type": "IMPLEMENTATION",
       "authority_required": {

@@ -81,7 +81,8 @@
                 }
               },
               "hard_stop": { "type": "array", "items": { "type": "string" }, "default": [] },
-              "risk_level": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] }
+              "risk_level": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+              "consumes_digest": { "type": "boolean" }
             }
           }
         },
@@ -94,7 +95,8 @@
             "properties": {
               "from": { "type": "string", "minLength": 1 },
               "to": { "type": "string", "minLength": 1 },
-              "type": { "type": "string", "enum": ["depends_on"], "default": "depends_on" }
+              "type": { "type": "string", "enum": ["depends_on"], "default": "depends_on" },
+              "consumes_digest": { "type": "boolean" }
             }
           }
         },

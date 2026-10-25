@@ -21,7 +21,7 @@
 // Generation is monotonic and never reused; current generation is resolved by
 // the explicit review-job.json current pointer, never by timestamp scan.
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, openSync, fstatSync, closeSync, constants, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha256Text } from "../evidence/run-evidence-store.mjs";
@@ -364,6 +364,24 @@ export function updateReviewJob(cardId, {
   if (expectedGeneration !== null && job.generation !== expectedGeneration) {
     return { ok: false, code: "REVIEW_JOB_GENERATION_MISMATCH", expected: expectedGeneration, actual: job.generation, job, path: current.path };
   }
+
+  // Timestamp guard: artifactCreatedAt is RUNNING-only and immutable.
+  if (patch.artifactCreatedAt !== undefined) {
+    if (job.artifactCreatedAt) {
+      if (patch.artifactCreatedAt !== job.artifactCreatedAt) {
+        return { ok: false, code: "REVIEW_JOB_TIMESTAMP_IMMUTABLE", job, path: current.path };
+      }
+    } else {
+      const targetState = patch.state ?? job.state;
+      if (targetState !== "RUNNING") {
+        return { ok: false, code: "REVIEW_JOB_TIMESTAMP_RUNNING_ONLY", job, path: current.path };
+      }
+    }
+  }
+
+  if (patch.state === "RUNNING" && !job.artifactCreatedAt && !patch.artifactCreatedAt) {
+    patch.artifactCreatedAt = new Date().toISOString();
+  }
   const next = { ...job, ...patch, stateVersion: job.stateVersion + 1 };
   const errors = validateAgainstSchema(REVIEW_JOB_SCHEMA, next, "review-job");
   if (errors.length > 0) {
@@ -387,7 +405,11 @@ export function advanceState(cardId, from, to, opts = {}) {
   if (current.job.state !== from) {
     return { ok: false, code: "REVIEW_JOB_STATE_MISMATCH", expected: from, actual: current.job.state, job: current.job, path: current.path };
   }
-  return updateReviewJob(cardId, { expectedStateVersion: current.job.stateVersion, patch: { state: to } }, opts);
+  const patch = { state: to };
+  if (to === "RUNNING") {
+    patch.artifactCreatedAt = current.job.artifactCreatedAt ?? new Date().toISOString();
+  }
+  return updateReviewJob(cardId, { expectedStateVersion: current.job.stateVersion, patch }, opts);
 }
 
 /** Supersede the current job (T9). Terminal; never reusable. */
@@ -401,6 +423,27 @@ export function supersede(cardId, supersededBy, opts = {}) {
     expectedStateVersion: current.job.stateVersion,
     patch: { state: "SUPERSEDED", supersededBy },
   }, opts);
+}
+
+/**
+ * Read artifact bytes without following symlinks.
+ * Refuses symlinks using descriptor-based O_NOFOLLOW and assertNotSymlink.
+ */
+export function readArtifactNoFollow(path) {
+  assertNotSymlink(path);
+  const flags = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0);
+  const fd = openSync(path, flags);
+  try {
+    const st = fstatSync(fd);
+    if (st.isSymbolicLink()) {
+      const err = new Error(`SYMLINK_REFUSED: ${path}`);
+      err.code = "SYMLINK_REFUSED";
+      throw err;
+    }
+    return readFileSync(fd, "utf8");
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /**
@@ -442,10 +485,13 @@ export function acceptReviewJob({
 
   let fbytes, vbytes, verdictArtifact;
   try {
-    fbytes = readFileSync(findingsPath(cardId, job.generation, opts), "utf8");
-    vbytes = readFileSync(verdictPath(cardId, job.generation, opts), "utf8");
+    fbytes = readArtifactNoFollow(findingsPath(cardId, job.generation, opts));
+    vbytes = readArtifactNoFollow(verdictPath(cardId, job.generation, opts));
     verdictArtifact = JSON.parse(vbytes);
-  } catch {
+  } catch (e) {
+    if (e?.code === "HOLD / SYMLINK_REJECTED" || e?.code === "SYMLINK_REFUSED" || e?.code === "ELOOP") {
+      return { ok: false, code: "REVIEW_ARTIFACT_SYMLINK_REFUSED", job, path: current.path, error: e.message };
+    }
     return { ok: false, code: "REVIEW_ARTIFACT_MISSING", job, path: current.path };
   }
   // Recompute digests from persisted bytes — never trust bound fields alone.

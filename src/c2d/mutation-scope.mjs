@@ -200,37 +200,32 @@ export const RUNNER_EPHEMERAL_PATTERNS = Object.freeze([
  *  - it matches a forbidden pattern, or
  *  - it does not match any allowed pattern.
  *
- * Ephemeral runner metadata files (delivery.json, scratch artifacts) are
- * filtered from violations by default so autonomous agent wrappers do not
- * fail closed on runner-internal delivery artifacts.
+ * Ephemeral runner metadata files (delivery.json, scratch artifacts) can be
+ * permitted via allowEphemeral (default false). When allowed, non-forbidden
+ * ephemeral files do not trigger outside_allowlist violations, but are ALWAYS
+ * retained in the delta evidence and ALWAYS subject to forbidden_paths enforcement.
  *
- * Returns { ok, delta, violations } — delta always contains the filtered
+ * Returns { ok, delta, violations } — delta always contains the complete
  * changed-path inventory (tracked/untracked/deleted/renamed-as-add+delete)
- * regardless of outcome, so callers get full mutation evidence even on HOLD.
+ * regardless of outcome, so reviewers receive complete mutation evidence.
  */
-export function enforceScopeGate(repositoryRoot, baselineSnapshot, currentSnapshot, allowedPaths, forbiddenPaths, { allowEphemeral = true } = {}) {
+export function enforceScopeGate(repositoryRoot, baselineSnapshot, currentSnapshot, allowedPaths, forbiddenPaths, { allowEphemeral = false } = {}) {
   const delta = computeDelta(baselineSnapshot, currentSnapshot, repositoryRoot);
   const violations = [];
-  const activeDelta = [];
   for (const change of delta) {
     const canonical = canonicalRepositoryPath(change.path, repositoryRoot);
     if (!canonical) {
       violations.push({ ...change, reason: "path_escape_or_symlink_or_git" });
       continue;
     }
-    if (allowEphemeral && matchesAnyPattern(canonical, RUNNER_EPHEMERAL_PATTERNS)) {
-      continue;
-    }
-    activeDelta.push(change);
+    const ephemeral = allowEphemeral && matchesAnyPattern(canonical, RUNNER_EPHEMERAL_PATTERNS);
     if (matchesAnyPattern(canonical, forbiddenPaths || [])) {
       violations.push({ ...change, canonical_path: canonical, reason: "forbidden_path" });
-      continue;
-    }
-    if (!matchesAnyPattern(canonical, allowedPaths || [])) {
+    } else if (!ephemeral && !matchesAnyPattern(canonical, allowedPaths || [])) {
       violations.push({ ...change, canonical_path: canonical, reason: "outside_allowlist" });
     }
   }
-  return { ok: violations.length === 0, delta: activeDelta, violations };
+  return { ok: violations.length === 0, delta, violations };
 }
 
 export { computeDelta };

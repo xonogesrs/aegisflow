@@ -27,6 +27,7 @@
     {
       "card_id": "E3_impl",
       "role_id": "impl",
+      "consumes_digest": true,
       "goal": "Implement adapter following the defined contract",
       "card_type": "IMPLEMENTATION",
       "authority_required": {

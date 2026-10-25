@@ -291,6 +291,17 @@ export function validateAdmission(record) {
   return { ok: errors.length === 0, errors };
 }
 
+export function deepFreeze(obj) {
+  if (obj === null || typeof obj !== "object") return obj;
+  for (const key of Object.getOwnPropertyNames(obj)) {
+    const val = obj[key];
+    if (val !== null && typeof val === "object" && !Object.isFrozen(val)) {
+      deepFreeze(val);
+    }
+  }
+  return Object.freeze(obj);
+}
+
 /**
  * Freeze an admission record: derive + bind admission_id, strip
  * decision_time to the canonical input basis, return a deep-frozen record.
@@ -303,8 +314,9 @@ export function freezeAdmission(record) {
     throw err;
   }
   const { admission_id, decision_time, ...rest } = record;
-  const frozen = { ...rest, decision_time: decision_time ?? new Date().toISOString(), admission_id: deriveAdmissionId(rest) };
-  return Object.freeze(frozen);
+  const cloned = structuredClone(rest);
+  const frozen = { ...cloned, decision_time: decision_time ?? new Date().toISOString(), admission_id: deriveAdmissionId(rest) };
+  return deepFreeze(frozen);
 }
 
 /**

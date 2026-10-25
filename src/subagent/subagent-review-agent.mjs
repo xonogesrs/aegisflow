@@ -227,6 +227,8 @@ export function createReviewAgentReviewerAdapter({ profile, repoPath, scratchRoo
       command: buildReviewAgentCommand(),
       roMounts,
       rwMounts,
+      repoPaths: [repoPath, ...(worktreePath ? [worktreePath] : []), resultsDir],
+      scratchRoot,
       network: "none",
       cpus: runtime.limits?.cpus,
       memoryMiB: runtime.limits?.memoryMiB,
