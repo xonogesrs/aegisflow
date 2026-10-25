@@ -604,6 +604,19 @@ export function dockerBaseArgs(profile) {
   return ["--host", instanceSocket(profile)];
 }
 
+export const FORBIDDEN_EXTRA_DOCKER_ARGS = Object.freeze([
+  "--privileged",
+  "--cap-add",
+  "--network",
+  "--security-opt",
+  "--userns",
+  "--ipc",
+  "--pid",
+  "--volume",
+  "-v",
+  "--mount",
+]);
+
 /**
  * Run a task in an isolated container on the pinned instance.
  * Returns { status: completed|timed_out|aborted|error, exitCode, signal,
@@ -618,6 +631,8 @@ export function runTask({
   command,
   roMounts = [],
   rwMounts = [],
+  repoPaths = null,
+  scratchRoot = null,
   network = "none",
   cpus,
   memoryMiB,
@@ -627,6 +642,17 @@ export function runTask({
   extraArgs = [],
   env = {},
 }) {
+  if (scratchRoot) {
+    assertMountAllowlist({ roMounts, rwMounts, repoPaths: repoPaths ?? [], scratchRoot });
+  }
+  for (const arg of extraArgs) {
+    const lower = String(arg).toLowerCase();
+    for (const forbidden of FORBIDDEN_EXTRA_DOCKER_ARGS) {
+      if (lower === forbidden || lower.startsWith(`${forbidden}=`)) {
+        throw new ColimaRuntimeError(`Forbidden docker argument in extraArgs: ${arg}`);
+      }
+    }
+  }
   return new Promise((resolve) => {
     const execId = executionId ?? taskId;
     const containerName = `autoloop-${String(execId).replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 40)}-${taskId}`;

@@ -14,7 +14,7 @@
 // (same-bytes replay = idempotent; different bytes = REJECT); atomic
 // replace-under-lock + monotonic stateVersion CAS for review-job.json.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { relative } from "node:path";
 import { sha256Text } from "../evidence/run-evidence-store.mjs";
 import { validateAgainstSchema } from "./lifecycle-authorization.mjs";
@@ -69,7 +69,7 @@ function isTerminalHeld(state) {
 }
 
 /** Build the findings object from reviewer content + job bindings. */
-export function buildFindingsObject({ job, reviewerIdentity, findings, summary }) {
+export function buildFindingsObject({ job, reviewerIdentity, findings, summary, createdAt }) {
   return {
     schemaVersion: REVIEW_FINDINGS_SCHEMA_ID,
     jobId: job.jobId,
@@ -80,12 +80,12 @@ export function buildFindingsObject({ job, reviewerIdentity, findings, summary }
     reviewerIdentity,
     findings: Array.isArray(findings) ? findings : [],
     summary: summary ?? "",
-    createdAt: new Date().toISOString(),
+    createdAt: createdAt ?? job.updatedAt ?? job.createdAt ?? new Date().toISOString(),
   };
 }
 
 /** Build the verdict object from reviewer judgment + job bindings. */
-export function buildVerdictObject({ job, reviewerIdentity, findingsDigest, verdict, summary, recommendedNextAction }) {
+export function buildVerdictObject({ job, reviewerIdentity, findingsDigest, verdict, summary, recommendedNextAction, createdAt }) {
   return {
     schemaVersion: REVIEW_VERDICT_SCHEMA_ID,
     jobId: job.jobId,
@@ -98,7 +98,7 @@ export function buildVerdictObject({ job, reviewerIdentity, findingsDigest, verd
     verdict,
     summary: summary ?? "",
     recommendedNextAction: recommendedNextAction ?? "",
-    createdAt: new Date().toISOString(),
+    createdAt: createdAt ?? job.updatedAt ?? job.createdAt ?? new Date().toISOString(),
   };
 }
 
@@ -107,7 +107,7 @@ export function buildVerdictObject({ job, reviewerIdentity, findingsDigest, verd
  * Session-only findings never satisfy this: the artifact must exist at the
  * canonical path, validate, and its digest be recomputed from persisted bytes.
  */
-export function persistFindings({ cardId, reviewerIdentity, findings = [], summary = "" }, opts = {}) {
+export function persistFindings({ cardId, reviewerIdentity, findings = [], summary = "", createdAt }, opts = {}) {
   const current = readReviewJob(cardId, opts);
   if (!current.ok) return current;
   const job = current.job;
@@ -125,7 +125,20 @@ export function persistFindings({ cardId, reviewerIdentity, findings = [], summa
     return { ok: false, code: "REVIEW_JOB_STATE_MISMATCH", expected: "RUNNING", actual: job.state, job, path: current.path };
   }
 
-  const obj = buildFindingsObject({ job, reviewerIdentity, findings, summary });
+  const target = findingsPath(cardId, job.generation, opts);
+  let effectiveCreatedAt = createdAt ?? opts.createdAt ?? job.updatedAt ?? job.createdAt;
+  if (!effectiveCreatedAt && existsSync(target)) {
+    try {
+      const existing = JSON.parse(readFileSync(target, "utf8"));
+      if (typeof existing?.createdAt === "string") {
+        effectiveCreatedAt = existing.createdAt;
+      }
+    } catch {
+      // ignore parse failure
+    }
+  }
+
+  const obj = buildFindingsObject({ job, reviewerIdentity, findings, summary, createdAt: effectiveCreatedAt });
   const errors = validateAgainstSchema(REVIEW_FINDINGS_SCHEMA, obj, "review-findings");
   if (errors.length > 0) {
     return { ok: false, code: "REVIEW_FINDINGS_SCHEMA_INVALID", errors, job, path: current.path };
@@ -133,7 +146,6 @@ export function persistFindings({ cardId, reviewerIdentity, findings = [], summa
   const serialized = serializeArtifact(obj);
   const digest = sha256Text(serialized);
 
-  const target = findingsPath(cardId, job.generation, opts);
   const wrote = writeImmutableExclusive(target, serialized);
   if (!wrote.ok) return { ...wrote, job, path: current.path };
 
@@ -151,7 +163,7 @@ export function persistFindings({ cardId, reviewerIdentity, findings = [], summa
  * mechanical. A verdict cannot be authoritative without the exact findings
  * binding (findingsDigest) and without the persisted findings digest matching.
  */
-export function persistVerdict({ cardId, reviewerIdentity, verdict, summary = "", recommendedNextAction = "" }, opts = {}) {
+export function persistVerdict({ cardId, reviewerIdentity, verdict, summary = "", recommendedNextAction = "", createdAt }, opts = {}) {
   const current = readReviewJob(cardId, opts);
   if (!current.ok) return current;
   const job = current.job;
@@ -184,7 +196,20 @@ export function persistVerdict({ cardId, reviewerIdentity, verdict, summary = ""
     return { ok: false, code: "REVIEW_FINDINGS_DIGEST_MISMATCH", bound: job.findingsDigest, recomputed: recomputedFindingsDigest, job, path: current.path };
   }
 
-  const obj = buildVerdictObject({ job, reviewerIdentity, findingsDigest: job.findingsDigest, verdict, summary, recommendedNextAction });
+  const target = verdictPath(cardId, job.generation, opts);
+  let effectiveCreatedAt = createdAt ?? opts.createdAt ?? job.updatedAt ?? job.createdAt;
+  if (!effectiveCreatedAt && existsSync(target)) {
+    try {
+      const existing = JSON.parse(readFileSync(target, "utf8"));
+      if (typeof existing?.createdAt === "string") {
+        effectiveCreatedAt = existing.createdAt;
+      }
+    } catch {
+      // ignore parse failure
+    }
+  }
+
+  const obj = buildVerdictObject({ job, reviewerIdentity, findingsDigest: job.findingsDigest, verdict, summary, recommendedNextAction, createdAt: effectiveCreatedAt });
   const errors = validateAgainstSchema(REVIEW_VERDICT_SCHEMA, obj, "review-verdict");
   if (errors.length > 0) {
     return { ok: false, code: "REVIEW_VERDICT_SCHEMA_INVALID", errors, job, path: current.path };
@@ -192,7 +217,6 @@ export function persistVerdict({ cardId, reviewerIdentity, verdict, summary = ""
   const serialized = serializeArtifact(obj);
   const digest = sha256Text(serialized);
 
-  const target = verdictPath(cardId, job.generation, opts);
   const wrote = writeImmutableExclusive(target, serialized);
   if (!wrote.ok) return { ...wrote, job, path: current.path };
 

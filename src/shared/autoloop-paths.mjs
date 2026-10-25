@@ -35,10 +35,9 @@
 // handed, so it is safe to import from the Colima profile lock (which must not
 // depend on colima-runtime.mjs) and from tests.
 
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, statSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
-import { realpathSync } from "node:fs";
 
 /** Prefix of the pre-rename configuration variables. */
 export const LEGACY_ENV_PREFIX = "AUTOLOOP_";
@@ -425,4 +424,43 @@ export function resolveExecutable(name, {
 
 function defaultExists(p) {
   return existsSync(p);
+}
+
+/**
+ * TTL cleaner for the scratch workspace. Purges files/subdirectories inside
+ * scratchRoot older than maxAgeMs (default 24h) to prevent unbounded accumulation
+ * of fixture/probe artifacts. Fails open (catches per-entry errors, does not throw).
+ */
+export function purgeScratchTtl({
+  scratchRoot = null,
+  maxAgeMs = 24 * 60 * 60 * 1000,
+  env = process.env,
+  home = homedir(),
+} = {}) {
+  const root = scratchRoot ?? resolveScratchRoot({ env, home });
+  if (!existsSync(root)) return { purged: 0, retained: 0, errors: 0 };
+  const now = Date.now();
+  let purged = 0;
+  let retained = 0;
+  let errors = 0;
+  try {
+    const entries = readdirSync(root);
+    for (const name of entries) {
+      const fullPath = join(root, name);
+      try {
+        const s = statSync(fullPath);
+        if (now - s.mtimeMs > maxAgeMs) {
+          rmSync(fullPath, { recursive: true, force: true });
+          purged++;
+        } else {
+          retained++;
+        }
+      } catch {
+        errors++;
+      }
+    }
+  } catch {
+    errors++;
+  }
+  return { purged, retained, errors };
 }

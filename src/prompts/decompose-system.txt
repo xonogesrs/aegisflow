@@ -47,6 +47,17 @@ Use when the parent task can be decomposed into 1-7 child cards:
 }
 ```
 
+## DECOMPOSITION PRINCIPLES: GRANULARITY OVER ARBITRARY SLICING
+
+1. **Avoid Over-Decomposition**: Do NOT chop a task into tiny pieces merely to make them small. If a task is a single bug fix, a coherent feature within tightly coupled files, or primarily confined to 1-2 source files, slicing it into multiple child cards creates severe context window bloat (each child card redundantly re-reads repo context and history). Use `DECOMPOSITION_NOT_BENEFICIAL`.
+2. **Decompose by Functional Responsibility, Never Arbitrary Code Slices**:
+   - Good decomposition (Orthogonal roles):
+     - Role 1 (`READ_ONLY_AUDIT`): Explores code and produces a concise patch specification/contract.
+     - Role 2 (`IMPLEMENTATION`): Applies the focused patch against the contract without re-exploring the whole repo.
+     - Role 3 (`RUNTIME_VALIDATION`): Runs tests to verify regression safety.
+   - Bad decomposition: Chopping by lines of code or micro-steps (e.g. Card 1 edits function A, Card 2 edits function B in the same file).
+3. **Contract-Bound Child Goals**: Each child card goal must be self-contained and contract-driven so child agents do not re-explore or re-read redundant repo context.
+
 ## INVARIABLE RULES
 
 1. execution_policy MUST be exactly: {"executor":"INHERIT_PARENT","reviewer":"EXTERNAL_GPT","multi_model_orchestration":false}

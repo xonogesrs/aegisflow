@@ -75,9 +75,11 @@ export function createPayloadGuard(freeze = TRANSPORT_FREEZE) {
     if (payload.reasoning_effort !== freeze.reasoningEffort) {
       throw new TransportError("reasoning_effort", `reasoning_effort=${payload.reasoning_effort} want=${freeze.reasoningEffort}`);
     }
-    if (payload[freeze.maxTokenField] !== freeze.maxTokens) {
+    const tokens = payload[freeze.maxTokenField] ?? payload.max_tokens ?? payload.max_completion_tokens;
+    if (tokens !== freeze.maxTokens) {
       throw new TransportError("max_tokens", `${freeze.maxTokenField}=${payload[freeze.maxTokenField]} want=${freeze.maxTokens}`);
     }
+    payload[freeze.maxTokenField] = tokens;
     return payload;
   };
 }

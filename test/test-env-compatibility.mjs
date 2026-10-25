@@ -24,7 +24,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { homedir } from "node:os";
+import { existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import {
@@ -44,6 +45,7 @@ import {
   resolveReviewSurface,
   resolveScratchRoot,
   resolveTelemetryRoot,
+  purgeScratchTtl,
   REVIEW_ARCHIVE_ENV,
   REVIEW_SURFACE_ENV,
 } from "../src/shared/autoloop-paths.mjs";
@@ -306,5 +308,26 @@ test("T17 a spawned CLI honors legacy-only, brand-only and brand-wins precedence
   } finally {
     rmSync(legacyRoot, { recursive: true, force: true });
     rmSync(brandRoot, { recursive: true, force: true });
+  }
+});
+
+test("T18 purgeScratchTtl removes expired scratch entries while retaining fresh ones", () => {
+  const testRoot = mkdtempSync(join(tmpdir(), "autoloop-scratch-test-"));
+  try {
+    const expiredFile = join(testRoot, "old-fixture.txt");
+    const freshFile = join(testRoot, "new-fixture.txt");
+    writeFileSync(expiredFile, "old");
+    writeFileSync(freshFile, "new");
+    // Manually backdate expiredFile to 48 hours ago
+    const twoDaysAgo = new Date(Date.now() - 48 * 3600 * 1000);
+    utimesSync(expiredFile, twoDaysAgo, twoDaysAgo);
+
+    const result = purgeScratchTtl({ scratchRoot: testRoot, maxAgeMs: 24 * 3600 * 1000 });
+    assert.equal(result.purged, 1, "should purge exactly 1 expired entry");
+    assert.equal(result.retained, 1, "should retain 1 fresh entry");
+    assert.equal(existsSync(expiredFile), false, "expired entry must be deleted");
+    assert.equal(existsSync(freshFile), true, "fresh entry must be preserved");
+  } finally {
+    rmSync(testRoot, { recursive: true, force: true });
   }
 });

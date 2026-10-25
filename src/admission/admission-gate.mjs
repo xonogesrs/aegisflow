@@ -27,6 +27,7 @@
 // a compatibility surface only.
 
 import { validateAdmission, assertAdmissionFrozen, deriveAdmissionId } from "./admission-record.mjs";
+import { isRetrievalAuthorized } from "./policy-projection.mjs";
 import { createBudgetEnforcement } from "../budget/enforcement.mjs";
 import { attachBudgetResult } from "../budget/graph-wiring.mjs";
 import { digestOf } from "../canonical-digest.mjs";
@@ -362,6 +363,32 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
   if (graph === "durable" || graph === "subagent") {
     canonicalRolloverExecutor = await deriveCanonicalRolloverExecutor({ admission });
   }
+
+  // ── CBM-2/CBM-4: memory retrieval provider & writeback store injection ──
+  // If authorized by the frozen admission and not explicitly supplied:
+  //   - retrieval: createGraphMemoryProvider provides governed read access.
+  //   - writeback: LocalMemoryStore provides governed post-final record storage.
+  let resolvedMemory = runnerOpts.memory;
+  if (!resolvedMemory && isRetrievalAuthorized(admission)) {
+    const { createGraphMemoryProvider } = await import("../memory/graph-context.mjs");
+    resolvedMemory = {
+      provider: createGraphMemoryProvider({
+        stateRoot: runnerOpts.stateRoot ?? null,
+        log: runnerOpts.log ?? { info() {}, warn() {}, error() {} },
+      }),
+    };
+  }
+  let resolvedWriteback = runnerOpts.writeback;
+  if (!resolvedWriteback && admission?.memory_policy?.writeback_allowed === true) {
+    const { LocalMemoryStore } = await import("../memory/local-store.mjs");
+    resolvedWriteback = {
+      store: new LocalMemoryStore({
+        stateRoot: runnerOpts.stateRoot ?? null,
+        log: runnerOpts.log ?? { info() {}, warn() {}, error() {} },
+      }),
+    };
+  }
+
   const result = await fn({
     ...runnerOpts,
     admission,
@@ -371,6 +398,8 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
     // cannot re-enable a disabled run.
     telemetry: productionTelemetry ?? false,
     ...(canonicalRolloverExecutor ? { rolloverRequestExecutor: canonicalRolloverExecutor } : {}),
+    ...(resolvedMemory ? { memory: resolvedMemory } : {}),
+    ...(resolvedWriteback ? { writeback: resolvedWriteback } : {}),
   });
   // R-06: attach the telemetry disposition to the envelope (observability
   // only; the disposition never rewrites any other field).

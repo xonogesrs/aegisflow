@@ -19,6 +19,8 @@ import {
   roundTripProbe,
   assertColimaHome,
   ensureInstance,
+  runTask,
+  FORBIDDEN_EXTRA_DOCKER_ARGS,
 } from "../src/runtime/colima-runtime.mjs";
 import { validateAdapterResult, validateAdapterRequest } from "../src/adapter/contract.mjs";
 
@@ -154,7 +156,13 @@ test("gate passes with a configured mount and matching volume identity", () => {
 test("instanceSocket requires the runtime home to be configured", () => {
   // Without COLIMA_HOME the socket cannot be resolved — fail closed, never a
   // fallback to ~/.colima.
-  assert.throws(() => instanceSocket("autoloop-w1"), (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_HOME_NOT_CANONICAL"));
+  const prev = process.env.COLIMA_HOME;
+  delete process.env.COLIMA_HOME;
+  try {
+    assert.throws(() => instanceSocket("autoloop-w1"), (e) => e instanceof ColimaRuntimeError && e.message.includes("COLIMA_HOME_NOT_CANONICAL"));
+  } finally {
+    if (prev !== undefined) process.env.COLIMA_HOME = prev;
+  }
 });
 
 test("ensureInstance runs the storage gate before any machine action", () => {
@@ -170,6 +178,26 @@ test("test image is the frozen immutable alpine digest", () => {
 
 test("card label is stable for stale cleanup scoping", () => {
   assert.equal(CARD_LABEL, "autoloop.card=colima-autoloop-real-integration");
+});
+
+test("runTask rejects forbidden extraArgs (--privileged, --cap-add, --volume, etc.)", () => {
+  const forbiddenCases = [
+    ["--privileged"],
+    ["--cap-add", "SYS_ADMIN"],
+    ["--cap-add=ALL"],
+    ["--network", "host"],
+    ["--security-opt", "apparmor=unconfined"],
+    ["-v", "/etc:/host_etc"],
+    ["--volume=/etc:/host_etc"],
+    ["--mount", "type=bind,src=/,dst=/host"],
+  ];
+  for (const extraArgs of forbiddenCases) {
+    assert.throws(
+      () => runTask({ profile: "autoloop-w1", taskId: "t1", command: "true", extraArgs }),
+      (e) => e instanceof ColimaRuntimeError && e.message.includes("Forbidden docker argument in extraArgs"),
+      `Should reject extraArgs: ${JSON.stringify(extraArgs)}`,
+    );
+  }
 });
 
 test("assertMountAllowlist accepts only repo ro + scratch rw", () => {

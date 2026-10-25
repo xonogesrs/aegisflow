@@ -150,6 +150,34 @@ test("NEG19: production entry with a VALID frozen admission dispatches with the 
   assert.equal(calls[0].admission, rec, "the frozen admission is forwarded unchanged");
 });
 
+test("CBM-2/CBM-4: memory provider and writeback store injected when authorized by admission", async () => {
+  const calls = [];
+  // Build a STANDARD profile admission (where retrieval_allowed is true)
+  const c = classify({
+    dimensionScores: {
+      ...FULL_EVIDENCE,
+      affected_files: { score: 2, reasons: ["two files"] },
+      dependency_depth: { score: 1, reasons: ["one dep"] },
+    },
+    riskSignals: [],
+  });
+  const unadmitted = buildAdmissionRecord({ taskId: "TEST-GATE-MEM", classification: c, mutationScope: ["src/"] });
+  // Manually enable both retrieval and writeback in the record before freezing
+  unadmitted.memory_policy = {
+    retrieval_allowed: true,
+    writeback_allowed: true,
+    authority_required: false,
+  };
+  const rec = freezeAdmission(unadmitted);
+  const r = await runAdmittedGraph({ admission: rec, runner: spyRunner(calls), ir: { phases: [] } });
+  assert.equal(r.final, "PASS");
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].memory, "memory object must be injected");
+  assert.equal(typeof calls[0].memory.provider.retrieveGraphMemory, "function");
+  assert.ok(calls[0].writeback, "writeback object must be injected");
+  assert.equal(typeof calls[0].writeback.store.query, "function");
+});
+
 test("NEG19: gate without graph or runner -> HOLD / ADMISSION_INVALID (no dispatch target)", async () => {
   const r = await runAdmittedGraph({ admission: validAdmission(), graph: null, runner: null });
   assert.equal(r.final, "HOLD");

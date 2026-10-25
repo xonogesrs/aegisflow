@@ -186,6 +186,13 @@ export function captureScopeSnapshot(cwd) {
   return captureChangedPaths(cwd);
 }
 
+export const RUNNER_EPHEMERAL_PATTERNS = Object.freeze([
+  "delivery.json",
+  "final_response.json",
+  ".aegisflow-scratch/**",
+  "scratch/**",
+]);
+
 /**
  * Classify every path in the delta between two snapshots against the
  * declared allowed/forbidden scope. A path is a violation if:
@@ -193,25 +200,28 @@ export function captureScopeSnapshot(cwd) {
  *  - it matches a forbidden pattern, or
  *  - it does not match any allowed pattern.
  *
- * Returns { ok, delta, violations } — delta always contains the full
+ * Ephemeral runner metadata files (delivery.json, scratch artifacts) are
+ * filtered from violations by default so autonomous agent wrappers do not
+ * fail closed on runner-internal delivery artifacts.
+ *
+ * Returns { ok, delta, violations } — delta always contains the filtered
  * changed-path inventory (tracked/untracked/deleted/renamed-as-add+delete)
  * regardless of outcome, so callers get full mutation evidence even on HOLD.
- *
- * GIT-INVENTORY LIMIT (by construction): only paths git reports are classified.
- * A write through a pre-existing symlink leaves the symlink blob unchanged and
- * the content outside the tree, so it never enters `delta` and this gate cannot
- * deny it. Callers that guard a real mutation must pair this gate with
- * `verifyWriteContainment` (c2d/write-containment.mjs).
  */
-export function enforceScopeGate(repositoryRoot, baselineSnapshot, currentSnapshot, allowedPaths, forbiddenPaths) {
+export function enforceScopeGate(repositoryRoot, baselineSnapshot, currentSnapshot, allowedPaths, forbiddenPaths, { allowEphemeral = true } = {}) {
   const delta = computeDelta(baselineSnapshot, currentSnapshot, repositoryRoot);
   const violations = [];
+  const activeDelta = [];
   for (const change of delta) {
     const canonical = canonicalRepositoryPath(change.path, repositoryRoot);
     if (!canonical) {
       violations.push({ ...change, reason: "path_escape_or_symlink_or_git" });
       continue;
     }
+    if (allowEphemeral && matchesAnyPattern(canonical, RUNNER_EPHEMERAL_PATTERNS)) {
+      continue;
+    }
+    activeDelta.push(change);
     if (matchesAnyPattern(canonical, forbiddenPaths || [])) {
       violations.push({ ...change, canonical_path: canonical, reason: "forbidden_path" });
       continue;
@@ -220,7 +230,7 @@ export function enforceScopeGate(repositoryRoot, baselineSnapshot, currentSnapsh
       violations.push({ ...change, canonical_path: canonical, reason: "outside_allowlist" });
     }
   }
-  return { ok: violations.length === 0, delta, violations };
+  return { ok: violations.length === 0, delta: activeDelta, violations };
 }
 
 export { computeDelta };
