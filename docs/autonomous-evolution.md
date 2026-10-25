@@ -151,6 +151,28 @@ node scripts/evolution-kill-switch.mjs --store <dir> --resume
 The declaration is read through `AEGISFLOW_EVOLUTION_DEPLOYMENT_CONFIG`. Without
 a resolvable declaration, evolution refuses to run.
 
+### Attention digest (what needs a human, without going looking)
+
+Autonomy means most work finishes silently, so the things that *do* need a
+human accumulate quietly. `scripts/aegisflow-status.mjs` is a read-only digest
+of them:
+
+```bash
+node scripts/aegisflow-status.mjs            # banner, or a one-line all-clear
+node scripts/aegisflow-status.mjs --check    # banner ONLY when there is an alert (hook/skill preamble)
+node scripts/aegisflow-status.mjs --detail   # every item, incl. informational
+node scripts/aegisflow-status.mjs --ack      # mark current alerts as seen
+```
+
+Items become alerts by accumulation, not on first sight: MEDIUM candidates
+awaiting promotion alert at 3 pending or 24 h old; an interrupted run alerts
+after 10 minutes without progress. A tripped circuit breaker, an expired
+policy, a canary rollback and a corrupt checkpoint alert immediately.
+LOW autonomous promotions are informational only. `--ack` records "seen" for
+the current items in `attention-state.json`; a changed situation (for example a
+new pending candidate) raises a fresh alert. The digest never promotes,
+resumes or retries anything.
+
 ### What the kill switch does and does not do
 
 `AUTO_EVOLUTION = ENABLED | SUSPENDED`.
