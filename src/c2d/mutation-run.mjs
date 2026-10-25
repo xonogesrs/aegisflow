@@ -74,8 +74,10 @@ export function runBoundedCommand(cmd, args, opts = {}) {
         try { child.kill("SIGKILL"); } catch { /* best-effort */ }
       }
     }, timeoutMs);
-    child.stdout.on("data", (d) => { stdout += d; });
-    child.stderr.on("data", (d) => { stderr += d; });
+    // Only the first 20000 chars are reported; keep draining the pipe but stop
+    // accumulating so a chatty child cannot exhaust memory before the timeout.
+    child.stdout.on("data", (d) => { if (stdout.length < 20000) stdout += d; });
+    child.stderr.on("data", (d) => { if (stderr.length < 20000) stderr += d; });
     child.on("error", (err) => {
       if (settled) return;
       settled = true;

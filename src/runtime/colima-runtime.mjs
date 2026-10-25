@@ -846,8 +846,11 @@ export function runTask({
     let settled = false;
     const startedAt = Date.now();
 
-    child.stdout.on("data", (d) => (stdout += d));
-    child.stderr.on("data", (d) => (stderr += d));
+    // Bound captured output: keep draining the pipe (the container must not
+    // block on a full pipe) but stop accumulating past the cap.
+    const MAX_TASK_OUTPUT_CHARS = 8 * 1024 * 1024;
+    child.stdout.on("data", (d) => { if (stdout.length < MAX_TASK_OUTPUT_CHARS) stdout += d; });
+    child.stderr.on("data", (d) => { if (stderr.length < MAX_TASK_OUTPUT_CHARS) stderr += d; });
 
     const finish = (result) => {
       if (settled) return;

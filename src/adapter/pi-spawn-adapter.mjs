@@ -34,6 +34,9 @@ export const PI_SPAWN_OPERATIONAL_ENV_KEYS = Object.freeze([
   "PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "TERM",
 ]);
 
+/** Upper bound for one buffered rpc stdout line（chars）. */
+const MAX_RPC_LINE_CHARS = 16 * 1024 * 1024;
+
 const FORBIDDEN_ARGS = new Set([
   "--approve", "-a", "--continue", "-c", "--resume", "-r",
   "--session", "--fork",
@@ -236,6 +239,7 @@ export async function spawnSuccessorSession(request) {
       finish({ status: "timed_out", error: `quarantine_session_not_settled_within_${spawnTimeoutMs()}ms` });
     }, spawnTimeoutMs());
     child.stdout.on("data", (d) => {
+      if (settledDone) return;
       buf += d.toString("utf8");
       let idx;
       while ((idx = buf.indexOf("\n")) >= 0) {
@@ -251,6 +255,12 @@ export async function spawnSuccessorSession(request) {
             if (texts.length > 0) lastAssistantText = texts.join("");
           }
         } catch { /* non-JSON line */ }
+      }
+      // A single newline-less line must not grow without bound: fail closed.
+      if (buf.length > MAX_RPC_LINE_CHARS) {
+        buf = "";
+        terminateProcessGroup(child, { graceMs: 0, escalation: 0 });
+        finish({ status: "error", error: "rpc_line_too_large" });
       }
     });
     child.stderr.on("data", (d) => { stderrTail = (stderrTail + d.toString("utf8")).slice(-400); });
