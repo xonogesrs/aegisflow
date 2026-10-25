@@ -366,14 +366,14 @@ export function updateReviewJob(cardId, {
   }
 
   // Timestamp guard: artifactCreatedAt is RUNNING-only and immutable.
-  if (patch.artifactCreatedAt !== undefined) {
+  if ("artifactCreatedAt" in patch) {
     if (job.artifactCreatedAt) {
       if (patch.artifactCreatedAt !== job.artifactCreatedAt) {
         return { ok: false, code: "REVIEW_JOB_TIMESTAMP_IMMUTABLE", job, path: current.path };
       }
     } else {
       const targetState = patch.state ?? job.state;
-      if (targetState !== "RUNNING") {
+      if (targetState !== "RUNNING" || !patch.artifactCreatedAt) {
         return { ok: false, code: "REVIEW_JOB_TIMESTAMP_RUNNING_ONLY", job, path: current.path };
       }
     }

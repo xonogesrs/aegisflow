@@ -71,8 +71,8 @@ function isTerminalHeld(state) {
 }
 
 /** Build the findings object from reviewer content + job bindings. */
-export function buildFindingsObject({ job, reviewerIdentity, findings, summary, createdAt }) {
-  const effectiveCreatedAt = createdAt ?? job?.artifactCreatedAt;
+export function buildFindingsObject({ job, reviewerIdentity, findings, summary }) {
+  const effectiveCreatedAt = job?.artifactCreatedAt;
   if (!effectiveCreatedAt) {
     throw new Error("REVIEW_JOB_ARTIFACT_TIMESTAMP_MISSING: artifactCreatedAt required in job");
   }
@@ -91,7 +91,11 @@ export function buildFindingsObject({ job, reviewerIdentity, findings, summary, 
 }
 
 /** Build the verdict object from reviewer judgment + job bindings. */
-export function buildVerdictObject({ job, reviewerIdentity, findingsDigest, verdict, summary, recommendedNextAction, createdAt }) {
+export function buildVerdictObject({ job, reviewerIdentity, findingsDigest, verdict, summary, recommendedNextAction }) {
+  const effectiveCreatedAt = job?.artifactCreatedAt;
+  if (!effectiveCreatedAt) {
+    throw new Error("REVIEW_JOB_ARTIFACT_TIMESTAMP_MISSING: artifactCreatedAt required in job");
+  }
   return {
     schemaVersion: REVIEW_VERDICT_SCHEMA_ID,
     jobId: job.jobId,
@@ -104,7 +108,7 @@ export function buildVerdictObject({ job, reviewerIdentity, findingsDigest, verd
     verdict,
     summary: summary ?? "",
     recommendedNextAction: recommendedNextAction ?? "",
-    createdAt: createdAt ?? job?.artifactCreatedAt,
+    createdAt: effectiveCreatedAt,
   };
 }
 
@@ -113,7 +117,7 @@ export function buildVerdictObject({ job, reviewerIdentity, findingsDigest, verd
  * Session-only findings never satisfy this: the artifact must exist at the
  * canonical path, validate, and its digest be recomputed from persisted bytes.
  */
-export function persistFindings({ cardId, reviewerIdentity, findings = [], summary = "", createdAt }, opts = {}) {
+export function persistFindings({ cardId, reviewerIdentity, findings = [], summary = "" }, opts = {}) {
   const current = readReviewJob(cardId, opts);
   if (!current.ok) return current;
   const job = current.job;
@@ -121,12 +125,12 @@ export function persistFindings({ cardId, reviewerIdentity, findings = [], summa
     return { ok: false, code: "REVIEW_JOB_STALE_OR_HELD", state: job.state, job, path: current.path };
   }
 
-  const effectiveCreatedAt = createdAt ?? job.artifactCreatedAt;
+  const effectiveCreatedAt = job.artifactCreatedAt;
   if (!effectiveCreatedAt) {
     return { ok: false, code: "REVIEW_JOB_ARTIFACT_TIMESTAMP_MISSING", job, path: current.path };
   }
 
-  const obj = buildFindingsObject({ job, reviewerIdentity, findings, summary, createdAt: effectiveCreatedAt });
+  const obj = buildFindingsObject({ job, reviewerIdentity, findings, summary });
   const errors = validateAgainstSchema(REVIEW_FINDINGS_SCHEMA, obj, "review-findings");
   if (errors.length > 0) {
     return { ok: false, code: "REVIEW_FINDINGS_SCHEMA_INVALID", errors, job, path: current.path };
@@ -176,7 +180,7 @@ export function persistFindings({ cardId, reviewerIdentity, findings = [], summa
  * mechanical. A verdict cannot be authoritative without the exact findings
  * binding (findingsDigest) and without the persisted findings digest matching.
  */
-export function persistVerdict({ cardId, reviewerIdentity, verdict, summary = "", recommendedNextAction = "", createdAt }, opts = {}) {
+export function persistVerdict({ cardId, reviewerIdentity, verdict, summary = "", recommendedNextAction = "" }, opts = {}) {
   const current = readReviewJob(cardId, opts);
   if (!current.ok) return current;
   const job = current.job;
@@ -184,14 +188,14 @@ export function persistVerdict({ cardId, reviewerIdentity, verdict, summary = ""
     return { ok: false, code: "REVIEW_JOB_STALE_OR_HELD", state: job.state, job, path: current.path };
   }
 
-  const effectiveCreatedAt = createdAt ?? job.artifactCreatedAt;
+  const effectiveCreatedAt = job.artifactCreatedAt;
   const target = verdictPath(cardId, job.generation, opts);
 
   if (job.state === "VERDICT_PRODUCED" || job.state === "PERSISTED" || job.state === "STAGED") {
     if (!job.verdictDigest) {
       return { ok: false, code: "REVIEW_JOB_VERDICT_DIGEST_UNBOUND", job, path: current.path };
     }
-    const obj = buildVerdictObject({ job, reviewerIdentity, findingsDigest: job.findingsDigest, verdict, summary, recommendedNextAction, createdAt: effectiveCreatedAt });
+    const obj = buildVerdictObject({ job, reviewerIdentity, findingsDigest: job.findingsDigest, verdict, summary, recommendedNextAction });
     const errors = validateAgainstSchema(REVIEW_VERDICT_SCHEMA, obj, "review-verdict");
     if (errors.length > 0) {
       return { ok: false, code: "REVIEW_VERDICT_SCHEMA_INVALID", errors, job, path: current.path };
@@ -233,7 +237,7 @@ export function persistVerdict({ cardId, reviewerIdentity, verdict, summary = ""
     return { ok: false, code: "REVIEW_JOB_ARTIFACT_TIMESTAMP_MISSING", job, path: current.path };
   }
 
-  const obj = buildVerdictObject({ job, reviewerIdentity, findingsDigest: job.findingsDigest, verdict, summary, recommendedNextAction, createdAt: effectiveCreatedAt });
+  const obj = buildVerdictObject({ job, reviewerIdentity, findingsDigest: job.findingsDigest, verdict, summary, recommendedNextAction });
   const errors = validateAgainstSchema(REVIEW_VERDICT_SCHEMA, obj, "review-verdict");
   if (errors.length > 0) {
     return { ok: false, code: "REVIEW_VERDICT_SCHEMA_INVALID", errors, job, path: current.path };

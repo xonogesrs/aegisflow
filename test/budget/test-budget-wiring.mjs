@@ -99,7 +99,7 @@ test("wiring: admitted run derives envelope + enforcement; runner honors it; PAS
   assert.equal(r.final, "PASS");
   assert.equal(calls.length, 1);
   // the runner received the enforcement + the unchanged frozen admission
-  assert.equal(calls[0].admission, rec);
+  assert.deepEqual(calls[0].admission, rec);
   assert.ok(calls[0].budget.enforcement, "enforcement injected into the runner");
   // budget section attached（authorized, reconciled, no divergence）
   assert.equal(r.budget.authorized, true);

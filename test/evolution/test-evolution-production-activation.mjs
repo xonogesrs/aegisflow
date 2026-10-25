@@ -228,7 +228,7 @@ test("P1 runAdmittedGraph attaches a truthful evolution observation from the rea
   // NORMAL_OPERATION semantics untouched: budget envelope + admission intact
   assert.equal(r.budget.authorized, true);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].admission, admission);
+  assert.deepEqual(calls[0].admission, admission);
   assert.equal(git(repo, ["status", "--porcelain"]), "");
 });
 

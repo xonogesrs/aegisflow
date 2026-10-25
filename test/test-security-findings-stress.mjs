@@ -209,6 +209,11 @@ test("STRESS-SEC02: Admission record is deep-frozen; async mutation or drift can
   assert.ok(Object.isFrozen(frozen.memory_policy), "nested memory_policy must be deep-frozen");
   assert.ok(Object.isFrozen(frozen.budget), "nested budget must be deep-frozen");
 
+  // Regression test: deepFreeze recurses into already-frozen nodes
+  const nestedObj = { a: Object.freeze({ b: { c: 1 } }) };
+  deepFreeze(nestedObj);
+  assert.equal(Object.isFrozen(nestedObj.a.b), true, "inner object under already-frozen node must be frozen");
+
   // Attempting to mutate nested property in strict mode must throw
   assert.throws(
     () => {
@@ -235,6 +240,52 @@ test("STRESS-SEC02: Admission record is deep-frozen; async mutation or drift can
   });
   assert.ok(runnerInvoked, "spy runner must be invoked for valid admission");
   assert.equal(receivedMemory, null, "runner must not receive memory provider when retrieval_allowed is false");
+
+  // Positive test: retrieval_allowed is true -> runner DOES receive memory provider
+  const rawPositive = buildAdmissionRecord({ taskId: "TASK-SEC02-POS", classification: c, mutationScope: ["docs/"] });
+  rawPositive.memory_policy = { retrieval_allowed: true, query_allowed: true, writeback_allowed: true };
+  const frozenPositive = freezeAdmission(rawPositive);
+  runnerInvoked = false;
+  receivedMemory = null;
+  const resPositive = await runAdmittedGraph({
+    admission: frozenPositive,
+    runner: spyRunner,
+  });
+  assert.equal(resPositive.final ?? "OK", "OK");
+  assert.ok(runnerInvoked, "runner must be invoked for valid admission with retrieval_allowed: true");
+  assert.ok(receivedMemory !== null, "runner MUST receive memory provider when retrieval_allowed is true");
+  assert.ok(typeof receivedMemory?.provider?.retrieveGraphMemory === "function", "memory provider must expose retrieveGraphMemory");
+
+  // Accessor-based TOCTOU regression test: forging a getter that flips retrieval_allowed after N reads
+  for (let K = 0; K <= 20; K++) {
+    let reads = 0;
+    const forged = {};
+    for (const k of Object.keys(frozen)) {
+      if (k === "memory_policy") continue;
+      forged[k] = frozen[k];
+    }
+    Object.defineProperty(forged, "memory_policy", {
+      enumerable: true,
+      configurable: false,
+      get() {
+        reads++;
+        return reads <= K
+          ? { retrieval_allowed: false, query_allowed: false, writeback_allowed: false }
+          : { retrieval_allowed: true, query_allowed: false, writeback_allowed: false };
+      },
+    });
+    runnerInvoked = false;
+    receivedMemory = null;
+    const resAccessor = await runAdmittedGraph({
+      admission: forged,
+      runner: spyRunner,
+    });
+    if (runnerInvoked) {
+      assert.equal(receivedMemory, null, `runner must NEVER receive memory provider when admission was signed with retrieval_allowed: false (failed at K=${K})`);
+    } else {
+      assert.equal(resAccessor.final, "HOLD", "drifted admission must hold");
+    }
+  }
 
   // Tampered admission: attempt to bypass with modified admission_id or memory_policy
   const tampered = { ...frozen, memory_policy: { ...frozen.memory_policy, retrieval_allowed: true } };
@@ -428,6 +479,27 @@ test("STRESS-3: Review replay CAS idempotency, conflict rejection, acceptance sy
     }, { root });
     assert.equal(immutableTs.ok, false);
     assert.equal(immutableTs.code, "REVIEW_JOB_TIMESTAMP_IMMUTABLE");
+
+    // Erase attempt via undefined must also fail with REVIEW_JOB_TIMESTAMP_IMMUTABLE
+    const eraseTs = updateReviewJob("CARD-STRESS", {
+      patch: { artifactCreatedAt: undefined },
+    }, { root });
+    assert.equal(eraseTs.ok, false);
+    assert.equal(eraseTs.code, "REVIEW_JOB_TIMESTAMP_IMMUTABLE");
+
+    // Probe P4 regression test: caller cannot spoof createdAt to break legitimate idempotent retry
+    const fStress = [{ findingId: "f-p4", subject: "s", description: "d", recommendedDisposition: "fix" }];
+    const rootP4 = mkdtempSync(join(tmpdir(), "stress4-p4-"));
+    const ciP4 = { changedTreeIdentity: "a".repeat(64), patchSha256: "b".repeat(64), currentHead: "c".repeat(40), baseHead: "d".repeat(40), repository: "repo:test", branch: "main" };
+    createReviewJob({ cardId: "CARD-P4", generation: 1, candidateIdentity: ciP4, specId: "s", specDigest: "e".repeat(64) }, { root: rootP4 });
+    advanceState("CARD-P4", "REQUIRED", "PREPARED", { root: rootP4 });
+    advanceState("CARD-P4", "PREPARED", "RUNNING", { root: rootP4 });
+    const p1 = persistFindings({ cardId: "CARD-P4", reviewerIdentity: "reviewer:1", findings: fStress, summary: "x", createdAt: "1999-01-01T00:00:00.000Z" }, { root: rootP4 });
+    assert.equal(p1.ok, true);
+    const p2 = persistFindings({ cardId: "CARD-P4", reviewerIdentity: "reviewer:1", findings: fStress, summary: "x" }, { root: rootP4 });
+    assert.equal(p2.ok, true, "legitimate idempotent retry must succeed regardless of caller createdAt");
+    assert.equal(p2.idempotent, true);
+    rmSync(rootP4, { recursive: true, force: true });
 
     // Concurrent persistFindings with identical findings without caller createdAt:
     const findings = [{ findingId: "f1", subject: "s", description: "d", recommendedDisposition: "fix" }];

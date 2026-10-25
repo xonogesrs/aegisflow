@@ -658,10 +658,32 @@ export function assertMountAllowlist({ roMounts = [], rwMounts = [], repoPaths =
   if (hasSymlinkComponent(scratchRoot)) {
     throw new ColimaRuntimeError(`scratchRoot ${scratchRoot} contains symbolic links`);
   }
+  const validateTarget = (target, label) => {
+    if (target !== undefined && target !== null) {
+      if (typeof target !== "string" || !isAbsolute(target)) {
+        throw new ColimaRuntimeError(`${label} mount target must be an absolute path: ${target}`);
+      }
+      if (/[:,\n\r]/.test(target)) {
+        throw new ColimaRuntimeError(`${label} mount target contains invalid characters: ${target}`);
+      }
+      const forbiddenTargets = new Set(["/proc", "/sys", "/dev"]);
+      if (forbiddenTargets.has(target)) {
+        throw new ColimaRuntimeError(`${label} mount target forbidden: ${target}`);
+      }
+    }
+  };
+
   for (const m of roMounts) {
     if (!m?.source || typeof m.source !== "string") {
       throw new ColimaRuntimeError("read-only mount source must be a string");
     }
+    if (!isAbsolute(m.source)) {
+      throw new ColimaRuntimeError(`read-only mount source must be an absolute path: ${m.source}`);
+    }
+    if (/[:,\n\r]/.test(m.source)) {
+      throw new ColimaRuntimeError(`read-only mount source contains invalid characters: ${m.source}`);
+    }
+    validateTarget(m.target, "read-only");
     const normalized = m.source.replace(/\\/g, "/").split("/");
     if (normalized.includes("..")) {
       throw new ColimaRuntimeError(`read-only mount ${m.source} contains traversal segments`);
@@ -694,7 +716,17 @@ export function assertMountAllowlist({ roMounts = [], rwMounts = [], repoPaths =
     }
   }
   for (const m of rwMounts) {
-    if (!m?.source || typeof m.source !== "string" || !contained(scratchRoot, m.source)) {
+    if (!m?.source || typeof m.source !== "string") {
+      throw new ColimaRuntimeError("read-write mount source must be a string");
+    }
+    if (!isAbsolute(m.source)) {
+      throw new ColimaRuntimeError(`read-write mount source must be an absolute path: ${m.source}`);
+    }
+    if (/[:,\n\r]/.test(m.source)) {
+      throw new ColimaRuntimeError(`read-write mount source contains invalid characters: ${m.source}`);
+    }
+    validateTarget(m.target, "read-write");
+    if (!contained(scratchRoot, m.source)) {
       throw new ColimaRuntimeError(`read-write mount ${m?.source} outside scratchRoot ${scratchRoot}`);
     }
   }
@@ -751,6 +783,10 @@ export function runTask({
   extraArgs = [],
   env = {},
 }) {
+  if (!image || typeof image !== "string" || image.startsWith("-")) {
+    throw new ColimaRuntimeError(`Forbidden docker image: '${image}'`);
+  }
+
   // Always enforce mount validation when mounts are requested
   if (scratchRoot || roMounts.length > 0 || rwMounts.length > 0) {
     if (!scratchRoot && rwMounts.length > 0) {

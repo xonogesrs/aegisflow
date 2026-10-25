@@ -291,12 +291,19 @@ export function validateAdmission(record) {
   return { ok: errors.length === 0, errors };
 }
 
-export function deepFreeze(obj) {
+export function deepFreeze(obj, seen = new WeakSet()) {
   if (obj === null || typeof obj !== "object") return obj;
-  for (const key of Object.getOwnPropertyNames(obj)) {
-    const val = obj[key];
-    if (val !== null && typeof val === "object" && !Object.isFrozen(val)) {
-      deepFreeze(val);
+  if (seen.has(obj)) return obj;
+  seen.add(obj);
+  for (const key of Reflect.ownKeys(obj)) {
+    let val;
+    try {
+      val = obj[key];
+    } catch {
+      continue;
+    }
+    if (val !== null && typeof val === "object") {
+      deepFreeze(val, seen);
     }
   }
   return Object.freeze(obj);

@@ -147,7 +147,7 @@ test("NEG19: production entry with a VALID frozen admission dispatches with the 
   const r = await runAdmittedGraph({ admission: rec, runner: spyRunner(calls), ir: { phases: [] } });
   assert.equal(r.final, "PASS");
   assert.equal(calls.length, 1, "runner invoked exactly once");
-  assert.equal(calls[0].admission, rec, "the frozen admission is forwarded unchanged");
+  assert.deepEqual(calls[0].admission, rec, "the frozen admission snapshot is forwarded");
 });
 
 test("CBM-2/CBM-4: memory provider and writeback store injected when authorized by admission", async () => {

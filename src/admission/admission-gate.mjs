@@ -230,10 +230,15 @@ export function assertProductionAdmission(admission) {
  *   BEFORE the runner is invoked（nodeResults: [] — no execution started）.
  */
 export async function runAdmittedGraph({ admission, graph = null, runner = null, budget = null, ...runnerOpts }) {
-  if (admission && typeof admission === "object") {
-    deepFreeze(admission);
+  let adm = admission;
+  if (admission && typeof admission === "object" && !Array.isArray(admission)) {
+    try {
+      adm = deepFreeze(structuredClone(admission));
+    } catch {
+      adm = admission;
+    }
   }
-  const gate = assertProductionAdmission(admission);
+  const gate = assertProductionAdmission(adm);
   if (!gate.ok) {
     return {
       final: "HOLD",
@@ -294,7 +299,7 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
   // The allocation produced by the global allocator MUST become the effective
   // execution limit. Validate its admission binding + integrity digest BEFORE
   // any budget enforcement / runner dispatch.
-  const allocation = validateExecutionAllocation(admission, budget?.allocation ?? null);
+  const allocation = validateExecutionAllocation(adm, budget?.allocation ?? null);
   if (!allocation.ok) {
     return {
       final: "HOLD",
@@ -312,7 +317,7 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
   // ledger state is malformed/tampered（NEG12）HOLDs here — the runner is
   // never invoked.
   const enforcementResult = createBudgetEnforcement({
-    admission,
+    admission: adm,
     checkpointState: budget?.checkpointState ?? null,
     parentEnforcement: budget?.parentEnforcement ?? null,
     childLimits: allocation.dimensions ?? budget?.childLimits ?? null,
@@ -344,7 +349,7 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
   // disable; anything falsy means default-on. A telemetry failure degrades
   // to a diagnostic disposition on the result envelope and NEVER changes
   // admission / budget / lifecycle / verdict semantics (S16 §C/§J).
-  const telemetryRunId = String(runnerOpts.executionId ?? admission.admission_id ?? "");
+  const telemetryRunId = String(runnerOpts.executionId ?? adm?.admission_id ?? "");
   const telemetryResolution = await resolveProductionTelemetryWiring({
     telemetryOpt: runnerOpts.telemetry,
     graphRunId: telemetryRunId,
@@ -368,11 +373,11 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
   // real sub-agent graphs as well.
   let canonicalRolloverExecutor = null;
   if (graph === "durable" || graph === "subagent") {
-    canonicalRolloverExecutor = await deriveCanonicalRolloverExecutor({ admission });
+    canonicalRolloverExecutor = await deriveCanonicalRolloverExecutor({ admission: adm });
   }
 
   // Re-validate immediately before memory resolution / runner dispatch
-  const renewedGate = assertProductionAdmission(admission);
+  const renewedGate = assertProductionAdmission(adm);
   if (!renewedGate.ok) {
     return {
       final: "HOLD",
@@ -390,7 +395,7 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
   //   - writeback: LocalMemoryStore provides governed post-final record storage.
   // Memory & writeback are authority seams; callers cannot inject substitutes via runnerOpts.
   let resolvedMemory = null;
-  if (isRetrievalAuthorized(admission)) {
+  if (isRetrievalAuthorized(adm)) {
     const { createGraphMemoryProvider } = await import("../memory/graph-context.mjs");
     resolvedMemory = {
       provider: createGraphMemoryProvider({
@@ -400,7 +405,7 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
     };
   }
   let resolvedWriteback = null;
-  if (admission?.memory_policy?.writeback_allowed === true) {
+  if (adm?.memory_policy?.writeback_allowed === true) {
     const { LocalMemoryStore } = await import("../memory/local-store.mjs");
     resolvedWriteback = {
       store: new LocalMemoryStore({
@@ -412,7 +417,7 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
 
   const result = await fn({
     ...runnerOpts,
-    admission,
+    admission: adm,
     budget: { ...(budget ?? {}), enforcement },
     // R-06: the resolved telemetry wiring (canonical object) OR explicit
     // false (disable) — never undefined, so runner-side default resolution
@@ -463,7 +468,7 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
       // The frozen admission is the ONLY provider authority: the feed reads the
       // admitted provider_binding from it for attribution (§A/§C) and never
       // re-derives or replaces it (§E).
-      admission,
+      admission: adm,
       switchState,
     });
     attachStrategyAttribution(result, feed.record);
@@ -483,7 +488,7 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
       evidenceRoot: runnerOpts.persistence?.root ?? null,
       executionId: evolutionExecutionId,
       graphRunId: telemetryRunId,
-      admission,
+      admission: adm,
       // §A: the SAME derivation the observation was built from — the loop's
       // plan inputs never re-derive (and never re-write) the memory.
       attribution: feed.attribution,

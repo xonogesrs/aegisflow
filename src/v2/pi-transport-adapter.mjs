@@ -15,8 +15,28 @@
 //
 // 不從 autoloop-analysis/probes/ import runtime code；本檔自含。
 
-import { createModels } from "@earendil-works/pi-ai";
-import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
+let createModels = null;
+let deepseekProvider = null;
+try {
+  const piAi = await import("@earendil-works/pi-ai");
+  createModels = piAi.createModels;
+  const ds = await import("@earendil-works/pi-ai/providers/deepseek");
+  deepseekProvider = ds.deepseekProvider;
+} catch {
+  try {
+    const { homedir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { existsSync } = await import("node:fs");
+    const candidate = join(homedir(), ".npm-global/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/index.js");
+    if (existsSync(candidate)) {
+      const piAi = await import(candidate);
+      createModels = piAi.createModels;
+      const candidateDs = join(homedir(), ".npm-global/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/providers/deepseek.js");
+      const ds = await import(candidateDs);
+      deepseekProvider = ds.deepseekProvider;
+    }
+  } catch {}
+}
 
 export const TRANSPORT_FREEZE = Object.freeze({
   package: "@earendil-works/pi-ai",
