@@ -17,25 +17,18 @@
 
 let createModels = null;
 let deepseekProvider = null;
+let piAiLoadError = null;
 try {
   const piAi = await import("@earendil-works/pi-ai");
   createModels = piAi.createModels;
   const ds = await import("@earendil-works/pi-ai/providers/deepseek");
   deepseekProvider = ds.deepseekProvider;
-} catch {
-  try {
-    const { homedir } = await import("node:os");
-    const { join } = await import("node:path");
-    const { existsSync } = await import("node:fs");
-    const candidate = join(homedir(), ".npm-global/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/index.js");
-    if (existsSync(candidate)) {
-      const piAi = await import(candidate);
-      createModels = piAi.createModels;
-      const candidateDs = join(homedir(), ".npm-global/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/providers/deepseek.js");
-      const ds = await import(candidateDs);
-      deepseekProvider = ds.deepseekProvider;
-    }
-  } catch {}
+} catch (e) {
+  // pi-ai is a pinned dependency（package.json）; resolve it only through normal
+  // package resolution — never from a user-home path. Importing this module
+  // without it stays safe（token guards remain usable）; building the adapter
+  // fails closed in createPiTransportAdapter.
+  piAiLoadError = e;
 }
 
 export const TRANSPORT_FREEZE = Object.freeze({
@@ -170,6 +163,12 @@ export function strictParse(raw) {
  * @param {object} [opts] { fetchImpl, allowMissingKey (test-only), onEvent }
  */
 export function createPiTransportAdapter(opts = {}) {
+  if (!createModels || !deepseekProvider) {
+    throw new TransportError(
+      "TRANSPORT_DEPENDENCY_MISSING",
+      `${TRANSPORT_FREEZE.package} could not be loaded (run npm ci): ${String(piAiLoadError?.message ?? "unknown").slice(0, 120)}`,
+    );
+  }
   const models = createModels();
   models.setProvider(deepseekProvider());
   const model = models.getModel(TRANSPORT_FREEZE.provider, TRANSPORT_FREEZE.model);
