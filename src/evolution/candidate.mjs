@@ -76,7 +76,7 @@ export function derivationIndexPath(policyRoot) {
   return join(policyRoot, "evolution-derivation-index.json");
 }
 
-function readDerivationIndex(policyRoot) {
+export function readDerivationIndex(policyRoot) {
   const p = derivationIndexPath(policyRoot);
   if (!existsSync(p)) return { schema: EVOLUTION_CANDIDATE_SCHEMA, version: 1, derivations: {} };
   try {
@@ -86,7 +86,7 @@ function readDerivationIndex(policyRoot) {
   } catch { return { schema: EVOLUTION_CANDIDATE_SCHEMA, version: 1, derivations: {} }; }
 }
 
-function writeDerivationIndex(policyRoot, index) {
+export function writeDerivationIndex(policyRoot, index) {
   const p = derivationIndexPath(policyRoot);
   mkdirSync(dirname(p), { recursive: true });
   const tmp = `${p}.tmp-${process.pid}`;

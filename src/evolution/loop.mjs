@@ -232,6 +232,7 @@ export async function runEvolutionCycle(p) {
         plan: plan.plan, triggerEvent,
         baselineHead: p.baselineHead, baselineRevision: p.baselineRevision,
         strategyPolicy: readStrategyPolicy(p.policyRoot),
+        storeRoot: p.policyRoot,
       });
     } catch (e) {
       return { ...hold(EVOLUTION_LOOP_HOLD.CANDIDATE_UNSUPPORTED, String(e?.message ?? e).slice(0, 300), { stage: "candidate" }), plan, trace };

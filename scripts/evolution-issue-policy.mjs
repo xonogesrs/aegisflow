@@ -6,7 +6,7 @@
 //
 //   node scripts/evolution-issue-policy.mjs --store <dir> [--scope "src/**"] \
 //     [--strategy-dimensions "MODEL_ROUTING,RETRY_REPAIR"] \
-//     [--expires "2026-10-24T00:00:00.000Z"] [--json]
+//     [--expires "2026-11-25T00:00:00.000Z"] [--json]
 //
 // Default production policy (card §B):
 //   LOW    = AUTONOMOUS   (bounded single-concern, no authority surface)
@@ -52,6 +52,12 @@ const store = arg("--store");
 if (!store) usage();
 const asJson = process.argv.includes("--json");
 
+const successor = process.argv.includes("--successor");
+let existingPolicy = null;
+try {
+  existingPolicy = readEvolutionPolicy(resolve(store), { allowExpired: true });
+} catch {}
+
 // Bounded LOW scope. Default: runtime leaf surfaces a bounded constant/bug
 // repair can safely touch. Callers may narrow or extend with --scope, but
 // the structural forbidden list (authority surfaces) is enforced inside
@@ -66,7 +72,9 @@ const scopes = [];
 for (let i = 0; i < process.argv.length - 1; i++) {
   if (process.argv[i] === "--scope") scopes.push(process.argv[i + 1]);
 }
-const scope_patterns = scopes.length ? scopes : DEFAULT_SCOPE;
+const scope_patterns = scopes.length
+  ? scopes
+  : (successor && existingPolicy?.scope_patterns?.length ? existingPolicy.scope_patterns : DEFAULT_SCOPE);
 // No unrestricted wildcard mutation scope (card §B).
 for (const s of scope_patterns) {
   if (s === "**" || s === "*" || s === "src/**" || s === "src/*") {
@@ -96,6 +104,8 @@ if (strategyDimsArg) {
       process.exit(1);
     }
   }
+} else if (successor && existingPolicy?.strategy_dimensions_allowed?.length) {
+  strategy_dimensions_allowed = existingPolicy.strategy_dimensions_allowed;
 }
 
 const expires = arg("--expires") ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -146,7 +156,6 @@ const input = {
 // conflicting record: the outgoing generation is archived durably under
 // <store>/evolution-policy-history/ and the new record binds its digest. No
 // manual archiving is required (or permitted as a supported operation).
-const successor = process.argv.includes("--successor");
 const previousDigestArg = arg("--previous-digest");
 if (previousDigestArg !== null && !/^[0-9a-f]{64}$/.test(previousDigestArg)) {
   console.error(`EVOLUTION_POLICY_INVALID: --previous-digest must be a 64-hex policy digest`);
@@ -190,5 +199,9 @@ try {
   process.exit(0);
 } catch (e) {
   console.error(`EVOLUTION_POLICY_ISSUE_FAILED: ${e?.code ? `${e.code}: ` : ""}${e?.message ?? e}`);
+  if (String(e?.message).includes("already exists") || String(e?.code).includes("CONFLICT")) {
+    console.error("Tip: an evolution policy already exists in this store. Use --successor to issue the next generation, e.g.:");
+    console.error(`  node scripts/evolution-issue-policy.mjs --store "${store}" --successor`);
+  }
   process.exit(1);
 }

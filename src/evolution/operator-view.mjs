@@ -136,6 +136,9 @@ export function buildEvolutionReport({ storeRoot, env = process.env } = {}) {
         previousPolicyDigest: p.previous_policy_digest ?? null,
         history: listEvolutionPolicyHistory(root),
       };
+      if (expired) {
+        report.diagnostics.push({ code: "POLICY_EXPIRED", detail: `Policy expired at ${p.expires_at}; issue a successor via scripts/evolution-issue-policy.mjs --successor` });
+      }
     } else {
       report.diagnostics.push({ code: "POLICY_UNREADABLE", detail: pPath });
     }

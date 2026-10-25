@@ -35,7 +35,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SCHEDULER="$HERE/scheduler-tick-dry.mjs"
-C3A_TICK="$HERE/operator-tick.mjs"
+C3A_TICK="$HERE/orchestration/operator/operator-tick.mjs"
 
 metadata_dir=""
 lock_file=""

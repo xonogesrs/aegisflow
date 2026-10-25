@@ -56,7 +56,9 @@ export function defaultAuthorizedRoots({ env = process.env } = {}) {
 }
 
 function isDescendantOrSame(candidate, root) {
-  return candidate === root || candidate.startsWith(root + sep);
+  if (candidate === root) return true;
+  const prefix = root.endsWith(sep) ? root : root + sep;
+  return candidate.startsWith(prefix);
 }
 
 /**
