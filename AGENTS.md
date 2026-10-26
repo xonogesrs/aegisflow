@@ -7,6 +7,9 @@ will try to discover it by searching outward from wherever it was launched,
 which turns into an unbounded scan of the real filesystem (observed: an 896s
 whole-home `grep`/`find` pair, no progress).
 
+The command-level guide (find code, recall memory, see what needs attention, pick up
+an interrupted task) is in `SKILL.md`; this file holds the hard rules.
+
 ## Where you are
 
 This is the AegisFlow repository. Its location is whatever directory this file
