@@ -93,8 +93,8 @@ test("the deployed tree resolves to exactly one extension module", () => {
 		const discovered = discoverExtensionModules(home.target);
 		assert.deepEqual(
 			discovered.modules,
-			["cbm-query.js", "no-poll-waits.js"],
-			"OMP must load exactly the two reviewed extension modules",
+			["aegis-attention.js", "cbm-query.js", "no-poll-waits.js"],
+			"OMP must load exactly the three reviewed extension modules",
 		);
 		assert.deepEqual(discovered.manifests, [], "no directory may present an extension manifest");
 	} finally {

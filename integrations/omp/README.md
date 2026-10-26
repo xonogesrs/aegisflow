@@ -1,8 +1,8 @@
 # OMP integration (optional)
 
-This directory publishes the **optional** OMP integration: two agent-host
-extensions — waiter/terminal-fence safety, and the read-only codebase-memory
-tool. It is a separate artifact from AegisFlow core — see
+This directory publishes the **optional** OMP integration: three agent-host
+extensions — waiter/terminal-fence safety, the read-only codebase-memory
+tool, and the operator-only attention reminder. It is a separate artifact from AegisFlow core — see
 [Core feature vs. integration feature](#core-feature-vs-integration-feature)
 before assuming anything here applies to AegisFlow itself.
 
@@ -15,6 +15,7 @@ before assuming anything here applies to AegisFlow itself.
 ~/.omp/agent/extensions/
   no-poll-waits.js                          <- extension: waiters + terminal fence
   cbm-query.js                              <- extension: cbm_query (read-only CBM)
+  aegis-attention.js                        <- extension: attention reminder + /aegis-alert
   lib/poll-wait-policy.js                   <- pure policy, imported by no-poll-waits
   test/poll-wait-policy.test.mjs            <- policy self-test (plain node)
   test/waiter-fence.acceptance.ts           <- lifecycle acceptance (bun)
@@ -113,6 +114,29 @@ memory.
 record's claim contradicts the source tree, resolving that is the agent's job —
 the tool does not judge truth, and the fence below is about *deliveries*, not
 about *facts*.
+
+---
+
+## Attention reminder (`aegis-attention.js`)
+
+Autonomous evolution and durable execution finish most work silently, so the few
+things that need a human (MEDIUM promotions awaiting approval, a tripped breaker,
+an interrupted run) would otherwise go unseen. This extension surfaces them
+without anyone having to go looking:
+
+| Surface | Behaviour |
+|---|---|
+| session start | runs `scripts/aegisflow-status.mjs --check`; shows a banner ONLY when an alert threshold was crossed, otherwise prints nothing |
+| `/aegis-alert` | toggles the automatic reminder; `/aegis-alert on\|off\|toggle\|status` |
+| `/aegis-status` | the full digest, including informational and acknowledged items |
+
+Properties: it registers **no agent tool** (only the operator's prompt-command
+channel can flip or read it), arguments map through a closed table and are passed
+as argv (no shell), the run is time- and output-bounded, and every failure
+degrades to "no banner". The switch silences only this banner; it is unrelated to
+the evolution kill switch. It needs the checkout to be locatable
+(`AEGISFLOW_REPO_ROOT`, as for `cbm_query`). See
+`docs/autonomous-evolution.md` for the thresholds and `--ack`.
 
 ---
 
