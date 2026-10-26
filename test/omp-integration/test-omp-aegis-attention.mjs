@@ -1,11 +1,14 @@
 // test/omp-integration/test-omp-aegis-attention.mjs
 //
 // Contract test for the `aegis-attention` OMP extension: the session-start
-// reminder is silent unless the digest speaks, the /aegis-alert argument is mapped
-// through a closed table (no shell, no interpolation), and no failure ever
+// reminder is silent unless the digest speaks, /aegis-on and /aegis-off take no arguments
+// (no shell, no interpolation), and no failure ever
 // reaches the host.
 
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import openAttention, { resolveRepoRoot, runStatus } from "../../integrations/omp/extensions/aegis-attention.js";
@@ -30,10 +33,10 @@ test("the checkout is located from the extension's own place in the repo", () =>
 	assert.equal(resolveRepoRoot("/").ok, true);
 });
 
-test("registers two commands and NO agent tool", () => {
+test("registers three commands and NO agent tool", () => {
 	const pi = fakePi();
 	openAttention(pi);
-	assert.deepEqual(Object.keys(pi.commands).sort(), ["aegis-alert", "aegis-status"]);
+	assert.deepEqual(Object.keys(pi.commands).sort(), ["aegis-off", "aegis-on", "aegis-status"]);
 	assert.equal(pi.tools.length, 0, "the agent must not be able to read or flip the reminder");
 	assert.equal(typeof pi.handlers.session_start, "function");
 });
@@ -52,16 +55,26 @@ test("runStatus passes only fixed flags, as argv (no shell), and never throws", 
 	assert.equal(crash.ok, false);
 });
 
-test("/aegis-alert maps its argument through a closed table; junk is refused without running anything", async () => {
+test("/aegis-on and /aegis-off run only their fixed flag, whatever the host passes as arguments", async () => {
 	const pi = fakePi();
 	openAttention(pi);
-	const ctx = fakeCtx();
-	// A hostile argument must produce a usage notice and spawn nothing: the real script is
-	// never reached, so no switch file can have been written.
-	await pi.commands["aegis-alert"].handler("on; touch /tmp/should-not-exist", ctx);
-	assert.equal(ctx.notes.length, 1);
-	assert.match(ctx.notes[0].text, /Usage: \/aegis-alert/);
-	assert.equal(ctx.notes[0].level, "warning");
+	// The commands ignore their argument entirely: nothing hostile can reach argv. The real script
+	// runs against a throwaway AEGISFLOW_HOME so the developer's own switch is never touched.
+	const home = mkdtempSync(join(tmpdir(), "aegis-attn-cmd-"));
+	const prev = process.env.AEGISFLOW_HOME;
+	process.env.AEGISFLOW_HOME = home;
+	try {
+		const off = fakeCtx();
+		await pi.commands["aegis-off"].handler("on; touch /tmp/should-not-exist", off);
+		assert.match(off.notes[0].text, /已關閉/);
+		const on = fakeCtx();
+		await pi.commands["aegis-on"].handler("", on);
+		assert.match(on.notes[0].text, /已開啟/);
+		assert.equal(existsSync("/tmp/should-not-exist"), false);
+	} finally {
+		if (prev === undefined) delete process.env.AEGISFLOW_HOME; else process.env.AEGISFLOW_HOME = prev;
+		rmSync(home, { recursive: true, force: true });
+	}
 });
 
 test("session_start is silent when the digest is quiet or the host has no UI", () => {

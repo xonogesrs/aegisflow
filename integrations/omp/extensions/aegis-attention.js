@@ -6,10 +6,10 @@
 //
 //   * on `session_start` it runs `--check` and, ONLY when something has crossed an
 //     alert threshold, shows the banner through `ctx.ui.notify`. A quiet system
-//     prints nothing; an OMP switched off with `/aegis-alert off` prints nothing.
-//   * `/aegis-alert [on|off|toggle|status]` flips or shows the AUTOMATIC reminder.
-//     No argument toggles. It silences only this banner: evolution, durable
-//     execution and every governance gate are untouched.
+//     prints nothing; an OMP switched off with `/aegis-off` prints nothing.
+//   * `/aegis-on` and `/aegis-off` switch the AUTOMATIC reminder on/off. The switch
+//     silences only this banner: evolution, durable execution and every governance
+//     gate are untouched.
 //   * `/aegis-status` shows the full digest (informational and acknowledged items too).
 //
 // WHAT IT IS NOT
@@ -18,11 +18,11 @@
 // here; only the operator's prompt-command channel can. It never promotes, resumes
 // or retries anything, and it never throws into the host: every failure degrades to
 // "no banner" (session start) or to an explanatory notice (a command).
+// The commands take no arguments, so there is nothing to interpolate.
 //
 // The checkout is located like cbm-query.js does: `AEGISFLOW_REPO_ROOT` /
 // `AUTOLOOP_REPO_ROOT`, then this file's own location, then a walk up from the cwd.
-// No operator-specific path is baked in. Commands use fixed argv (no shell), and the
-// argument is mapped through a closed table, never interpolated.
+// No operator-specific path is baked in. Commands use fixed argv (no shell).
 
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -35,15 +35,6 @@ const STATUS_SCRIPT = join("scripts", "aegisflow-status.mjs");
 const RUN_TIMEOUT_MS = 4000;
 const RUN_MAX_BUFFER = 64 * 1024;
 const NODE_CANDIDATES = Object.freeze(["node", "/usr/local/bin/node", "/opt/homebrew/bin/node"]);
-
-/** Closed argument table: the only flags this extension can ever pass through. */
-const ALERT_FLAGS = Object.freeze({
-	"": "--toggle",
-	toggle: "--toggle",
-	on: "--on",
-	off: "--off",
-	status: "--switch",
-});
 
 function hasStatusScript(dir) {
 	try {
@@ -121,19 +112,18 @@ export default function (pi) {
 		}
 	});
 
-	pi.registerCommand("aegis-alert", {
-		description: "Switch the AegisFlow automatic reminder. Usage: /aegis-alert [on|off|toggle|status] (no argument = toggle)",
-		handler: async (args, ctx) => {
-			const key = (typeof args === "string" ? args.trim().toLowerCase() : "") || "";
-			const flag = Object.hasOwn(ALERT_FLAGS, key) ? ALERT_FLAGS[key] : null;
-			if (!flag) {
-				notify(ctx, "Usage: /aegis-alert [on|off|toggle|status]", "warning");
-				return;
-			}
-			const r = runStatus([flag], { cwd: ctx?.cwd ?? process.cwd() });
-			notify(ctx, r.output || "(no output)", r.ok ? "info" : "warning");
-		},
-	});
+	for (const [name, flag, description] of [
+		["aegis-on", "--on", "Turn the AegisFlow automatic reminder ON."],
+		["aegis-off", "--off", "Turn the AegisFlow automatic reminder OFF (manual /aegis-status still works)."],
+	]) {
+		pi.registerCommand(name, {
+			description,
+			handler: async (_args, ctx) => {
+				const r = runStatus([flag], { cwd: ctx?.cwd ?? process.cwd() });
+				notify(ctx, r.output || "(no output)", r.ok ? "info" : "warning");
+			},
+		});
+	}
 
 	pi.registerCommand("aegis-status", {
 		description: "Show everything AegisFlow thinks needs your attention (full digest).",

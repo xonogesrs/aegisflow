@@ -15,7 +15,7 @@ before assuming anything here applies to AegisFlow itself.
 ~/.omp/agent/extensions/
   no-poll-waits.js                          <- extension: waiters + terminal fence
   cbm-query.js                              <- extension: cbm_query (read-only CBM)
-  aegis-attention.js                        <- extension: attention reminder + /aegis-alert
+  aegis-attention.js                        <- extension: attention reminder + /aegis-on|off
   lib/poll-wait-policy.js                   <- pure policy, imported by no-poll-waits
   test/poll-wait-policy.test.mjs            <- policy self-test (plain node)
   test/waiter-fence.acceptance.ts           <- lifecycle acceptance (bun)
@@ -127,12 +127,12 @@ without anyone having to go looking:
 | Surface | Behaviour |
 |---|---|
 | session start | runs `scripts/aegisflow-status.mjs --check`; shows a banner ONLY when an alert threshold was crossed, otherwise prints nothing |
-| `/aegis-alert` | toggles the automatic reminder; `/aegis-alert on\|off\|toggle\|status` |
+| `/aegis-on`, `/aegis-off` | switch the automatic reminder on / off (no arguments) |
 | `/aegis-status` | the full digest, including informational and acknowledged items |
 
 Properties: it registers **no agent tool** (only the operator's prompt-command
-channel can flip or read it), arguments map through a closed table and are passed
-as argv (no shell), the run is time- and output-bounded, and every failure
+channel can flip or read it), the commands take no arguments and run as fixed argv
+(no shell), the run is time- and output-bounded, and every failure
 degrades to "no banner". The switch silences only this banner; it is unrelated to
 the evolution kill switch. It needs the checkout to be locatable
 (`AEGISFLOW_REPO_ROOT`, as for `cbm_query`). See
