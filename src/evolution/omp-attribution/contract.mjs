@@ -15,9 +15,12 @@
 import { createHash } from "node:crypto";
 import { scanForSecrets } from "../../evidence/run-evidence-store.mjs";
 
-export const OMP_OBSERVATION_SCHEMA = "aegisflow.omp-attribution/v1";
+// v2: cwd_ref is a per-store keyed HMAC (v1 used an unsalted SHA-256; no v1 data was ever persisted).
+export const OMP_OBSERVATION_SCHEMA = "aegisflow.omp-attribution/v2";
 export const OMP_OBSERVATION_STATE_SCHEMA = "aegisflow.omp-attribution-state/v1";
-export const EXTRACTOR_VERSION = "1";
+export const EXTRACTOR_VERSION = "2";
+export const CWD_REF_ALG = "hmac-sha256-v1";
+export const KEY_ID_RE = /^[0-9a-f]{16}$/;
 export const EVIDENCE_CLASS = "OBSERVED_NATIVE_SESSION";
 export const TASK_CLASS = "OMP_GENERAL";
 export const OUTCOME_UNVERIFIED = "UNVERIFIED";
@@ -182,8 +185,10 @@ export function validateObservation(o) {
     }
   }
 
-  if (exactKeys(o.cwd_ref, ["sha256", "allowlisted"], "cwd_ref", errors)) {
-    if (!HEX64_RE.test(String(o.cwd_ref.sha256))) errors.push("cwd_ref.sha256: bad");
+  if (exactKeys(o.cwd_ref, ["alg", "key_id", "mac", "allowlisted"], "cwd_ref", errors)) {
+    if (o.cwd_ref.alg !== CWD_REF_ALG) errors.push("cwd_ref.alg: wrong");
+    if (!KEY_ID_RE.test(String(o.cwd_ref.key_id))) errors.push("cwd_ref.key_id: bad");
+    if (!HEX64_RE.test(String(o.cwd_ref.mac))) errors.push("cwd_ref.mac: bad");
     if (o.cwd_ref.allowlisted !== true) errors.push("cwd_ref.allowlisted: must be true");
   }
 

@@ -26,6 +26,10 @@ import {
 } from "../../c2d/fs-atomic.mjs";
 import { evolutionSuspensionPath } from "../kill-switch.mjs";
 import {
+  CWD_ALG, IDENTITY_SCHEMA, KEY_ERRORS, KEY_ID_RE, KeyError, assertKeyOutsideStore, createKeyFile,
+  cwdMacFor, ephemeralKey, readKeyFile,
+} from "./cwd-key.mjs";
+import {
   OBSERVATION_ID_RE, OMP_OBSERVATION_STATE_SCHEMA, assertOutputSafe, observationIdFor, sha256Hex,
   validateObservation,
 } from "./contract.mjs";
@@ -49,8 +53,51 @@ export const paths = (storeRoot) => {
     observations: join(root, "observations"),
     state: join(root, "state"),
     lock: join(root, ".run.lock"),
+    identity: join(root, "identity.json"),
   };
 };
+
+// ── per-store cwd key identity ───────────────────────────────────────────────
+
+function readIdentity(p) {
+  if (!existsSync(p.identity)) return null;
+  try {
+    if (!lstatSync(p.identity).isFile()) throw new Error("not a file");
+    const i = JSON.parse(readFileSync(p.identity, "utf8"));
+    if (i?.schema !== IDENTITY_SCHEMA || i.cwd_alg !== CWD_ALG || !KEY_ID_RE.test(String(i.key_id))) throw new Error("bad");
+    return i;
+  } catch {
+    throw new KeyError(KEY_ERRORS.IDENTITY_CORRUPT, "store identity record is unreadable");
+  }
+}
+
+function storeHasData(p) {
+  return [p.observations, p.state].some((d) => existsSync(d) && readdirSync(d).length > 0);
+}
+
+/**
+ * Decide which cwd key this run uses. FAIL CLOSED everywhere a key is needed:
+ * an existing store identity with a missing/unreadable/different key, or a
+ * store that holds data but no identity record, never gets a new key.
+ * A key is only ever created for a store that is genuinely empty, and only in
+ * write mode. Dry-run without a key uses an in-memory key that is never saved.
+ */
+function resolveCwdKey({ storeRoot, keyFile, write, p }) {
+  if (write && !keyFile) throw usage("--key-file is required with --write");
+  if (keyFile) assertKeyOutsideStore(keyFile, storeRoot);
+  const identity = readIdentity(p);
+  const loaded = keyFile ? readKeyFile(keyFile) : null;
+  if (identity) {
+    if (!loaded) throw new KeyError(KEY_ERRORS.MISSING, "the store has a key identity but the key file is absent");
+    if (loaded.keyId !== identity.key_id) throw new KeyError(KEY_ERRORS.MISMATCH, "the key does not match this store identity");
+    return loaded;
+  }
+  if (storeHasData(p)) throw new KeyError(KEY_ERRORS.IDENTITY_MISSING, "the store holds data but no key identity record");
+  if (!write) return loaded ?? ephemeralKey();
+  const k = loaded ?? createKeyFile(keyFile);
+  writeJsonExclusiveCreate(p.identity, { schema: IDENTITY_SCHEMA, cwd_alg: CWD_ALG, key_id: k.keyId });
+  return k;
+}
 
 /** Same two rules as evolutionSwitchState(), without importing the observer
  *  (which would drag the strategy-memory side into this domain). */
@@ -139,6 +186,8 @@ export function countObservationFiles(storeRoot) {
  * @param {number} [o.quiescenceMs]
  * @param {() => number} [o.nowMs]  injected clock
  * @param {(path: string) => "not_held"|"held"|"unknown"} [o.lsof]
+ * @param {string[]} [o.onlySlugs] restrict discovery to these slug directories (no other directory is opened)
+ * @param {string} [o.keyFile]     per-store HMAC key file, OUTSIDE the store (required with write)
  * @param {boolean} [o.synthetic]
  * @param {object} [o.env]
  * @param {(step: string, path?: string) => void} [o.fault] test seam
@@ -146,7 +195,7 @@ export function countObservationFiles(storeRoot) {
 export function runIngest({
   storeRoot, sessionsRoot, allowRoots, denyRoots = [], write = false,
   quiescenceMs = DEFAULT_QUIESCENCE_MS, nowMs = () => Date.now(), lsof = defaultLsof,
-  synthetic = false, env = process.env, fault = null,
+  synthetic = false, env = process.env, fault = null, keyFile = null, onlySlugs = null,
 }) {
   if (!storeRoot || !sessionsRoot) throw usage("storeRoot and sessionsRoot are required");
   if (!Array.isArray(allowRoots) || allowRoots.length === 0) throw usage("cwd allowlist is empty (fail-closed)");
@@ -191,8 +240,10 @@ export function runIngest({
   }
 
   try {
+    const resolved = resolveCwdKey({ storeRoot, keyFile, write, p });
+    const cwdKey = { keyId: resolved.keyId, mac: cwdMacFor(resolved.key) };
     if (write) { ensureDir0700(p.observations); ensureDir0700(p.state); }
-    const files = discoverSessionFiles(sessionsRoot);
+    const files = discoverSessionFiles(sessionsRoot, onlySlugs);
     const perUuid = new Map();
     for (const f of files) {
       const u = SESSION_FILE_RE.exec(f.slice(f.lastIndexOf("/") + 1))?.[1];
@@ -203,14 +254,14 @@ export function runIngest({
         const again = suspendedState({ env, storeRoot });
         if (again) { report.suspended = again; report.counts.SUSPENDED_MID_RUN = 1; break; }
       }
-      processFile(file, perUuid);
+      processFile(file, perUuid, cwdKey);
     }
   } finally {
     if (lock) releaseExclusiveLock(lock);
   }
   return assertOutputSafe(report);
 
-  function processFile(file, perUuid) {
+  function processFile(file, perUuid, cwdKey) {
     const base = file.slice(file.lastIndexOf("/") + 1);
     const nameUuid = SESSION_FILE_RE.exec(base)?.[1];
     if (!nameUuid) return;
@@ -225,6 +276,7 @@ export function runIngest({
 
     // Header gate BEFORE anything about the session is persisted.
     const head = peekHeader(obs.head);
+    if (head.id === null) return exclude("no_session_header");
     if (head.id !== nameUuid) return exclude("session_id_mismatch");
     const cwd = cwdDecision({ cwd: head.cwd, allowRoots, denyRoots });
     if (!cwd.ok) return exclude(cwd.reason);
@@ -289,7 +341,7 @@ export function runIngest({
       tail_sha256: obs.identity.tail_sha256,
     };
     const built = buildObservation({
-      entries: parsed.entries, fileInfo, nameUuid, allowRoots, denyRoots, nowIso, synthetic,
+      entries: parsed.entries, fileInfo, nameUuid, allowRoots, denyRoots, nowIso, cwdKey, synthetic,
     });
     if (!built.ok) return exclude(built.reason);
     if (!write) return tally("WOULD_RECORD", nameUuid, oid);

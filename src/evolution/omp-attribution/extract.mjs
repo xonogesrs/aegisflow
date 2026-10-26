@@ -16,7 +16,7 @@ import { spawnSync } from "node:child_process";
 import {
   EVIDENCE_CLASS, EXTRACTOR_VERSION, LIMITS, OUTCOME_UNVERIFIED, SOURCE_KIND, STRATEGY_DIMENSIONS,
   TASK_CLASS, TOKEN_RE, UUID_RE, OMP_OBSERVATION_SCHEMA, KNOWN_TOOLS, boundedCount, looksSensitive,
-  looksSensitiveToken, observationIdFor, sha256Hex, validateObservation,
+  looksSensitiveToken, CWD_REF_ALG, observationIdFor, sha256Hex, validateObservation,
 } from "./contract.mjs";
 
 export const TAIL_BYTES = 4096;
@@ -132,20 +132,28 @@ export function observeSessionFile(path, { sessionsRoot, fault = null }) {
   }
 }
 
+export const HEADER_SCAN_LINES = 8;
+
 /**
- * The header is the first line. Peek at it from the head bytes so a session of
- * a non-allowlisted cwd is excluded BEFORE anything about it is persisted.
+ * Find the `session` header among the first few COMPLETE lines of the head
+ * bytes (real OMP files start with a `title` entry; the header is line 2), so a
+ * session of a non-allowlisted cwd is excluded BEFORE anything about it is
+ * persisted. Only the header's id and cwd are returned.
  * @returns {{ id: string|null, cwd: string|null }}
  */
 export function peekHeader(head) {
-  const nl = head.indexOf(0x0a);
-  if (nl < 0) return { id: null, cwd: null };
-  try {
-    const e = JSON.parse(head.subarray(0, nl).toString("utf8"));
-    if (isObj(e) && e.type === "session") {
-      return { id: typeof e.id === "string" ? e.id : null, cwd: typeof e.cwd === "string" ? e.cwd : null };
-    }
-  } catch { /* fall through */ }
+  let start = 0;
+  for (let n = 0; n < HEADER_SCAN_LINES; n++) {
+    const nl = head.indexOf(0x0a, start);
+    if (nl < 0) break; // an incomplete (or oversized) line is never parsed
+    try {
+      const e = JSON.parse(head.subarray(start, nl).toString("utf8"));
+      if (isObj(e) && e.type === "session") {
+        return { id: typeof e.id === "string" ? e.id : null, cwd: typeof e.cwd === "string" ? e.cwd : null };
+      }
+    } catch { /* not JSON: skip this line */ }
+    start = nl + 1;
+  }
   return { id: null, cwd: null };
 }
 
@@ -187,12 +195,14 @@ export function identityEquals(a, b) {
 
 /** Top-level `<root>/<slug>/<ts>_<uuid>.jsonl` only; subagent dirs, symlinks
  *  and anything oddly named are never returned. */
-export function discoverSessionFiles(sessionsRoot) {
+export function discoverSessionFiles(sessionsRoot, onlySlugs = null) {
   const out = [];
   let slugs;
   try { slugs = readdirSync(sessionsRoot, { withFileTypes: true }); } catch { return out; }
   for (const slug of slugs) {
     if (!slug.isDirectory() || slug.isSymbolicLink() || !SLUG_RE.test(slug.name)) continue;
+    // When the operator names slug directories, no OTHER directory is opened.
+    if (Array.isArray(onlySlugs) && !onlySlugs.includes(slug.name)) continue;
     const dir = join(sessionsRoot, slug.name);
     let files;
     try { files = readdirSync(dir, { withFileTypes: true }); } catch { continue; }
@@ -245,7 +255,8 @@ function sum(into, key, v) {
  * Project parsed entries onto the closed v1 observation.
  * @returns {{ ok: true, observation: object } | { ok: false, reason: string }}
  */
-export function buildObservation({ entries, fileInfo, nameUuid, allowRoots, denyRoots, nowIso, synthetic = false }) {
+export function buildObservation({ entries, fileInfo, nameUuid, allowRoots, denyRoots, nowIso, cwdKey, synthetic = false }) {
+  if (!cwdKey || typeof cwdKey.mac !== "function" || typeof cwdKey.keyId !== "string") return EXCLUDE("cwd_key_missing");
   const header = entries.find((e) => isObj(e) && e.type === "session");
   if (!header) return EXCLUDE("no_session_header");
   if (typeof header.id !== "string" || !UUID_RE.test(header.id) || header.id !== nameUuid) {
@@ -342,7 +353,7 @@ export function buildObservation({ entries, fileInfo, nameUuid, allowRoots, deny
       entry_count: entries.length,
       extractor_version: EXTRACTOR_VERSION,
     },
-    cwd_ref: { sha256: sha256Hex(`cwd:${normalizeFsPath(header.cwd)}`), allowlisted: true },
+    cwd_ref: { alg: CWD_REF_ALG, key_id: cwdKey.keyId, mac: cwdKey.mac(normalizeFsPath(header.cwd)), allowlisted: true },
     model: {
       providers: providers.keys().sort(),
       models: models.keys().sort(),

@@ -9,6 +9,7 @@ Scope: the minimal extractor authorized after the design review (DESIGN.md,
 |---|---|
 | `src/evolution/omp-attribution/contract.mjs` | closed v1 schema, validator, token / secret gates, fixed tool allowlist |
 | `src/evolution/omp-attribution/extract.mjs` | safe file observation (lstat, `O_NOFOLLOW`, fstat re-checks, nlink), header peek, whitelist projection, conservative `lsof` |
+| `src/evolution/omp-attribution/cwd-key.mjs` | per-store HMAC key: create / read / verify, fail-closed errors |
 | `src/evolution/omp-attribution/ingest.mjs` | per-session state machine, crash-safe writes, run lock, kill switch |
 | `scripts/omp-session-attribution.mjs` | manual CLI, dry-run by default |
 | `test/evolution/omp-attribution/test-omp-attribution-extractor.mjs` | host-only suite (injected clock and `lsof`, mkdtemp fixtures, runtime-assembled fake credentials) |
@@ -24,7 +25,7 @@ than `kill-switch.mjs`, or anything under `src/admission` / `src/governance`.
 node scripts/omp-session-attribution.mjs \
   --store <evolution store dir> --sessions-root <omp sessions dir> \
   --allow-cwd <dir> [--allow-cwd <dir> ...] [--deny-root <dir> ...] \
-  [--quiescence-minutes 30] [--synthetic] [--write] [--json]
+  [--quiescence-minutes 30] [--synthetic] [--key-file <path>] [--write] [--json]
 ```
 
 - Dry-run unless `--write`. Dry-run persists nothing, state included.
@@ -32,8 +33,9 @@ node scripts/omp-session-attribution.mjs \
   allowlist refuses to run. `--deny-root` is **additive** to the built-in
   `/private/tmp` and `/private/var/folders`.
 - Output lands only under `<store>/omp-observations/{observations,state}/`.
+- `--key-file` is required with `--write` (see "cwd identity" below).
 - Exit codes: 0 ok · 2 usage · 3 run lock busy (never stolen; an operator
-  removes a stale `.run.lock`).
+  removes a stale `.run.lock`) · 4 key / identity failure.
 
 ## Behaviour that matters
 
@@ -61,6 +63,19 @@ node scripts/omp-session-attribution.mjs \
   token-regex-limited and sensitive-pattern scanned (extra patterns for
   hyphen-segmented `sk-` keys and long unbroken runs); tool names must be on a
   fixed list or are counted as `other`; any hit drops the whole record.
+- **cwd identity (schema v2)**: `cwd_ref` is `{ alg: "hmac-sha256-v1", key_id, mac, allowlisted }`,
+  an HMAC-SHA256 of the normalised cwd under a **per-store key**. The key is 32
+  CSPRNG bytes in a user-only (0600) file **outside** the store and outside git
+  (`--key-file`; the parent directory must exist and is never chmod-ed); it is
+  never written to the store, a report, stdout/stderr or an error. The store keeps
+  only `omp-observations/identity.json` (`cwd_alg`, `key_id` = a one-way digest of the
+  key). **Fail closed**: an existing identity with a missing / unreadable /
+  insecure (group-readable, symlink, wrong owner) / different key, or a store that
+  holds data but no identity record, aborts with exit 4 and creates nothing. A key is
+  only ever created for a genuinely empty store, in write mode, and never under a
+  kill switch. Dry-run with no key uses an in-memory key that is never saved. Use
+  one key file per store. Schema `aegisflow.omp-attribution/v2` replaces v1
+  (unsalted SHA-256); no v1 record was ever persisted, so there is nothing to migrate.
 - **Outcome** is always `UNVERIFIED` in v1 — `VERIFIED_*` is not representable.
 
 ## Deviations from DESIGN.md (explicit)
@@ -72,9 +87,8 @@ node scripts/omp-session-attribution.mjs \
 3. The cwd allowlist is matched on the session **header** `cwd`, not on the
    directory slug (the slug encoding is not reliably reversible). The slug is
    only validated as a plain name; only top-level `<ts>_<uuid>.jsonl` files are read.
-4. `cwd_ref.sha256` is an unsalted hash of the normalised cwd, as specified;
-   a path that can be guessed can be confirmed by someone holding the store.
-   A per-store keyed hash is an open question for the Controller.
+4. `cwd_ref` is a per-store keyed HMAC (Controller ruling), not the unsalted
+   SHA-256 the design text specified.
 
 ## Not done / follow-ups
 

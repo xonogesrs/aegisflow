@@ -13,7 +13,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  appendFileSync, chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync,
+  appendFileSync, chmodSync, existsSync, linkSync, statSync, rmSync, mkdirSync, mkdtempSync, readFileSync, readdirSync,
   symlinkSync, truncateSync, utimesSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -21,6 +21,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
+import { createHash } from "node:crypto";
 import { clearInjectionHooks, setInjectionHook } from "../../../src/c2d/fs-atomic.mjs";
 import { evolutionSuspensionPath, suspendEvolution } from "../../../src/evolution/kill-switch.mjs";
 import {
@@ -29,6 +30,7 @@ import {
 import {
   classifyLsofResult, cwdDecision, normalizeFsPath, observeSessionFile, readSessionBytes,
 } from "../../../src/evolution/omp-attribution/extract.mjs";
+import { KEY_ERRORS } from "../../../src/evolution/omp-attribution/cwd-key.mjs";
 import {
   countObservationFiles, listTrustedObservations, paths, runIngest,
 } from "../../../src/evolution/omp-attribution/ingest.mjs";
@@ -85,6 +87,11 @@ function entriesFor(uuid, { cwd = CWD, model = "model-a", extra = [] } = {}) {
   ];
 }
 
+/** Real OMP files start with a `title` entry; the `session` header is line 2. */
+function withTitleFirst(entries) {
+  return [{ type: "title", title: "fixture title", source: "auto", updatedAt: 1, v: 1, pad: "" }, ...entries];
+}
+
 function fileNameFor(uuid) { return `2026-10-26T06-00-00-000Z_${uuid}.jsonl`; }
 
 /** Write a session fixture; mtime is set `ageMs` before `clockNow`. */
@@ -98,10 +105,18 @@ function putSession(env, entries, { uuid, slug = "-work-aegis-fixture", ageMs = 
   return file;
 }
 
-function run(env, { write = false, now, lsof = () => "not_held", fault = null, envVars = {}, allow = [CWD], deny = [] } = {}) {
+/** Default per-store key location: outside the store, parent dir pre-created. */
+function keyPathFor(env) {
+  const dir = join(env.root, "keys");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return join(dir, "omp.key");
+}
+
+function run(env, { write = false, now, lsof = () => "not_held", fault = null, envVars = {}, allow = [CWD], deny = [], keyFile } = {}) {
   return runIngest({
     storeRoot: env.store, sessionsRoot: env.sessions, allowRoots: allow, denyRoots: deny,
     write, nowMs: () => now, lsof, synthetic: true, env: envVars, fault,
+    keyFile: keyFile === undefined ? keyPathFor(env) : keyFile,
   });
 }
 
@@ -630,10 +645,12 @@ test("H2 CLI default is dry-run: zero writes; --json output passes the safety ga
 
 test("H3 CLI --write on an empty sessions root creates only the omp-observations domain", () => {
   const env = mkEnv();
-  const r = cli(["--store", env.store, "--sessions-root", env.sessions, "--allow-cwd", CWD, "--write"]);
+  const keyFile = keyPathFor(env);
+  const r = cli(["--store", env.store, "--sessions-root", env.sessions, "--allow-cwd", CWD, "--write", "--key-file", keyFile]);
   assert.equal(r.status, 0, r.stderr);
   const top = readdirSync(env.store);
   assert.deepEqual(top, ["omp-observations"]);
+  assert.ok(existsSync(keyFile), "the key is created OUTSIDE the store");
 });
 
 
@@ -812,4 +829,200 @@ test("I4b an unreadable marker location (permission error, not ENOENT) also susp
     chmodSync(env.store, 0o700);
   }
   assert.ok(!existsSync(paths(env.store).root));
+});
+
+
+// ── K: per-store keyed cwd identity (HMAC) ──────────────────────────────────
+
+const sha = (t) => createHash("sha256").update(t).digest("hex");
+
+function codeOf(fn) {
+  try { fn(); } catch (e) { return e.code; }
+  return null;
+}
+
+test("K1 cwd_ref is a keyed HMAC (schema v2), not a bare hash; the key is 0600 and outside the store", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0 });
+  recordOnce(env, U1, T0);
+  const o = listTrustedObservations(env.store)[0];
+  assert.equal(o.schema, "aegisflow.omp-attribution/v2");
+  assert.equal(o.cwd_ref.alg, "hmac-sha256-v1");
+  assert.match(o.cwd_ref.key_id, /^[0-9a-f]{16}$/);
+  assert.match(o.cwd_ref.mac, /^[0-9a-f]{64}$/);
+  assert.notEqual(o.cwd_ref.mac, sha(`cwd:${CWD}`), "must not equal the unsalted hash");
+  assert.notEqual(o.cwd_ref.mac, sha(CWD));
+  const keyFile = keyPathFor(env);
+  assert.equal(statSync(keyFile).mode & 0o777, 0o600);
+  assert.match(readFileSync(keyFile, "utf8").trim(), /^[0-9a-f]{64}$/);
+  assert.ok(!keyFile.startsWith(env.store + "/"));
+  const identity = JSON.parse(readFileSync(paths(env.store).identity, "utf8"));
+  assert.equal(identity.key_id, o.cwd_ref.key_id);
+});
+
+test("K2 the same cwd under different store keys yields different, non-comparable references", () => {
+  const T0 = Date.now();
+  const macs = [];
+  for (let i = 0; i < 2; i++) {
+    const env = mkEnv();
+    putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0 });
+    recordOnce(env, U1, T0);
+    macs.push(listTrustedObservations(env.store)[0].cwd_ref);
+  }
+  assert.notEqual(macs[0].mac, macs[1].mac);
+  assert.notEqual(macs[0].key_id, macs[1].key_id);
+});
+
+test("K3 the key never appears in the store, the report, errors or CLI output", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0 });
+  const { first, second } = recordOnce(env, U1, T0);
+  const keyHex = readFileSync(keyPathFor(env), "utf8").trim();
+  const everything = treeText(env.store) + JSON.stringify(first) + JSON.stringify(second);
+  assert.ok(!everything.includes(keyHex));
+  const keyFile = keyPathFor(env);
+  const out = cli(["--store", env.store, "--sessions-root", env.sessions, "--allow-cwd", CWD, "--key-file", keyFile, "--json"]);
+  assert.ok(!(out.stdout + out.stderr).includes(keyHex));
+  const bad = join(env.root, "keys", "wrong.key");
+  writeFileSync(bad, keyHex.replace(/^./, "0") + "\n", { mode: 0o600 });
+  const err = cli(["--store", env.store, "--sessions-root", env.sessions, "--allow-cwd", CWD, "--key-file", bad, "--write"]);
+  assert.equal(err.status, 4);
+  assert.ok(!(err.stdout + err.stderr).includes(keyHex));
+});
+
+test("K4 a lost key fails closed: no new key is minted over an existing store identity", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0 });
+  recordOnce(env, U1, T0);
+  const keyFile = keyPathFor(env);
+  const trusted = readFileSync(join(paths(env.store).observations, `${observationIdFor(U1)}.json`), "utf8");
+  rmSync(keyFile);
+  for (const write of [true, false]) {
+    assert.equal(codeOf(() => run(env, { write, now: T0 + 90 * MIN })), KEY_ERRORS.MISSING, `write=${write}`);
+    assert.ok(!existsSync(keyFile), "a key must not be re-created");
+  }
+  assert.equal(readFileSync(join(paths(env.store).observations, `${observationIdFor(U1)}.json`), "utf8"), trusted);
+});
+
+test("K5 a different key (same path) is detected via key_id and refused", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0 });
+  recordOnce(env, U1, T0);
+  const keyFile = keyPathFor(env);
+  rmSync(keyFile);
+  writeFileSync(keyFile, "ab".repeat(32) + "\n", { mode: 0o600 });
+  assert.equal(codeOf(() => run(env, { write: true, now: T0 + 90 * MIN })), KEY_ERRORS.MISMATCH);
+});
+
+test("K6 data without an identity record fails closed (never adopts or re-mints)", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0 });
+  recordOnce(env, U1, T0);
+  rmSync(paths(env.store).identity);
+  assert.equal(codeOf(() => run(env, { write: true, now: T0 + 90 * MIN })), KEY_ERRORS.IDENTITY_MISSING);
+  writeFileSync(paths(env.store).identity, "{ broken");
+  assert.equal(codeOf(() => run(env, { write: true, now: T0 + 90 * MIN })), KEY_ERRORS.IDENTITY_CORRUPT);
+});
+
+test("K7 unsafe key files are refused: group-readable, symlink, wrong content, inside the store", () => {
+  const T0 = Date.now();
+  const env = mkEnv();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0 });
+  const keyFile = keyPathFor(env);
+
+  writeFileSync(keyFile, "cd".repeat(32) + "\n", { mode: 0o644 });
+  chmodSync(keyFile, 0o644);
+  assert.equal(codeOf(() => run(env, { write: true, now: T0 })), KEY_ERRORS.INSECURE);
+
+  rmSync(keyFile);
+  const real = join(env.root, "keys", "real.key");
+  writeFileSync(real, "ef".repeat(32) + "\n", { mode: 0o600 });
+  symlinkSync(real, keyFile);
+  assert.equal(codeOf(() => run(env, { write: true, now: T0 })), KEY_ERRORS.INSECURE);
+
+  rmSync(keyFile);
+  writeFileSync(keyFile, "not a key\n", { mode: 0o600 });
+  assert.equal(codeOf(() => run(env, { write: true, now: T0 })), KEY_ERRORS.UNREADABLE);
+
+  assert.equal(codeOf(() => run(env, { write: true, now: T0, keyFile: join(env.store, "inside.key") })), KEY_ERRORS.INSIDE_STORE);
+  assert.ok(!existsSync(paths(env.store).state), "nothing may be written on a key failure");
+  assert.equal(countObservationFiles(env.store), 0);
+});
+
+test("K8 write requires --key-file; dry-run without one uses an in-memory key and persists nothing", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0 });
+  assert.throws(() => run(env, { write: true, now: T0, keyFile: null }), /--key-file is required/);
+  const before = snapshot(env.root);
+  const r = run(env, { write: false, now: T0, keyFile: null });
+  assert.equal(r.mode, "dry-run");
+  assert.deepEqual(snapshot(env.root), before);
+  assert.equal(cli(["--store", env.store, "--sessions-root", env.sessions, "--allow-cwd", CWD, "--write"]).status, 2);
+});
+
+test("K9 a kill-switched run does not create a key or an identity", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0 });
+  const r = run(env, { write: true, now: T0, envVars: { AUTO_EVOLUTION: "SUSPENDED" } });
+  assert.equal(r.counts.SUSPENDED, 1);
+  assert.ok(!existsSync(join(env.root, "keys", "omp.key")));
+});
+
+test("K10 the v1 shape (unsalted sha256 cwd_ref, v1 schema) is no longer valid", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0 });
+  recordOnce(env, U1, T0);
+  const o = listTrustedObservations(env.store)[0];
+  assert.ok(!validateObservation({ ...o, schema: "aegisflow.omp-attribution/v1" }).ok);
+  assert.ok(!validateObservation({ ...o, cwd_ref: { sha256: "a".repeat(64), allowlisted: true } }).ok);
+  assert.ok(!validateObservation({ ...o, cwd_ref: { ...o.cwd_ref, alg: "sha256" } }).ok);
+});
+
+
+test("L1 --slug limits discovery: other session directories are never opened", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0, slug: "-wanted" });
+  putSession(env, entriesFor(U2), { uuid: U2, clockNow: T0, slug: "-other" });
+  const all = run(env, { now: T0 });
+  assert.equal(all.results.length, 2);
+  const only = runIngest({
+    storeRoot: env.store, sessionsRoot: env.sessions, allowRoots: [CWD], denyRoots: [], nowMs: () => T0,
+    lsof: () => "not_held", onlySlugs: ["-wanted"], keyFile: null,
+  });
+  assert.deepEqual(only.results.map((r) => r.session_id), [U1]);
+  const r = cli(["--store", env.store, "--sessions-root", env.sessions, "--allow-cwd", CWD, "--slug", "-wanted", "--json"]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout).results.map((x) => x.session_id), [U1]);
+  // Real directory names start with "--": the = form must work.
+  putSession(env, entriesFor(U3), { uuid: U3, clockNow: T0, slug: "--dashed-slug--" });
+  const d = cli(["--store", env.store, "--sessions-root", env.sessions, "--allow-cwd", CWD, "--slug=--dashed-slug--", "--json"]);
+  assert.equal(d.status, 0, d.stderr);
+  assert.deepEqual(JSON.parse(d.stdout).results.map((x) => x.session_id), [U3]);
+});
+
+
+test("M1 real layout: a leading title entry before the session header is handled; a missing header is reported as such", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, withTitleFirst(entriesFor(U1)), { uuid: U1, clockNow: T0 });
+  const noHeader = entriesFor(U2).slice(1); // header removed
+  putSession(env, noHeader, { uuid: U2, clockNow: T0, slug: "-no-header" });
+  const manyLines = [];
+  for (let i = 0; i < 12; i++) manyLines.push({ type: "custom", id: `ab00000${i % 10}`, customType: "x" });
+  putSession(env, [...manyLines, ...entriesFor(U3)], { uuid: U3, clockNow: T0, slug: "-late-header" });
+  const { first, second } = recordOnce(env, U1, T0);
+  assert.equal(dispOf(first, U1), "PENDING_FIRST_OBSERVATION");
+  assert.equal(dispOf(second, U1), "RECORDED");
+  assert.equal(second.results.find((r) => r.session_id === U2).reason, "no_session_header");
+  assert.equal(second.results.find((r) => r.session_id === U3).reason, "no_session_header", "header beyond the scan window is not searched for");
+  assert.equal(listTrustedObservations(env.store).length, 1);
 });
