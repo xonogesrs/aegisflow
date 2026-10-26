@@ -1,0 +1,310 @@
+[
+  {
+    "name": "EXTENSION_LOADED",
+    "ok": true,
+    "detail": {
+      "found": [
+        "fence-identity",
+        "fence-generation",
+        "release-final"
+      ]
+    }
+  },
+  {
+    "name": "NORMAL_PROMPT",
+    "ok": true,
+    "detail": {
+      "answered": "REHEARSAL_PROMPT_OK",
+      "loadFailure": false
+    }
+  },
+  {
+    "name": "TOOL_CALLING",
+    "ok": true,
+    "detail": "REHEARSAL_TOOL_OK"
+  },
+  {
+    "name": "SLASH_COMMAND",
+    "ok": true,
+    "detail": "completed"
+  },
+  {
+    "name": "SLASH_COMMAND:extension-command",
+    "ok": true,
+    "detail": "completed"
+  },
+  {
+    "name": "SESSION_RESUME:file-written",
+    "ok": true,
+    "detail": [
+      "2026-10-21T12-22-34-996Z_<session-uuid>.jsonl"
+    ]
+  },
+  {
+    "name": "SESSION_RESUME",
+    "ok": true,
+    "detail": {
+      "firstAnswered": true,
+      "resumedAnswered": true,
+      "historyGrew": true,
+      "secondTurnInSameFile": true
+    }
+  },
+  {
+    "name": "ASYNC_JOB_DELIVERY",
+    "ok": true,
+    "detail": {
+      "backgrounded": true,
+      "delivered": true
+    }
+  },
+  {
+    "name": "AGENT_END",
+    "ok": true,
+    "detail": {
+      "agentEndFrames": 1
+    }
+  },
+  {
+    "name": "AUTOLOOP_DISPATCH",
+    "ok": true,
+    "detail": {
+      "status": "OMP dispatch: native",
+      "timeoutOk": true,
+      "orphan": 0
+    }
+  },
+  {
+    "name": "CBM_ROUTING",
+    "ok": true,
+    "detail": {
+      "ekm": true,
+      "legacyAliasOffered": false
+    }
+  },
+  {
+    "name": "CONTROLLER_AUTHORITY_DENIAL",
+    "ok": true,
+    "detail": {
+      "verified": true,
+      "denial": "CONTROLLER_AUTHORITY_ABSENT"
+    }
+  },
+  {
+    "name": "CONTROLLER_AUTHORITY_DENIAL:no-ledger-write",
+    "ok": true,
+    "detail": []
+  },
+  {
+    "name": "CONTROLLER_VALID_COMMIT:bound",
+    "ok": true,
+    "detail": "ALLOCATED"
+  },
+  {
+    "name": "CONTROLLER_VALID_COMMIT",
+    "ok": true,
+    "detail": {
+      "state": "COMMITTED",
+      "ledgerRecorded": true
+    }
+  },
+  {
+    "name": "CONTROLLER_VALID_COMMIT:durable",
+    "ok": true,
+    "detail": {
+      "commitRecords": 1,
+      "totalRecords": 3
+    }
+  },
+  {
+    "name": "CONTROLLER_VALID_COMMIT:generation-advanced",
+    "ok": true,
+    "detail": 2
+  },
+  {
+    "name": "RESULT_CORRELATION",
+    "ok": true,
+    "detail": {
+      "foreignKey": "MAC_MISMATCH",
+      "first": true,
+      "replay": "DUPLICATE_RESULT"
+    }
+  },
+  {
+    "name": "LEDGER_EXCLUSIVITY",
+    "ok": true,
+    "detail": [
+      {
+        "generation": 1,
+        "winners": 1,
+        "records": 1
+      },
+      {
+        "generation": 3,
+        "winners": 1,
+        "records": 1
+      },
+      {
+        "generation": 5,
+        "winners": 1,
+        "records": 1
+      }
+    ]
+  },
+  {
+    "name": "C1:ledger-not-committed-before",
+    "ok": true,
+    "detail": "NOT_COMMITTED"
+  },
+  {
+    "name": "C1:agent-bash-wrote-ledger",
+    "ok": true,
+    "detail": "appended"
+  },
+  {
+    "name": "C1:forged-record-not-believed",
+    "ok": false,
+    "detail": "COMMITTED"
+  },
+  {
+    "name": "C1:legit-commit-still-succeeds",
+    "ok": false,
+    "detail": {
+      "state": "DENIED",
+      "denial": "GENERATION_ALREADY_COMMITTED"
+    }
+  },
+  {
+    "name": "C1:agent-cannot-modify-loaded-module",
+    "ok": false,
+    "detail": "module bytes changed by a same-uid write"
+  },
+  {
+    "name": "C1:ordinary-start-loads-dropped-module",
+    "ok": true,
+    "detail": "dropped module executed"
+  },
+  {
+    "name": "C1:governed-launch-ignores-dropped-module",
+    "ok": true,
+    "detail": "not loaded"
+  },
+  {
+    "name": "C1:attested-launch-refuses-tampered-tree",
+    "ok": true,
+    "detail": "EXTENSION_HASH_MISMATCH"
+  },
+  {
+    "name": "C2:separate-state-dirs-cannot-double-commit",
+    "ok": false,
+    "detail": {
+      "a": "COMMITTED",
+      "b": "COMMITTED",
+      "generations": [
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "name": "C3:cross-instance-frame-refused",
+    "ok": true,
+    "detail": "MAC_MISMATCH"
+  },
+  {
+    "name": "C3:distinct-keys",
+    "ok": true,
+    "detail": {
+      "distinct": true,
+      "shape": true
+    }
+  },
+  {
+    "name": "C4:dispatched-before-kill",
+    "ok": true,
+    "detail": "dispatched"
+  },
+  {
+    "name": "C4:ledger-is-the-only-witness",
+    "ok": true,
+    "detail": {
+      "durable": "COMMITTED",
+      "commitRecords": 1,
+      "records": [
+        "allocate:1",
+        "commit:1",
+        "allocate:2"
+      ]
+    }
+  },
+  {
+    "name": "C4:probe-matches-ledger",
+    "ok": true,
+    "detail": {
+      "probe": "COMMITTED",
+      "durable": "COMMITTED"
+    }
+  },
+  {
+    "name": "ROLLBACK:install-applied",
+    "ok": true,
+    "detail": "replace,unchanged,unchanged,copy,copy,copy,unchanged,unchanged,unchanged,unchanged,copy"
+  },
+  {
+    "name": "ROLLBACK:preexisting-files-unchanged",
+    "ok": true,
+    "detail": {
+      "preserved": [
+        "cbm-query.js:unchanged",
+        "lib/poll-wait-policy.js:unchanged",
+        "test/poll-wait-policy.test.mjs:unchanged",
+        "test/waiter-fence.acceptance.ts:unchanged",
+        "test/terminal-fence-authority.acceptance.ts:unchanged",
+        "test/terminal-fence-ordering.acceptance.ts:unchanged"
+      ]
+    }
+  },
+  {
+    "name": "ROLLBACK:r3-files-copied",
+    "ok": true,
+    "detail": {
+      "copied": [
+        "lib/controller-result.mjs",
+        "lib/runtime-identity.mjs",
+        "lib/ledger-lock.mjs",
+        "test/controller-contract.acceptance.ts"
+      ]
+    }
+  },
+  {
+    "name": "ROLLBACK:byte-identical-restore",
+    "ok": true,
+    "detail": {
+      "ok": true,
+      "identical": true
+    }
+  },
+  {
+    "name": "ROLLBACK:preexisting-files-survived",
+    "ok": true,
+    "detail": {
+      "present": [
+        "cbm-query.js",
+        "lib/poll-wait-policy.js",
+        "test/waiter-fence.acceptance.ts"
+      ]
+    }
+  },
+  {
+    "name": "ROLLBACK:r3-files-removed",
+    "ok": true,
+    "detail": {
+      "remaining": []
+    }
+  },
+  {
+    "name": "ROLLBACK:restored-runtime-answers",
+    "ok": true,
+    "detail": "REHEARSAL_PROMPT_OK"
+  }
+]

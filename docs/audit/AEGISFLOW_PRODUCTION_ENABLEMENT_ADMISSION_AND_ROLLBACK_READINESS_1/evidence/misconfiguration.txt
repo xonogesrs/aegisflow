@@ -1,0 +1,7 @@
+
+[authority-no-statedir] identityState=EPHEMERAL identityError=null generation=1
+[authority-no-statedir] commit denial=(none) committed=true ledgerRecorded=false identityState=EPHEMERAL generationDurable=undefined
+
+[statedir-no-authority] identityState=EPHEMERAL identityError=null generation=1
+[statedir-no-authority] commit denial=CONTROLLER_AUTHORITY_ABSENT committed=false ledgerRecorded=undefined identityState=EPHEMERAL generationDurable=undefined
+ledger dir exists after ungoverned run: false

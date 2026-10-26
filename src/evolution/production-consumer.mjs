@@ -50,21 +50,26 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
 import { C2dHoldError, HOLD } from "../c2d/fs-atomic.mjs";
-import { readConfigEnv } from "../shared/autoloop-paths.mjs";
+import { readConfigEnv, legacyEnvName } from "../shared/autoloop-paths.mjs";
 import { acquireStructuredLock } from "../c2d/lock.mjs";
 import { collectFingerprint } from "../c2d/fingerprint.mjs";
+import { canonicalize } from "../canonical-digest.mjs";
 import { readEvolutionPolicy } from "./policy.mjs";
 import {
   readTriggerState, writeTriggerState, applyTriggerGates, recordTrigger,
   buildTriggerEvent, sha256Hex,
+  // N3 REPAIR: the consumer re-derives the eligible signals from the journal
+  // with the SAME two functions the observer used — never a second evaluator.
+  extractTriggerObservations, evaluateSignals,
 } from "./trigger.mjs";
 import { evolutionSwitchState, readObservationJournal } from "./production-observer.mjs";
+import { assessEvidenceProvenance } from "./attribution-feed.mjs";
 import { reconcileEvolutionState } from "./recovery.mjs";
 import { deriveAttribution } from "./attribution.mjs";
 import { canonicalTaskClass } from "./attribution.mjs";
 import {
   EVOLUTION_DECLARATION_ENV, readEvolutionProductionDeclaration,
-  declarationInputs, parseStrategyBaselineValues,
+  declarationInputs, parseStrategyBaselineValues, readDeclaredProposalOnly,
 } from "./production-declaration.mjs";
 
 export const EVOLUTION_CONSUMER_SCHEMA = "autoloop.evolution-consumer/v1";
@@ -83,6 +88,9 @@ export const EVOLUTION_CONSUMER_DISPOSITIONS = Object.freeze([
   "SINGLEFLIGHT",          // an identical cycle is already active (§D)
   "CYCLE_STARTED",         // durable trigger recorded; runEvolutionCycle scheduled
   "SCHEDULE_FAILED",       // the consumer failed open — no cycle (never a run failure)
+  "CONFIGURATION_INVALID", // §G3: an unusable governed input (e.g. a non-boolean
+                           // proposalOnly) — NO cycle is started; never a silent
+                           // downgrade to the mutating mode
 ]);
 
 /** Every disposition the SCHEDULED CYCLE writes to the bounded outcome log
@@ -105,6 +113,10 @@ export const EVOLUTION_CONFIG_ENV = Object.freeze({
   STRATEGY_DIMENSIONS: "AEGISFLOW_EVOLUTION_STRATEGY_DIMENSIONS",
   STRATEGY_BASELINE_VALUES: "AEGISFLOW_EVOLUTION_STRATEGY_BASELINE_VALUES",
   SYNTHETIC: "AEGISFLOW_EVOLUTION_SYNTHETIC",
+  // §G3: the explicit, default-OFF proposal-only ceiling. An operator turns it
+  // on here (declaration / explicit env / runnerOpts); nothing in the
+  // evolution pipeline can raise its own execution authority.
+  PROPOSAL_ONLY: "AEGISFLOW_EVOLUTION_PROPOSAL_ONLY",
   // §J.2: the deployment declaration record (storeRoot / checkpointRoot /
   // repoRoot / taskClass / strategyBaselineValues) — a PATH supplied by the
   // deployment, never a machine-specific constant in source.
@@ -133,6 +145,38 @@ function rememberOutcome(entry) {
 function envValue(env, key) {
   const resolved = readConfigEnv(env, key);
   return resolved ? resolved.value.trim() : null;
+}
+
+/**
+ * Read a governed env entry WITHOUT type coercion (N2).
+ *
+ * `readConfigEnv` only reports STRING values, and treats a blank string as
+ * unset — correct for path/identity inputs, but it also makes a non-string
+ * value (`1`, `0`, `null`, `{}`, `[]`) indistinguishable from "not set". For a
+ * provenance declaration that difference is the whole contract: "not set" is
+ * production evidence, while an unusable value must be REJECTED. So the value
+ * is read here with its type intact, on BOTH the brand and the legacy name.
+ *
+ * Precedence matches `readConfigEnv`: the brand name wins when it carries a
+ * non-blank string, otherwise the legacy name is considered; but a PRESENT
+ * value of the wrong type on either name is reported, never skipped.
+ *
+ * @returns {{ name: string|null, value: unknown, present: boolean, typeInvalid: boolean }}
+ */
+function rawEnvEntry(env, key) {
+  const names = [key, legacyEnvName(key)];
+  let fallback = { name: null, value: undefined, present: false };
+  for (const name of names) {
+    if (!env || !Object.prototype.hasOwnProperty.call(env, name)) continue;
+    const value = env[name];
+    if (typeof value !== "string") {
+      return { name, value, present: true, typeInvalid: true };
+    }
+    if (value.trim().length === 0) continue;
+    if (name === key) return { name, value, present: true, typeInvalid: false };
+    if (!fallback.present) fallback = { name, value, present: true };
+  }
+  return { ...fallback, typeInvalid: false };
 }
 
 function cfgValue(cfg, env, key, envKey) {
@@ -194,8 +238,89 @@ export function resolveEvolutionProductionConfig({ runnerOpts = {}, env = proces
       : { values: decl.strategyBaselineValues ?? null, error: null });
   const strategyBaselineValues = baselineCandidate.values ?? null;
 
-  const syntheticEnv = String(envValue(env, EVOLUTION_CONFIG_ENV.SYNTHETIC) ?? "").toLowerCase();
-  const synthetic = cfg.synthetic === true || decl.synthetic === true || syntheticEnv === "1" || syntheticEnv === "true";
+  // §G1 SYNTHETIC (declared provenance). Three governed surfaces can declare
+  // it: the caller's explicit object, the operator's environment, the
+  // deployment declaration. A legal boolean keeps the existing semantics —
+  // ANY surface that says `true` marks the run synthetic, and the provenance
+  // policy is unchanged.
+  //
+  // LOW-RISK HARDENING 1 / N2 — a value whose TYPE is unusable is REJECTED,
+  // never coerced to `false`. `cfg.synthetic === true` and an env string other
+  // than 1/true/0/false used to fall through silently, which read a malformed
+  // configuration as "production evidence" and let the cycle run on data the
+  // operator had marked otherwise. Same fail-closed shape as §G3.
+  const syntheticEnvEntry = rawEnvEntry(env, EVOLUTION_CONFIG_ENV.SYNTHETIC);
+  const syntheticEnv = syntheticEnvEntry.typeInvalid
+    ? ""
+    : String(syntheticEnvEntry.value ?? "").trim().toLowerCase();
+  let syntheticInvalid = null;
+  if (cfg.synthetic !== undefined && typeof cfg.synthetic !== "boolean") {
+    syntheticInvalid = "runnerOpts.evolution.synthetic must be a boolean";
+  } else if (syntheticEnvEntry.typeInvalid) {
+    // N2: a non-STRING env value is not "unset". `readConfigEnv` ignores it, so
+    // reading the entry with its type intact is what makes `1`, `0`, `null`,
+    // `{}` and `[]` a rejection instead of silent production evidence.
+    syntheticInvalid = `${syntheticEnvEntry.name ?? EVOLUTION_CONFIG_ENV.SYNTHETIC} must be 1/true/0/false (got ${typeof syntheticEnvEntry.value})`;
+  } else if (syntheticEnv !== "" && syntheticEnv !== "1" && syntheticEnv !== "true" && syntheticEnv !== "0" && syntheticEnv !== "false") {
+    // Name the variable that was ACTUALLY set (the brand or the legacy alias),
+    // so the operator does not have to guess which one the deployment exports.
+    syntheticInvalid = `${syntheticEnvEntry.name ?? EVOLUTION_CONFIG_ENV.SYNTHETIC} must be 1/true/0/false`;
+  } else if (declaration.record && Object.prototype.hasOwnProperty.call(declaration.record, "synthetic")
+    && typeof declaration.record.synthetic !== "boolean") {
+    syntheticInvalid = "the deployment declaration's synthetic must be a boolean";
+  }
+  const synthetic = cfg.synthetic === true
+    || decl.synthetic === true
+    || declaration.record?.synthetic === true
+    || syntheticEnv === "1" || syntheticEnv === "true";
+
+  // §G3 PROPOSAL-ONLY (default OFF). Three governed surfaces can set it,
+  // highest precedence first: the caller's explicit object, the operator's
+  // environment variable, the deployment declaration. At EVERY surface an
+  // explicit boolean STOPS the search, so a caller that says `false` cannot be
+  // overridden by a broader surface (and a declaration that says `false` is
+  // not overridden by an absent anything). Nothing in the evolution pipeline
+  // can raise it (not a plan, not a trigger event, not the agent).
+  //
+  // TARGETED REMEDIATION 2 / F2 — FAIL CLOSED, never fail open:
+  //   - the DECLARED ceiling is read from the RAW record, not from the
+  //     validated one. A declaration that fails validation for an UNRELATED
+  //     key (a typo, a bad baseline value) used to be discarded whole, which
+  //     silently dropped the operator's `proposalOnly:true` and let the loop
+  //     run in the MUTATING mode. An authority ceiling must never be lost to
+  //     an unrelated error in the same file.
+  //   - a value whose TYPE is unusable is never guessed: `proposalOnlyInvalid`
+  //     carries it and the consumer refuses to start a cycle.
+  //   - an unreadable/unparsable declaration file is surfaced as
+  //     `declarationInvalid` (the ceiling cannot be known) and, like the above,
+  //     starts no cycle.
+  const declaredCeiling = readDeclaredProposalOnly(declaration.record);
+  const proposalEnv = String(envValue(env, EVOLUTION_CONFIG_ENV.PROPOSAL_ONLY) ?? "").toLowerCase();
+  let proposalOnly = false;
+  let proposalOnlyInvalid = null;
+  if (cfg.proposalOnly !== undefined) {
+    if (typeof cfg.proposalOnly === "boolean") proposalOnly = cfg.proposalOnly;
+    else proposalOnlyInvalid = "runnerOpts.evolution.proposalOnly must be a boolean";
+  } else if (proposalEnv !== "") {
+    if (proposalEnv === "1" || proposalEnv === "true") proposalOnly = true;
+    else if (proposalEnv !== "0" && proposalEnv !== "false") {
+      proposalOnlyInvalid = `${EVOLUTION_CONFIG_ENV.PROPOSAL_ONLY} must be 1/true/0/false`;
+    }
+  } else if (declaredCeiling.error) {
+    proposalOnlyInvalid = declaredCeiling.error;
+  } else if (declaredCeiling.present) {
+    proposalOnly = declaredCeiling.value === true;
+  }
+
+  // A DECLARATION THAT DOES NOT VALIDATE IS A GOVERNED-CONFIGURATION FAILURE.
+  // Its ceiling may be unknowable (a misnamed key is indistinguishable from an
+  // absent one), so the deployment must not be read as "the ceiling is OFF".
+  // TARGETED REMEDIATION 2 / F2 — the earlier fail-open discarded the whole
+  // record and silently ran the MUTATING mode.
+  const declarationInvalid = declaration.provided && (declaration.record === null || declaration.errors.length > 0)
+    ? `the deployment declaration is not usable: ${declaration.errors.join(",") || "unreadable"}`
+    : null;
+  const configurationInvalid = proposalOnlyInvalid ?? declarationInvalid ?? syntheticInvalid ?? null;
 
   const missing = [];
   if (!storeRoot) missing.push("storeRoot");
@@ -214,11 +339,21 @@ export function resolveEvolutionProductionConfig({ runnerOpts = {}, env = proces
     strategyBaselineValues,
     strategyBaselineValuesError: baselineCandidate.error ?? null,
     synthetic,
+    proposalOnly,
+    proposalOnlyInvalid,
+    configurationInvalid,
+    declarationInvalid,
     declaration: {
       provided: declaration.provided,
       path: declaration.path,
       source: declaration.source,
       errors: declaration.errors,
+      // TARGETED REMEDIATION 2 / F2: whether the record VALIDATED as a whole
+      // and whether the raw file was readable at all. A reader must be able to
+      // tell "no declaration" from "a declaration that could not be used".
+      valid: declaration.provided ? declaration.declaration !== null : null,
+      readable: declaration.provided ? declaration.record !== null : null,
+      proposalOnly: declaredCeiling.present ? declaredCeiling.value : null,
     },
     reviewVerdict: typeof cfg.reviewVerdict === "string" && cfg.reviewVerdict.length > 0 ? cfg.reviewVerdict : "PASS",
     canaryWindowMs: Number.isFinite(cfg.canaryWindowMs) ? cfg.canaryWindowMs : (Number.isFinite(decl.canaryWindowMs) ? decl.canaryWindowMs : undefined),
@@ -228,6 +363,201 @@ export function resolveEvolutionProductionConfig({ runnerOpts = {}, env = proces
 }
 
 // ── §A/§B/§D/§E the production consumption entry ───────────────────────────
+
+/**
+ * Re-establish evidence provenance from the DURABLE journal (N3).
+ *
+ * The consumer receives `observation.evidence_qualified` from its caller. That
+ * boolean is produced by the observer for the production path, but nothing
+ * structural prevents a non-production caller from passing a forged
+ * observation with a hand-built `fired` list. Trusting the field would let such
+ * a caller write a durable trigger record and consume the signature's cooldown
+ * before the loop's own fence ever ran.
+ *
+ * So the consumer re-reads the journal with the SAME reader (one journal
+ * contract) and re-applies the SAME predicate (one provenance rule) that the
+ * observer and the loop use. Refusal is total: no trigger, no cooldown, no
+ * cycle.
+ *
+ * Side effect, disclosed: the shared reader initialises the evidence store's
+ * own execution directory (owner-only, empty) when it is absent — the same
+ * thing the observer already does on the production path before this guard
+ * runs. It writes no journal row, no trigger record and no cooldown slot, and
+ * it is not a store the evolution subsystem owns.
+ *
+ * @returns {{ qualified: boolean, reason: string|null, events: object[] }}
+ */
+function revalidateEvidenceProvenance({ config = null, evidenceRoot = null, executionId = null } = {}) {
+  const journal = readObservationJournal({ evidenceRoot, executionId });
+  if (!journal.ok) return { qualified: false, reason: `no durable journal (${journal.reason})`, events: [] };
+  const provenance = assessEvidenceProvenance({ config, events: journal.events });
+  if (!provenance.eligible) return { qualified: false, reason: provenance.reason, events: journal.events };
+  return { qualified: true, reason: null, events: journal.events };
+}
+
+/**
+ * Signal classes the CONSUMER cannot re-derive from the journal on this path.
+ *
+ *   - `QUALIFIED_PATTERN_EVIDENCE` — its evidence is pattern qualification from
+ *     the learning store, which the consumer does not read.
+ *   - `LATENCY_REGRESSION` / `TOKEN_INEFFICIENCY` — both fire only against a
+ *     BASELINE the caller supplies (`latencyBaseline` / `tokenBaseline`). The
+ *     consumer has no durable view of a baseline, so a caller-supplied one
+ *     would be exactly the unverified input this guard exists to refuse.
+ *
+ * No production path supplies any of these inputs to the observer today, so
+ * these classes cannot legitimately appear in a production `fired` list;
+ * refusing them narrows nothing that is reachable and fails closed on the
+ * classes whose evidence is not durably re-establishable here.
+ */
+const NON_REDERIVABLE_SIGNAL_CLASSES = Object.freeze({
+  QUALIFIED_PATTERN_EVIDENCE: "pattern qualification is not durably readable here",
+  LATENCY_REGRESSION: "its baseline is not durably readable here",
+  TOKEN_INEFFICIENCY: "its baseline is not durably readable here",
+});
+
+/** Canonical fingerprint of ONE signal record: every field a trigger event
+ *  carries, with the evidence refs order-normalised. Two signals with the same
+ *  fingerprint are the same claim about the same evidence. */
+function signalFingerprint(signal) {
+  return canonicalize({
+    signalClass: signal?.signalClass ?? null,
+    count: signal?.count ?? null,
+    minCount: signal?.minCount ?? null,
+    signature: signal?.signature ?? null,
+    evidenceRefs: [...(Array.isArray(signal?.evidenceRefs) ? signal.evidenceRefs : [])].sort(),
+    observation: signal?.observation ?? {},
+  });
+}
+
+/** The first field in which two signals disagree, for the refusal reason. */
+function signalFieldMismatch(claimed, derived) {
+  const a = claimed ?? {};
+  const b = derived ?? {};
+  if (a.signalClass !== b.signalClass) return "signalClass";
+  if (a.signature !== b.signature) return "signature";
+  if (a.count !== b.count) return "count";
+  if (a.minCount !== b.minCount) return "minCount";
+  const refsA = [...(Array.isArray(a.evidenceRefs) ? a.evidenceRefs : [])].sort();
+  const refsB = [...(Array.isArray(b.evidenceRefs) ? b.evidenceRefs : [])].sort();
+  if (refsA.join("\u0000") !== refsB.join("\u0000")) return "evidenceRefs";
+  // A patch is the one observation field that reaches a mutation plan, so it
+  // is named explicitly instead of being folded into a generic mismatch.
+  if (canonicalize(a.observation?.patchPlan ?? null) !== canonicalize(b.observation?.patchPlan ?? null)) return "patchPlan";
+  if (canonicalize(a.observation?.affectedScope ?? null) !== canonicalize(b.observation?.affectedScope ?? null)) return "affectedScope";
+  return "observation";
+}
+
+/**
+ * The tolerated distance between an observation's own `at` and the consumer's
+ * clock. Inside it the re-derivation uses the observation's timestamp (so the
+ * window matches the observer's byte for byte); outside it the consumer uses
+ * its own clock — a caller must not be able to select a stale or future
+ * evidence window by editing one field.
+ */
+const OBSERVATION_AT_TOLERANCE_MS = 5 * 60 * 1000;
+
+/** The re-derivation's clock for ONE observation. */
+function derivationClock(observation, now = Date.now()) {
+  const at = Date.parse(observation?.at ?? "");
+  if (!Number.isFinite(at)) return null;
+  return Math.abs(now - at) <= OBSERVATION_AT_TOLERANCE_MS ? at : null;
+}
+
+/**
+ * N3 — JOURNAL-DERIVED SIGNAL AUTHORITY.
+ *
+ * The consumer must never trust the caller's `fired` list, `signature`, `count`,
+ * `signalClass` or `patchPlan`. Citing a row that happens to exist in a real
+ * journal proves nothing: a forged signal can cite a genuine row while claiming
+ * a signature, count or patch that the row does not support, and thereby write
+ * a durable trigger, spend the signature's cooldown and seed a candidate with
+ * an unverified patch.
+ *
+ * So the eligible signals are RE-DERIVED here from the durable journal with the
+ * SAME two functions the observer used (`extractTriggerObservations` +
+ * `evaluateSignals`) and the SAME policy thresholds. The caller's claim is only
+ * accepted when it is canonically identical to a re-derived signal — including
+ * its `observation`, which is where a bounded patch travels. The DERIVED
+ * records (not the caller's objects) are what the gate, the durable trigger
+ * record and the downstream plan consume, so a patch can only reach a candidate
+ * when the journal itself carries it.
+ *
+ * The observation window is anchored to the observation's own `at` timestamp so
+ * the re-derivation sees exactly the window the observer saw. Without that, an
+ * event sitting on the cutoff could be counted by one call and dropped by the
+ * other, and a GENUINE signal would be refused — the guard must never fence
+ * real evidence.
+ *
+ * This is not a second evidence store and not a second evaluator: it is the
+ * existing derivation, run once more against the journal the consumer already
+ * re-read.
+ *
+ * @returns {{ ok: boolean, reason: string|null, signals: object[] }}
+ */
+function rederiveSignalsFromJournal({ events, thresholds = {}, now = null }) {
+  let derived;
+  try {
+    const observations = extractTriggerObservations({
+      events,
+      ...(Number.isFinite(now) ? { now } : {}),
+    });
+    derived = evaluateSignals({ observations, thresholds: thresholds ?? {} });
+  } catch (e) {
+    return { ok: false, reason: `signal re-derivation failed: ${String(e?.message ?? e).slice(0, 160)}`, signals: [] };
+  }
+  return { ok: true, reason: null, signals: Array.isArray(derived) ? derived : [] };
+}
+
+/**
+ * Compare the caller's fired list against the journal-derived one.
+ *
+ * The comparison is exact in BOTH directions: a claimed signal the journal does
+ * not derive is a forgery, and a derived signal the caller omitted would let the
+ * caller decide which qualifying evidence is allowed to act. Production always
+ * passes the observer's own list, so both directions hold by construction.
+ *
+ * @returns {{ ok: boolean, reason: string|null, signals: object[] }}
+ *   `signals` is the DERIVED list — the only list downstream may act on.
+ */
+function verifyFiredSignals({ fired, derived }) {
+  for (const signal of fired) {
+    const cls = String(signal?.signalClass ?? "?");
+    const why = NON_REDERIVABLE_SIGNAL_CLASSES[cls];
+    if (why) return { ok: false, reason: `signal ${cls} cannot be re-established from the durable journal (${why})`, signals: [] };
+  }
+  const byFingerprint = new Map(derived.map((s) => [signalFingerprint(s), s]));
+  const refsOf = (s) => [...(Array.isArray(s?.evidenceRefs) ? s.evidenceRefs : [])].sort().join("\u0000");
+  for (const claimed of fired) {
+    if (byFingerprint.has(signalFingerprint(claimed))) continue;
+    // Same class, same cited rows, different claim — the interesting forgery:
+    // it reuses real evidence while asserting a fact the evidence denies. The
+    // refusal names the exact field, so the operator can tell a forged
+    // signature/count/patch from an entirely invented signal.
+    const sameClass = derived.filter((s) => s.signalClass === claimed?.signalClass);
+    const candidate = sameClass.find((s) => refsOf(s) === refsOf(claimed)) ?? sameClass[0];
+    if (candidate) {
+      return {
+        ok: false,
+        reason: `signal ${String(claimed?.signalClass ?? "?")} does not match the journal-derived signal (${signalFieldMismatch(claimed, candidate)})`,
+        signals: [],
+      };
+    }
+    return {
+      ok: false,
+      reason: `signal ${String(claimed?.signalClass ?? "?")} was not derived from the durable journal`,
+      signals: [],
+    };
+  }
+  if (derived.length !== fired.length) {
+    return {
+      ok: false,
+      reason: `the caller reported ${fired.length} signal(s) but the durable journal derives ${derived.length}`,
+      signals: [],
+    };
+  }
+  return { ok: true, reason: null, signals: derived };
+}
 
 function disposition(config, name, extra = {}) {
   return {
@@ -269,6 +599,27 @@ export function consumeEvolutionObservationForProduction({
   admission = null, attribution = null, attributionFeed = null,
 } = {}) {
   try {
+    // §G3 FAIL CLOSED: a governed setting that cannot be interpreted stops the
+    // consumer. It is never reinterpreted as "normal (mutating) mode". Checked
+    // before BOTH the inert check and the trigger so a misconfiguration is
+    // VISIBLE, not hidden behind "not declared" or "no trigger" on a quiet day.
+    // TARGETED REMEDIATION 2 / F2: `configurationInvalid` folds in the
+    // declaration-level failures too (an unusable ceiling value, a declaration
+    // that does not validate, an unreadable declaration whose ceiling is
+    // therefore unknown, a non-boolean `synthetic`). Any of them ⇒ NO cycle.
+    //
+    // This ordering is the point: an invalid declaration also fails to supply
+    // storeRoot, so the old order reported a benign DISABLED — telling the
+    // operator "nothing is declared" when what actually happened is "your
+    // declaration is unusable, and the ceiling it carries is unknown".
+    if (config?.configurationInvalid ?? config?.proposalOnlyInvalid) {
+      return disposition(config, "CONFIGURATION_INVALID", {
+        fired_count: Array.isArray(observation?.fired) ? observation.fired.length : 0,
+        reason: config.configurationInvalid ?? config.proposalOnlyInvalid,
+        proposal_only: config.proposalOnly === true,
+        declaration: config.declaration ?? null,
+      });
+    }
     if (!config?.enabled) {
       return disposition(config, "DISABLED", { reason: `evolution execution inputs not declared: ${(config?.missing ?? ["config"]).join(",")}` });
     }
@@ -283,16 +634,81 @@ export function consumeEvolutionObservationForProduction({
       });
     }
     const fired = Array.isArray(observation?.fired) ? observation.fired : [];
+    // §G1 EVIDENCE FENCE: an observation whose evidence was refused (synthetic
+    // or non-durable) is NOT a trigger — no gate, no durable record, no cycle.
+    if (observation?.evidence_qualified === false) {
+      return disposition(config, "NO_QUALIFIED_TRIGGER", {
+        fired_count: 0,
+        reason: `evidence not qualified: ${observation.evidence_exclusion ?? "unqualified"}`,
+        evidence_qualified: false,
+      });
+    }
     if (fired.length === 0) {
       return disposition(config, "NO_QUALIFIED_TRIGGER", { fired_count: 0 });
     }
+
+    // §G1 / N3 — THE CONSUMER RE-VERIFIES PROVENANCE ITSELF.
+    //
+    // `observation.evidence_qualified` is a field on an object the caller
+    // hands in, so a non-production caller can forge it. The durable trigger
+    // write, the cooldown/consume slot and the scheduled cycle must never rest
+    // on a boolean the consumer did not establish: the journal is re-read here
+    // and the SAME provenance predicate the observer and the loop use is
+    // applied again. A refusal happens BEFORE the gate, so it spends zero
+    // cooldown, records zero triggers and schedules zero cycles.
+    //
+    // A caller that supplies no durable journal identity cannot be verified
+    // and is therefore refused — never trusted by default.
+    const provenance = revalidateEvidenceProvenance({ config, evidenceRoot, executionId });
+    if (!provenance.qualified) {
+      return disposition(config, "NO_QUALIFIED_TRIGGER", {
+        fired_count: 0,
+        reason: `evidence re-verification failed: ${provenance.reason}`,
+        evidence_qualified: false,
+        evidence_reverified: true,
+      });
+    }
+    // Every fired signal must be RE-DERIVABLE from that journal. Citing rows
+    // that happen to exist is not enough: a forged signal can cite a genuine
+    // row while claiming a signature, count or patch the row does not support.
+    // The eligible signals are therefore re-derived here with the SAME two
+    // functions the observer used, and only a claim canonically identical to a
+    // derived signal is accepted. Downstream acts on the DERIVED records, so a
+    // patch can reach a candidate only when the journal itself carries it.
+    const rederived = rederiveSignalsFromJournal({
+      events: provenance.events,
+      thresholds: config?.thresholds ?? {},
+      now: derivationClock(observation),
+    });
+    if (!rederived.ok) {
+      return disposition(config, "NO_QUALIFIED_TRIGGER", {
+        fired_count: 0,
+        reason: `evidence re-verification failed: ${rederived.reason}`,
+        evidence_qualified: false,
+        evidence_reverified: true,
+      });
+    }
+    const verified = verifyFiredSignals({ fired, derived: rederived.signals });
+    if (!verified.ok) {
+      return disposition(config, "NO_QUALIFIED_TRIGGER", {
+        fired_count: 0,
+        reason: `evidence re-verification failed: ${verified.reason}`,
+        evidence_qualified: false,
+        evidence_reverified: true,
+        signals_rederived: rederived.signals.length,
+      });
+    }
+    // N3: the caller's objects are DISCARDED from here on. Everything below
+    // (gate, durable trigger record, plan, candidate) consumes the journal's
+    // own derivation.
+    const signals = verified.signals;
 
     // The loop is OFF without a durable policy — fail closed before any write.
     let policy;
     try {
       policy = readEvolutionPolicy(config.storeRoot);
     } catch (e) {
-      return disposition(config, "POLICY_UNAVAILABLE", { fired_count: fired.length, reason: String(e?.message ?? e).slice(0, 200) });
+      return disposition(config, "POLICY_UNAVAILABLE", { fired_count: signals.length, reason: String(e?.message ?? e).slice(0, 200) });
     }
 
     // §B durable trigger state — THE existing machinery, persisted here (the
@@ -302,7 +718,7 @@ export function consumeEvolutionObservationForProduction({
     let state = readTriggerState(config.storeRoot);
     let chosen = null;
     const suppressed = [];
-    for (const signal of fired) {
+    for (const signal of signals) {
       const gated = applyTriggerGates({ fired: [signal], state });
       state = gated.state;
       if (gated.allowed.length > 0) { chosen = gated.allowed[0]; break; }
@@ -310,7 +726,7 @@ export function consumeEvolutionObservationForProduction({
     }
     if (!chosen) {
       return disposition(config, "GATED", {
-        fired_count: fired.length, suppressed_count: suppressed.length, suppressed,
+        fired_count: signals.length, suppressed_count: suppressed.length, suppressed,
       });
     }
     const triggerEvent = buildTriggerEvent({
@@ -329,7 +745,7 @@ export function consumeEvolutionObservationForProduction({
     const key = `${config.storeRoot}\u0000${triggerEvent.signature}`;
     if (ACTIVE.has(key)) {
       return disposition(config, "SINGLEFLIGHT", {
-        fired_count: fired.length, trigger_id: triggerEvent.trigger_id,
+        fired_count: signals.length, trigger_id: triggerEvent.trigger_id,
         signature: triggerEvent.signature, reason: "an identical evolution cycle is already active in this process",
       });
     }
@@ -343,19 +759,20 @@ export function consumeEvolutionObservationForProduction({
     } catch (e) {
       ACTIVE.delete(key);
       return disposition(config, "SCHEDULE_FAILED", {
-        fired_count: fired.length, trigger_id: triggerEvent.trigger_id,
+        fired_count: signals.length, trigger_id: triggerEvent.trigger_id,
         signature: triggerEvent.signature, signal_class: triggerEvent.signal_class,
         reason: `schedule failed: ${String(e?.message ?? e).slice(0, 200)}`,
       });
     }
     ACTIVE.set(key, scheduled);
     return disposition(config, "CYCLE_STARTED", {
-      fired_count: fired.length,
+      fired_count: signals.length,
       signal_class: triggerEvent.signal_class,
       signature: triggerEvent.signature,
       trigger_id: triggerEvent.trigger_id,
       policy_id: policy.policy_id,
       reviewer_configured: Boolean(config.reviewerIdentity),
+      proposal_only: config.proposalOnly === true,
       suppressed_count: suppressed.length,
       // §A/§G: the attribution observation was recorded by the every-run feed
       // (BEFORE the trigger was evaluated), independent of this cycle.
@@ -397,6 +814,9 @@ function summarizeCycle(result) {
     hold_code: result?.hold_code ?? null,
     stage: result?.stage ?? null,
     candidate_id: result?.candidate_id ?? null,
+    candidate_digest: result?.candidate_digest ?? null,
+    proposal_only: result?.proposal_only === true,
+    proposal: result?.proposal ?? null,
     branch: result?.branch ?? null,
     candidate_kind: result?.candidate_kind ?? null,
     strategy_activation: result?.strategy_activation ?? null,
@@ -514,6 +934,12 @@ function scheduleCycle({ config, key, triggerEvent, evidenceRoot, executionId, g
         reviewerIdentity: config.reviewerIdentity ?? null,
         reviewVerdict: config.reviewVerdict,
         canaryWindowMs: config.canaryWindowMs,
+        // §G3: the governed ceiling. Default false — the normal mode's
+        // semantics are unchanged when it is not explicitly enabled.
+        proposalOnly: config.proposalOnly === true,
+        // §G1/F5: the DECLARED provenance travels with the cycle so the loop's
+        // own fence agrees with the observer/feed for THIS run.
+        synthetic: config.synthetic === true,
         env: config.env ?? process.env,
       });
       const entry = { ...base, disposition: "CYCLE_COMPLETED", loop_verdict: result?.loop_verdict ?? null, cycle: summarizeCycle(result) };

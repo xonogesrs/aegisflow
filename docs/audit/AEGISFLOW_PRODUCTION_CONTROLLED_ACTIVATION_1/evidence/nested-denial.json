@@ -1,0 +1,32 @@
+{
+  "card": "AEGISFLOW_PRODUCTION_CONTROLLED_ACTIVATION_1",
+  "probe": "nested-denial",
+  "observedAt": "2026-10-22T11:34:29.553Z",
+  "productionMutation": "NONE",
+  "isolatedRootRemoved": true,
+  "observations": {
+    "NESTED_DENIAL_SIGNED": {
+      "pass": true,
+      "detail": {
+        "denialPresent": true,
+        "denialSnippet": "{\"type\":\"extension_ui_request\",\"id\":\"15b0265cd1da4c32\",\"method\":\"notify\",\"message\":\"Terminal fence DENIED (CONTROLLER_AUTHORITY_ABSENT): terminal fence requires controller authority (OMP_TERMINAL_FENCE_AUTHORITY). Run generation 1 remains ACTIVE; pending deliveries continue to be delivered.\",\"notifyType\":\"warning\"}"
+      }
+    },
+    "NESTED_WROTE_NO_COMMIT": {
+      "pass": true,
+      "detail": {
+        "commitRecords": 0,
+        "ledgerRecordTypes": [
+          "allocate"
+        ]
+      }
+    },
+    "PARENT_STILL_OWNS_GENERATION": {
+      "pass": true,
+      "detail": {
+        "boundGeneration": 1
+      }
+    },
+    "nestedOutputFull": "{\"type\":\"ready\",\"protocolVersion\":1,\"supportedProtocolVersions\":[1,2],\"maxFrameBytes\":1048576,\"maxReassembledFrameBytes\":67108864}\n{\"type\":\"extension_ui_request\",\"id\":\"15b0265cd15a4c31\",\"method\":\"setWidget\",\"widgetKey\":\"autoresearch\"}\n{\"type\":\"available_commands_update\",\"commands\":[{\"name\":\"security\",\"description\":\"Plan, run, inspect, import, and compare OMP-native security scans\",\"input\":{\"hint\":\"<plan|scan|status|cancel|scans|show|import|export|validate|compare|disposition>\"},\"subcommands\":[{\"name\":\"plan\",\"description\":\"Create an immutable security scan plan\"},{\"name\":\"scan\",\"description\":\"Start a planned or newly planned native scan\"},{\"name\":\"status\",\"description\":\"Show native scan operation status\"},{\"name\":\"cancel\",\"description\":\"Cancel a running native scan\"},{\"name\":\"scans\",\"description\":\"List stored project security scans\"},{\"name\":\"show\",\"description\":\"Render a scan or security:// resource\"},{\"name\":\"import\",\"description\":\"Import SARIF or a Codex Security bundle\"},{\"name\":\"ex…\n{\"type\":\"extension_ui_request\",\"id\":\"15b0265cd1da4c32\",\"method\":\"notify\",\"message\":\"Terminal fence DENIED (CONTROLLER_AUTHORITY_ABSENT): terminal fence requires controller authority (OMP_TERMINAL_FENCE_AUTHORITY). Run generation 1 remains ACTIVE; pending deliveries continue to be delivered.\",\"notifyType\":\"warning\"}\n{\"id\":\"n1\",\"type\":\"response\",\"command\":\"prompt\",\"success\":true}\n{\"type\":\"extension_ui_request\",\"id\":\"15b0265cd21a4c33\",\"method\":\"setWidget\",\"widgetKey\":\"autoresearch\"}\n\n\n[Some lines truncated to 768 bytes. Use artifact://0:raw:3-3 to read line 3 whole]"
+  }
+}

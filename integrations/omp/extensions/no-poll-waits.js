@@ -3,6 +3,7 @@
 // CARD = AEGISFLOW_OMP_WAITER_LIFECYCLE_AND_NOTIFICATION_REPAIR_1
 //        AEGISFLOW_OMP_TERMINAL_FENCE_AUTHORITY_REPAIR_1
 //        AEGISFLOW_OMP_TERMINAL_FENCE_ORDERING_REPAIR_1
+//        AEGISFLOW_CONTROLLER_RPC_IDENTITY_RESULT_CORRELATION_REPAIR_1
 //
 // Confirmed root cause (AEGISFLOW_BACKGROUND_WAITER_FANOUT_ROOT_CAUSE_1, evidence
 // from session <session-id-redacted>):
@@ -101,12 +102,34 @@
 //    Arming the barrier fences nothing: an active task's legitimate completions
 //    keep being delivered right up to the controller's commit.
 
+import { readFileSync, unlinkSync } from "node:fs";
 import {
 	DEFAULT_AUTO_BACKGROUND_THRESHOLD_MS,
 	WAIT_STRATEGY_GUIDE,
 	classifyBashWait,
 	decideBashWait,
 } from "./lib/poll-wait-policy.js";
+import {
+	RESULT_KEY_ENV,
+	RESULT_KEY_PATTERN,
+	signResultFrame,
+} from "./lib/controller-result.mjs";
+import {
+	adoptGeneration,
+	allocateGeneration,
+	createRuntimeInstanceId,
+	generationAlreadyCommitted,
+	recordCommitAndClaimNext,
+	verifyOwnership,
+} from "./lib/runtime-identity.mjs";
+import {
+	CAPABILITY_DENIAL,
+	capabilityPresent,
+	clearControllerCapability,
+	controllerCapability,
+	installControllerCapability,
+	installControllerCapabilityFromEnv,
+} from "./lib/controller-capability.mjs";
 
 /** Terminal dispositions a logical task generation can reach. */
 export const TERMINAL_STATUSES = Object.freeze(["PASS", "HOLD", "FAIL", "CANCELLED"]);
@@ -162,45 +185,162 @@ const COMMIT_COMMAND = "fence-generation";
 /** Host-only controller command that releases the final report through the barrier. */
 const RELEASE_COMMAND = "release-final";
 /**
- * Controller capability marker. The orchestrator that launches a governed
- * process sets this deliberately; without it no commit is possible, so an OMP
- * process nobody is governing cannot be closed out by a fence at all.
+ * Host-only READ-ONLY identity command (R3).
+ *
+ * A controller must know `(sessionId, runtimeInstanceId, generation)` BEFORE it
+ * commits, because the commit is only meaningful if it names the runtime the
+ * controller means. The predecessor contract had no way to ask: the only frame
+ * that carried identity was the commit result itself, so a client had to commit
+ * blindly and learn the identity from the answer. That is one commit too many.
+ *
+ * This command mutates NOTHING — it does not fence, does not advance, does not
+ * touch the ledger — and answers on the same signed channel with the same
+ * identity fields, so a controller can bind first and commit second.
+ */
+const IDENTITY_COMMAND = "fence-identity";
+/**
+ * The RETIRED controller capability marker (R4).
+ *
+ * This variable used to BE the authority: a governed launch set it on the child,
+ * the child's `bash` tool inherited it, and setting it again on a nested `omp`
+ * was enough to commit. The admission card measured both. It is now read for one
+ * purpose only — to RECOGNISE AND REFUSE an inherited marker — and it grants
+ * nothing. See `lib/controller-capability.mjs` for what authority is now.
  */
 export const AUTHORITY_ENV = "OMP_TERMINAL_FENCE_AUTHORITY";
+
+/**
+ * Install this process's controller capability at load (R4).
+ *
+ * The key arrives over a dedicated descriptor that the Agent's descendants do not
+ * inherit, and the descriptor is consumed immediately. A process without a key
+ * has no authority, whatever its environment says.
+ */
+const capabilityInstall = installControllerCapabilityFromEnv();
+
+/**
+ * This process's runtime instance id (R1).
+ *
+ * Derived once at module load from (host fingerprint, pid, process start time,
+ * random suffix). It is never read from the environment: a launcher-supplied id
+ * would be visible to every child process the governed agent can spawn, and
+ * this value is one of the identities a commit is checked against.
+ */
+export const RUNTIME_INSTANCE_ID = createRuntimeInstanceId();
+
+/**
+ * The controller's result-signing key (R5), or null when the controller did not
+ * provision one.
+ *
+ * The launcher passes a FILE PATH; the key is read once here and the file is
+ * unlinked, so the secret is never in the environment, argv, a log line, the
+ * session file, or any child process's reach after load. Without a key the
+ * extension still reports its result with `mac: null`, and a controller MUST
+ * refuse it — an unsigned frame proves nothing about which runtime produced it.
+ */
+const resultKey = loadResultKey();
+
+function loadResultKey(env = globalThis.process?.env) {
+	const keyPath = env?.[RESULT_KEY_ENV];
+	if (typeof keyPath !== "string" || keyPath.length === 0) return null;
+	try {
+		// Read+unlink in the same synchronous step so no interleaved code (an
+		// extension loaded after this one) can observe the path as still present.
+		const key = readFileSync(keyPath, "utf8").trim();
+		// Drop the path from the environment regardless of what follows: a child
+		// process the governed agent spawns inherits `process.env`, and knowing the
+		// path is most of the way to reading the key.
+		try {
+			delete env[RESULT_KEY_ENV];
+		} catch {
+			// A frozen env is not a reason to keep signing.
+		}
+		try {
+			unlinkSync(keyPath);
+		} catch {
+			// The key is in memory but still on disk, and any process that can read
+			// that file can forge a frame this runtime would sign. Measured in
+			// independent review: with the key's directory read-only, the file
+			// survived and a child process read it and produced a frame that
+			// verified. Fail closed: no key means no MAC, and a controller must
+			// refuse an unsigned frame rather than trust it.
+			return null;
+		}
+		return RESULT_KEY_PATTERN.test(key) ? key : null;
+	} catch {
+		return null;
+	}
+}
 
 const BACKGROUND_NOTICE_RE = /Backgrounded (?:early to handle an incoming message; the command keeps running\.\s*)?as job ([\w.-]+)/;
 
 /** Per-session waiter bookkeeping. In-memory: a fence is a runtime decision. */
 const sessions = new Map();
 
-function stateFor(sessionId) {
-	let state = sessions.get(sessionId);
-	if (!state) {
-		state = {
-			sessionId,
-			generation: 1,
-			/** jobId -> { generation, label, startTime } */
-			jobs: new Map(),
-			/** generations whose pending deliveries are fenced */
-			fenced: new Set(),
-			blocked: 0,
-			allowed: 0,
-			fenceCalls: 0,
-			fencedJobIds: [],
-			/** Agent-declared completion reports. Recorded, never authoritative. */
-			terminalRequests: [],
-			/** Commit attempts denied for lack of controller authority. */
-			commitDenials: [],
-			/** Commit attempts refused because the name is not Agent-reachable. */
-			agentFenceAttempts: [],
-			/** generation -> established terminal state (ordered steps 1–4 done) */
-			terminalGenerations: new Map(),
-			/** One record per committed terminal transition, with per-step stamps. */
-			orderingLog: [],
-			/** Declared-but-uncommitted terminal dispositions, per generation. */
-			pendingTerminals: [],
-			/** Final-delivery barrier counters. */
-			barrier: {
+/**
+ * Build this runtime's state for one session, allocating its generation (R1).
+ *
+ * The generation is no longer keyed by session alone: every state carries this
+ * process's `runtimeInstanceId`, so `(sessionId, runtimeInstanceId, generation)`
+ * names exactly one runtime event even when two processes present the same
+ * session id.
+ *
+ * When the controller also provisions a state directory the generation is
+ * allocated from a durable ledger and continues across restarts (`ALLOCATED`);
+ * without one it is this process's own counter (`EPHEMERAL`), which removes the
+ * identity collision but not the numbering continuity. With no capability at all
+ * nothing is allocated and no file is touched, exactly as before.
+ */
+function createState(sessionId, env = globalThis.process?.env, now = Date.now()) {
+	const governed = controllerAuthorityPresent(env);
+	const allocation = governed
+		? allocateGeneration({ sessionId, runtimeInstanceId: RUNTIME_INSTANCE_ID, env, now })
+		: {
+				generation: 1,
+				identityState: "EPHEMERAL",
+				identityError: null,
+				runtimeInstanceId: RUNTIME_INSTANCE_ID,
+				ledgerPath: null,
+				previousGeneration: null,
+				generationDurable: false,
+				allocationToken: null,
+			};
+	return {
+		sessionId,
+		/** R1: composite identity, not a session-only counter. */
+		runtimeInstanceId: RUNTIME_INSTANCE_ID,
+		identityState: allocation.identityState,
+		identityError: allocation.identityError,
+		ledgerPath: allocation.ledgerPath,
+		previousGeneration: allocation.previousGeneration,
+		/** True only when the ledger names this generation durably. */
+		generationDurable: allocation.generationDurable === true,
+		/** Names this runtime's allocation record in the ledger; re-verified before every fence. */
+		allocationToken: allocation.allocationToken ?? null,
+		/** null when the allocation failed closed: no generation may be committed. */
+		generation: allocation.generation,
+		/** jobId -> { generation, label, startTime } */
+		jobs: new Map(),
+		/** generations whose pending deliveries are fenced */
+		fenced: new Set(),
+		blocked: 0,
+		allowed: 0,
+		fenceCalls: 0,
+		fencedJobIds: [],
+		/** Agent-declared completion reports. Recorded, never authoritative. */
+		terminalRequests: [],
+		/** Commit attempts denied for lack of controller authority. */
+		commitDenials: [],
+		/** Commit attempts refused because the name is not Agent-reachable. */
+		agentFenceAttempts: [],
+		/** generation -> established terminal state (ordered steps 1–4 done) */
+		terminalGenerations: new Map(),
+		/** One record per committed terminal transition, with per-step stamps. */
+		orderingLog: [],
+		/** Declared-but-uncommitted terminal dispositions, per generation. */
+		pendingTerminals: [],
+		/** Final-delivery barrier counters. */
+		barrier: {
 			opened: 0,
 			refusedReleases: 0,
 			settleBlocks: 0,
@@ -209,7 +349,13 @@ function stateFor(sessionId) {
 			heldGenerations: [],
 			lastReleasedGeneration: null,
 		},
-		};
+	};
+}
+
+function stateFor(sessionId) {
+	let state = sessions.get(sessionId);
+	if (!state) {
+		state = createState(sessionId);
 		sessions.set(sessionId, state);
 	}
 	return state;
@@ -283,12 +429,30 @@ function fenceGeneration(pi, state, manager, status, reason, authority = "unknow
 	state.fenced.add(generation);
 	const fenceAt = Date.now();
 	let suppressed = 0;
+	// Delivery invalidation is a SEPARATE outcome from the terminal transition.
+	// `suppressed` is the count of QUEUED deliveries dropped, which is normally 0
+	// even on complete success (a running job is marked suppressed, not queued),
+	// so it cannot signal a failure. These two fields can.
+	let deliveryFenceSucceeded = true;
+	let deliveryFenceError = null;
 	if (manager && jobIds.length > 0) {
 		try {
 			suppressed = manager.acknowledgeDeliveries(jobIds);
 		} catch (error) {
-			pi.logger?.warn?.("no-poll-waits: delivery fence failed", { error: String(error), jobIds });
+			deliveryFenceSucceeded = false;
+			deliveryFenceError = String(error && error.message ? error.message : error);
+			pi.logger?.warn?.("no-poll-waits: delivery fence failed", {
+				error: deliveryFenceError,
+				jobIds,
+				sessionId: state.sessionId,
+				generation,
+			});
 		}
+	} else if (!manager && jobIds.length > 0) {
+		// No manager means the bound jobs could not be invalidated at all. That is
+		// a failure to invalidate, not a vacuous success.
+		deliveryFenceSucceeded = false;
+		deliveryFenceError = "JOB_MANAGER_UNAVAILABLE";
 	}
 	const invalidatedAt = Date.now();
 	// Advance: subsequent work in this session runs in a fresh generation, so a
@@ -304,14 +468,144 @@ function fenceGeneration(pi, state, manager, status, reason, authority = "unknow
 		authority,
 		jobIds,
 		suppressed,
+		deliveryFenceSucceeded,
+		deliveryFenceError,
 	});
-	return { generation, jobIds, suppressed, reason: reason ?? "terminal", authority, fenced: true, fenceAt, invalidatedAt };
+	return {
+		generation,
+		jobIds,
+		suppressed,
+		deliveryFenceSucceeded,
+		deliveryFenceError,
+		reason: reason ?? "terminal",
+		authority,
+		fenced: true,
+		fenceAt,
+		invalidatedAt,
+	};
 }
 
-/** True when the launching controller granted this process terminal-fence authority. */
-export function controllerAuthorityPresent(env = globalThis.process?.env) {
-	const value = env?.[AUTHORITY_ENV];
-	return typeof value === "string" && value.length > 0;
+/**
+ * Advance the durable identity after a fence, whichever leg committed it.
+ *
+ * Both the controller command and the automatic `agent_end` leg call
+ * `fenceGeneration()`, which increments `state.generation`. If only the
+ * controller leg claimed the new number in the ledger, the automatic leg would
+ * leave the live generation unnamed while `identityState` still read ALLOCATED.
+ *
+ * @returns {{ error: string|null }}
+ */
+function advanceDurableGeneration(pi, state, committedGeneration, { status = "TERMINAL", requestId = null } = {}) {
+	if (!state.ledgerPath) return { error: null, committedRecorded: false };
+	const ledger = recordCommitAndClaimNext({
+		ledgerPath: state.ledgerPath,
+		sessionId: state.sessionId,
+		runtimeInstanceId: state.runtimeInstanceId,
+		generation: committedGeneration,
+		status,
+		requestId,
+		// R4: the commit is bound to the allocation that owned the generation, so a
+		// reader can tell "this runtime closed its own generation" from "this
+		// runtime wrote a commit record for a number it never owned".
+		allocationToken: state.allocationToken ?? null,
+	});
+	if (ledger.error) {
+		// The live generation is no longer uniquely named. Say so, and stop
+		// accepting commits on it.
+		state.identityState = "UNWRITABLE";
+		state.identityError = ledger.error;
+		state.generationDurable = false;
+		state.allocationToken = null;
+		pi.logger?.warn?.("no-poll-waits: durable generation advance failed", {
+			sessionId: state.sessionId,
+			runtimeInstanceId: state.runtimeInstanceId,
+			generation: committedGeneration,
+			error: ledger.error,
+		});
+		return { error: ledger.error, committedRecorded: ledger.committedRecorded === true };
+	}
+	if (ledger.allocationToken) {
+		state.allocationToken = ledger.allocationToken;
+		state.generationDurable = true;
+	}
+	// THE LEDGER DECIDES THE LIVE NUMBER.
+	//
+	// `fenceGeneration()` advanced `state.generation` to `committedGeneration + 1`
+	// before this ran. When a peer process on the same session already owns that
+	// number, the ledger gives this runtime the next free one instead — and the
+	// live state must follow it, or this runtime would keep running as a generation
+	// it does not own and every later commit would be refused
+	// (`GENERATION_OWNERSHIP_LOST`). Rebinding is safe here: the fence that just
+	// committed invalidated the old generation's jobs, so the new generation owns
+	// nothing yet.
+	if (Number.isSafeInteger(ledger.nextGeneration) && state.generation !== ledger.nextGeneration) {
+		pi.logger?.warn?.("no-poll-waits: live generation renumbered from the ledger", {
+			sessionId: state.sessionId,
+			runtimeInstanceId: state.runtimeInstanceId,
+			committedGeneration,
+			previousLiveGeneration: state.generation,
+			liveGeneration: ledger.nextGeneration,
+		});
+		state.generation = ledger.nextGeneration;
+	}
+	return { error: null, committedRecorded: ledger.committedRecorded === true };
+}
+
+/**
+ * True when THIS PROCESS holds controller commit authority (R4).
+ *
+ * The question is no longer "does an environment variable say so". A variable is
+ * something any process can print and any child can set; the capability is an
+ * installed key that arrived over a descriptor the Agent does not inherit. A
+ * nested `omp` launched from the Agent's `bash` therefore answers `false` no
+ * matter what it puts in its own environment.
+ *
+ * The `env` parameter is retained only so existing callers keep compiling. It is
+ * deliberately ignored: reading authority out of a caller-supplied object is the
+ * exact defect this replaces.
+ */
+export function controllerAuthorityPresent(_env = undefined) {
+	return capabilityPresent();
+}
+
+/** Diagnostic view of the installed capability. Never returns the key. */
+export function controllerCapabilityState() {
+	const capability = controllerCapability();
+	if (!capability) {
+		return {
+			present: false,
+			installDenial: capabilityInstall.ok ? CAPABILITY_DENIAL.ABSENT : capabilityInstall.denial,
+			installDetail: capabilityInstall.ok ? null : (capabilityInstall.detail ?? null),
+			hasLedgerFd: false,
+			hasLockDir: false,
+		};
+	}
+	return {
+		present: true,
+		installDenial: null,
+		installDetail: null,
+		hasLedgerFd: capability.ledgerFd !== null,
+		hasLockDir: capability.lockDir !== null,
+	};
+}
+
+/**
+ * Install a capability directly. TEST AND CONTROLLER-EMBEDDING SEAM ONLY.
+ *
+ * A governed runtime receives its capability from the launch environment. This
+ * exists for the acceptance harness, which must exercise the real commit path in
+ * a process it controls, and for a controller that embeds the extension. It is
+ * NOT reachable from the Agent: the Agent has no code execution inside the
+ * extension's module graph, and nothing exported here is registered as a tool or
+ * a command.
+ */
+export function installControllerAuthorityForTest({ key, ledgerFd = null, lockDir = null }) {
+	return installControllerCapability({ key, ledgerFd, lockDir });
+}
+
+/** Drop the capability. Tests only: a live governed runtime never gives it up. */
+export function clearControllerAuthorityForTest() {
+	clearControllerCapability();
 }
 
 /**
@@ -360,21 +654,195 @@ export function requestTerminal(pi, state, status, reason) {
 }
 
 /**
- * The controller/orchestrator commit. Fail closed: without the controller's
- * capability marker and a valid disposition nothing is fenced and the generation
- * stays active, so pending deliveries continue to be delivered normally.
+ * Parse controller command arguments.
+ *
+ * Backward compatible with `/<cmd> <STATUS> [reason]`: a bare first token is the
+ * disposition and everything after it is free-text reason. On top of that, the
+ * controller may pin the identity it means to commit with `key=value` tokens
+ * (`session=`, `runtime=`, `generation=`, `request=`), which are consumed as
+ * targets instead of leaking into the reason. A target token is recognized
+ * anywhere in the argument string so a controller can put them first.
  */
-export function commitTerminalFence(pi, state, manager, status, reason, env = globalThis.process?.env) {
+/**
+ * Split controller arguments into identity targets and free text.
+ *
+ * Identity tokens are recognized by their PREFIX, so a malformed token cannot
+ * silently degrade into reason text. Two failure modes measured in independent
+ * review, both of which fenced successfully:
+ *
+ *   `generation=1junk`  -> parseInt read 1, so the caller pinned nothing but
+ *                          looked like it had pinned generation 1
+ *   `generation=`       -> the `(.+)` matcher did not match at all, so the token
+ *                          fell through as reason text and the caller silently
+ *                          became UNPINNED
+ *
+ * Both are now explicit errors. An empty or unparseable identity token is never
+ * "no target supplied" — the caller asked for a pin and did not get one.
+ */
+function splitTargets(raw) {
+	const text = typeof raw === "string" ? raw.trim() : "";
+	const tokens = text.length === 0 ? [] : text.split(/\s+/);
+	const targets = { sessionId: undefined, runtimeInstanceId: undefined, generation: undefined, requestId: undefined };
+	const invalid = [];
+	const rest = [];
+	for (const token of tokens) {
+		const match = /^(session|runtime|generation|request)=(.*)$/.exec(token);
+		if (!match) {
+			rest.push(token);
+			continue;
+		}
+		const [, key, value] = match;
+		if (value.length === 0) {
+			invalid.push(`${key}=`);
+			continue;
+		}
+		if (key === "generation") {
+			// Whole-token validation: `1junk` is not 1.
+			if (!/^[0-9]+$/.test(value)) {
+				invalid.push(`generation=${value}`);
+				continue;
+			}
+			const parsed = Number.parseInt(value, 10);
+			if (!Number.isSafeInteger(parsed) || parsed < 1) {
+				invalid.push(`generation=${value}`);
+				continue;
+			}
+			targets.generation = parsed;
+			continue;
+		}
+		if (key === "session") targets.sessionId = value;
+		else if (key === "runtime") targets.runtimeInstanceId = value;
+		else targets.requestId = value;
+	}
+	return { rest, targets, invalid };
+}
+
+export function parseCommitArgs(raw) {
+	const { rest, targets, invalid } = splitTargets(raw);
+	const [status = "", ...reasonTokens] = rest;
+	return {
+		status: status.toUpperCase(),
+		reason: reasonTokens.join(" ") || "controller terminal",
+		targets,
+		invalidTargets: invalid,
+	};
+}
+
+/**
+ * Structured commit result (R2). Every field is a fact this extension observed;
+ * nothing is inferred from "the command ran".
+ *
+ * `commandAccepted` / `commandDispatched` / `handlerExecuted` are set by the
+ * command handler around the call, so a controller can tell "the transport
+ * delivered my prompt" apart from "the extension committed the fence".
+ */
+function resultBase(state, extra = {}) {
+	return {
+		op: "commit",
+		sessionId: state.sessionId,
+		runtimeInstanceId: state.runtimeInstanceId,
+		generation: state.generation,
+		identityState: state.identityState,
+		identityError: state.identityError ?? null,
+		commandAccepted: true,
+		commandDispatched: true,
+		handlerExecuted: true,
+		commitExecuted: false,
+		committed: false,
+		denial: null,
+		reason: null,
+		status: null,
+		authority: TERMINAL_AUTHORITIES.CONTROLLER_COMMAND,
+		targetVerified: false,
+		...extra,
+	};
+}
+
+/** Map an identity state to the denial code a controller sees on the wire. */
+function identityDenialCode(identityState) {
+	switch (identityState) {
+		case "CORRUPT":
+			return "IDENTITY_LEDGER_CORRUPT";
+		case "COLLISION":
+			return "GENERATION_ALLOCATION_COLLISION";
+		case "ADOPTION_CONFLICT":
+			return "GENERATION_ADOPTION_CONFLICT";
+		case "NO_STATE_DIR":
+			return "IDENTITY_STATE_DIR_UNCONFIGURED";
+		case "UNWRITABLE":
+			return "IDENTITY_LEDGER_UNWRITABLE";
+		case "EPHEMERAL":
+			return "IDENTITY_NOT_DURABLE";
+		case "EXHAUSTED":
+			return "GENERATION_RANGE_EXHAUSTED";
+		default:
+			return "IDENTITY_UNAVAILABLE";
+	}
+}
+
+/** Sign and write one result frame to the RPC stdout channel (R5). */
+export function publishControllerResult(result, requestId = null) {
+	const body = { requestId, result };
+	if (resultKey === null) {
+		return { emitted: false, signed: false, frame: { ...body, mac: null }, reason: "RESULT_KEY_ABSENT" };
+	}
+	if (!resultTransportEnabled()) {
+		return { emitted: false, signed: true, frame: signResultFrame(resultKey, body), reason: "NOT_RPC_TRANSPORT" };
+	}
+	const frame = signResultFrame(resultKey, body);
+	const line = `${JSON.stringify(frame)}\n`;
+	// One physical line, one write, under PIPE_BUF: the runtime's own frame
+	// writer emits whole lines per write too, so a small line cannot be spliced
+	// into the middle of another frame's bytes.
+	if (Buffer.byteLength(line, "utf8") > 4096) {
+		return { emitted: false, signed: true, frame, reason: "RESULT_FRAME_TOO_LARGE" };
+	}
+	try {
+		process.stdout.write(line);
+		return { emitted: true, signed: true, frame, reason: null };
+	} catch {
+		return { emitted: false, signed: true, frame, reason: "STDOUT_WRITE_FAILED" };
+	}
+}
+
+/**
+ * Is stdout a machine frame channel right now?
+ *
+ * Writing a JSON line to a terminal would corrupt an interactive session, so
+ * the frame is only emitted when the host is driving a machine channel: either
+ * `runRpcMode` marked the process (`PI_NOTIFICATIONS=off` — it sets that before
+ * any command can run), or stdout is not a TTY (a piped RPC host), or the
+ * controller explicitly declared the transport. A key alone is not enough: a
+ * controller that provisions a key and then runs the runtime interactively
+ * still must not have JSON injected into its terminal.
+ */
+function resultTransportEnabled(env = globalThis.process?.env) {
+	if (env?.OMP_CONTROLLER_RESULT_TRANSPORT === "stdout") return true;
+	if (env?.PI_NOTIFICATIONS === "off") return true;
+	return globalThis.process?.stdout?.isTTY !== true;
+}
+
+/**
+ * The controller/orchestrator commit. Fail closed: without the controller's
+ * capability marker, a valid disposition, an allocated identity and a matching
+ * target, nothing is fenced and the generation stays active, so pending
+ * deliveries continue to be delivered normally.
+ *
+ * @param {object} [target] identity the controller claims it is committing:
+ *   `{ sessionId?, runtimeInstanceId?, generation?, requestId? }`. A supplied
+ *   field that disagrees with this runtime is a denial, never a warning.
+ */
+export function commitTerminalFence(pi, state, manager, status, reason, env = globalThis.process?.env, target = {}) {
 	if (!controllerAuthorityPresent(env)) {
 		const denial = {
-			committed: false,
+			...resultBase(state, { status: status ?? null }),
 			denial: "CONTROLLER_AUTHORITY_ABSENT",
-			generation: state.generation,
 			reason: `terminal fence requires controller authority (${AUTHORITY_ENV})`,
 		};
 		state.commitDenials.push({ ...denial, at: Date.now() });
 		pi.logger?.warn?.("no-poll-waits: terminal fence commit denied", {
 			sessionId: state.sessionId,
+			runtimeInstanceId: state.runtimeInstanceId,
 			generation: state.generation,
 			status: status ?? null,
 			authority: TERMINAL_AUTHORITIES.CONTROLLER_COMMAND,
@@ -384,14 +852,14 @@ export function commitTerminalFence(pi, state, manager, status, reason, env = gl
 	}
 	if (!TERMINAL_STATUSES.includes(status)) {
 		const denial = {
-			committed: false,
+			...resultBase(state, { status: status ?? null }),
 			denial: "INVALID_TERMINAL_STATUS",
-			generation: state.generation,
 			reason: `status must be one of ${TERMINAL_STATUSES.join("/")}`,
 		};
 		state.commitDenials.push({ ...denial, at: Date.now() });
 		pi.logger?.warn?.("no-poll-waits: terminal fence commit denied", {
 			sessionId: state.sessionId,
+			runtimeInstanceId: state.runtimeInstanceId,
 			generation: state.generation,
 			status: status ?? null,
 			authority: TERMINAL_AUTHORITIES.CONTROLLER_COMMAND,
@@ -399,7 +867,203 @@ export function commitTerminalFence(pi, state, manager, status, reason, env = gl
 		});
 		return denial;
 	}
-	return commitOrderedTerminal(pi, state, manager, status, reason, TERMINAL_AUTHORITIES.CONTROLLER_COMMAND);
+
+	// R1: only a state whose generation this runtime actually owns may commit.
+	// A state created while no capability was present holds a memory counter, not
+	// a ledger identity; if the capability is present now, the run is adopted —
+	// into the ledger when that is safe, as EPHEMERAL when there is no ledger.
+	// Everything else (corrupt ledger, collision, unwritable, adoption conflict)
+	// fails closed.
+	if (state.identityState === "EPHEMERAL" && controllerAuthorityPresent(env)) {
+		const adoption = adoptGeneration({
+			sessionId: state.sessionId,
+			runtimeInstanceId: state.runtimeInstanceId,
+			generation: state.generation,
+			env,
+		});
+		if (adoption.adopted) {
+			state.identityState = adoption.state;
+			state.ledgerPath = adoption.ledgerPath;
+			state.identityError = null;
+			state.generationDurable = adoption.state === "ALLOCATED";
+			state.allocationToken = adoption.allocationToken ?? null;
+		} else {
+			state.identityState = adoption.state;
+			state.identityError = adoption.error;
+			state.ledgerPath = adoption.ledgerPath;
+		}
+	}
+	if (state.identityState !== "ALLOCATED" && state.identityState !== "EPHEMERAL") {
+		const denial = {
+			...resultBase(state, { status: status ?? null }),
+			denial: identityDenialCode(state.identityState),
+			reason: `run generation identity is ${state.identityState}${state.identityError ? `: ${state.identityError}` : ""}`,
+		};
+		state.commitDenials.push({ ...denial, at: Date.now() });
+		pi.logger?.warn?.("no-poll-waits: terminal fence commit denied", {
+			sessionId: state.sessionId,
+			runtimeInstanceId: state.runtimeInstanceId,
+			generation: state.generation,
+			status: status ?? null,
+			authority: TERMINAL_AUTHORITIES.CONTROLLER_COMMAND,
+			...denial,
+		});
+		return denial;
+	}
+	// R1: the target identity is verified BEFORE any fence state changes.
+	const targetDenial = verifyCommitTarget(state, target);
+	if (targetDenial) {
+		const denial = {
+			...resultBase(state, { status }),
+			denial: targetDenial.denial,
+			reason: targetDenial.reason,
+			targetVerified: false,
+		};
+		state.commitDenials.push({ ...denial, at: Date.now() });
+		pi.logger?.warn?.("no-poll-waits: terminal fence commit denied", {
+			sessionId: state.sessionId,
+			runtimeInstanceId: state.runtimeInstanceId,
+			generation: state.generation,
+			status,
+			authority: TERMINAL_AUTHORITIES.CONTROLLER_COMMAND,
+			...denial,
+		});
+		return denial;
+	}
+
+	// R1/R2: a generation this ledger already closed may not be committed again,
+	// even by a restarted process that re-derived the same number.
+	if (generationAlreadyCommitted(state.ledgerPath, state.generation, state.sessionId)) {
+		const denial = {
+			...resultBase(state, { status }),
+			denial: "GENERATION_ALREADY_COMMITTED",
+			reason: `run generation ${state.generation} is already committed in the durable ledger`,
+			targetVerified: true,
+		};
+		state.commitDenials.push({ ...denial, at: Date.now() });
+		pi.logger?.warn?.("no-poll-waits: terminal fence commit denied", {
+			sessionId: state.sessionId,
+			runtimeInstanceId: state.runtimeInstanceId,
+			generation: state.generation,
+			status,
+			authority: TERMINAL_AUTHORITIES.CONTROLLER_COMMAND,
+			...denial,
+		});
+		return denial;
+	}
+
+	// R1: ownership is re-verified against the LEDGER, not against in-memory state.
+	// Allocation-time verification is a snapshot, and a peer can append a
+	// conflicting allocation afterwards; independent review reproduced exactly
+	// that, with the earlier process committing a generation a peer also owned.
+	if (state.identityState === "ALLOCATED") {
+		const ownership = verifyOwnership({
+			ledgerPath: state.ledgerPath,
+			sessionId: state.sessionId,
+			generation: state.generation,
+			allocationToken: state.allocationToken,
+		});
+		if (!ownership.owned) {
+			state.identityState = ownership.reason === "GENERATION_ALREADY_COMMITTED" ? "ALLOCATED" : "COLLISION";
+			state.identityError = ownership.reason;
+			const denial = {
+				...resultBase(state, { status }),
+				denial:
+					ownership.reason === "GENERATION_ALREADY_COMMITTED"
+						? "GENERATION_ALREADY_COMMITTED"
+						: "GENERATION_OWNERSHIP_LOST",
+				reason: `this runtime no longer owns generation ${state.generation}: ${ownership.reason}`,
+				targetVerified: false,
+			};
+			state.commitDenials.push({ ...denial, at: Date.now() });
+			pi.logger?.warn?.("no-poll-waits: terminal fence commit denied", {
+				sessionId: state.sessionId,
+				runtimeInstanceId: state.runtimeInstanceId,
+				generation: state.generation,
+				status,
+				authority: TERMINAL_AUTHORITIES.CONTROLLER_COMMAND,
+				...denial,
+			});
+			return denial;
+		}
+	}
+
+	const committed = commitOrderedTerminal(pi, state, manager, status, reason, TERMINAL_AUTHORITIES.CONTROLLER_COMMAND);
+	// One advancement path for both fence legs: record the commit, claim the next
+	// generation, and re-point the ownership token.
+	const advanced = advanceDurableGeneration(pi, state, committed.generation, { status, requestId: target?.requestId });
+	const ledgerError = advanced.error;
+	const targetPinned = Boolean(
+		target &&
+			(typeof target.runtimeInstanceId === "string" ||
+				typeof target.sessionId === "string" ||
+				typeof target.generation === "number"),
+	);
+	const result = {
+		...resultBase(state, {
+			status,
+			commitExecuted: true,
+			committed: true,
+			// `targetVerified` reports that an IDENTITY was pinned and matched —
+			// a request id alone is correlation, not identity.
+			targetVerified: targetPinned,
+		}),
+		generation: committed.generation,
+		jobIds: committed.jobIds,
+		suppressed: committed.suppressed,
+		// Delivery invalidation is reported separately from the terminal
+		// transition: `committed` says the disposition became authoritative and the
+		// generation was fenced; these two say whether the bound jobs' pending
+		// deliveries were actually invalidated. A controller that needs suppression
+		// must check `deliveryFenceSucceeded`, not `committed`.
+		deliveryFenceSucceeded: committed.deliveryFenceSucceeded,
+		deliveryFenceError: committed.deliveryFenceError,
+		fenceAt: committed.ordered.fenceAt,
+		invalidatedAt: committed.ordered.invalidatedAt,
+		terminalStateAt: committed.ordered.terminalStateAt,
+		gateOpenedAt: committed.ordered.gateOpenedAt,
+		finalDeliveryAllowed: committed.finalDeliveryAllowed,
+		FENCE_BEFORE_FINAL: committed.FENCE_BEFORE_FINAL,
+		// "Recorded" must mean the COMMIT is durably recorded — not "the whole
+		// advance succeeded". Those differ: the commit record is written first, and
+		// the next-generation claim can fail afterwards. Measured in independent
+		// review with an injected EIO on the claim append: the ledger held
+		// `commit:g1` while the frame said `ledgerRecorded:false`. In EPHEMERAL mode
+		// there is no ledger at all, which is also not "recorded".
+		ledgerRecorded: state.ledgerPath !== null && advanced.committedRecorded === true,
+		ledgerError: state.ledgerPath === null ? "NO_LEDGER_EPHEMERAL" : ledgerError,
+	};
+	return result;
+}
+
+/**
+ * Compare the controller's claimed identity against this runtime's.
+ *
+ * An omitted field is not checked (compatibility with a caller that only sends
+ * a disposition), but a supplied field that disagrees is a denial. The result
+ * reports `targetVerified` so a controller can tell which case it got.
+ */
+function verifyCommitTarget(state, target) {
+	if (!target || typeof target !== "object") return null;
+	if (target.sessionId !== undefined && target.sessionId !== state.sessionId) {
+		return {
+			denial: "TARGET_SESSION_MISMATCH",
+			reason: `target session ${target.sessionId} is not this runtime's session ${state.sessionId}`,
+		};
+	}
+	if (target.runtimeInstanceId !== undefined && target.runtimeInstanceId !== state.runtimeInstanceId) {
+		return {
+			denial: "TARGET_RUNTIME_MISMATCH",
+			reason: `target runtime ${target.runtimeInstanceId} is not this runtime ${state.runtimeInstanceId}`,
+		};
+	}
+	if (target.generation !== undefined && target.generation !== state.generation) {
+		return {
+			denial: "TARGET_GENERATION_MISMATCH",
+			reason: `target generation ${target.generation} is not the active generation ${state.generation}`,
+		};
+	}
+	return null;
 }
 
 /**
@@ -434,6 +1098,8 @@ function commitOrderedTerminal(pi, state, manager, status, reason, authority) {
 		invalidatedAt: fence.invalidatedAt,
 		invalidatedJobIds: fence.jobIds,
 		suppressedQueuedDeliveries: fence.suppressed,
+		deliveryFenceSucceeded: fence.deliveryFenceSucceeded,
+		deliveryFenceError: fence.deliveryFenceError,
 		terminalStateAt,
 		gateOpenedAt: null,
 		finalDeliveryAllowed: false,
@@ -460,6 +1126,8 @@ function commitOrderedTerminal(pi, state, manager, status, reason, authority) {
 		gateOpenedAt: record.gateOpenedAt,
 		invalidatedJobs: record.invalidatedJobIds.length,
 		suppressedQueuedDeliveries: record.suppressedQueuedDeliveries,
+		deliveryFenceSucceeded: record.deliveryFenceSucceeded,
+		deliveryFenceError: record.deliveryFenceError,
 		finalDeliveryAllowed: true,
 	});
 	return {
@@ -467,6 +1135,8 @@ function commitOrderedTerminal(pi, state, manager, status, reason, authority) {
 		generation,
 		jobIds: fence.jobIds,
 		suppressed: fence.suppressed,
+		deliveryFenceSucceeded: fence.deliveryFenceSucceeded,
+		deliveryFenceError: fence.deliveryFenceError,
 		reason: record.reason,
 		authority,
 		ordered: record,
@@ -686,7 +1356,42 @@ export default function (pi) {
 		const manager = resolveJobManager(pi, sessionId);
 		const pending = [...state.jobs.values()].filter(binding => binding.generation === state.generation).length;
 		if (pending === 0) return undefined;
-		fenceGeneration(
+		// The automatic leg has no controller target, but it must still respect
+		// ownership: a runtime whose durable identity is UNWRITABLE/COLLISION (or
+		// whose live generation a peer also claims) must not fence a generation it
+		// cannot prove is its own. Fail closed, leave the deliveries alone, and say
+		// why — a silent skip would look like "nothing to fence".
+		if (state.identityState === "ALLOCATED") {
+			const ownership = verifyOwnership({
+				ledgerPath: state.ledgerPath,
+				sessionId: state.sessionId,
+				generation: state.generation,
+				allocationToken: state.allocationToken,
+			});
+			if (!ownership.owned) {
+				state.identityState = ownership.reason === "GENERATION_ALREADY_COMMITTED" ? "ALLOCATED" : "COLLISION";
+				state.identityError = ownership.reason;
+				pi.logger?.warn?.("no-poll-waits: automatic fence skipped, generation not owned", {
+					sessionId: state.sessionId,
+					runtimeInstanceId: state.runtimeInstanceId,
+					generation: state.generation,
+					reason: ownership.reason,
+				});
+				return undefined;
+			}
+		} else if (state.identityState !== "EPHEMERAL") {
+			// CORRUPT / COLLISION / UNWRITABLE / EXHAUSTED: the identity is not
+			// usable, so the automatic leg cannot attribute a fence either.
+			pi.logger?.warn?.("no-poll-waits: automatic fence skipped, identity unusable", {
+				sessionId: state.sessionId,
+				runtimeInstanceId: state.runtimeInstanceId,
+				generation: state.generation,
+				identityState: state.identityState,
+				identityError: state.identityError ?? null,
+			});
+			return undefined;
+		}
+		const fenced = fenceGeneration(
 			pi,
 			state,
 			manager,
@@ -694,6 +1399,12 @@ export default function (pi) {
 			"agent_end settled without continuation",
 			TERMINAL_AUTHORITIES.HOST_AGENT_END,
 		);
+		// The automatic leg advances the generation exactly like the controller
+		// leg, so it must also advance the DURABLE identity. Without this, the live
+		// generation after an automatic fence is unnamed in the ledger while
+		// `identityState` still says ALLOCATED — and a controller could then commit
+		// a generation a peer owns. Measured in independent review.
+		advanceDurableGeneration(pi, state, fenced.generation, { status: "TERMINAL" });
 		return undefined;
 	});
 
@@ -804,26 +1515,184 @@ export default function (pi) {
 	// (commands are resolved from submitted prompt text before any agent turn), so
 	// this is authority the Agent cannot forge by producing text or tool payloads.
 	// The capability marker makes it fail closed for an unmanaged process.
+	//
+	// R3 adds the read-only identity leg FIRST, so a controller can bind to a
+	// target before committing instead of committing to discover it. It is a
+	// separate command rather than a mode of this one because the two differ in
+	// the only way that matters: this one mutates a generation, that one cannot.
+	pi.registerCommand(IDENTITY_COMMAND, {
+		description:
+			`Report this runtime's fence identity without committing anything (controller/orchestrator ` +
+			`authority only). Usage: /${IDENTITY_COMMAND} [request=<id>]`,
+		handler: async (args, ctx) => {
+			const { targets, invalid } = splitTargets(args);
+			const sessionId = ctx?.sessionManager?.getSessionId?.() ?? "unknown";
+			const state = stateFor(sessionId);
+			// The identity report is authority-bearing in one direction only: it
+			// discloses which generation a controller may then commit. Without the
+			// marker it is refused, so an ungoverned process cannot be interrogated
+			// for a target by a party that could not commit anyway.
+			const result =
+				invalid.length > 0
+					? {
+							...resultBase(state, { op: "identity" }),
+							denial: "MALFORMED_IDENTITY_TARGET",
+							reason: `malformed identity target(s): ${invalid.join(", ")}`,
+						}
+					: !controllerAuthorityPresent()
+						? {
+								...resultBase(state, { op: "identity" }),
+								denial: "CONTROLLER_AUTHORITY_ABSENT",
+								reason: `identity disclosure requires controller authority (${AUTHORITY_ENV})`,
+							}
+						: {
+								...resultBase(state, { op: "identity" }),
+								// Nothing was attempted: the base already sets these false, and
+								// restating them here would make the frame look like a commit.
+								identityState: state.identityState,
+								identityError: state.identityError ?? null,
+								generationDurable: state.generationDurable === true,
+								// R4: the allocation token is part of the identity, so a controller
+								// can bind to it and pin it on the commit. It names an allocation,
+								// not a secret: it is only useful together with the controller's
+								// key, and it is published only to a caller that already holds the
+								// capability (this command is refused without one).
+								allocationToken: state.allocationToken ?? null,
+								ledgerPath: state.ledgerPath,
+								fenceCalls: state.fenceCalls,
+								authority: TERMINAL_AUTHORITIES.CONTROLLER_COMMAND,
+							};
+			const published = publishControllerResult(result, targets.requestId ?? null);
+			pi.logger?.warn?.("no-poll-waits: fence identity report", {
+				sessionId,
+				runtimeInstanceId: state.runtimeInstanceId,
+				generation: state.generation,
+				requestId: targets.requestId ?? null,
+				denial: result.denial ?? null,
+				resultFrameEmitted: published.emitted,
+				resultFrameSigned: published.signed,
+				resultFrameReason: published.reason,
+			});
+		},
+	});
+
 	pi.registerCommand(COMMIT_COMMAND, {
 		description:
 			`Commit the run generation's terminal fence (controller/orchestrator authority only). ` +
-			`Usage: /${COMMIT_COMMAND} <PASS|HOLD|FAIL|CANCELLED> [reason]`,
+			`Usage: /${COMMIT_COMMAND} <PASS|HOLD|FAIL|CANCELLED> [session=<id>] [runtime=<id>] ` +
+			`[generation=<n>] [request=<id>] [reason]`,
 		handler: async (args, ctx) => {
-			const raw = typeof args === "string" ? args.trim() : "";
-			const [status = "", ...rest] = raw.split(/\s+/);
-			const reason = rest.join(" ") || "controller terminal";
+			const { status, reason, targets, invalidTargets } = parseCommitArgs(args);
 			const sessionId = ctx?.sessionManager?.getSessionId?.() ?? "unknown";
 			const state = stateFor(sessionId);
 			const manager = resolveJobManager(pi, sessionId);
-			const result = commitTerminalFence(
-				pi,
-				state,
-				manager,
-				status.toUpperCase(),
-				reason,
-			);
+			let result;
+			// Snapshot BEFORE the attempt: `state.fenced` holds every generation this
+			// runtime ever fenced, so "a fence exists" cannot answer "did THIS call
+			// fence". Independent review showed the difference: after any earlier
+			// successful commit, a later denial whose logging threw would report
+			// `committed:true` for that earlier generation.
+			const fenceCallsBefore = state.fenceCalls;
+			// If the primitive DENIED and then something threw while logging the
+			// denial, the denial is the true outcome — not a handler exception.
+			// Measured in independent review: an authority denial whose log threw
+			// reported `commitExecuted:true` with `fenceCalls: 0`, contradicting the
+			// denial object the primitive had already built.
+			const denialsBefore = state.commitDenials.length;
+			if (invalidTargets.length > 0) {
+				// A malformed identity token is refused rather than ignored: a caller
+				// that tried to pin and got an unpinned commit has lost the guarantee
+				// it asked for, and must not be told the commit succeeded. The commit
+				// was never attempted, so `commitExecuted` stays false.
+				result = {
+					...resultBase(state, { status }),
+					denial: "MALFORMED_IDENTITY_TARGET",
+					reason: `malformed identity target(s): ${invalidTargets.join(", ")}`,
+				};
+			} else try {
+				result = commitTerminalFence(pi, state, manager, status, reason, undefined, targets);
+			} catch (error) {
+				// A thrown handler is an observable failure, not a success and not a
+				// silent denial. `committed` must report what ACTUALLY happened, not
+				// what the caller hoped: measured in independent review, a throw after
+				// the fence had already applied produced `committed:false` for a
+				// generation that was in fact committed, which is the same lie in the
+				// other direction. `state.fenced` is the runtime's own record of what
+				// it fenced, so the frame is derived from it.
+				const landed = state.fenceCalls > fenceCallsBefore;
+				const denied =
+					state.commitDenials.length > denialsBefore
+						? state.commitDenials[state.commitDenials.length - 1]
+						: null;
+				if (denied && !landed) {
+					// The primitive produced a real denial; only logging it failed. Report
+					// the denial, with the throw recorded beside it.
+					result = {
+						...resultBase(state, { status }),
+						...denied,
+						handlerException: String(error && error.message ? error.message : error),
+						jobIds: [],
+						suppressed: 0,
+					};
+				} else {
+					result = {
+						...resultBase(state, { status }),
+						// The fence advances the generation, so the generation that landed is
+						// the one before the current value — but only when this call fenced.
+						generation: landed ? state.generation - 1 : state.generation,
+						// Reaching here means the primitive was ENTERED and produced no
+						// denial (a denial with no fence is handled above), so a commit
+						// really was attempted — it just did not complete. Reporting
+						// `commitExecuted:false` here would conflate "attempted and
+						// failed" with "never attempted", which is the distinction this
+						// field exists to make. Measured in independent review: a manager
+						// throwing inside `acknowledgeDeliveries`, with the failure log
+						// also throwing before `fenceCalls` incremented, reported
+						// `commitExecuted:false` after an observed attempt.
+						commitExecuted: true,
+						committed: landed,
+						denial: landed ? null : "HANDLER_EXCEPTION",
+						reason: landed
+							? `the fence was committed, then the handler threw: ${String(error && error.message ? error.message : error)}`
+							: String(error && error.message ? error.message : error),
+						handlerException: String(error && error.message ? error.message : error),
+						// The frame must be complete enough to read even when the handler
+						// failed: a missing field here would make the controller treat a
+						// real outcome as a malformed frame.
+						jobIds: [],
+						suppressed: 0,
+						// R4: AN UNRECORDED COMMIT MUST SAY SO.
+						//
+						// Measured by independent review: when the durable advance threw
+						// (a deleted lock directory makes the lock create fail AFTER the
+						// fence has applied), this branch reported `committed:true` and
+						// OMITTED `ledgerRecorded` entirely. The client only downgrades an
+						// explicit `ledgerRecorded === false`, so a commit with no durable
+						// record was returned as `COMMITTED, durable:true`.
+						//
+						// `ledgerRecorded` is now always present and always honest: the
+						// ledger is the only thing that may claim durability.
+						ledgerRecorded: false,
+						ledgerError: `HANDLER_EXCEPTION: ${String(error && error.message ? error.message : error)}`,
+					};
+				}
+				// A logger that throws must not cost the controller its result. The
+				// frame is the contract; logging is a convenience.
+				try {
+					pi.logger?.warn?.("no-poll-waits: terminal fence handler threw", {
+						sessionId,
+						runtimeInstanceId: state.runtimeInstanceId,
+						generation: state.generation,
+						status,
+						error: String(error),
+					});
+				} catch {
+					// deliberately ignored: the result frame below is the record
+				}
+			}
+			const published = publishControllerResult(result, targets.requestId ?? null);
 			const line = result.committed
-				? `Terminal fence COMMITTED for run generation ${result.generation} as ${status.toUpperCase()}. ` +
+				? `Terminal fence COMMITTED for run generation ${result.generation} as ${result.status}. ` +
 					`Pending deliveries invalidated: ${result.jobIds.length} ` +
 					`(queued deliveries dropped: ${result.suppressed}). Late completions remain recorded and ` +
 					`readable via proc:// but will not invoke the agent. ` +
@@ -836,13 +1705,25 @@ export default function (pi) {
 			} catch {
 				// UI is absent in print/RPC mode; the command has already taken effect.
 			}
-			pi.logger?.warn?.("no-poll-waits: terminal fence command", {
-				sessionId,
-				authority: TERMINAL_AUTHORITIES.CONTROLLER_COMMAND,
-				status: status.toUpperCase(),
-				committed: result.committed,
-				denial: result.denial ?? null,
-			});
+			// The frame is already published; a throwing logger must not turn a
+			// completed commit into a rejected command. Logging is a convenience,
+			// the frame is the contract.
+			try {
+				pi.logger?.warn?.("no-poll-waits: terminal fence command", {
+					sessionId,
+					runtimeInstanceId: state.runtimeInstanceId,
+					authority: TERMINAL_AUTHORITIES.CONTROLLER_COMMAND,
+					status,
+					requestId: targets.requestId ?? null,
+					committed: result.committed,
+					denial: result.denial ?? null,
+					resultFrameEmitted: published.emitted,
+					resultFrameSigned: published.signed,
+					resultFrameReason: published.reason,
+				});
+			} catch {
+				// deliberately ignored: the result frame above is the record
+			}
 		},
 	});
 
@@ -853,14 +1734,60 @@ export default function (pi) {
 	pi.registerCommand(RELEASE_COMMAND, {
 		description:
 			`Release the run generation's final report (controller/orchestrator authority only; ` +
-			`requires the ordered terminal commit). Usage: /${RELEASE_COMMAND} [generation]`,
+			`requires the ordered terminal commit). Usage: /${RELEASE_COMMAND} [generation] [request=<id>]`,
 		handler: async (args, ctx) => {
-			const raw = typeof args === "string" ? args.trim() : "";
-			const parsed = Number.parseInt(raw, 10);
+			const { rest, targets: releaseTargets, invalid: invalidReleaseTargets } = splitTargets(args);
 			const sessionId = ctx?.sessionManager?.getSessionId?.() ?? "unknown";
 			const state = stateFor(sessionId);
-			const generation = Number.isFinite(parsed) ? parsed : state.generation - 1;
-			const result = releaseFinalResponse(pi, state, generation);
+			// Same rule as the commit target: an explicit generation is validated
+			// whole. `parseInt("1junk")` is 1, which would release a generation the
+			// caller did not name. No argument at all still means "the fenced one".
+			const rawGeneration = rest[0];
+			const generationValid =
+				rawGeneration === undefined || (/^[0-9]+$/.test(rawGeneration) && Number.isSafeInteger(Number(rawGeneration)));
+			const generation =
+				rawGeneration === undefined
+					? state.generation - 1
+					: generationValid
+						? Number(rawGeneration)
+						: Number.NaN;
+			// Pinned identity is CHECKED, not merely parsed. Measured in independent
+			// review: `/release-final session=foreign runtime=foreign generation=999`
+			// released the live generation anyway, because only `request` was read
+			// from the target. A release mutates `finalReleaseAt`, so accepting a
+			// mismatched pin and rejecting the frame afterwards would be too late.
+			const pinMismatch =
+				(releaseTargets.sessionId !== undefined && releaseTargets.sessionId !== state.sessionId)
+					? "TARGET_SESSION_MISMATCH"
+					: (releaseTargets.runtimeInstanceId !== undefined &&
+								releaseTargets.runtimeInstanceId !== state.runtimeInstanceId)
+						? "TARGET_RUNTIME_MISMATCH"
+						: generationValid && releaseTargets.generation !== undefined && releaseTargets.generation !== generation
+							? "TARGET_GENERATION_MISMATCH"
+							: null;
+			const result =
+				invalidReleaseTargets.length > 0
+					? {
+							released: false,
+							denial: "MALFORMED_IDENTITY_TARGET",
+							reason: `malformed identity target(s): ${invalidReleaseTargets.join(", ")}`,
+							generation,
+						}
+					: !generationValid
+						? {
+								released: false,
+								denial: "MALFORMED_GENERATION",
+								reason: `release generation must be a whole number, got ${JSON.stringify(rawGeneration)}`,
+								generation,
+							}
+						: pinMismatch !== null
+							? {
+									released: false,
+									denial: pinMismatch,
+									reason: `release target does not match this runtime: ${pinMismatch}`,
+									generation,
+								}
+							: releaseFinalResponse(pi, state, generation);
 			const line = result.released
 				? `Final report RELEASED for run generation ${result.generation} at ${result.finalReleaseAt}. ` +
 					`Fence committed at ${result.fenceAt} (FENCE_BEFORE_FINAL=${result.FENCE_BEFORE_FINAL}); ` +
@@ -872,12 +1799,36 @@ export default function (pi) {
 			} catch {
 				// UI is absent in print/RPC mode; the command has already taken effect.
 			}
+			// The release is a controller decision too, so it answers on the same
+			// signed channel with the same identity fields. `released` is its commit
+			// flag; `committed` stays false because a release commits no fence.
+			const published = publishControllerResult(
+				{
+					...resultBase(state, {
+						status: result.released ? "RELEASED" : null,
+						commitExecuted: false,
+						committed: false,
+					}),
+					op: "release",
+					generation: result.generation,
+					released: result.released,
+					denial: result.denial ?? null,
+					reason: result.reason ?? null,
+					finalReleaseAt: result.finalReleaseAt ?? null,
+					fenceAt: result.fenceAt ?? null,
+					FENCE_BEFORE_FINAL: result.FENCE_BEFORE_FINAL ?? null,
+				},
+				releaseTargets.requestId ?? null,
+			);
 			pi.logger?.warn?.("no-poll-waits: final release command", {
 				sessionId,
+				runtimeInstanceId: state.runtimeInstanceId,
 				authority: TERMINAL_AUTHORITIES.CONTROLLER_COMMAND,
 				generation,
+				requestId: releaseTargets.requestId ?? null,
 				released: result.released,
 				denial: result.denial ?? null,
+				resultFrameEmitted: published.emitted,
 			});
 		},
 	});
@@ -890,6 +1841,15 @@ export function waiterStateSnapshot() {
 		ensureOrdering(state);
 		out.push({
 			sessionId: state.sessionId,
+			/** R1 composite identity. */
+			runtimeInstanceId: state.runtimeInstanceId,
+			identityState: state.identityState,
+			identityError: state.identityError ?? null,
+			previousGeneration: state.previousGeneration,
+			ledgerPath: state.ledgerPath,
+			/** True only when a durable ledger names this generation. */
+			generationDurable: state.generationDurable === true,
+			allocationToken: state.allocationToken ?? null,
 			generation: state.generation,
 			jobs: [...state.jobs.entries()].map(([id, binding]) => ({ id, ...binding })),
 			fencedGenerations: [...state.fenced],

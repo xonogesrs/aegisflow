@@ -23,18 +23,10 @@
 // explicitly marked `candidate_kind: "AGENT_STRATEGY"` so no downstream stage
 // can mistake it for a source edit.
 
-import { mkdirSync } from "node:fs";
 import { digestOf } from "../canonical-digest.mjs";
-import { C2dHoldError, writeJsonExclusiveCreate } from "../c2d/fs-atomic.mjs";
+import { C2dHoldError } from "../c2d/fs-atomic.mjs";
 import { STRATEGY_DIMENSIONS } from "./attribution.mjs";
 import { BOUNDED_STRATEGY_PARAMS, validateStrategyValue } from "./strategy-store.mjs";
-import {
-  candidateStorePath,
-  candidateFilePath,
-  readCandidate,
-  readDerivationIndex,
-  writeDerivationIndex,
-} from "./candidate.mjs";
 
 export const EVOLUTION_STRATEGY_CANDIDATE_SCHEMA = "autoloop.evolution-strategy-candidate/v1";
 
@@ -98,17 +90,15 @@ export function classifyStrategyRisk({ dimension, params, taskClass = null } = {
  * @param {string} p.baselineHead — 40-hex baseline
  * @param {number|string} p.baselineRevision
  * @param {object} [p.strategyPolicy] — current strategy policy (generation binding)
- * @param {string} [p.storeRoot] — optional evolution store root for persistence & dedup
- * @returns {{ status: "CREATED"|"EXISTING", candidate: object }}
+ * @returns {{ status: "CREATED", candidate: object }}
  */
-export function deriveStrategyCandidate({ plan, triggerEvent, baselineHead, baselineRevision, strategyPolicy = null, storeRoot = null }) {
+export function deriveStrategyCandidate({ plan, triggerEvent, baselineHead, baselineRevision, strategyPolicy = null }) {
   if (plan?.schema !== "autoloop.evolution-improvement-plan/v1" || plan.kind !== "AGENT_STRATEGY") {
     fail(STRATEGY_CANDIDATE_HOLD.PLAN_INVALID, "plan is not an AGENT_STRATEGY improvement plan");
   }
   if (!/^[0-9a-f]{40}$/.test(baselineHead ?? "")) {
     fail(STRATEGY_CANDIDATE_HOLD.PLAN_INVALID, "baseline HEAD invalid");
   }
-
   const sp = plan.strategy_plan ?? {};
   const dimension = sp.dimension;
   if (!STRATEGY_DIMENSIONS.includes(dimension)) {
@@ -140,23 +130,6 @@ export function deriveStrategyCandidate({ plan, triggerEvent, baselineHead, base
     policy_generation: strategyPolicy?.generation ?? null,
   };
   const candidateId = `ecand_${digestOf(identityFacts).slice(0, 40)}`;
-
-  // Idempotency: dedup via derivation index if storeRoot is supplied
-  let key = null;
-  let index = null;
-  if (storeRoot && triggerEvent?.signature) {
-    key = `${triggerEvent.signature}@${baselineHead}`;
-    index = readDerivationIndex(storeRoot);
-    if (index.derivations[key]) {
-      const existing = readCandidate(storeRoot, index.derivations[key]);
-      if (existing) {
-        if (existing.candidate_id === candidateId) {
-          return { status: "EXISTING", candidate: existing };
-        }
-        fail(STRATEGY_CANDIDATE_HOLD.PLAN_REFUSED, `candidate for ${key} already exists with differing candidate_id: ${existing.candidate_id} != ${candidateId}`);
-      }
-    }
-  }
 
   const candidate = {
     schema: "autoloop.evolution-candidate/v1",
@@ -238,24 +211,6 @@ export function deriveStrategyCandidate({ plan, triggerEvent, baselineHead, base
     status: "DERIVED",
   };
   candidate.candidate_digest = digestOf({ ...candidate, candidate_digest: undefined });
-
-  // Persist candidate artifact and update derivation index if storeRoot provided
-  if (storeRoot) {
-    mkdirSync(candidateStorePath(storeRoot), { recursive: true });
-    const p = candidateFilePath(storeRoot, candidateId);
-    try {
-      writeJsonExclusiveCreate(p, candidate);
-    } catch (e) {
-      const existing = readCandidate(storeRoot, candidateId);
-      if (existing) return { status: "EXISTING", candidate: existing };
-      throw e;
-    }
-    if (index && key) {
-      index.derivations[key] = candidateId;
-      writeDerivationIndex(storeRoot, index);
-    }
-  }
-
   return { status: "CREATED", candidate };
 }
 

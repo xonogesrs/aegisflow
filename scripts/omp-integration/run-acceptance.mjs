@@ -69,6 +69,13 @@ const SUITES = [
 		expect: /^ORDERING_ACCEPTANCE=PASS\b/m,
 		label: "TERMINAL_FENCE_ORDERING",
 	},
+	{
+		name: "controller-contract",
+		file: "test/controller-contract.acceptance.ts",
+		runtime: "bun",
+		expect: /^CONTROLLER_CONTRACT_ACCEPTANCE=PASS\b/m,
+		label: "CONTROLLER_CONTRACT",
+	},
 ];
 
 function which(candidates) {
@@ -131,10 +138,34 @@ function stageSource(packageRoot) {
 	return stage;
 }
 
+/**
+ * Ambient controller state is stripped from every harness child.
+ *
+ * Measured: a shell that had exported `OMP_TERMINAL_FENCE_AUTHORITY` and a state
+ * directory made the authority suite allocate durable generations and fail an
+ * assertion that is correct for an ungoverned process. A test result must not
+ * depend on what the operator's shell happens to export, so the acceptance
+ * runner spawns its harnesses with a scrubbed environment and each harness
+ * provisions exactly the state it means to test.
+ */
+const CONTROLLER_ENV_KEYS = [
+	"OMP_TERMINAL_FENCE_AUTHORITY",
+	"OMP_TERMINAL_FENCE_STATE_DIR",
+	"OMP_CONTROLLER_RESULT_KEY_FILE",
+	"OMP_CONTROLLER_RESULT_TRANSPORT",
+];
+
+function scrubbedEnv() {
+	const env = { ...process.env };
+	for (const key of CONTROLLER_ENV_KEYS) delete env[key];
+	return env;
+}
+
 function runSuite(suite, stage, bun) {
 	const runtime = suite.runtime === "bun" ? bun : process.execPath;
 	const result = spawnSync(runtime, [join("extensions", suite.file)], {
 		cwd: stage,
+		env: scrubbedEnv(),
 		encoding: "utf8",
 		timeout: 300_000,
 	});

@@ -1,0 +1,37 @@
+{
+  "witnessDir": "/Volumes/NVM2T/Development/backups/aegisflow-production-activation-witness-2026-10-22",
+  "ledgerSha256": "6d8d9483834257406c1474cfeb3006316002f049afe612681a7b1a334da5d495",
+  "ledgerSha256Recorded": "6d8d9483834257406c1474cfeb3006316002f049afe612681a7b1a334da5d495",
+  "ledgerIntegrityMatches": true,
+  "keySha256": "1f5b6314dc405ba9751291ea68f77b86589e6e5dd78c3515f16bc241827272a6",
+  "keySha256Recorded": "1f5b6314dc405ba9751291ea68f77b86589e6e5dd78c3515f16bc241827272a6",
+  "keyIntegrityMatches": true,
+  "verifierModule": "/Users/zhengfengqing/.omp/agent/extensions/lib/ledger-auth.mjs",
+  "recordTypes": [
+    "allocate",
+    "commit",
+    "allocate"
+  ],
+  "macBearingRecords": [
+    {
+      "type": "allocate",
+      "requestId": null,
+      "macVerified": true
+    },
+    {
+      "type": "commit",
+      "requestId": "commit-1136e0773170",
+      "macVerified": true
+    },
+    {
+      "type": "allocate",
+      "requestId": null,
+      "macVerified": true
+    }
+  ],
+  "allMacsVerify": true,
+  "commitRecords": 1,
+  "matchingIdentity": 1,
+  "controllerResultMatchesIdentity": true,
+  "ok": true
+}

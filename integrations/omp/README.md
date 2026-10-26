@@ -1,8 +1,8 @@
 # OMP integration (optional)
 
 This directory publishes the **optional** OMP integration: three agent-host
-extensions — waiter/terminal-fence safety, the read-only codebase-memory
-tool, and the operator-only attention reminder. It is a separate artifact from AegisFlow core — see
+extensions — waiter/terminal-fence safety, the read-only Engineering
+Knowledge Memory (EKM) tool, and the operator-only attention reminder. It is a separate artifact from AegisFlow core — see
 [Core feature vs. integration feature](#core-feature-vs-integration-feature)
 before assuming anything here applies to AegisFlow itself.
 
@@ -14,7 +14,7 @@ before assuming anything here applies to AegisFlow itself.
 ```
 ~/.omp/agent/extensions/
   no-poll-waits.js                          <- extension: waiters + terminal fence
-  cbm-query.js                              <- extension: cbm_query (read-only CBM)
+  cbm-query.js                              <- extension: ekm_query (read-only EKM)
   aegis-attention.js                        <- extension: attention reminder + /aegis-on|off
   lib/poll-wait-policy.js                   <- pure policy, imported by no-poll-waits
   test/poll-wait-policy.test.mjs            <- policy self-test (plain node)
@@ -22,6 +22,12 @@ before assuming anything here applies to AegisFlow itself.
   test/terminal-fence-authority.acceptance.ts <- authority acceptance (bun)
   test/terminal-fence-ordering.acceptance.ts  <- terminal-ordering acceptance (bun)
 ```
+
+The file keeps its historical `cbm-query.js` name because it is a deployed
+discovery entry: renaming it would leave the previous copy behind as a second
+loaded module on every machine that upgrades. The agent-visible tool it
+registers is `ekm_query`; the `cbm_query` name remains registered as a
+`defaultInactive` compatibility entry.
 
 `lib/` and `test/` are deliberately **not** load candidates: they have no
 `index.js`, no `index.ts` and no `package.json`, so extension discovery resolves
@@ -70,9 +76,9 @@ Deployed behaviour, all of it exercised by the harnesses in
 | Post-terminal stale-delivery suppression | Fencing a generation acknowledges every bound job's pending delivery, closing both the queued path and the already-enqueued path |
 | Terminal fence authority separation | The commit primitive is reachable only from the host prompt-command channel, gated by the controller capability |
 | Agent self-fence denial | No tool in the agent's vocabulary can commit a fence; the legacy name is refused at the hook, fail closed |
-| Trusted controller commit path | `/fence-generation <PASS\|HOLD\|FAIL\|CANCELLED> [reason]` on the host channel, with `OMP_TERMINAL_FENCE_AUTHORITY` set |
+| Trusted controller commit path | `/fence-generation <PASS\|HOLD\|FAIL\|CANCELLED> [reason]` on the host channel, from a launch given the capability |
 | Active / new-generation delivery preservation | Fencing invalidates *only* the fenced generation; the session advances and the next task's deliveries are untouched |
-| Read-only codebase-memory access | `cbm_query` — one tool over the CBM store, same engine as the harness CLI, DATA-only, fail-closed |
+| Read-only engineering-knowledge access | `ekm_query` — one tool over the EKM store, same engine as the harness CLI, DATA-only, fail-closed |
 
 Real work that merely contains a legitimate sleep (`for i in 1 2 3; do sleep 30;
 npm test; done`) is never poll-only and is always admitted with its timeout
@@ -80,23 +86,39 @@ untouched.
 
 ---
 
-## Codebase memory tool (`cbm_query`)
+## Engineering Knowledge Memory tool (`ekm_query`)
 
-`cbm-query.js` gives a governed agent ONE read-only tool over AegisFlow's CBM
-store (`src/memory/`, CBM-2/CBM-3). Before it existed, memory was reachable only
-through `scripts/autoloop-memory-query.mjs` — a **harness** CLI. An interactive
-session has no harness, so in a normal session the agent had no memory tool at
-all; measured by asking a live session for one, which answered `NO_SUCH_TOOL`.
+`cbm-query.js` gives a governed agent ONE read-only tool over AegisFlow's
+Engineering Knowledge Memory store (`src/memory/`, internally CBM-2/CBM-3).
+Before it existed, memory was reachable only through
+`scripts/autoloop-memory-query.mjs` — a **harness** CLI. An interactive session
+has no harness, so in a normal session the agent had no memory tool at all;
+measured by asking a live session for one, which answered `NO_SUCH_TOOL`.
+
+The tool's own description states the boundary the name now carries: it answers
+questions about **verified engineering knowledge, decisions, provenance and
+evidence**, and it is *not* a source-code symbol index or call graph. CBM is
+reserved for the third-party Codebase Memory MCP integration, which is a
+separate artifact.
 
 | Property | How |
 |---|---|
-| One tool, read-only | `cbm_query` calls `LocalMemoryStore.query()` and nothing else; there is no write path in the module |
+| One tool, read-only | `ekm_query` calls `LocalMemoryStore.query()` and nothing else; there is no write path in the module |
 | Same engine as the harness CLI | `resolveRepositoryIdentity` + `retrieveMemory` are imported from `src/memory/`, not reimplemented |
 | Repository isolation | identity is resolved from the **session cwd**, so another repository's records are excluded by the existing eligibility filter |
 | DATA, never instructions | every result carries `kind: "MEMORY_CONTEXT_DATA"` and the authority-boundary statement |
 | Fail-closed, never a crash | `EMPTY_MEMORY` = a valid answer; `INVALID` = corrupt/irreconcilable store; `UNAVAILABLE` = no checkout or no store module, with the reason |
 | Not mandatory | nothing injects memory into the prompt; a task that needs no prior knowledge never calls it |
 | Not path-pinned | the checkout is found via `AEGISFLOW_REPO_ROOT` / `AUTOLOOP_REPO_ROOT`, then this file's own location, then a walk up from cwd |
+
+### The `cbm_query` compatibility name
+
+`ekm_query` replaced `cbm_query`. The old name stays registered so a caller
+written against it keeps working, but it is registered `defaultInactive`: it is
+not part of the agent's active tool set and appears only when a caller asks for
+it by name. Both names execute the identical seam and return identical payloads;
+only `details.op` names the entry that was called. There is no router, no second
+store and no second ranking path.
 
 Locating the checkout matters because the deployed copy lives under the agent's
 own directory. Set `AEGISFLOW_REPO_ROOT` for a deployed installation whose
@@ -150,7 +172,7 @@ governed Agent                  trusted controller / orchestrator
 request_terminal_fence(…)  ──▶  /fence-generation <STATUS> [reason]
   records a REQUEST               commits the fence
   always reports committed:false  invalidates the generation's pending deliveries
-  suppresses nothing              requires OMP_TERMINAL_FENCE_AUTHORITY
+  suppresses nothing              requires a capability the launcher gave it
 ```
 
 - **An agent MAY request.** `request_terminal_fence` records the disposition the
@@ -163,18 +185,23 @@ request_terminal_fence(…)  ──▶  /fence-generation <STATUS> [reason]
 - **Only the trusted controller commits.** `fenceGeneration()` is reachable from
   the host prompt-command channel — which the governed model cannot dispatch into
   its own session, because commands are resolved from submitted prompt text
-  before any agent turn runs — and only while the process carries the
-  capability marker.
-- **Absent capability ⇒ DENIED, fail closed.** Without
-  `OMP_TERMINAL_FENCE_AUTHORITY` the command reports
+  before any agent turn runs — and only while the process holds the
+  capability (an inherited ledger descriptor plus the key that authenticates
+  records written through it).
+- **Absent capability ⇒ DENIED, fail closed.** Without the capability the
+  command reports
   `Terminal fence DENIED (CONTROLLER_AUTHORITY_ABSENT)` and the generation stays
   active: pending deliveries keep being delivered. An OMP process nobody is
   governing therefore cannot be fenced at all, which is the safe direction.
 
-`OMP_TERMINAL_FENCE_AUTHORITY` is **not** a capability an agent can obtain. It is
-an environment marker that the orchestrator which launched the governed process
-sets deliberately. It is not derived from anything the model produces, it is not
-readable as a tool, and no prompt text or tool payload grants it. Treat any
+Authority is **not a variable**, and `OMP_TERMINAL_FENCE_AUTHORITY` no longer
+grants anything: it was an environment marker, the governed child's `bash`
+inherited it, and the Agent could therefore set it again on a nested `omp`. That
+was measured and closed by R4. Authority is now a capability: an open descriptor
+to the ledger and the key that authenticates records written through it, both
+close-on-exec and both `file-read*`/`file-write*`-denied by the launch sandbox
+for the whole process tree. It is not derived from anything the model produces,
+not readable as a tool, and no prompt text or tool payload grants it. Treat any
 suggestion that an agent "has" this authority as a defect report, not a feature.
 
 There is also an automatic leg: a genuinely terminal `agent_end` (settled with no
@@ -185,12 +212,15 @@ terminality, never an agent declaration.
 ### Controller contract
 
 ```sh
-OMP_TERMINAL_FENCE_AUTHORITY=1 omp --mode rpc …   # launch the governed process
+# The governed launch is made by src/control-plane/controller-client.mjs, which
+# attests the binary and the extension tree, wraps the child in the launch
+# sandbox, and hands over the ledger descriptor and key.
+node -e '…launchGovernedRuntime({…})…'
 # then, on the host channel (RPC prompt frame or an interactive prompt line):
 /fence-generation PASS card accepted
 ```
 
-An orchestrator that never issues the command does not need the marker: the
+An orchestrator that never issues the command needs no capability at all: the
 `agent_end` leg and the wait policy work without it.
 
 ### Terminal-transition ordering (the final-delivery barrier)
@@ -396,7 +426,7 @@ own behaviour. If you never install the OMP integration:
 
 The one thing AegisFlow provides *for* the integration is the controller side:
 whatever launches a governed OMP process (the pilot, or your own orchestrator)
-decides whether to set `OMP_TERMINAL_FENCE_AUTHORITY` and when to commit a fence.
+decides whether to grant the capability and when to commit a fence.
 
 ---
 

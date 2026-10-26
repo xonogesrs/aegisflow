@@ -1,0 +1,6 @@
+ledger file:
+-rw------- 1 operator wheel 1457 Oct 21 17:58 cases/c2-shared/controller/state/rehearsal-session-fixture.jsonl
+state dir:
+drwx------ operator:wheel cases/c2-shared/controller/state
+controller root:
+drwx------ operator:wheel cases/c2-shared/controller

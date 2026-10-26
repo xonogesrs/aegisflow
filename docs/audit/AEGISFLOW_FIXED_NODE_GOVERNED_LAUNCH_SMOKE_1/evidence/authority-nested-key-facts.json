@@ -1,0 +1,37 @@
+{
+  "facts": [
+    {
+      "id": "R4_A03:nested-omp-wrote-no-commit",
+      "ok": true,
+      "detail": {
+        "commits": 0,
+        "sawDenial": true
+      }
+    },
+    {
+      "id": "R4_A03:nested-omp-denied",
+      "ok": true,
+      "detail": "{\"type\":\"ready\",\"protocolVersion\":1,\"supportedProtocolVersions\":[1,2],\"maxFrameBytes\":1048576,\"maxReassembledFrameBytes\":67108864}\n{\"type\":\"extension_ui_request\",\"id\":\"15b01297cf3555ef\",\"method\":\"setW"
+    },
+    {
+      "id": "R4_A03:parent-generation-unaffected",
+      "ok": true,
+      "detail": "COMMITTED"
+    },
+    {
+      "id": "R4_A04:ledger-key-not-readable-by-agent",
+      "ok": true,
+      "detail": "cat: <isolated-root>/cases/a04/controller/ledger.key: Operation not permitted\n\nRK_UNREADABLE\nREAD_ATTEMPT_DONE\n\n"
+    },
+    {
+      "id": "R4_A04:result-key-file-not-readable",
+      "ok": true,
+      "detail": "RK_UNREADABLE"
+    },
+    {
+      "id": "R4_A04:probe-completed",
+      "ok": true,
+      "detail": "cat: <isolated-root>/cases/a04/controller/ledger.key: Operation not permitted\n\nRK_UNREADABLE\nREAD_ATTEMPT_DONE\n\n"
+    }
+  ]
+}

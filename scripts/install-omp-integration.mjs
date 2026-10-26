@@ -34,7 +34,7 @@
 // Nothing here runs in the background.
 
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
@@ -199,31 +199,48 @@ function installIntegration({ source, target, backupRoot, dryRun }) {
 
 	const stamp = timestampSlug();
 	const actions = [];
+	// Directories this install CREATES, as opposed to directories it finds. A
+	// rollback may only remove what it created: measured in review, inferring
+	// ownership from deleted files removed a pre-existing empty `lib/`, so the
+	// pre-install tree was not restored.
+	const createdDirectories = new Set();
+	const noteMissingParents = rel => {
+		const parts = dirname(rel).split(/[\\/]/).filter(part => part !== "." && part !== "");
+		let current = "";
+		for (const part of parts) {
+			current = current.length === 0 ? part : `${current}/${part}`;
+			if (!existsSync(join(target, current))) createdDirectories.add(current);
+		}
+	};
 	for (const rel of KNOWN_FILES) {
 		const src = join(source, rel);
 		const dest = join(target, rel);
 		if (!existsSync(dest)) {
-			actions.push({ file: rel, action: "copy", backup: null });
+			noteMissingParents(rel);
 			if (!dryRun) writeFileAtomic(dest, readBytes(src));
+			// `deployedSha256` is what this install actually wrote, so a rollback can
+			// distinguish "still the installed bytes" from "edited since the install".
+			actions.push({ file: rel, action: "copy", backup: null, deployedSha256: dryRun ? null : sha256File(dest) });
 			continue;
 		}
 		const same = sha256File(src) === sha256File(dest);
 		if (same) {
-			actions.push({ file: rel, action: "unchanged", backup: null });
+			actions.push({ file: rel, action: "unchanged", backup: null, deployedSha256: sha256File(dest) });
 			continue;
 		}
 		const backup = join(backupRoot, stamp, rel);
-		actions.push({ file: rel, action: "replace", backup });
 		if (!dryRun) {
 			writeFileAtomic(backup, readBytes(dest));
 			writeFileAtomic(dest, readBytes(src));
 		}
+		actions.push({ file: rel, action: "replace", backup, deployedSha256: dryRun ? null : sha256File(dest) });
 	}
 
 	const discovered = discoverExtensionModules(target);
 	return {
 		ok: true,
 		actions,
+		createdDirectories: dryRun ? [] : [...createdDirectories].sort(),
 		dryRun,
 		backupRoot: actions.some(a => a.backup) ? join(backupRoot, stamp) : null,
 		loadedModules: discovered.modules,

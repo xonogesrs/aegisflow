@@ -1,0 +1,13 @@
+{
+  "toolRegistered": true,
+  "sessionDir": "<tmp>/aegis-c1-boundary/pre-repair/session",
+  "stateRoot": "<tmp>/aegis-c1-boundary/pre-repair/memory-state",
+  "toolPayloadText": "engineering knowledge memory unavailable: repository identity could not be resolved: planted",
+  "toolState": "UNAVAILABLE",
+  "toolIsolation": null,
+  "toolReason": "repository identity could not be resolved: planted",
+  "retrievedCount": 0,
+  "plantedEvaluatedByToolPath": true,
+  "controlLoaded": true,
+  "controlEvaluated": false
+}

@@ -1,0 +1,98 @@
+=== COLLECTED_AT
+2026-10-21T10:28:40Z
+
+=== OMP_EXECUTABLE
+path=$HOME/.local/bin/omp
+realpath=$HOME/.local/bin/omp
+sha256=f2a657b3320fcafa23055053940a45b26a8d3254e1412a158838013d670d6ec5
+version=omp/18.12.3
+mode=-rwxr-xr-x operator:staff
+path=$HOME/.bun/bin/omp
+realpath=$HOME/.local/bin/omp
+sha256=f2a657b3320fcafa23055053940a45b26a8d3254e1412a158838013d670d6ec5
+version=omp/18.12.3
+mode=-rwxr-xr-x operator:staff
+
+=== NODE
+node=/opt/homebrew/bin/node v26.0.0
+
+=== EXTENSIONS_TREE
+03c08f43b145602edfc47e427c4b4738cf3fa9d19bcc6ec204a61f30ff52b75e  ./cbm-query.js
+7c2eae224fd0965cc58f4a1f36c00c865059f18e59a7c91c6e4490f9b98090b0  ./lib/poll-wait-policy.js
+11d8628ba5deb2671670956b3b4d04ea82228c004971904f7aa670fd96e6f8ef  ./no-poll-waits.js
+49a8b7e673a36c95dc3b801cf43408231653e70ed1224e8e349feeb1397bb0ed  ./orca-agent-status.ts
+5e18bf52a7ed8e04e9ba9f00b7c35f74d93e9dc981a81956e23fd5bfb1c5dc1a  ./orca-prefill.ts
+16b0ff9134ec39527cc06f31664cf5e43170a2b6c3cb5a2a251a20f5a565329c  ./orca-titlebar-spinner.ts
+723c3932e7b6732595f779ec91c1cf77022c5b3231a2036e2fb8bf10d7697285  ./test/poll-wait-policy.test.mjs
+ae16f1142914a9ecfecfa18006b5adef5e897c38f67994a9c16375a507e3135a  ./test/terminal-fence-authority.acceptance.ts
+7fae4534919c1fb6ad024bced1b3656362a20f08eee9c18f58c060a523318244  ./test/terminal-fence-ordering.acceptance.ts
+d36c62f8fa355e963d9d4b8bd14bcb1020e68f35ebd4fedaa65b416b2306c65e  ./test/waiter-fence.acceptance.ts
+
+=== EXTENSION_DISCOVERY_SET
+cbm-query.js
+no-poll-waits.js
+orca-agent-status.ts
+orca-prefill.ts
+orca-titlebar-spinner.ts
+
+=== CONFIG
+108ca03cb80bc76e09b895936da8e2898d85d361a5e493b72ac3792e59528d66  config.yml
+e2346f8ff347171c3e024da292d255947199288943e4def6a6a86ae6ec06c641  models.yml
+032839c1b99c6003c8e3781149fead036cb2a50a3d638f9d452710dabb5a67d4  mcp.json
+
+=== WRITABILITY_OF_DEPLOY_PATHS
+drwx------ operator:staff $HOME/.omp/agent
+drwxr-xr-x operator:staff $HOME/.omp/agent/extensions
+drwxr-xr-x operator:staff $HOME/.omp/agent/extensions/lib
+
+=== FILESYSTEM
+
+=== PROCESSES
+ 4925  4922 二 10月/20 20:57:54 2026   $HOME/.local/opt/codebase-memory-mcp/0.12.1/bin/codebase-memory-mcp --cbm-daemon-internal
+11340 11290 三 10月/21 18:26:47 2026   $HOME/.local/bin/omp --mode text -p hi --no-skills --no-rules --no-title --no-pty --max-time 30s --cwd /private/tmp/admission-rehearsal/cases/c1g
+13553  4905 二 10月/20 21:30:08 2026   $HOME/.local/bin/omp __omp_worker_daemon_broker
+25746  4905 二 10月/20 22:23:39 2026   $HOME/.local/bin/omp __omp_worker_daemon_broker
+ 4922  4905 二 10月/20 20:57:53 2026   $HOME/.local/opt/codebase-memory-mcp/0.12.1/bin/codebase-memory-mcp
+
+=== AUTOLOOP
+  AutoLoop OMP mode: OFF
+  OMP dispatch: native
+
+=== SHELL_WIRING
+42-# Daily entry: `omp`. Dispatch authority is pilot-state.json ONLY, queried via
+43:# `al-omp is-on` (exit 0 -> ON -> governed; non-zero -> OFF / missing /
+44-# malformed -> native, fail-closed). The [AL] prompt indicator
+45-# (~/.alomp-indicator-on) is cosmetic only and never routes: a stale indicator
+46-# cannot change dispatch. Deliberately NO native fallback on the governed
+47:# branch — a fenced/rejected al-omp must never be silently re-run as an
+48-# ungoverned native OMP (that would bypass FENCE 1 and the reentry guard).
+49-# Native escape hatch: $HOME/node_modules/.bin/omp (direct path).
+50-ALOMP_PILOT_ROOT="$WORK_VOLUME/Development/autoloop-omp-pilot"
+51-ALOMP_INDICATOR_FILE="$HOME/.alomp-indicator-on"
+52:export PILOT_OMP_EXECUTABLE="$HOME/.local/bin/omp"
+53-
+54-omp() {
+55:  if "$ALOMP_PILOT_ROOT/bin/al-omp" is-on >/dev/null 2>&1; then
+56:    "$ALOMP_PILOT_ROOT/bin/al-omp" omp -- "$@"
+57-    return $?
+58-  fi
+59-
+
+=== AUTHORITY_MARKERS_IN_ENV
+
+=== EXISTING_STATE_DIRS
+(none)
+
+=== CBM
+path=$HOME/.local/opt/codebase-memory-mcp/0.12.1/bin/codebase-memory-mcp
+sha256=a36cfa1f5d10d8c4762501d63feef082711aae4704b9e8f9066db52779a8601e
+version=codebase-memory-mcp 0.12.1
+cache_dir=$WORK_VOLUME/cbm/cache
+
+=== PLUGINS
+  npm Plugins:
+  
+  ● @edlsh/omp-computer-use@0.1.0
+  ● omp-grok-build@0.1.0
+  ● pi-jev@0.7.0
+  ● zmarketplace@0.7.8

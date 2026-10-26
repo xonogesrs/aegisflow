@@ -1,0 +1,121 @@
+{
+  "command": "check",
+  "files": [
+    {
+      "file": "no-poll-waits.js",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "14ceb06ccfde59c0889c9e14078874ed4faf8ccd5988849821b655ce485b3596",
+      "deployedSha256": "14ceb06ccfde59c0889c9e14078874ed4faf8ccd5988849821b655ce485b3596"
+    },
+    {
+      "file": "cbm-query.js",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "1de77827da2b8f10fb0a8b46050331e8a498537252ac8f607e33c7678ddf7b18",
+      "deployedSha256": "1de77827da2b8f10fb0a8b46050331e8a498537252ac8f607e33c7678ddf7b18"
+    },
+    {
+      "file": "lib/memory-query-core.mjs",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "7b5515d9071e7685e8292f8a2d0e27ad728e8427d24b1cb0dc0e2b55d6eb5b4a",
+      "deployedSha256": "7b5515d9071e7685e8292f8a2d0e27ad728e8427d24b1cb0dc0e2b55d6eb5b4a"
+    },
+    {
+      "file": "lib/memory-query-child.mjs",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "9d570ab6eefb3852ba37b4935dca5b0ff3b0cb530ca20785749f98b7f744f6b6",
+      "deployedSha256": "9d570ab6eefb3852ba37b4935dca5b0ff3b0cb530ca20785749f98b7f744f6b6"
+    },
+    {
+      "file": "lib/poll-wait-policy.js",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "7c2eae224fd0965cc58f4a1f36c00c865059f18e59a7c91c6e4490f9b98090b0",
+      "deployedSha256": "7c2eae224fd0965cc58f4a1f36c00c865059f18e59a7c91c6e4490f9b98090b0"
+    },
+    {
+      "file": "lib/controller-result.mjs",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "365df82cbe7e8a6ca2c0fe8bbc733cdb314a1c4fa03165d7abc356f37897d21c",
+      "deployedSha256": "365df82cbe7e8a6ca2c0fe8bbc733cdb314a1c4fa03165d7abc356f37897d21c"
+    },
+    {
+      "file": "lib/runtime-identity.mjs",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "d680f3b480763f5e8a0d90721ad99f0a4b309f3fd04d76478a040f48d93ad1cd",
+      "deployedSha256": "d680f3b480763f5e8a0d90721ad99f0a4b309f3fd04d76478a040f48d93ad1cd"
+    },
+    {
+      "file": "lib/ledger-lock.mjs",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "72d1c2d544a79daaae9caec092372825a5eff1b8611a3cff7e16199d2b5c3d2d",
+      "deployedSha256": "72d1c2d544a79daaae9caec092372825a5eff1b8611a3cff7e16199d2b5c3d2d"
+    },
+    {
+      "file": "lib/ledger-auth.mjs",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "e8e0afb9e135d9a41eda64697ca96afd7d326d4b8db8fd247452c2644b2e7cea",
+      "deployedSha256": "e8e0afb9e135d9a41eda64697ca96afd7d326d4b8db8fd247452c2644b2e7cea"
+    },
+    {
+      "file": "lib/controller-capability.mjs",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "0e39e9edb6b84129012ba52f22e2a49c3cf5caf4c14e34c9a4e98eb3a02c8534",
+      "deployedSha256": "0e39e9edb6b84129012ba52f22e2a49c3cf5caf4c14e34c9a4e98eb3a02c8534"
+    },
+    {
+      "file": "test/poll-wait-policy.test.mjs",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "723c3932e7b6732595f779ec91c1cf77022c5b3231a2036e2fb8bf10d7697285",
+      "deployedSha256": "723c3932e7b6732595f779ec91c1cf77022c5b3231a2036e2fb8bf10d7697285"
+    },
+    {
+      "file": "test/waiter-fence.acceptance.ts",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "e476cff69813b6fb663ac9bad618e1323351930ca7d50bbadd1aa31d27263f4d",
+      "deployedSha256": "e476cff69813b6fb663ac9bad618e1323351930ca7d50bbadd1aa31d27263f4d"
+    },
+    {
+      "file": "test/terminal-fence-authority.acceptance.ts",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "9a2d9e887f7e9d761a6c33632e13bf64028125096d7f4143744a6eaf10aa1ed8",
+      "deployedSha256": "9a2d9e887f7e9d761a6c33632e13bf64028125096d7f4143744a6eaf10aa1ed8"
+    },
+    {
+      "file": "test/terminal-fence-ordering.acceptance.ts",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "146a2b404ee7775290aeefbf5b0557d9b466510ad272dd438cc47eac054646bc",
+      "deployedSha256": "146a2b404ee7775290aeefbf5b0557d9b466510ad272dd438cc47eac054646bc"
+    },
+    {
+      "file": "test/controller-contract.acceptance.ts",
+      "state": "MATCH",
+      "redactedIdentifiers": 0,
+      "publishedSha256": "2fb750ac5ea2550173174af9c747b0886a7baa64e92a01f9604d584fac9fcffd",
+      "deployedSha256": "2fb750ac5ea2550173174af9c747b0886a7baa64e92a01f9604d584fac9fcffd"
+    }
+  ],
+  "counts": {
+    "MATCH": 15,
+    "EQUIVALENT": 0,
+    "DRIFT": 0,
+    "MISSING": 0
+  },
+  "ok": true,
+  "verdict": "MATCH",
+  "strictBytes": true,
+  "source": "/private/tmp/aegis-repair-1/integrations/omp/extensions",
+  "target": "/Users/zhengfengqing/.omp/agent/extensions"
+}

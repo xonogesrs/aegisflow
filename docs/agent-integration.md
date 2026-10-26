@@ -152,22 +152,43 @@ Two extensions ship there:
 | Extension | Purpose |
 |---|---|
 | `no-poll-waits.js` | waiter lifecycle + terminal-fence authority (below) |
-| `cbm-query.js` | the `cbm_query` tool: the agent's own read-only access to the CBM store |
+| `cbm-query.js` | the `ekm_query` tool: the agent's own read-only access to Engineering Knowledge Memory |
 
-`cbm_query` exists because the memory engine was reachable only through
+`ekm_query` exists because the memory engine was reachable only through
 `scripts/autoloop-memory-query.mjs`, a harness CLI. A harness has an agent
 vocabulary; an interactive session does not, so memory was invisible there and an
-agent could not use knowledge the repository had already recorded. The tool
-imports the same `resolveRepositoryIdentity` / `LocalMemoryStore.query` surface
-the CLI uses — there is no second store and no second ranking path — and returns
-`kind: "MEMORY_CONTEXT_DATA"` with an explicit authority boundary. It is
+agent could not use knowledge the repository had already recorded. It answers
+questions about verified engineering knowledge, decisions, provenance and
+evidence — it is explicitly **not** a source-code symbol index or call graph.
+The tool uses the same `resolveRepositoryIdentity` / `LocalMemoryStore.query`
+surface the CLI uses — there is no second store and no second ranking path — and
+returns `kind: "MEMORY_CONTEXT_DATA"` with an explicit authority boundary. It is
 read-only, never mandatory, and reports `EMPTY_MEMORY` / `INVALID` /
 `UNAVAILABLE` rather than an empty success.
+
+**It runs in a child process, and that is a security property, not an
+implementation detail.** `cbm-query.js` is loaded into the OMP process, and under
+a governed launch that process holds the controller capability (an inherited
+ledger descriptor plus the key that authenticates what is written through it).
+While the tool imported the memory module in that process, and located the
+checkout by walking up from the session cwd, an agent could write
+`<session-cwd>/src/memory/index.mjs` with its ordinary `bash` tool and have that
+code execute beside the capability. That was measured on a governed launch, not
+inferred. The repair has two layers: the checkout is never resolved from the
+session cwd (only `AEGISFLOW_REPO_ROOT` / `AUTOLOOP_REPO_ROOT` and the
+extension's own location), and the store logic (`lib/memory-query-core.mjs`) runs
+in `lib/memory-query-child.mjs` under a plain `node`, with a scrubbed
+environment, so no descriptor and no key is reachable from it. There is no
+in-process fallback: a child that cannot start is an `UNAVAILABLE` answer.
+
+The pre-EKM name `cbm_query` remains registered as a `defaultInactive`
+compatibility entry: same execution seam, same result, but not part of the
+agent's active tool set. `ekm_query` is the single memory tool an agent sees.
 
 The tool inherits the store's DECLARED lineage: when a machine has recorded that
 a deprecated repository identity belongs to this checkout (see
 [troubleshooting](troubleshooting.md#a-populated-store-returns-selectedrecords-0-excludedrepository--n)),
-`cbm_query` sees those records too and reports the lineage alongside the result.
+`ekm_query` sees those records too and reports the lineage alongside the result.
 An undeclared identity stays isolated exactly as before, and the tool never
 declares an alias itself — that requires evidence and is a deliberate operator
 action (`scripts/autoloop-memory-lineage.mjs`).
@@ -178,7 +199,7 @@ terminal authority must stay on the AegisFlow side of the boundary.**
 | Actor | May do | May not do |
 |---|---|---|
 | governed agent (the model) | `request_terminal_fence(status, reason)` — records a disposition; always reports `committed: false` | commit a terminal fence, invalidate a pending delivery, or declare its own generation terminal |
-| trusted controller / orchestrator (whatever launches the governed process) | commit the fence on the host prompt-command channel: `/fence-generation <PASS\|HOLD\|FAIL\|CANCELLED> [reason]`, with `OMP_TERMINAL_FENCE_AUTHORITY` set | — |
+| trusted controller / orchestrator (whatever launches the governed process) | commit the fence on the host prompt-command channel: `/fence-generation <PASS\|HOLD\|FAIL\|CANCELLED> [reason]`, from a launch that was given the capability | — |
 
 A committed terminal transition runs in one ordered, synchronous sequence —
 `TERMINAL_COMMITTED → GENERATION_FENCED → DELIVERIES_INVALIDATED →
@@ -188,10 +209,15 @@ released through the release barrier (`releaseFinalResponse` /
 fenced. The measured failure this closes: a report released *before* the fence,
 a late completion delivered into that gap, and a fence landing afterwards.
 
-`OMP_TERMINAL_FENCE_AUTHORITY` is an environment marker the **launcher** sets; it
-is not a capability an agent can acquire, derive from a payload, or reach through
-a tool. Without it the commit fails closed (`CONTROLLER_AUTHORITY_ABSENT`) and the
-generation stays active, so pending background deliveries keep being delivered.
+Authority is a **capability, not a variable**. A governed launch gives the child
+an open descriptor to the ledger plus the key that authenticates records written
+through it, both close-on-exec, and the launch sandbox denies the ledger and key
+paths to the whole process tree. The old `OMP_TERMINAL_FENCE_AUTHORITY` marker
+grants nothing and is recognised only in order to refuse a launch that carries
+it. Without a capability the commit fails closed
+(`CONTROLLER_AUTHORITY_ABSENT`) and the generation stays active, so pending
+background deliveries keep being delivered. See
+`docs/audit/AEGISFLOW_CONTROLLER_AUTHORITY_ISOLATION_AND_AUTHENTICATED_LEDGER_R4_1/THREAT_MODEL.md`.
 
 Nothing in AegisFlow core depends on the extension being installed: `npm install`
 and `npm test` work without an agent runtime, and no file under `src/` imports

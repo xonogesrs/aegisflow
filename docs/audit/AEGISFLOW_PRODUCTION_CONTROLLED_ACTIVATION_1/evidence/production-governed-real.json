@@ -1,0 +1,96 @@
+{
+  "card": "AEGISFLOW_PRODUCTION_CONTROLLED_ACTIVATION_1",
+  "observedAt": "2026-10-22T11:43:31.826Z",
+  "scope": "governed launch using the production model config and provider credential, throwaway HOME/session dir",
+  "productionMutation": "NONE",
+  "isolatedRootRemoved": true,
+  "observations": {
+    "GOVERNED_LAUNCH_PRODUCTION_CONFIG": {
+      "pass": true,
+      "detail": {
+        "ok": true,
+        "denial": null,
+        "sandbox": true,
+        "capability": true
+      }
+    },
+    "PRODUCTION_PROMPT": {
+      "pass": true,
+      "detail": {
+        "settled": true,
+        "provider": "production modelRoles.default",
+        "matched": true
+      }
+    },
+    "PRODUCTION_FIXED_NODE": {
+      "pass": true,
+      "detail": {
+        "settled": true,
+        "toolOutput": "/usr/local/bin/node\nv22.22.2\n450f27e22fc8babf6eb2e19d77474d99b12f3c12515900c0266a0ca7ea526fbf  /usr/local/bin/node\n",
+        "modelChosen": true
+      }
+    },
+    "PRODUCTION_CONTROLLER_COMMIT": {
+      "pass": true,
+      "detail": {
+        "state": "COMMITTED",
+        "ledgerRecorded": true,
+        "witness": "COMMITTED",
+        "matching": 1,
+        "boundIdentity": {
+          "sessionId": "01a1636c-4b6d-77dc-b32d-08c8b2a1aa68",
+          "runtimeInstanceId": "87a5f94d-74645-1792669403172-fa4f17bb6c4b",
+          "generation": 1,
+          "identityState": "ALLOCATED",
+          "generationDurable": true,
+          "allocationToken": "49094ea5dd8d005c"
+        },
+        "controllerRequestId": "commit-021a9eb89dec",
+        "controllerResultFrame": {
+          "op": "commit",
+          "sessionId": "01a1636c-4b6d-77dc-b32d-08c8b2a1aa68",
+          "runtimeInstanceId": "87a5f94d-74645-1792669403172-fa4f17bb6c4b",
+          "generation": 1,
+          "identityState": "ALLOCATED",
+          "identityError": null,
+          "commandAccepted": true,
+          "commandDispatched": true,
+          "handlerExecuted": true,
+          "commitExecuted": true,
+          "committed": true,
+          "denial": null,
+          "reason": null,
+          "status": "PASS",
+          "authority": "controller-command",
+          "targetVerified": true,
+          "jobIds": [],
+          "suppressed": 0,
+          "deliveryFenceSucceeded": true,
+          "deliveryFenceError": null,
+          "fenceAt": 1792669411709,
+          "invalidatedAt": 1792669411709,
+          "terminalStateAt": 1792669411709,
+          "gateOpenedAt": 1792669411709,
+          "finalDeliveryAllowed": true,
+          "FENCE_BEFORE_FINAL": true,
+          "ledgerRecorded": true,
+          "ledgerError": null
+        },
+        "ledgerRecord": {
+          "type": "commit",
+          "sessionId": "01a1636c-4b6d-77dc-b32d-08c8b2a1aa68",
+          "runtimeInstanceId": "87a5f94d-74645-1792669403172-fa4f17bb6c4b",
+          "generation": 1,
+          "allocationToken": "49094ea5dd8d005c",
+          "status": "PASS",
+          "requestId": "commit-021a9eb89dec",
+          "at": 1792669411709,
+          "v": 1,
+          "mac": "ae56df4a4755407643ad41d3aeec170a0cdf019192e0324bebe2addab6359df5"
+        },
+        "macVerifiedWithDeployedVerifier": true,
+        "ledgerKeySha256": "b7d7d720b1df0ed20750b94cdedf23fb7842c4da40448ef8f101f94e19e56312"
+      }
+    }
+  }
+}

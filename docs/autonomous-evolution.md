@@ -203,6 +203,187 @@ changes, not the machinery that runs work.
 - the every-run attribution feed and any feed failures;
 - the resolved production declaration.
 
+## Proposal-only mode
+
+A second, **default-OFF** execution ceiling: the loop analyses evidence and
+saves a reviewable proposal, then stops. It is a governed setting — it cannot
+be raised by a plan, a trigger event, or the agent.
+
+```
+node scripts/evolution-declare-production.mjs --out <path> ... --proposal-only
+# or per run/process:
+AEGISFLOW_EVOLUTION_PROPOSAL_ONLY=1
+# or runnerOpts.evolution.proposalOnly = true
+```
+
+With it on, one qualifying cycle runs:
+
+```
+evidence (qualified) → trigger → plan → candidate → DERIVED → durable write
+                                                        ↓
+                                              PROPOSAL_RECORDED  (STOP)
+```
+
+and **never** enters authorization, mutation, fitness, review, promotion,
+canary, commit, push, or strategy activation. The returned
+`loop_verdict` is `PROPOSAL_RECORDED`; the cycle result carries the proposal's
+`candidate_id`, `candidate_digest`, durable path, evidence references and
+measurement plan so it can be reviewed from the operator surface. Nothing is
+applied, so there is nothing to roll back — the disable path is the setting
+itself plus the existing kill switch.
+
+Fail-closed rules:
+
+| Condition | Result |
+|---|---|
+| `proposalOnly` is not a boolean (caller object, env, or declaration) | `HOLD / EVOLUTION_LOOP_PROPOSAL_ONLY_INVALID`; the consumer reports `CONFIGURATION_INVALID` and starts no cycle |
+| the deployment declaration does not validate, or cannot be read | `CONFIGURATION_INVALID` — the declaration's ceiling is unknowable, so it is never assumed OFF. A declared `proposalOnly:true` beside an unrelated bad key is still honoured as a ceiling and still blocks the deployment |
+| evidence is synthetic, test-only, or not a durable journal row | `HOLD / EVOLUTION_LOOP_EVIDENCE_UNQUALIFIED` before trigger evaluation, before any durable trigger write, and before any cooldown is consumed — on **both** loop entry modes |
+| the proposal cannot be durably written or read back | `HOLD / EVOLUTION_LOOP_CANDIDATE_NOT_PERSISTED` — a proposal is never claimed without its artifact |
+| the proposal artifact is durable but its derivation index is not | `HOLD / EVOLUTION_LOOP_CANDIDATE_NOT_INDEXED` with `artifact_durable: true` — the artifact exists and a retry repairs the index; this is never reported as "not persisted" |
+| `AUTO_EVOLUTION = SUSPENDED` | unchanged: the cycle never starts |
+
+With it off, the loop behaves exactly as documented above.
+
+### Configuration precedence
+
+Highest surface first, and at every surface an explicit boolean **stops** the
+search — a narrower `false` is never overridden by a broader `true`:
+
+1. `runnerOpts.evolution.proposalOnly`
+2. `AEGISFLOW_EVOLUTION_PROPOSAL_ONLY` (`1`/`true`/`0`/`false`)
+3. `proposalOnly` in the deployment declaration
+
+The declaration's ceiling is read from the **raw** record, so an unrelated
+validation failure elsewhere in the same file cannot discard it.
+
+## Proposal durability
+
+A strategy proposal is written to the **existing** candidate store
+(`<store>/evolution-candidates/`, `autoloop.evolution-candidate/v1`) with the
+same exclusive-create, identity-dedup and derivation-index semantics the source
+family uses — no second store and no new format. The write happens **before**
+authorization, so a proposal survives a cycle that is later refused or
+rejected, and it is visible to `scripts/evolution-operator.mjs` and to crash
+reconciliation.
+
+Identity is deterministic: the same trigger at the same baseline re-derives the
+same `candidate_id`, a retry is an `EXISTING` no-op, and an artifact whose
+immutable content differs is a conflict that fails closed. `created_at` is not
+part of that identity — a replayed event keeps the first write's record.
+
+### Candidate families are separate index namespaces
+
+The derivation index (`<store>/evolution-derivation-index.json`) keys one entry
+per **candidate family**, not one per signature:
+
+| Family | Key |
+|---|---|
+| `SOURCE` | `<signature>@<baseline-head>` (the historical key — unchanged) |
+| `AGENT_STRATEGY` | `AGENT_STRATEGY:<signature>@<baseline-head>` |
+
+The two families share the store directory, the schema and the dedup semantics,
+but never a key. A strategy proposal can therefore not become the
+"already derived" answer for a later source derivation of the same
+signature@baseline (or the reverse) — both orders derive both candidates. A
+legacy unqualified entry left by an earlier build is reclaimed by the family
+that owns that key; the other family's artifact stays on disk under its own
+identity.
+
+### Persistence failures are classified
+
+The artifact write, its read-back and the index write are separate facts:
+
+| Fact | Code |
+|---|---|
+| the artifact did not land | `EVOLUTION_CANDIDATE_PERSIST_FAILED` → `HOLD / EVOLUTION_LOOP_CANDIDATE_NOT_PERSISTED` |
+| the artifact landed, the index did not | `EVOLUTION_CANDIDATE_INDEX_WRITE_FAILED` → `HOLD / EVOLUTION_LOOP_CANDIDATE_NOT_INDEXED`, `artifact_durable: true` |
+| two different candidates claim one identity | `EVOLUTION_CANDIDATE_CONFLICT` → `HOLD / EVOLUTION_LOOP_CANDIDATE_CONFLICT`, `artifact_durable: true`, `conflict: { kind, owner_id, key }` — the index is healthy and refused to repoint an owner; first writer wins and nothing was unwritable |
+
+An identity conflict is **not** an I/O failure. Reporting it as
+`INDEX_WRITE_FAILED` sent the operator to inspect storage instead of the
+competing proposal, so the store classifies it by code before it reads
+`artifact_durable`.
+
+A retry after an index failure re-writes nothing (the artifact is authoritative)
+and indexes the existing derivation, so recovery needs no cleanup.
+
+## Evidence qualification
+
+Synthetic evidence is refused at the **trigger entry**, not only by the
+attribution feed:
+
+- a deployment that declares itself synthetic;
+- a durable record declaring `payload.synthetic` / `payload.test_only`, or
+  carrying a `SYNTHETIC_EVIDENCE` row;
+- a row that is not a verifiable journal row (no durable event id / sequence).
+
+Detection is declared, never guessed: a record that declares nothing is
+production evidence. The refusal is reported on the envelope
+(`evolutionObservation.evidence_qualified: false`, `evidence_exclusion`) and by
+the consumer as `NO_QUALIFIED_TRIGGER` with its reason — no trigger is recorded
+and no cycle starts.
+
+**One rule, both entry modes.** The observer, the every-run feed and
+`runEvolutionCycle` call the same predicate
+(`assessEvidenceProvenance`, `attribution-feed.mjs`). The check runs before
+trigger evaluation, before any durable trigger write and before any cooldown or
+window slot is consumed, so unqualified evidence can neither fire nor suppress
+the next real signal for its signature. A self-deriving caller therefore
+refuses exactly what production refuses; a caller that supplies an
+already-recorded trigger is re-checked as well. Refusals carry the provenance
+reason (`synthetic_evidence:…`, `untrusted_evidence_row`, `no_evidence_rows`),
+never a bare `NO_TRIGGER`.
+
+### The consumer derives its signals from the journal
+
+`observation.evidence_qualified` is a field on an object the caller hands in, so
+a non-production caller could forge it. The consumer therefore re-reads the
+durable journal (same reader) and re-applies the same predicate **before** the
+trigger gate.
+
+Provenance alone is not enough. A signal can cite a journal row that genuinely
+exists while asserting a signature, count, class or patch the row does not
+support — and a `fired` list is exactly what decides the durable trigger, the
+cooldown key and the candidate's plan. The consumer therefore **re-derives** the
+eligible signals from that journal with the same two functions the observer used
+(`extractTriggerObservations` + `evaluateSignals`) and the same policy
+thresholds, and accepts a caller claim only when it is canonically identical to
+a derived one — `signalClass`, `signature`, `count`, `minCount`, `evidenceRefs`
+and `observation` (where a bounded patch travels). The comparison holds in both
+directions: a signal the journal does not derive is refused, and a caller that
+reports fewer signals than the journal derives is refused too, so the caller
+cannot pick which qualifying evidence acts.
+
+Everything downstream — the trigger gate, the durable trigger record, the plan
+and the candidate — consumes the **derived** records, never the caller's
+objects. A patch therefore reaches a candidate only when the journal itself
+carries it.
+
+Three classes cannot be re-derived from the journal on this path and are
+**refused** rather than exempted: `QUALIFIED_PATTERN_EVIDENCE` (pattern
+qualification lives in the learning store) and `LATENCY_REGRESSION` /
+`TOKEN_INEFFICIENCY` (both fire only against a caller-supplied baseline). No
+production path supplies those inputs to the observer today, so this narrows an
+unreachable path rather than changing live behaviour.
+
+A refusal at this point is total — `NO_QUALIFIED_TRIGGER` with
+`evidence_reverified: true`, zero trigger records, zero cooldown consumed, zero
+candidate artifacts, zero cycles. A caller that supplies no journal identity
+cannot be verified and is refused, never trusted by default.
+
+### `synthetic` typing
+
+`synthetic` is a boolean or absent, on all three surfaces (runner object, env,
+declaration). Anything else — a string, a number, `null`, an object — is a
+governed-configuration failure (`CONFIGURATION_INVALID`, no cycle), never
+coerced to `false`. The env accepts the strings `1`/`true`/`0`/`false` and the
+legacy `AUTOLOOP_EVOLUTION_SYNTHETIC` alias is the same surface. A **non-string**
+env value (`1`, `0`, `null`, `{}`, `[]`) is rejected rather than read as unset:
+the shared config reader ignores non-strings, and treating that silence as
+production evidence is exactly the fail-open this closes. Precedence is
+unchanged — a usable brand value wins and the legacy name is not consulted.
+
 ## Honest limitations
 
 - **LOW-risk only.** The dimension set is genuinely narrow.

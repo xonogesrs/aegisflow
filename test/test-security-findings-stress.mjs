@@ -94,6 +94,7 @@ import {
 
 // Strategy dedup imports
 import { deriveStrategyCandidate, STRATEGY_CANDIDATE_HOLD } from "../src/evolution/candidate-strategy.mjs";
+import { EVOLUTION_CANDIDATE_HOLD, persistCandidate } from "../src/evolution/candidate.mjs";
 import { runEvolutionCycle } from "../src/evolution/loop.mjs";
 
 function initGitRepo(dir) {
@@ -790,8 +791,8 @@ test("STRESS-4: Token freeze validates tokens and strips all alias fields from w
   assert.equal(guarded.max_tokens, undefined, "max_tokens alias must be completely deleted from wire payload");
 });
 
-// ── Stress-Test Strategy: Strategy candidate derivation validates plan before dedup
-test("STRESS-STRATEGY: Strategy candidate derivation validates plan before dedup lookup", () => {
+// ── Stress-Test Strategy: Strategy candidate derivation validates the plan; dedup is the family-keyed persist
+test("STRESS-STRATEGY: Strategy candidate derivation validates the plan; dedup is the family-keyed persist lookup", () => {
   const storeRoot = mkdtempSync(join(tmpdir(), "stress-strategy-store-"));
   const baselineHead = "1234567890123456789012345678901234567890";
   const triggerEvent = {
@@ -819,16 +820,16 @@ test("STRESS-STRATEGY: Strategy candidate derivation validates plan before dedup
   };
 
   try {
-    // 1. First derivation creates candidate
+    // 1. First derivation creates a candidate; persisting it records the family-keyed derivation
     const first = deriveStrategyCandidate({
       plan: validPlan,
       triggerEvent,
       baselineHead,
       baselineRevision: 1,
-      storeRoot,
     });
     assert.equal(first.status, "CREATED");
     assert.ok(first.candidate.candidate_id);
+    assert.equal(persistCandidate(storeRoot, first.candidate).status, "CREATED");
 
     // 2. An invalid plan with same signature@baseline MUST fail validation and NOT return EXISTING
     const invalidPlan = {
@@ -850,7 +851,6 @@ test("STRESS-STRATEGY: Strategy candidate derivation validates plan before dedup
           triggerEvent,
           baselineHead,
           baselineRevision: 1,
-          storeRoot,
         });
       },
       (e) => e.code.includes("PLAN_INVALID"),
@@ -868,30 +868,28 @@ test("STRESS-STRATEGY: Strategy candidate derivation validates plan before dedup
       },
     };
 
+    const changed = deriveStrategyCandidate({
+      plan: changedPlan,
+      triggerEvent,
+      baselineHead,
+      baselineRevision: 1,
+    });
+    assert.notEqual(changed.candidate.candidate_id, first.candidate.candidate_id);
     assert.throws(
-      () => {
-        deriveStrategyCandidate({
-          plan: changedPlan,
-          triggerEvent,
-          baselineHead,
-          baselineRevision: 1,
-          storeRoot,
-        });
-      },
-      (e) => e.code.includes("PLAN_REFUSED"),
-      "changed plan for same signature@baseline must throw PLAN_REFUSED"
+      () => persistCandidate(storeRoot, changed.candidate),
+      (e) => e.code === EVOLUTION_CANDIDATE_HOLD.CANDIDATE_CONFLICT,
+      "a different candidate for the same family signature@baseline must be refused as CANDIDATE_CONFLICT"
     );
 
-    // 4. Identical plan returns EXISTING
+    // 4. An identical plan re-derives the same candidate and persisting it again is EXISTING
     const identical = deriveStrategyCandidate({
       plan: validPlan,
       triggerEvent,
       baselineHead,
       baselineRevision: 1,
-      storeRoot,
     });
-    assert.equal(identical.status, "EXISTING");
     assert.equal(identical.candidate.candidate_id, first.candidate.candidate_id);
+    assert.equal(persistCandidate(storeRoot, identical.candidate).status, "EXISTING");
   } finally {
     rmSync(storeRoot, { recursive: true, force: true });
   }

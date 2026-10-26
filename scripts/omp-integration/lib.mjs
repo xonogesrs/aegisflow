@@ -42,11 +42,30 @@ export const KNOWN_FILES = Object.freeze([
 	"no-poll-waits.js",
 	"cbm-query.js",
 	"aegis-attention.js",
+	// C1: the EKM read path, and the child process that runs it. `cbm-query.js`
+	// holds the tool surface; the store logic moved into the `.mjs` core so it can
+	// be imported by a process that is NOT the OMP runtime. Deploying only
+	// `cbm-query.js` would leave the tool unable to answer.
+	"lib/memory-query-core.mjs",
+	"lib/memory-query-child.mjs",
 	"lib/poll-wait-policy.js",
+	"lib/controller-result.mjs",
+	"lib/runtime-identity.mjs",
+	// R3: the cross-process ledger lock. It ships WITH the extension because the
+	// extension is what takes the lock; the controller client only reads the ledger
+	// it protects, and the client is not deployed at all.
+	"lib/ledger-lock.mjs",
+	// R4: the capability and the record MAC. Both ship WITH the extension because
+	// the extension is what holds a capability and signs the records it writes; the
+	// controller reads the same modules from this repository, and is still not
+	// deployed as an extension.
+	"lib/ledger-auth.mjs",
+	"lib/controller-capability.mjs",
 	"test/poll-wait-policy.test.mjs",
 	"test/waiter-fence.acceptance.ts",
 	"test/terminal-fence-authority.acceptance.ts",
 	"test/terminal-fence-ordering.acceptance.ts",
+	"test/controller-contract.acceptance.ts",
 ]);
 
 /** Suffixes that make a file executable code (and therefore deployment-relevant). */

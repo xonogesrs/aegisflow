@@ -9,6 +9,10 @@
 //   * the governed Agent's tool surface must NOT contain a terminal-commit
 //     primitive, and must NOT be able to acquire one by payload text or by
 //     replaying the removed tool name;
+//   * authority is a CAPABILITY, not an environment variable (R4). A test that
+//     wants a commit installs one explicitly; a test that wants a refusal
+//     installs nothing. Setting `OMP_TERMINAL_FENCE_AUTHORITY` grants nothing,
+//     which is itself asserted below;
 //   * the Agent's REPORT tool (`request_terminal_fence`) must never fence, for
 //     any of PASS/HOLD/FAIL/CANCELLED;
 //   * the trusted controller must still be able to commit the SAME fence
@@ -21,12 +25,20 @@ import { AsyncJobManager } from "@oh-my-pi/pi-coding-agent/async";
 import openPollWaits, {
 	AUTHORITY_ENV,
 	TERMINAL_STATUSES,
+	clearControllerAuthorityForTest,
 	commitTerminalFence,
 	controllerAuthorityPresent,
+	installControllerAuthorityForTest,
 	waiterStateSnapshot,
 } from "../no-poll-waits.js";
 
 const OWNER = "Main";
+/**
+ * A key for the harness "controller" (R4). Records are authenticated now, so a
+ * test that exercises a commit needs a key — and the key is the ONLY thing that
+ * grants authority, which is the point.
+ */
+const LEDGER_KEY = "0".repeat(64);
 const COMMIT_COMMAND = "fence-generation";
 const REQUEST_TOOL = "request_terminal_fence";
 const LEGACY_TOOL = "fence_background_waiters";
@@ -232,13 +244,18 @@ const results = {};
 {
 	const { manager, delivered } = newManager();
 	const { host, jobId, release } = await hostWithGatedJob("case2b-no-capability", manager);
+	// R4: the variable is set to a plausible value ON PURPOSE. Under the old model
+	// that was authority; under the capability model it grants nothing, and the
+	// commit must still be refused.
 	const saved = process.env[AUTHORITY_ENV];
-	delete process.env[AUTHORITY_ENV];
+	process.env[AUTHORITY_ENV] = "harness-looks-like-authority";
+	clearControllerAuthorityForTest();
 	try {
-		assert.equal(controllerAuthorityPresent(), false);
+		assert.equal(controllerAuthorityPresent(), false, "an environment variable is not authority");
 		await host.commands.get(COMMIT_COMMAND).handler("PASS controller wants terminal", host.session);
 	} finally {
 		if (saved !== undefined) process.env[AUTHORITY_ENV] = saved;
+		else delete process.env[AUTHORITY_ENV];
 	}
 	const snapshot = waiterStateSnapshot().find(s => s.sessionId === "case2b-no-capability");
 	assert.equal(snapshot.fenceCalls, 0, "an unmanaged process must not be able to commit a fence");
@@ -277,14 +294,15 @@ const results = {};
 			.get(REQUEST_TOOL)
 			.execute("call-report", { status, reason: "task finished" }, undefined, undefined, host.session);
 
-		const saved = process.env[AUTHORITY_ENV];
-		process.env[AUTHORITY_ENV] = `harness-${status}`;
+		// …then the TRUSTED CONTROLLER commits, on the host command channel. The
+		// controller holds a capability; the harness installs one because it is
+		// playing the controller's role in this process.
+		const capability = installControllerAuthorityForTest({ key: LEDGER_KEY });
+		assert.equal(capability.ok, true, "the harness controller must be able to hold a capability");
 		try {
-			// …then the TRUSTED CONTROLLER commits, on the host command channel.
 			await host.commands.get(COMMIT_COMMAND).handler(`${status} card completed`, host.session);
 		} finally {
-			if (saved === undefined) delete process.env[AUTHORITY_ENV];
-			else process.env[AUTHORITY_ENV] = saved;
+			clearControllerAuthorityForTest();
 		}
 
 		const fence = fenceLogs(host.logs);
@@ -344,13 +362,11 @@ const results = {};
 {
 	const { manager, delivered } = newManager();
 	const { host, jobId, release } = await hostWithGatedJob("case5-generation", manager);
-	const saved = process.env[AUTHORITY_ENV];
-	process.env[AUTHORITY_ENV] = "harness-gen";
+	installControllerAuthorityForTest({ key: LEDGER_KEY });
 	try {
 		await host.commands.get(COMMIT_COMMAND).handler("PASS generation 1 terminal", host.session);
 	} finally {
-		if (saved === undefined) delete process.env[AUTHORITY_ENV];
-		else process.env[AUTHORITY_ENV] = saved;
+		clearControllerAuthorityForTest();
 	}
 	release();
 	await manager.getJob(jobId).promise;
@@ -385,6 +401,10 @@ const results = {};
 	const host = makeHost("case6-primitive", manager);
 	const saved = process.env[AUTHORITY_ENV];
 	delete process.env[AUTHORITY_ENV];
+	// R4: the variable is set to a value that used to BE authority, and cleared of
+	// any capability. The primitive must refuse anyway.
+	process.env[AUTHORITY_ENV] = "harness-forged-authority";
+	clearControllerAuthorityForTest();
 	let denial;
 	try {
 		const state = waiterStateSnapshot().length; // touch the snapshot surface
@@ -392,13 +412,15 @@ const results = {};
 		denial = commitTerminalFence(host.pi, { sessionId: "case6-primitive", generation: 1, jobs: new Map(), fenced: new Set(), commitDenials: [], terminalRequests: [] }, manager, "PASS", "forged", process.env);
 	} finally {
 		if (saved !== undefined) process.env[AUTHORITY_ENV] = saved;
+		else delete process.env[AUTHORITY_ENV];
 	}
 	assert.equal(denial.committed, false, "the commit primitive must fail closed without controller authority");
 	assert.equal(denial.denial, "CONTROLLER_AUTHORITY_ABSENT");
 	results.PRIMITIVE_FAILS_CLOSED = "YES";
 
-	// Invalid disposition through the controller channel is refused too.
-	process.env[AUTHORITY_ENV] = "harness-invalid";
+	// Invalid disposition through the controller channel is refused too. This needs
+	// a REAL capability, so the refusal is about the status and not about authority.
+	installControllerAuthorityForTest({ key: LEDGER_KEY });
 	let invalid;
 	try {
 		invalid = commitTerminalFence(
@@ -410,8 +432,7 @@ const results = {};
 			process.env,
 		);
 	} finally {
-		if (saved === undefined) delete process.env[AUTHORITY_ENV];
-		else process.env[AUTHORITY_ENV] = saved;
+		clearControllerAuthorityForTest();
 	}
 	assert.equal(invalid.committed, false);
 	assert.equal(invalid.denial, "INVALID_TERMINAL_STATUS");

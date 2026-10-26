@@ -154,7 +154,20 @@ function journalFor({
   // of the pipeline — see `SIGNAL_COUNT_FLOOR` in src/evolution/trigger.mjs.
   const base = Date.now() - 60 * 60 * 1000; // one hour ago: always inside the window
   let tick = 0;
-  const stamp = (e) => ({ ...e, timestamp: new Date(base + tick++ * 1000).toISOString() });
+  // A durable journal row carries its OWN identity (stamped event id +
+  // monotonic sequence) — RunEvidenceStore writes both on append, and the
+  // loop's §G1/F1/F5 evidence fence refuses anything that lacks them. A
+  // fixture that omits them is not evidence, it is a hand-built array.
+  const stamp = (e) => {
+    const n = tick;
+    tick += 1;
+    return {
+      ...e,
+      timestamp: new Date(base + n * 1000).toISOString(),
+      event_id: `evt_${n + 1}_${"7".repeat(16)}`,
+      sequence: n + 1,
+    };
+  };
   const events = [];
   if (phaseCount !== null) {
     events.push({ event_type: "DAG_ACCEPTED", stage: "decomposition", payload: { phase_count: phaseCount, ir_sha256: "a".repeat(64), dag_sha256: "b".repeat(64) } });

@@ -1,0 +1,5 @@
+first generation: 1 committed: true
+second generation: 3 newer: true
+same session: true
+distinct runtime: true
+ledger: allocate:1 commit:1 allocate:2 allocate:3

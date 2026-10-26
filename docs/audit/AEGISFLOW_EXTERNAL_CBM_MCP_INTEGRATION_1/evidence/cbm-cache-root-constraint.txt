@@ -1,0 +1,13 @@
+### cache root under $HOME rejected (documented ancestry rule)
+codebase-memory-mcp: could not load saved runtime settings
+exit=0
+
+### ACL on home dir that triggers it
+drwxr-x---+ 346 zhengfengqing  staff  11072 10月 19 19:11 \$HOME
+ 0: group:everyone deny delete
+ 1: user:auracore-broker allow search
+
+### working root
+Configuration:
+  auto_index                = false     
+  auto_index_limit          = 50000     

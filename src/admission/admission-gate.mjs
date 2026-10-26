@@ -489,6 +489,10 @@ export async function runAdmittedGraph({ admission, graph = null, runner = null,
       storeRoot: evolutionConfig.storeRoot,
       journal,
       switchState,
+      // §G1: the DECLARED provenance the feed already uses. A synthetic
+      // deployment therefore cannot form a production trigger, and the trigger
+      // and the feed can never disagree about what kind of run this was.
+      config: evolutionConfig,
     });
     attachEvolutionObservation(result, observation);
     result.evolutionDisposition = consumeEvolutionObservationForProduction({

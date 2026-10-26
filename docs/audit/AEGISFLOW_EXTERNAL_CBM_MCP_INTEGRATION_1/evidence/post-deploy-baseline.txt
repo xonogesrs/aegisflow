@@ -1,0 +1,11 @@
+=== post-deploy baselines
+omp_binary_sha256=fa41b27d434380e99b713e4f9ced0f73eb1fc0c409fdf23a57c119971d24bac5
+omp_version=omp/18.12.1
+108ca03cb80bc76e09b895936da8e2898d85d361a5e493b72ac3792e59528d66  \$HOME/.omp/agent/config.yml
+032839c1b99c6003c8e3781149fead036cb2a50a3d638f9d452710dabb5a67d4  \$HOME/.omp/agent/mcp.json
+total 228
+drwxr-xr-x 5 zhengfengqing staff    160 Oct 19 19:11 .
+drwxr-xr-x 8 zhengfengqing staff    256 Sep 24 21:20 ..
+-rw-r--r-- 1 zhengfengqing staff  17647 Aug 16 21:47 journal.jsonl
+-rw-r--r-- 1 zhengfengqing staff 208896 Oct 18 21:53 memory.db
+-rw-r--r-- 1 zhengfengqing staff   2209 Oct 18 23:47 repository-aliases.json

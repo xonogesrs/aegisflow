@@ -1,0 +1,5 @@
+### A2 isolated profile (no codebase-memory server) — plumbing intact
+Working...
+1. YES — `get_board_info` (`mcp__kicad_get_board_info`).
+2. YES — `ekm_query`.
+3. NO — no `codebase_memory` tool is mounted.

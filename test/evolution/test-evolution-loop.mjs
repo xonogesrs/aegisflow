@@ -113,9 +113,18 @@ function policyInput(overrides = {}) {
   };
 }
 
+// Durable journal identity (event id + sequence) is what makes a row
+// PRODUCTION evidence — the loop's §G1/F1/F5 fence refuses anything else. The
+// fixtures therefore carry it exactly as RunEvidenceStore stamps it.
+let fixtureSeq = 0;
+function durableRow(row) {
+  fixtureSeq += 1;
+  return { ...row, event_id: `evt_${fixtureSeq}_${"0".repeat(16)}`, sequence: fixtureSeq };
+}
+
 function failureEvents(n, reason = "HOLD / C3B_MUTATION_FAILED") {
-  return Array.from({ length: n }, (_, i) => ({
-    event_type: "RUN_HELD", timestamp: new Date().toISOString(), event_id: `evt_fail_${i}`,
+  return Array.from({ length: n }, () => durableRow({
+    event_type: "RUN_HELD", timestamp: new Date().toISOString(),
     payload: { reason },
   }));
 }

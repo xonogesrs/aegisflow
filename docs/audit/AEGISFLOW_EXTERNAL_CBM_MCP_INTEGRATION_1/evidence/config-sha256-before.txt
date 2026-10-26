@@ -1,0 +1,2 @@
+0177341cb04c57d7929622804c9a21bc921c3e38f6cf6ae92147ab3b0a6ce89a  \$HOME/.omp/agent/mcp.json
+108ca03cb80bc76e09b895936da8e2898d85d361a5e493b72ac3792e59528d66  \$HOME/.omp/agent/config.yml

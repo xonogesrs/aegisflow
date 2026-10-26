@@ -196,13 +196,14 @@ const reportReceipt = await reportTool.execute(
 );
 assert.equal(reportReceipt.details.committed, false, "an agent report must never commit a fence");
 
-const savedAuthority = process.env.OMP_TERMINAL_FENCE_AUTHORITY;
-process.env.OMP_TERMINAL_FENCE_AUTHORITY = "harness-controller";
+// R4: authority is a capability, not an environment variable. The harness plays
+// the controller here, so it installs one and drops it afterwards.
+const { installControllerAuthorityForTest, clearControllerAuthorityForTest } = await import("../no-poll-waits.js");
+installControllerAuthorityForTest({ key: "2".repeat(64) });
 try {
 	await commitCommand.handler("PASS card accepted", ctx);
 } finally {
-	if (savedAuthority === undefined) delete process.env.OMP_TERMINAL_FENCE_AUTHORITY;
-	else process.env.OMP_TERMINAL_FENCE_AUTHORITY = savedAuthority;
+	clearControllerAuthorityForTest();
 }
 const fenceLog = logs.find(entry => Array.isArray(entry) && entry[0] === "no-poll-waits: generation fenced");
 assert.ok(fenceLog, "the controller commit must fence the generation");
