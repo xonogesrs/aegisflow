@@ -32,6 +32,16 @@ function install() {
   // Env contract consumed by the generated worker bootstrap (spawned legs).
   process.env.E1_PRELOAD_DIR = dir;
   process.env.E1_SHIM_URL = shim.shimUrl;
+  // The Colima profile lock is machine-wide by design (default root:
+  // <AEGISFLOW_HOME>/colima-locks) and is deliberately NOT shimmed. Test files run
+  // in parallel, so without a private root they all contend for the real lock in
+  // the operator's home and one of them fails with HOLD / COLIMA_PROFILE_BUSY
+  // (observed: E2 X2 in the host-only suite). Give this process its own root,
+  // removed with the shim dir, unless the operator configured one. Spawned legs
+  // inherit it through process.env.
+  if (!process.env.AEGISFLOW_COLIMA_PROFILE_LOCK_ROOT && !process.env.AUTOLOOP_COLIMA_PROFILE_LOCK_ROOT) {
+    process.env.AEGISFLOW_COLIMA_PROFILE_LOCK_ROOT = join(dir, "colima-profile-locks");
+  }
   // Sealed decision 1: the hook MUST be registered before the static tree
   // links src/runtime/colima-runtime.mjs — a --import preload runs exactly
   // there; the static-import double entry hits the guard above.
