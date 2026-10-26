@@ -151,12 +151,19 @@ function executionItems({ checkpointRoots, now, thresholds }) {
     if (names.length > MAX_EXEC_DIRS_SCANNED) diagnostics.push({ code: "CHECKPOINT_SCAN_TRUNCATED", detail: `${names.length} entries, scanned ${MAX_EXEC_DIRS_SCANNED}` });
     for (const name of names.slice(0, MAX_EXEC_DIRS_SCANNED)) {
       try { validateExecutionId(name); } catch { continue; }
-      const execDir = join(root, name);
+      // Two layouts exist: <root>/<exec>/CURRENT.json, and the per-run persistence
+      // root <root>/<exec>/<exec>/CURRENT.json used by the durable runner.
+      let readRoot = root;
       let mtimeMs = null;
-      try { mtimeMs = statSync(currentPath(execDir)).mtimeMs; } catch { continue; }
+      try { mtimeMs = statSync(currentPath(join(root, name))).mtimeMs; } catch {
+        try {
+          readRoot = join(root, name);
+          mtimeMs = statSync(currentPath(join(readRoot, name))).mtimeMs;
+        } catch { continue; }
+      }
       let cap;
       try {
-        const { snapshot } = readCheckpoint(root, name);
+        const { snapshot } = readCheckpoint(readRoot, name);
         cap = classifyResumeCapability({ checkpoint: snapshot });
       } catch (e) {
         cap = { capability: "CORRUPT", reason: String(e?.code ?? e?.message ?? "unreadable").slice(0, 60) };

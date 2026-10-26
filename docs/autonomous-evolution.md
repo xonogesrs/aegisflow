@@ -162,7 +162,16 @@ node scripts/aegisflow-status.mjs            # banner, or a one-line all-clear
 node scripts/aegisflow-status.mjs --check    # banner ONLY when there is an alert (hook/skill preamble)
 node scripts/aegisflow-status.mjs --detail   # every item, incl. informational
 node scripts/aegisflow-status.mjs --ack      # mark current alerts as seen
+node scripts/aegisflow-status.mjs --off      # switch the AUTOMATIC reminder (--check) off
+node scripts/aegisflow-status.mjs --on       # ... and back on (default: on)
+node scripts/aegisflow-status.mjs --switch   # show the switch state
 ```
+
+The switch silences only the automatic path (`--check`, as used by a
+session-start hook); manual runs, `--detail` and `--json` still report, and it is
+unrelated to the evolution kill switch. It is stored in
+`<AEGISFLOW_HOME>/attention-switch.json`; `AEGISFLOW_ATTENTION=off|on` overrides it.
+Without `--evolution-store` / `--checkpoint-root` it scans `<AEGISFLOW_HOME>/durable`.
 
 Items become alerts by accumulation, not on first sight: MEDIUM candidates
 awaiting promotion alert at 3 pending or 24 h old; an interrupted run alerts
