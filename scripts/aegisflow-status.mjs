@@ -5,7 +5,7 @@
 //
 //   node scripts/aegisflow-status.mjs [--check] [--detail] [--json] [--ack]
 //        [--evolution-store <abs>] [--checkpoint-root <abs> ...] [--state-dir <abs>]
-//   node scripts/aegisflow-status.mjs --off | --on | --switch
+//   node scripts/aegisflow-status.mjs --off | --on | --toggle | --switch
 //
 //   (default)  print the banner when something needs attention, else a one-line "all clear"
 //   --check    print the banner ONLY when there is an alert, otherwise print nothing.
@@ -19,6 +19,7 @@
 //              --json still work; evolution and execution are not affected (the evolution
 //              kill switch is scripts/evolution-kill-switch.mjs). AEGISFLOW_ATTENTION=off
 //              overrides the persisted switch.
+//   --toggle   flip the switch (one press, no need to remember on/off)
 //   --switch   show the switch state
 //
 // Defaults: --evolution-store from AEGISFLOW_EVOLUTION_STORE_ROOT; --checkpoint-root from
@@ -32,7 +33,7 @@ import { readAttentionSwitch, setAttentionSwitch } from "../src/attention/switch
 
 function usage(msg) {
   if (msg) console.error(msg);
-  console.error("usage: node scripts/aegisflow-status.mjs [--check] [--detail] [--json] [--ack] [--on|--off|--switch] [--evolution-store <abs>] [--checkpoint-root <abs> ...] [--state-dir <abs>]");
+  console.error("usage: node scripts/aegisflow-status.mjs [--check] [--detail] [--json] [--ack] [--on|--off|--toggle|--switch] [--evolution-store <abs>] [--checkpoint-root <abs> ...] [--state-dir <abs>]");
   process.exit(2);
 }
 
@@ -42,14 +43,19 @@ const opts = { "--evolution-store": null, "--state-dir": null };
 const checkpointRoots = [];
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
-  if (["--check", "--detail", "--json", "--ack", "--on", "--off", "--switch"].includes(a)) flags.add(a);
+  if (["--check", "--detail", "--json", "--ack", "--on", "--off", "--switch", "--toggle"].includes(a)) flags.add(a);
   else if (a === "--checkpoint-root") { if (!argv[i + 1]) usage("--checkpoint-root needs a value"); checkpointRoots.push(argv[++i]); }
   else if (a in opts) { if (!argv[i + 1]) usage(`${a} needs a value`); opts[a] = argv[++i]; }
   else usage(`unknown argument: ${a}`);
 }
-if (flags.has("--on") && flags.has("--off")) usage("--on and --off are mutually exclusive");
+if ([flags.has("--on"), flags.has("--off"), flags.has("--toggle")].filter(Boolean).length > 1) usage("--on, --off and --toggle are mutually exclusive");
 
 const env = process.env;
+
+if (flags.has("--toggle")) {
+  // flip the persisted switch relative to the EFFECTIVE state, so one press always changes what you see
+  flags.add(readAttentionSwitch({ env }).enabled ? "--off" : "--on");
+}
 
 if (flags.has("--on") || flags.has("--off")) {
   const r = setAttentionSwitch({ enabled: flags.has("--on"), env });
