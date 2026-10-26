@@ -11,7 +11,7 @@ import {
   constants as fsConstants, closeSync, fstatSync, lstatSync, openSync, readdirSync,
   readSync, realpathSync,
 } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
   EVIDENCE_CLASS, EXTRACTOR_VERSION, LIMITS, OUTCOME_UNVERIFIED, SOURCE_KIND, STRATEGY_DIMENSIONS,
@@ -193,16 +193,22 @@ export function identityEquals(a, b) {
     && a.mtime_ns === b.mtime_ns && a.tail_sha256 === b.tail_sha256;
 }
 
+/** Slug directory name of a discovered session file. */
+export function slugOf(file) {
+  return basename(dirname(file));
+}
+
 /** Top-level `<root>/<slug>/<ts>_<uuid>.jsonl` only; subagent dirs, symlinks
- *  and anything oddly named are never returned. */
-export function discoverSessionFiles(sessionsRoot, onlySlugs = null) {
+ *  and anything oddly named are never returned. ALWAYS lists every slug: the
+ *  duplicate-session-id index must be global, so a scoped (--slug) run filters
+ *  what it PROCESSES, never what it can SEE. Only directory entries are listed
+ *  here; no file outside the processed scope is opened. */
+export function discoverSessionFiles(sessionsRoot) {
   const out = [];
   let slugs;
   try { slugs = readdirSync(sessionsRoot, { withFileTypes: true }); } catch { return out; }
   for (const slug of slugs) {
     if (!slug.isDirectory() || slug.isSymbolicLink() || !SLUG_RE.test(slug.name)) continue;
-    // When the operator names slug directories, no OTHER directory is opened.
-    if (Array.isArray(onlySlugs) && !onlySlugs.includes(slug.name)) continue;
     const dir = join(sessionsRoot, slug.name);
     let files;
     try { files = readdirSync(dir, { withFileTypes: true }); } catch { continue; }

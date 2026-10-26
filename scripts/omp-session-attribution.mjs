@@ -30,10 +30,17 @@ function parse(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     // Session directory names may start with "--"; accept --slug=<name>.
-    if (a.startsWith("--slug=")) { o.slugs.push(a.slice("--slug=".length)); continue; }
+    if (a.startsWith("--slug=")) {
+      const v = a.slice("--slug=".length);
+      if (v.trim() === "") throw new Error("--slug requires a non-blank value");
+      o.slugs.push(v);
+      continue;
+    }
     const val = () => {
       const v = argv[++i];
       if (v === undefined || v.startsWith("--")) throw new Error(`${a} requires a value`);
+      // A blank value would resolve to the process cwd (allowlist/deny) or an empty name.
+      if (v.trim() === "") throw new Error(`${a} requires a non-blank value`);
       return v;
     };
     switch (a) {

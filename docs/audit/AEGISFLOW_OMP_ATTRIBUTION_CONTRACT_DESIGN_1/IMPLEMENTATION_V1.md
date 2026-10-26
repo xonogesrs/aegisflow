@@ -32,6 +32,16 @@ node scripts/omp-session-attribution.mjs \
 - No defaults for `--store`, `--sessions-root` or `--allow-cwd`; an empty
   allowlist refuses to run. `--deny-root` is **additive** to the built-in
   `/private/tmp` and `/private/var/folders`.
+- Blank, whitespace-only or relative `--allow-cwd` / `--deny-root` / `--slug` values
+  are usage errors (exit 2); they are never resolved against the process cwd.
+- `--slug[=name]` narrows what is **processed**, not what is **seen**: the
+  duplicate-session-id index is built over every slug (other slug directories are
+  listed by file name only; no file outside the processed slugs is opened). A
+  session id found in more than one slug is excluded everywhere, so a scoped run
+  can never re-point or downgrade an observation recorded from another slug.
+- A symlink at a state or identity path (including a dangling one) is treated as
+  corrupt: reads fail closed (`STATE_CORRUPT` / identity-corrupt) and the writer
+  refuses to replace anything that is not a regular file.
 - Output lands only under `<store>/omp-observations/{observations,state}/`.
 - `--key-file` is required with `--write` (see "cwd identity" below).
 - Exit codes: 0 ok · 2 usage · 3 run lock busy (never stolen; an operator

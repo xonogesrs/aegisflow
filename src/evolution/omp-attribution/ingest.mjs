@@ -19,7 +19,7 @@
 // nothing at all.
 
 import { existsSync, readFileSync, readdirSync, lstatSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import {
   C2dHoldError, HOLD, acquireExclusiveLock, assertPathComponentsNotSymlink, ensureDir0700,
   releaseExclusiveLock, writeJsonAtomicReplaceUnderLock, writeJsonExclusiveCreate,
@@ -34,7 +34,7 @@ import {
   validateObservation,
 } from "./contract.mjs";
 import {
-  SESSION_FILE_RE, buildObservation, cwdDecision, defaultLsof, discoverSessionFiles,
+  SESSION_FILE_RE, buildObservation, cwdDecision, defaultLsof, discoverSessionFiles, slugOf,
   identityEquals, observeSessionFile, parseSessionBytes, peekHeader, prefixDigest, readSessionBytes,
 } from "./extract.mjs";
 
@@ -60,9 +60,10 @@ export const paths = (storeRoot) => {
 // ── per-store cwd key identity ───────────────────────────────────────────────
 
 function readIdentity(p) {
-  if (!existsSync(p.identity)) return null;
+  const present = lstatOrNull(p.identity); // lstat: a dangling symlink is PRESENT (and refused), not absent
+  if (present === null) return null;
   try {
-    if (!lstatSync(p.identity).isFile()) throw new Error("not a file");
+    if (!present.isFile()) throw new Error("not a regular file");
     const i = JSON.parse(readFileSync(p.identity, "utf8"));
     if (i?.schema !== IDENTITY_SCHEMA || i.cwd_alg !== CWD_ALG || !KEY_ID_RE.test(String(i.key_id))) throw new Error("bad");
     return i;
@@ -136,9 +137,10 @@ function validState(s, oid) {
 /** @returns {{ kind: "absent" } | { kind: "ok", state: object } | { kind: "corrupt" }} */
 function readState(storeRoot, oid) {
   const p = join(paths(storeRoot).state, `${oid}.json`);
-  if (!existsSync(p)) return { kind: "absent" };
+  // lstat, not existsSync: a dangling symlink must read as corrupt (fail closed), never as "absent".
+  const st = lstatOrNull(p);
+  if (st === null) return { kind: "absent" };
   try {
-    const st = lstatSync(p);
     if (!st.isFile()) return { kind: "corrupt" };
     const s = JSON.parse(readFileSync(p, "utf8"));
     return validState(s, oid) ? { kind: "ok", state: s } : { kind: "corrupt" };
@@ -147,7 +149,23 @@ function readState(storeRoot, oid) {
 
 function writeState(storeRoot, state) {
   assertOutputSafe(state);
-  writeJsonAtomicReplaceUnderLock(join(paths(storeRoot).state, `${state.observation_id}.json`), state);
+  const target = join(paths(storeRoot).state, `${state.observation_id}.json`);
+  // Re-check at write time: anything that is not a regular file (incl. a dangling
+  // symlink, which existsSync cannot see) is refused rather than replaced.
+  const now = lstatOrNull(target);
+  if (now !== null && (now.isSymbolicLink() || !now.isFile())) {
+    throw new C2dHoldError(HOLD.SYMLINK_REJECTED, "state path is not a regular file; refusing to replace it");
+  }
+  writeJsonAtomicReplaceUnderLock(target, state);
+}
+
+function lstatOrNull(path) {
+  try {
+    return lstatSync(path);
+  } catch (e) {
+    if (e?.code === "ENOENT") return null;
+    throw e;
+  }
 }
 
 /** Observations that count: final file present, schema-valid, state settled-and-trusted. */
@@ -186,7 +204,8 @@ export function countObservationFiles(storeRoot) {
  * @param {number} [o.quiescenceMs]
  * @param {() => number} [o.nowMs]  injected clock
  * @param {(path: string) => "not_held"|"held"|"unknown"} [o.lsof]
- * @param {string[]} [o.onlySlugs] restrict discovery to these slug directories (no other directory is opened)
+ * @param {string[]} [o.onlySlugs] process only these slug directories. Duplicate-session-id detection
+ *                                 stays GLOBAL (other slugs are listed by name, never opened).
  * @param {string} [o.keyFile]     per-store HMAC key file, OUTSIDE the store (required with write)
  * @param {boolean} [o.synthetic]
  * @param {object} [o.env]
@@ -199,6 +218,13 @@ export function runIngest({
 }) {
   if (!storeRoot || !sessionsRoot) throw usage("storeRoot and sessionsRoot are required");
   if (!Array.isArray(allowRoots) || allowRoots.length === 0) throw usage("cwd allowlist is empty (fail-closed)");
+  // A blank or relative root would resolve against the process cwd and silently widen/shift the boundary.
+  if (!allowRoots.every(isAbsolutePathValue)) throw usage("cwd allowlist entries must be non-blank absolute paths (fail-closed)");
+  if (!Array.isArray(denyRoots) || !denyRoots.every(isAbsolutePathValue)) throw usage("deny roots must be non-blank absolute paths");
+  if (onlySlugs !== null && (!Array.isArray(onlySlugs) || onlySlugs.length === 0
+    || !onlySlugs.every((x) => typeof x === "string" && x.trim() !== "" && !/[\\/]/.test(x)))) {
+    throw usage("slug names must be non-blank directory names");
+  }
   if (!existsSync(storeRoot)) throw usage("store root does not exist");
 
   const report = {
@@ -243,12 +269,14 @@ export function runIngest({
     const resolved = resolveCwdKey({ storeRoot, keyFile, write, p });
     const cwdKey = { keyId: resolved.keyId, mac: cwdMacFor(resolved.key) };
     if (write) { ensureDir0700(p.observations); ensureDir0700(p.state); }
-    const files = discoverSessionFiles(sessionsRoot, onlySlugs);
+    // The duplicate index is built over EVERY slug; --slug only narrows what is processed.
+    const allFiles = discoverSessionFiles(sessionsRoot);
     const perUuid = new Map();
-    for (const f of files) {
+    for (const f of allFiles) {
       const u = SESSION_FILE_RE.exec(f.slice(f.lastIndexOf("/") + 1))?.[1];
       perUuid.set(u, (perUuid.get(u) ?? 0) + 1);
     }
+    const files = onlySlugs === null ? allFiles : allFiles.filter((f) => onlySlugs.includes(slugOf(f)));
     for (const file of files) {
       if (write) {
         const again = suspendedState({ env, storeRoot });
@@ -400,3 +428,7 @@ function usage(msg) {
 }
 
 export { OBSERVATION_ID_RE };
+
+function isAbsolutePathValue(v) {
+  return typeof v === "string" && v.trim() !== "" && v.trim() === v && isAbsolute(v);
+}

@@ -14,7 +14,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   appendFileSync, chmodSync, existsSync, linkSync, statSync, rmSync, mkdirSync, mkdtempSync, readFileSync, readdirSync,
-  symlinkSync, truncateSync, utimesSync, writeFileSync,
+  lstatSync, readlinkSync, symlinkSync, truncateSync, utimesSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -886,7 +886,8 @@ test("K3 the key never appears in the store, the report, errors or CLI output", 
   const out = cli(["--store", env.store, "--sessions-root", env.sessions, "--allow-cwd", CWD, "--key-file", keyFile, "--json"]);
   assert.ok(!(out.stdout + out.stderr).includes(keyHex));
   const bad = join(env.root, "keys", "wrong.key");
-  writeFileSync(bad, keyHex.replace(/^./, "0") + "\n", { mode: 0o600 });
+  // Always a DIFFERENT key (a fixed "0" replacement collides 1 time in 16 with the random key).
+  writeFileSync(bad, (keyHex[0] === "0" ? "1" : "0") + keyHex.slice(1) + "\n", { mode: 0o600 });
   const err = cli(["--store", env.store, "--sessions-root", env.sessions, "--allow-cwd", CWD, "--key-file", bad, "--write"]);
   assert.equal(err.status, 4);
   assert.ok(!(err.stdout + err.stderr).includes(keyHex));
@@ -1025,4 +1026,159 @@ test("M1 real layout: a leading title entry before the session header is handled
   assert.equal(second.results.find((r) => r.session_id === U2).reason, "no_session_header");
   assert.equal(second.results.find((r) => r.session_id === U3).reason, "no_session_header", "header beyond the scan window is not searched for");
   assert.equal(listTrustedObservations(env.store).length, 1);
+});
+
+
+// ── N: PR #9 review repairs ─────────────────────────────────────────────────
+
+/** Scoped run: only `slug` is processed; the duplicate index must still be global. */
+function runScoped(env, slug, now, { write = true } = {}) {
+  return runIngest({
+    storeRoot: env.store, sessionsRoot: env.sessions, allowRoots: [CWD], denyRoots: [], write,
+    nowMs: () => now, lsof: () => "not_held", synthetic: true, onlySlugs: [slug], keyFile: keyPathFor(env),
+  });
+}
+
+const stateFile = (env, uuid) => join(paths(env.store).state, `${observationIdFor(uuid)}.json`);
+const obsFile = (env, uuid) => join(paths(env.store).observations, `${observationIdFor(uuid)}.json`);
+
+test("N1 cross-slug duplicate under --slug: a RECORDED observation is never re-pointed or downgraded (different content)", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0, slug: "-slug-a" });
+  recordOnce(env, U1, T0);
+  const stateBefore = readFileSync(stateFile(env, U1), "utf8");
+  const obsBefore = readFileSync(obsFile(env, U1), "utf8");
+  putSession(env, entriesFor(U1, { model: "model-b" }), { uuid: U1, clockNow: T0, slug: "-slug-b" });
+  for (const slug of ["-slug-b", "-slug-a"]) {
+    for (const when of [T0 + 60 * MIN, T0 + 120 * MIN]) {
+      const r = runScoped(env, slug, when);
+      assert.equal(r.results.length, 1);
+      assert.equal(r.results[0].disposition, "EXCLUDED");
+      assert.equal(r.results[0].reason, "duplicate_session_id");
+      assert.equal(readFileSync(stateFile(env, U1), "utf8"), stateBefore, `scoped ${slug}: state untouched`);
+      assert.equal(readFileSync(obsFile(env, U1), "utf8"), obsBefore);
+    }
+  }
+  assert.equal(listTrustedObservations(env.store).length, 1, "the trusted observation survives");
+});
+
+test("N2 cross-slug duplicate under --slug: identical copy does not re-point the recorded identity", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  const a = putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0, slug: "-slug-a" });
+  recordOnce(env, U1, T0);
+  const stateBefore = readFileSync(stateFile(env, U1), "utf8");
+  const b = join(env.sessions, "-slug-b");
+  mkdirSync(b, { recursive: true });
+  const copy = join(b, fileNameFor(U1));
+  writeFileSync(copy, readFileSync(a));
+  const t = new Date(T0 - 180 * MIN);
+  utimesSync(copy, t, t);
+  const r = runScoped(env, "-slug-b", T0 + 90 * MIN);
+  assert.equal(r.results[0].reason, "duplicate_session_id");
+  assert.equal(readFileSync(stateFile(env, U1), "utf8"), stateBefore);
+  assert.equal(listTrustedObservations(env.store).length, 1);
+});
+
+test("N3 cross-slug duplicate with no prior state: scoped runs record nothing, either slug", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0, slug: "-slug-a" });
+  putSession(env, entriesFor(U1, { model: "model-b" }), { uuid: U1, clockNow: T0, slug: "-slug-b" });
+  for (const slug of ["-slug-a", "-slug-b"]) {
+    for (const when of [T0, T0 + 31 * MIN, T0 + 62 * MIN]) {
+      const r = runScoped(env, slug, when);
+      assert.equal(r.results[0].reason, "duplicate_session_id");
+    }
+  }
+  assert.ok(!existsSync(paths(env.store).state) || readdirSync(paths(env.store).state).length === 0);
+  assert.equal(countObservationFiles(env.store), 0);
+});
+
+test("N4 scoped run still processes a unique session normally while another slug holds an unrelated duplicate pair", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0, slug: "-slug-a" });
+  putSession(env, entriesFor(U2), { uuid: U2, clockNow: T0, slug: "-slug-a" });
+  putSession(env, entriesFor(U2, { model: "model-b" }), { uuid: U2, clockNow: T0, slug: "-slug-b" });
+  runScoped(env, "-slug-a", T0);
+  const r = runScoped(env, "-slug-a", T0 + 31 * MIN);
+  assert.equal(r.results.find((x) => x.session_id === U1).disposition, "RECORDED");
+  assert.equal(r.results.find((x) => x.session_id === U2).reason, "duplicate_session_id");
+  assert.deepEqual(r.results.map((x) => x.session_id).sort(), [U1, U2].sort(), "only the scoped slug is reported");
+});
+
+test("N5 blank / whitespace / relative allowlist and deny values are rejected (never resolved to the cwd)", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  for (const bad of ["", "   ", "\t", "relative/dir", "."]) {
+    assert.throws(() => run(env, { now: T0, allow: [bad] }), /allowlist|absolute|blank/i, JSON.stringify(bad));
+    assert.throws(() => run(env, { now: T0, allow: [CWD, bad] }), /allowlist|absolute|blank/i);
+    assert.throws(() => run(env, { now: T0, deny: [bad] }), /deny|absolute|blank/i);
+  }
+  for (const bad of ["", "   "]) {
+    const r = cli(["--store", env.store, "--sessions-root", env.sessions, "--allow-cwd", bad]);
+    assert.equal(r.status, 2, `--allow-cwd ${JSON.stringify(bad)}`);
+    const d = cli(["--store", env.store, "--sessions-root", env.sessions, "--allow-cwd", CWD, "--deny-root", bad]);
+    assert.equal(d.status, 2);
+    const sl = cli(["--store", env.store, "--sessions-root", env.sessions, "--allow-cwd", CWD, "--slug", bad]);
+    assert.equal(sl.status, 2);
+  }
+  assert.equal(cli(["--store", env.store, "--sessions-root", env.sessions, "--allow-cwd", CWD, "--slug="]).status, 2);
+});
+
+test("N6 a dangling symlink at a state path is corrupt (fail closed), never absent, never overwritten", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0 });
+  run(env, { write: true, now: T0 });
+  const sp = stateFile(env, U1);
+  const goodState = readFileSync(sp, "utf8");
+  rmSync(sp);
+  const target = join(env.root, "nowhere.json");
+  symlinkSync(target, sp);
+  for (const write of [false, true]) {
+    const r = run(env, { write, now: T0 + 31 * MIN });
+    assert.equal(dispOf(r, U1), "STATE_CORRUPT", `write=${write}`);
+    assert.ok(lstatSync(sp).isSymbolicLink(), "the link is still there");
+    assert.equal(readlinkSync(sp), target);
+    assert.ok(!existsSync(target), "nothing was written through the link");
+  }
+  assert.equal(countObservationFiles(env.store), 0);
+  // A live symlink to a valid state file is equally refused.
+  const real = join(env.root, "real-state.json");
+  rmSync(sp);
+  writeFileSync(real, goodState);
+  symlinkSync(real, sp);
+  assert.equal(dispOf(run(env, { write: true, now: T0 + 62 * MIN }), U1), "STATE_CORRUPT");
+  assert.equal(readFileSync(real, "utf8"), goodState);
+});
+
+test("N7 the state write path itself refuses a symlink that appears after the read (defence in depth)", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0 });
+  run(env, { write: true, now: T0 });
+  const sp = stateFile(env, U1);
+  const target = join(env.root, "late-target.json");
+  // After the state was read (valid) and the observation written, swap the state file for a dangling link.
+  const fault = (step) => {
+    if (step === "after_observation_written") { rmSync(sp); symlinkSync(target, sp); }
+  };
+  assert.throws(() => run(env, { write: true, now: T0 + 31 * MIN, fault }), /not a regular file; refusing to replace/);
+  assert.ok(!existsSync(target), "nothing was written through the link");
+  assert.ok(lstatSync(sp).isSymbolicLink(), "the link was not replaced by a regular file");
+  assert.equal(listTrustedObservations(env.store).length, 0, "an observation without a trusted state never counts");
+});
+
+test("N8 a dangling symlink at identity.json fails closed as a corrupt identity", () => {
+  const env = mkEnv();
+  const T0 = Date.now();
+  putSession(env, entriesFor(U1), { uuid: U1, clockNow: T0 });
+  run(env, { write: true, now: T0 });
+  rmSync(paths(env.store).identity);
+  symlinkSync(join(env.root, "nowhere-id.json"), paths(env.store).identity);
+  assert.equal(codeOf(() => run(env, { write: true, now: T0 + 31 * MIN })), KEY_ERRORS.IDENTITY_CORRUPT);
+  assert.ok(!existsSync(join(env.root, "nowhere-id.json")));
 });
