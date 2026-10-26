@@ -22,11 +22,16 @@
 //
 // The checkout is located like cbm-query.js does: `AEGISFLOW_REPO_ROOT` /
 // `AUTOLOOP_REPO_ROOT`, then this file's own location, then a walk up from the cwd.
-// No operator-specific path is baked in. Commands use fixed argv (no shell).
+// A deployed copy lives under ~/.omp and a shell variable is easy to forget, so there is
+// one more source: a one-line pointer file `<AEGISFLOW_HOME or ~/.autoloop>/repo-root`
+// holding the checkout's absolute path (same trust as the env var: it is a file in the
+// operator's own home). No operator-specific path is baked in. Commands use fixed argv
+// (no shell).
 
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const EXTENSION_DIR = dirname(fileURLToPath(import.meta.url));
@@ -44,12 +49,32 @@ function hasStatusScript(dir) {
 	}
 }
 
+/** `<AEGISFLOW_HOME | AUTOLOOP_HOME | ~/.autoloop>/repo-root`, read as one absolute path. Never throws. */
+function readPointerFile() {
+	try {
+		let home = null;
+		for (const name of ["AEGISFLOW_HOME", "AUTOLOOP_HOME"]) {
+			const v = process.env[name]?.trim();
+			if (v && isAbsolute(v)) { home = v; break; }
+		}
+		const file = join(home ?? join(homedir(), ".autoloop"), "repo-root");
+		const st = lstatSync(file);
+		if (!st.isFile() || st.size > 4096) return null;
+		const value = readFileSync(file, "utf8").split("\n")[0].trim();
+		return value && isAbsolute(value) ? value : null;
+	} catch {
+		return null;
+	}
+}
+
 /** Locate the AegisFlow checkout. Never throws; an unlocatable checkout is reported, not guessed. */
 export function resolveRepoRoot(cwd = process.cwd()) {
 	for (const name of REPO_ROOT_ENVS) {
 		const value = process.env[name];
 		if (value && hasStatusScript(value)) return { ok: true, root: resolve(value) };
 	}
+	const pointed = readPointerFile();
+	if (pointed && hasStatusScript(pointed)) return { ok: true, root: resolve(pointed) };
 	const fromExtension = resolve(EXTENSION_DIR, "..", "..", "..");
 	if (hasStatusScript(fromExtension)) return { ok: true, root: fromExtension };
 	let dir = resolve(cwd);
@@ -61,7 +86,7 @@ export function resolveRepoRoot(cwd = process.cwd()) {
 	}
 	return {
 		ok: false,
-		reason: `no AegisFlow checkout with ${STATUS_SCRIPT} was found (set AEGISFLOW_REPO_ROOT)`,
+		reason: `no AegisFlow checkout with ${STATUS_SCRIPT} was found (set AEGISFLOW_REPO_ROOT or write the path to ~/.autoloop/repo-root)`,
 	};
 }
 

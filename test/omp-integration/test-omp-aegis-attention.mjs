@@ -6,7 +6,7 @@
 // reaches the host.
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -87,4 +87,25 @@ test("session_start is silent when the digest is quiet or the host has no UI", (
 	for (const n of ctx.notes) assert.ok(n.text.length > 0);
 	assert.doesNotThrow(() => pi.handlers.session_start({}, {}));
 	assert.doesNotThrow(() => pi.handlers.session_start({}, { ui: { notify() { throw new Error("no ui"); } } }));
+});
+
+test("the repo-root pointer file locates the checkout when env and cwd cannot", () => {
+	const home = mkdtempSync(join(tmpdir(), "aegis-attn-ptr-"));
+	const saved = { r: process.env.AEGISFLOW_REPO_ROOT, a: process.env.AUTOLOOP_REPO_ROOT, h: process.env.AEGISFLOW_HOME };
+	try {
+		const repo = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
+		delete process.env.AEGISFLOW_REPO_ROOT;
+		delete process.env.AUTOLOOP_REPO_ROOT;
+		process.env.AEGISFLOW_HOME = home;
+		writeFileSync(join(home, "repo-root"), `${repo}\n`);
+		assert.deepEqual(resolveRepoRoot("/"), { ok: true, root: repo });
+		// a relative or bogus pointer is ignored, never guessed
+		writeFileSync(join(home, "repo-root"), "relative/path\n");
+		assert.equal(resolveRepoRoot("/").ok, true, "falls through to the extension-relative source in-repo");
+	} finally {
+		for (const [k, v] of [["AEGISFLOW_REPO_ROOT", saved.r], ["AUTOLOOP_REPO_ROOT", saved.a], ["AEGISFLOW_HOME", saved.h]]) {
+			if (v === undefined) delete process.env[k]; else process.env[k] = v;
+		}
+		rmSync(home, { recursive: true, force: true });
+	}
 });
