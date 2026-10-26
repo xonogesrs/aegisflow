@@ -182,6 +182,18 @@ the current items in `attention-state.json`; a changed situation (for example a
 new pending candidate) raises a fresh alert. The digest never promotes,
 resumes or retries anything.
 
+**Resume brief.** When a long task has stopped making progress, the digest also
+knows where it stopped. `node scripts/aegisflow-status.mjs --brief` prints a short
+brief (execution id, how many phases are done, the active phase, repository
+branch/head, the worktree it must resume in, where its artifacts are) and nothing
+when no stale, unacknowledged interrupted run exists. It carries metadata and
+pointers only, never artifact content, and every checkpoint field is reduced to
+identifier characters, so it is data by construction. In OMP the extension puts it
+into the input box on a fresh start; nothing is sent until the operator presses
+Enter. It never resumes anything: resuming goes through `runAdmittedGraph` /
+`resumeDurableGraph`, which verify the fingerprint and refuse on any mismatch.
+`--ack` stops the brief; `/aegis-off` silences it with the rest of the reminder.
+
 ### What the kill switch does and does not do
 
 `AUTO_EVOLUTION = ENABLED | SUSPENDED`.

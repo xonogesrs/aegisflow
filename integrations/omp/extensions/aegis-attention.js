@@ -7,6 +7,9 @@
 //   * on `session_start` it runs `--check` and, ONLY when something has crossed an
 //     alert threshold, shows the banner through `ctx.ui.notify`. A quiet system
 //     prints nothing; an OMP switched off with `/aegis-off` prints nothing.
+//   * on a fresh start, when an interrupted long task is waiting, it also puts a resume
+//     brief (metadata and pointers only, labelled as data) into the input box, so the new
+//     session can pick the task up. Nothing is sent: the operator reads it and presses Enter.
 //   * `/aegis-on` and `/aegis-off` switch the AUTOMATIC reminder on/off. The switch
 //     silences only this banner: evolution, durable execution and every governance
 //     gate are untouched.
@@ -126,12 +129,25 @@ function notify(ctx, text, level) {
 	}
 }
 
-export default function (pi) {
+export default function (pi, deps = {}) {
+	const run = deps.runStatus ?? runStatus;
 	// Automatic reminder: silent unless an alert threshold was crossed AND the switch is on.
-	pi.on("session_start", (_event, ctx) => {
+	pi.on("session_start", (event, ctx) => {
 		try {
-			const r = runStatus(["--check"], { cwd: ctx?.cwd ?? process.cwd() });
-			if (r.ok && r.output) notify(ctx, r.output, "warning");
+			const cwd = ctx?.cwd ?? process.cwd();
+			const r = run(["--check"], { cwd });
+			if (!(r.ok && r.output)) return;
+			notify(ctx, r.output, "warning");
+			// Only a fresh start: resuming or reloading a session must not overwrite the input box.
+			if (event?.reason !== "startup") return;
+			const b = run(["--brief"], { cwd });
+			if (b.ok && b.output) {
+				try {
+					ctx?.ui?.setEditorText?.(b.output);
+				} catch {
+					// no UI in print/RPC mode
+				}
+			}
 		} catch {
 			// a reminder must never break a session
 		}

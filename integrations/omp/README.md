@@ -148,7 +148,7 @@ without anyone having to go looking:
 
 | Surface | Behaviour |
 |---|---|
-| session start | runs `scripts/aegisflow-status.mjs --check`; shows a banner ONLY when an alert threshold was crossed, otherwise prints nothing |
+| session start | runs `scripts/aegisflow-status.mjs --check`; shows a banner ONLY when an alert threshold was crossed, otherwise prints nothing. On a fresh start with an interrupted long task waiting, it also puts a resume brief (`--brief`, data only) into the input box; nothing is sent |
 | `/aegis-on`, `/aegis-off` | switch the automatic reminder on / off (no arguments) |
 | `/aegis-status` | the full digest, including informational and acknowledged items |
 

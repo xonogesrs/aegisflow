@@ -3,7 +3,7 @@
 //
 // "What needs my attention?" — read-only, except for the explicit --ack / --on / --off.
 //
-//   node scripts/aegisflow-status.mjs [--check] [--detail] [--json] [--ack]
+//   node scripts/aegisflow-status.mjs [--check|--brief] [--detail] [--json] [--ack]
 //        [--evolution-store <abs>] [--checkpoint-root <abs> ...] [--state-dir <abs>]
 //   node scripts/aegisflow-status.mjs --off | --on | --toggle | --switch
 //
@@ -11,6 +11,8 @@
 //   --check    print the banner ONLY when there is an alert, otherwise print nothing.
 //              Built for session-start hooks / skill preambles: silent when quiet,
 //              and silent when the automatic reminder is switched off.
+//   --brief    for hooks: print a resume brief (what was interrupted and where) ONLY when a
+//              stale, unacknowledged interrupted run exists; otherwise nothing. Honors the switch.
 //   --detail   list every item, including informational ones and acknowledged ones
 //   --json     machine-readable report (aegisflow.attention-report/v1)
 //   --ack      mark the currently raised alerts as seen (writes only attention-state.json
@@ -28,12 +30,12 @@
 
 import { isAbsolute, join } from "node:path";
 import { autoloopHome, readConfigEnv } from "../src/shared/autoloop-paths.mjs";
-import { acknowledge, collectAttention, renderBanner } from "../src/attention/attention.mjs";
+import { acknowledge, collectAttention, renderBanner, renderResumeBrief } from "../src/attention/attention.mjs";
 import { readAttentionSwitch, setAttentionSwitch } from "../src/attention/switch.mjs";
 
 function usage(msg) {
   if (msg) console.error(msg);
-  console.error("usage: node scripts/aegisflow-status.mjs [--check] [--detail] [--json] [--ack] [--on|--off|--toggle|--switch] [--evolution-store <abs>] [--checkpoint-root <abs> ...] [--state-dir <abs>]");
+  console.error("usage: node scripts/aegisflow-status.mjs [--check|--brief] [--detail] [--json] [--ack] [--on|--off|--toggle|--switch] [--evolution-store <abs>] [--checkpoint-root <abs> ...] [--state-dir <abs>]");
   process.exit(2);
 }
 
@@ -43,7 +45,7 @@ const opts = { "--evolution-store": null, "--state-dir": null };
 const checkpointRoots = [];
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
-  if (["--check", "--detail", "--json", "--ack", "--on", "--off", "--switch", "--toggle"].includes(a)) flags.add(a);
+  if (["--check", "--brief", "--detail", "--json", "--ack", "--on", "--off", "--switch", "--toggle"].includes(a)) flags.add(a);
   else if (a === "--checkpoint-root") { if (!argv[i + 1]) usage("--checkpoint-root needs a value"); checkpointRoots.push(argv[++i]); }
   else if (a in opts) { if (!argv[i + 1]) usage(`${a} needs a value`); opts[a] = argv[++i]; }
   else usage(`unknown argument: ${a}`);
@@ -80,7 +82,7 @@ for (const p of [evolutionStoreRoot, stateDir, ...roots]) {
 }
 
 // The automatic path stays completely silent while switched off.
-if (flags.has("--check") && !readAttentionSwitch({ env }).enabled) process.exit(0);
+if ((flags.has("--check") || flags.has("--brief")) && !readAttentionSwitch({ env }).enabled) process.exit(0);
 
 const report = collectAttention({ evolutionStoreRoot, checkpointRoots: roots, stateDir, env });
 
@@ -95,6 +97,12 @@ if (flags.has("--ack")) {
 
 if (flags.has("--json")) {
   console.log(JSON.stringify({ ...report, switch: readAttentionSwitch({ env }) }, null, 2));
+  process.exit(0);
+}
+
+if (flags.has("--brief")) {
+  const brief = renderResumeBrief(report);
+  if (brief) console.log(brief);
   process.exit(0);
 }
 
